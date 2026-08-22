@@ -50,8 +50,11 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData,
-    }).then(r => {
-      if (!r.ok) throw new Error('Credenciales inválidas')
+    }).then(async r => {
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ detail: null }))
+        throw new Error(err.detail || 'Credenciales inválidas')
+      }
       return r.json()
     })
   },

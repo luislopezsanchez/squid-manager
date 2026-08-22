@@ -12,7 +12,7 @@ WINDOW_SECONDS = 60
 MAX_REQUESTS_PER_WINDOW = 60  # 1 petición/segundo de media
 
 # Rate limit más estricto para el login (anti fuerza bruta)
-LOGIN_MAX_REQUESTS = 10  # 10 intentos por minuto por IP
+LOGIN_MAX_REQUESTS = 20  # 20 intentos por minuto por IP (suficiente margen, aún protege)
 
 # Estructura de datos: {ip: deque([timestamps])}
 _requests = defaultdict(deque)
