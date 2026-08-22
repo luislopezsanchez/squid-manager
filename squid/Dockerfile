@@ -22,7 +22,12 @@ RUN apt-get update && apt-get install -y \
     apache2-utils \
     ldap-utils \
     openssl \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
+
+# Instalar librerías Python para el helper de autenticación (local bcrypt + LDAP)
+RUN pip3 install --no-cache-dir --break-system-packages bcrypt==4.2.1 ldap3==2.9.1
 
 # Descargar y compilar Squid 6.12 con soporte SSL Bump (OpenSSL)
 RUN wget -q "http://www.squid-cache.org/Versions/v6/squid-6.12.tar.gz" -O /tmp/squid.tar.gz \
@@ -60,6 +65,10 @@ RUN wget -q "http://www.squid-cache.org/Versions/v6/squid-6.12.tar.gz" -O /tmp/s
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Copiar el helper de autenticación personalizado (local + LDAP)
+COPY auth_helper.py /usr/lib/squid/squidmanager_auth_helper
+RUN chmod +x /usr/lib/squid/squidmanager_auth_helper
 
 # Guardar copia de archivos de config en /opt/squid-defaults/ (el volumen /etc/squid los ocultara)
 RUN mkdir -p /opt/squid-defaults && cp /etc/squid/mime.conf /opt/squid-defaults/ 2>/dev/null || true \

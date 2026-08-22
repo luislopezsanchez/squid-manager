@@ -88,6 +88,17 @@ export const api = {
   getLdapConfig: () => request<any>('/ldap/config'),
   updateLdapConfig: (data: any) => request<any>('/ldap/config', { method: 'PUT', body: JSON.stringify(data) }),
   testLdap: (data: any) => request<any>('/ldap/test', { method: 'POST', body: JSON.stringify(data) }),
+  syncLdapUsers: () => request<any>('/ldap/sync', { method: 'POST' }),
+  listLdapUsers: () => request<any[]>('/ldap/users'),
+  toggleLdapUser: (id: number) => request<any>(`/ldap/users/${id}/toggle`, { method: 'PATCH' }),
+
+  // Grupos de usuarios
+  listGroups: () => request<any[]>('/groups/'),
+  createGroup: (data: any) => request<any>('/groups/', { method: 'POST', body: JSON.stringify(data) }),
+  updateGroup: (id: number, data: any) => request<any>(`/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteGroup: (id: number) => request<void>(`/groups/${id}`, { method: 'DELETE' }),
+  addGroupMember: (id: number, username: string) => request<any>(`/groups/${id}/members`, { method: 'POST', body: JSON.stringify({ username }) }),
+  removeGroupMember: (id: number, username: string) => request<any>(`/groups/${id}/members/${username}`, { method: 'DELETE' }),
 
   // Delay Pools
   listDelayPools: () => request<any[]>('/delay-pools/'),

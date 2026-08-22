@@ -15,7 +15,7 @@ from app.models.admin import Admin
 from app.models.squid_settings import SquidSetting
 from app.services.auth_service import get_current_admin
 from app.services.config_generator import generate_squid_config, validate_squid_config
-from app.services.squid_service import reload_squid, get_squid_status, restart_squid
+from app.services.squid_service import reload_squid, get_squid_status, restart_squid, write_ldap_aux_files
 from app.services.notification_service import queue_notification
 from app.config import settings
 
@@ -104,6 +104,13 @@ async def apply_config(
     config_path = settings.SQUID_CONFIG_PATH
     with open(config_path, "w") as f:
         f.write(config_text)
+
+    # 4b. Escribir archivos auxiliares de auth (ldap_helper.conf + ldap_allowlist)
+    from app.models.ldap_config import LdapConfig
+    from app.models.ldap_user import LdapUser
+    ldap_config = db.query(LdapConfig).first()
+    allowed_ldap = [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()]
+    write_ldap_aux_files(ldap_config, allowed_ldap)
 
     # 5. Validar sintaxis
     valid, msg = validate_squid_config(config_path)

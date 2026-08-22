@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
-from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications
+from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups
 from app.middleware import rate_limit_middleware
 
 logging.basicConfig(level=logging.INFO)
@@ -102,6 +102,7 @@ app.include_router(admins.router, prefix="/api/admins", tags=["Administradores"]
 app.include_router(backup.router, prefix="/api/backup", tags=["Backup/Restore/Import"])
 app.include_router(logs.router, prefix="/api/logs", tags=["Logs"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notificaciones"])
+app.include_router(user_groups.router, prefix="/api/groups", tags=["Grupos de usuarios"])
 
 
 @app.get("/")

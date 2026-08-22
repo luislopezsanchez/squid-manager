@@ -5,6 +5,29 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.5.0] - 2026-08-22
+
+### Añadido
+- **Autenticación combinada (local + LDAP)**: Helper personalizado (`squidmanager_auth_helper`)
+  que consulta htpasswd local primero y luego LDAP. Resuelve la limitación de Squid de un
+  único helper de auth básica.
+- **Gestión de sesiones**: Botón "Forzar re-autenticación" (purga la caché de credenciales,
+  global) y "Bloquear/Habilitar acceso" (bloqueo temporal por usuario).
+- **Sincronización de usuarios LDAP**: Importa usuarios desde AD (`POST /api/ldap/sync`).
+- **Allow-list estricto para LDAP**: Los usuarios LDAP no navegan por defecto; el admin los
+  habilita individualmente en el panel.
+- **Grupos de usuarios**: Crear grupos y asignar usuarios (locales o LDAP). Cada grupo genera
+  una ACL `proxy_auth` en Squid para aplicar políticas por grupo.
+
+### Corregido
+- **Bug de auth dual**: Squid tenía dos líneas `auth_param basic program` (local + LDAP),
+  lo que hacía que solo funcionara una. Resuelto con el helper combinado.
+- **Test LDAP**: Reemplazado `ldapsearch`/`ldapwhoami` (no instalados) por la librería `ldap3`.
+- **Atributo `dn` inválido** en la búsqueda LDAP.
+- **Toast roto** en las páginas Notificaciones, Admins, Logs y Backup.
+
+---
+
 ## [0.3.0] - 2026-08-22
 
 ### Añadido

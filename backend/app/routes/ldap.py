@@ -6,10 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from app.database import get_db, SessionLocal
+from app.database import get_db
 from app.models.admin import Admin
 from app.models.ldap_config import LdapConfig
+from app.models.ldap_user import LdapUser
 from app.services.auth_service import get_current_admin
+from app.services.squid_service import write_ldap_aux_files, reload_squid
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -80,6 +82,12 @@ async def update_ldap_config(
         )
         db.add(config)
     db.commit()
+
+    # Escribir archivos auxiliares (ldap_helper.conf) y recargar Squid
+    allowed = [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()]
+    write_ldap_aux_files(config, allowed)
+    reload_squid()
+
     return {"status": "ok", "message": "Configuración LDAP guardada"}
 
 
@@ -183,3 +191,119 @@ async def test_ldap_connection(
                         "detail": f"Contraseña incorrecta o error de autenticación: {e}"})
         conn.unbind()
         return {"results": results, "success": False}
+
+
+# ============================================================
+# Gestión de usuarios LDAP (allow-list estricto)
+# ============================================================
+
+class LdapUserResponse(BaseModel):
+    id: int
+    username: str
+    display_name: str | None
+    email: str | None
+    enabled: bool
+
+    class Config:
+        from_attributes = True
+
+
+def _sync_ldap_files(db: Session):
+    """Escribe los archivos auxiliares de LDAP y recarga Squid."""
+    config = db.query(LdapConfig).first()
+    allowed = [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()]
+    write_ldap_aux_files(config, allowed)
+    reload_squid()
+
+
+@router.get("/users", response_model=list[LdapUserResponse])
+async def list_ldap_users(
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    """Lista los usuarios LDAP sincronizados (allow-list)."""
+    return db.query(LdapUser).order_by(LdapUser.username).all()
+
+
+@router.post("/sync")
+async def sync_ldap_users(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Sincroniza los usuarios desde LDAP/Active Directory.
+
+    - Importa (upsert) todos los usuarios del directorio a la tabla ldap_users.
+    - Los usuarios nuevos se crean con enabled=False (allow-list estricto).
+    - NO almacena contraseñas; solo username, nombre y email.
+    """
+    config = db.query(LdapConfig).first()
+    if not config or not config.enabled:
+        raise HTTPException(400, detail="LDAP no está configurado o está deshabilitado")
+
+    from ldap3 import Server, Connection, SUBTREE
+
+    try:
+        server = Server(config.server_url, connect_timeout=10)
+        conn = Connection(server, user=config.bind_dn, password=config.bind_password,
+                          auto_bind=True, receive_timeout=15)
+    except Exception as e:
+        raise HTTPException(400, detail=f"Error conectando a LDAP: {e}")
+
+    try:
+        conn.search(search_base=config.search_base,
+                    search_filter="(objectClass=user)",
+                    search_scope=SUBTREE,
+                    attributes=["sAMAccountName", "uid", "cn", "mail"])
+    except Exception as e:
+        conn.unbind()
+        raise HTTPException(400, detail=f"Error buscando usuarios: {e}")
+
+    synced = 0
+    for entry in conn.entries:
+        # En AD el login es sAMAccountName; en OpenLDAP suele ser uid
+        sam = entry.sAMAccountName.value if entry.sAMAccountName else None
+        uid = entry.uid.value if entry.uid else None
+        username = sam or uid
+        if not username:
+            continue
+        # Omitir cuentas de máquina (acaban en $) y cuentas del sistema
+        if username.endswith("$") or username.lower() in ("krbtgt", "guest", "invitado"):
+            continue
+
+        cn = entry.cn.value if entry.cn else None
+        mail = entry.mail.value if entry.mail else None
+
+        existing = db.query(LdapUser).filter(LdapUser.username == username).first()
+        if existing:
+            existing.display_name = cn
+            existing.email = mail
+        else:
+            # allow-list estricto: nuevos usuarios deshabilitados por defecto
+            db.add(LdapUser(username=username, display_name=cn, email=mail, enabled=False))
+        synced += 1
+
+    conn.unbind()
+    db.commit()
+
+    _sync_ldap_files(db)
+
+    return {"status": "ok", "synced": synced}
+
+
+@router.patch("/users/{user_id}/toggle", response_model=LdapUserResponse)
+async def toggle_ldap_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Habilita/deshabilita un usuario LDAP (controla la allow-list)."""
+    user = db.query(LdapUser).filter(LdapUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, detail="Usuario LDAP no encontrado")
+
+    user.enabled = not user.enabled
+    db.commit()
+
+    _sync_ldap_files(db)
+
+    return user

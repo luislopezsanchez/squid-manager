@@ -16,6 +16,7 @@ import BackupRestore from './pages/BackupRestore'
 import Admins from './pages/Admins'
 import LogsViewer from './pages/LogsViewer'
 import Notifications from './pages/Notifications'
+import Groups from './pages/Groups'
 import Layout from './components/Layout'
 import { getToken } from './api/client'
 
@@ -39,6 +40,7 @@ function App() {
           <Route path="backup" element={<BackupRestore />} />
           <Route path="logs" element={<LogsViewer />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="groups" element={<Groups />} />
           <Route path="admins" element={<Admins />} />
         </Route>
       </Routes>

@@ -9,6 +9,8 @@ from app.models.delay_pool import DelayPool
 from app.models.ldap_config import LdapConfig
 from app.models.audit_log import AuditLog
 from app.models.notification_config import NotificationConfig
+from app.models.ldap_user import LdapUser
+from app.models.user_group import UserGroup, UserGroupMember
 
 __all__ = [
     "Admin",
@@ -20,4 +22,7 @@ __all__ = [
     "LdapConfig",
     "AuditLog",
     "NotificationConfig",
+    "LdapUser",
+    "UserGroup",
+    "UserGroupMember",
 ]

@@ -9,11 +9,35 @@ export default function LdapConfig() {
   const [testing, setTesting] = useState(false)
   const [testResults, setTestResults] = useState<any[]>([])
   const [testUser, setTestUser] = useState({ username: '', password: '' })
+  const [ldapUsers, setLdapUsers] = useState<any[]>([])
+  const [syncing, setSyncing] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
   useEffect(() => {
     api.getLdapConfig().then(setConfig).catch(e => showToast('Error al cargar config LDAP', 'error')).finally(() => setLoading(false))
+    api.listLdapUsers().then(setLdapUsers).catch(() => {})
   }, [])
+
+  const handleSync = async () => {
+    setSyncing(true)
+    try {
+      const result = await api.syncLdapUsers()
+      showToast(`Sincronizados ${result.synced} usuarios del directorio`, 'success')
+      api.listLdapUsers().then(setLdapUsers).catch(() => {})
+    } catch (e: any) {
+      showToast(`Error al sincronizar: ${e.message}`, 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const handleToggleLdapUser = async (id: number) => {
+    try {
+      const result = await api.toggleLdapUser(id)
+      api.listLdapUsers().then(setLdapUsers).catch(() => {})
+      showToast(`Usuario "${result.username}" ${result.enabled ? 'habilitado' : 'deshabilitado'}`)
+    } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -157,6 +181,58 @@ export default function LdapConfig() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Gestión de usuarios LDAP */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="font-medium text-gray-900">Usuarios LDAP (allow-list)</h2>
+            <p className="text-sm text-gray-500">Solo los usuarios habilitados pueden navegar. Por defecto, ninguno.</p>
+          </div>
+          <button
+            onClick={handleSync}
+            disabled={syncing || !config.enabled}
+            className="bg-primary-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50"
+          >
+            {syncing ? 'Sincronizando...' : '🔄 Sincronizar con AD'}
+          </button>
+        </div>
+
+        {ldapUsers.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 text-sm">
+            No hay usuarios sincronizados. Pulsa "Sincronizar con AD" para importarlos del directorio.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Usuario</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Nombre</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Email</th>
+                  <th className="text-right px-4 py-2 text-xs font-medium text-gray-500 uppercase">Navegación</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {ldapUsers.map(u => (
+                  <tr key={u.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2.5 font-medium text-gray-900">{u.username}</td>
+                    <td className="px-4 py-2.5 text-sm text-gray-600">{u.display_name || '—'}</td>
+                    <td className="px-4 py-2.5 text-sm text-gray-600">{u.email || '—'}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => handleToggleLdapUser(u.id)}
+                        className={`text-sm font-medium ${u.enabled ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}`}
+                        title={u.enabled ? 'Bloquear navegación' : 'Permitir navegación'}>
+                        {u.enabled ? '🚫 Bloquear' : '✅ Habilitar'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

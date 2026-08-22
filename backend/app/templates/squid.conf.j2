@@ -52,16 +52,13 @@ ssl_bump splice all
 sslcrtd_program /usr/lib/squid/security_file_certgen -s /tmp/ssl_crtd -M 4MB
 sslcrtd_children 5
 
-# --- Autenticación básica (usuarios locales) ---
-auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/squid_passwd
+# --- Autenticación combinada (local + LDAP) ---
+# Un único helper que consulta local (htpasswd) primero y luego LDAP.
+# Squid solo soporta UN helper de auth básica; por eso usamos uno combinado.
+auth_param basic program /usr/lib/squid/squidmanager_auth_helper
 auth_param basic children {{ settings.get('auth_children', '5') }}
 auth_param basic realm {{ settings.get('auth_realm', 'SquidManager Proxy') }}
 auth_param basic credentialsttl {{ settings.get('credentialsttl', '2 hours') }}
-
-{% if ldap and ldap.enabled %}
-# --- Autenticación LDAP ---
-auth_param basic program /usr/lib/squid/basic_ldap_auth -b "{{ ldap.search_base }}" -D "{{ ldap.bind_dn }}" -w "{{ ldap.bind_password }}" "{{ ldap.server_url }}"
-{% endif %}
 
 # --- ACLs predefinidas ---
 acl localnet src 10.0.0.0/8
@@ -86,6 +83,13 @@ acl authenticated proxy_auth REQUIRED
 # --- ACLs personalizadas (desde BD) ---
 {% for acl in acls %}
 acl {{ acl.name }} {{ acl.type }} {{ acl.value }}
+{% endfor %}
+
+# --- Grupos de usuarios (ACLs proxy_auth) ---
+{% for group in groups %}
+{% if group.members %}
+acl {{ group.name }} proxy_auth {{ group.members|join(' ') }}
+{% endif %}
 {% endfor %}
 
 # --- Reglas de acceso (http_access) ---

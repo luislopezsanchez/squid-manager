@@ -41,6 +41,7 @@ export default function Layout() {
     { to: '/rules', label: 'Reglas de Acceso', icon: '📋' },
     { to: '/delay-pools', label: 'Ancho de Banda', icon: '🐌' },
     { to: '/ldap', label: 'LDAP', icon: '🔗' },
+    { to: '/groups', label: 'Grupos', icon: '👥' },
     { to: '/settings', label: 'Configuración', icon: '⚙️' },
     { to: '/certificate', label: 'Certificado SSL', icon: '🔐' },
     { to: '/audit', label: 'Auditoría', icon: '📝' },

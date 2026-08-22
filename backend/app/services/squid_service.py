@@ -58,6 +58,43 @@ def purge_credentials() -> tuple[bool, str]:
     return False, msg
 
 
+def write_ldap_aux_files(ldap_config, allowed_usernames: list[str]) -> bool:
+    """Escribe los archivos auxiliares de auth LDAP en el volumen compartido.
+
+    - /etc/squid/ldap_helper.conf : configuración de conexión LDAP (key=value)
+    - /etc/squid/ldap_allowlist   : usuarios LDAP autorizados (allow-list estricto)
+
+    El helper personalizado (squidmanager_auth_helper) lee estos archivos.
+    """
+    try:
+        conf_path = Path("/etc/squid/ldap_helper.conf")
+        allow_path = Path("/etc/squid/ldap_allowlist")
+
+        # ldap_helper.conf
+        if ldap_config and getattr(ldap_config, "enabled", False):
+            conf_lines = [
+                f"server_url={ldap_config.server_url or ''}",
+                f"bind_dn={ldap_config.bind_dn or ''}",
+                f"bind_password={ldap_config.bind_password or ''}",
+                f"search_base={ldap_config.search_base or ''}",
+                f"user_filter={ldap_config.user_filter or '(sAMAccountName=%s)'}",
+            ]
+            conf_path.write_text("\n".join(conf_lines) + "\n")
+        else:
+            # LDAP deshabilitado: vaciar config (solo queda auth local)
+            conf_path.write_text("")
+
+        # ldap_allowlist
+        content = "\n".join(allowed_usernames) + ("\n" if allowed_usernames else "")
+        allow_path.write_text(content)
+
+        logger.info(f"Archivos auxiliares LDAP escritos (allow-list: {len(allowed_usernames)} usuarios)")
+        return True
+    except Exception as e:
+        logger.error(f"Error escribiendo archivos auxiliares LDAP: {e}")
+        return False
+
+
 def restart_squid() -> tuple[bool, str]:
     """Recrea el contenedor Squid con el nuevo puerto.
 

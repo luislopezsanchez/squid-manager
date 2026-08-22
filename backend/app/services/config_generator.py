@@ -13,6 +13,7 @@ from app.models.access_rule import AccessRule
 from app.models.squid_settings import SquidSetting
 from app.models.delay_pool import DelayPool
 from app.models.ldap_config import LdapConfig
+from app.models.user_group import UserGroup, UserGroupMember
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
@@ -35,12 +36,22 @@ def generate_squid_config(db: Session) -> str:
     delay_pools = db.query(DelayPool).filter(DelayPool.enabled == True).all()
     ldap = db.query(LdapConfig).first()
 
+    # Grupos de usuarios (mapeados a ACLs proxy_auth)
+    groups = []
+    for g in db.query(UserGroup).order_by(UserGroup.name).all():
+        members = [
+            m.username
+            for m in db.query(UserGroupMember).filter(UserGroupMember.group_id == g.id).all()
+        ]
+        groups.append({"name": g.name, "members": members})
+
     config = template.render(
         acls=acls,
         rules=rules,
         settings=settings,
         delay_pools=delay_pools,
         ldap=ldap,
+        groups=groups,
     )
     return config
 
