@@ -39,6 +39,48 @@ async def log_stats(_: Admin = Depends(get_current_admin)):
     return get_log_stats()
 
 
+@router.get("/security-alerts")
+async def security_alerts(
+    minutes: int = Query(10, ge=1, le=60),
+    threshold: int = Query(5, ge=1, le=100),
+    _: Admin = Depends(get_current_admin),
+):
+    """Detectar intentos de autenticación fallidos repetidos por IP.
+
+    Escanea los logs recientes en busca de IPs con >= `threshold` respuestas 407
+    (Proxy Authentication Required, es decir, credenciales inválidas o ausentes)
+    en los últimos `minutes` minutos.
+    """
+    from app.services.log_service import read_all_entries
+    import time
+
+    entries = read_all_entries()
+    now = time.time()
+    cutoff = now - (minutes * 60)
+
+    # Contar fallos de auth (407) por IP en la ventana de tiempo
+    from collections import Counter
+    auth_failures = Counter()
+    for e in entries:
+        if e["timestamp"] >= cutoff and e["status"] == 407:
+            auth_failures[e["client_ip"]] += 1
+
+    # Filtrar IPs que superan el umbral
+    suspicious = [
+        {"ip": ip, "failed_attempts": count}
+        for ip, count in auth_failures.items()
+        if count >= threshold
+    ]
+    suspicious.sort(key=lambda x: x["failed_attempts"], reverse=True)
+
+    return {
+        "window_minutes": minutes,
+        "threshold": threshold,
+        "alerts": suspicious,
+        "total_suspicious_ips": len(suspicious),
+    }
+
+
 @router.get("/export")
 async def export_logs(
     user: str | None = Query(None),
