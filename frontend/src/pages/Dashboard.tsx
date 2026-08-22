@@ -158,38 +158,55 @@ export default function Dashboard() {
             </span>
           </div>
 
-          {/* Gráfico - barras finas con más puntos */}
-          <div className="relative">
-            <div className="flex items-end gap-px h-48 overflow-hidden">
-              {timeline.map((point, i) => {
-                const total = point.total_bytes || (point.rx_bytes + point.tx_bytes)
-                const heightPercent = Math.max((total / maxBytes) * 100, 0.5)
-                return (
-                  <div key={i} className="flex-1 flex flex-col justify-end items-center group relative h-full" style={{ minWidth: '2px' }}>
-                    <div
-                      className="w-full rounded-sm transition-all duration-300"
-                      style={{
-                        height: `${heightPercent}%`,
-                        backgroundColor: total > 0 ? '#299ac2' : '#e2e8f0',
-                        minHeight: '1px',
-                      }}
-                    />
-                    {/* Tooltip solo en hover */}
-                    <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-20 pointer-events-none">
-                      {point.time}<br/>
-                      ↓ {formatRate(point.rx_bytes)}<br/>
-                      ↑ {formatRate(point.tx_bytes)}
-                    </div>
-                  </div>
-                )
-              })}
+          {/* Gráfico con eje Y */}
+          <div className="flex gap-2" style={{ height: '192px' }}>
+            {/* Eje Y - marcas de escala */}
+            <div className="flex flex-col justify-between text-[10px] text-gray-400 font-mono text-right pr-1" style={{ width: '60px' }}>
+              <span>{formatRate(maxBytes)}</span>
+              <span>{formatRate(maxBytes * 0.75)}</span>
+              <span>{formatRate(maxBytes * 0.5)}</span>
+              <span>{formatRate(maxBytes * 0.25)}</span>
+              <span>0</span>
             </div>
-            {/* Línea base */}
-            <div className="border-t border-gray-200 mt-0"></div>
+
+            {/* Área del gráfico */}
+            <div className="relative flex-1 overflow-hidden">
+              {/* Líneas horizontales de referencia */}
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                {[0, 1, 2, 3, 4].map(i => (
+                  <div key={i} className="border-t border-gray-100 w-full" style={{ height: '0' }} />
+                ))}
+              </div>
+
+              {/* Barras */}
+              <div className="flex items-end justify-end h-full gap-px relative">
+                {timeline.map((point, i) => {
+                  const total = point.total_bytes || (point.rx_bytes + point.tx_bytes)
+                  const heightPercent = Math.max((total / maxBytes) * 100, 0.5)
+                  return (
+                    <div key={i} className="flex flex-col justify-end items-center group relative h-full flex-shrink-0" style={{ width: '4px' }}>
+                      <div
+                        className="w-full rounded-sm transition-all duration-300"
+                        style={{
+                          height: `${heightPercent}%`,
+                          backgroundColor: total > 1000 ? '#299ac2' : '#e2e8f0',
+                          minHeight: '1px',
+                        }}
+                      />
+                      <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-20 pointer-events-none">
+                        {point.time}<br/>
+                        ↓ {formatRate(point.rx_bytes)}<br/>
+                        ↑ {formatRate(point.tx_bytes)}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Eje temporal */}
-          <div className="flex justify-between text-xs text-gray-400 mt-2">
+          <div className="flex justify-between text-xs text-gray-400 mt-2 pl-[68px]">
             <span>Hace 5 min</span>
             <span>Hace 2.5 min</span>
             <span>Ahora</span>
