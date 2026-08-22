@@ -57,7 +57,7 @@ export default function LogsViewer() {
   const [fDomain, setFDomain] = useState('')
   const [fDenied, setFDenied] = useState(false)
 
-  const { toast, showToast } = useToast()
+  const { showToast, ToastContainer } = useToast()
 
   const loadLogs = useCallback(() => {
     setLoading(true)
@@ -234,7 +234,7 @@ export default function LogsViewer() {
         </div>
       </div>
 
-      {toast && <div className={`fixed top-6 right-6 z-50 px-6 py-3 rounded-lg text-white ${toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-amber-600'}`}>{toast.msg}</div>}
+      <ToastContainer />
     </div>
   )
 }

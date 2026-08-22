@@ -16,6 +16,7 @@ class NotificationConfig(Base):
     smtp_user = Column(String(255), nullable=True)
     smtp_password = Column(String(255), nullable=True)
     smtp_from = Column(String(255), nullable=True)
+    smtp_encryption = Column(String(20), default="starttls", nullable=False)  # none, starttls, ssl
     email_recipients = Column(String(500), nullable=True)  # coma-separado
 
     # Telegram

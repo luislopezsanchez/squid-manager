@@ -154,6 +154,6 @@ export const api = {
   // Notifications
   getNotificationConfig: () => request<any>('/notifications/config'),
   updateNotificationConfig: (data: any) => request<any>('/notifications/config', { method: 'PUT', body: JSON.stringify(data) }),
-  testEmail: () => request<any>('/notifications/test-email', { method: 'POST' }),
-  testTelegram: () => request<any>('/notifications/test-telegram', { method: 'POST' }),
+  testEmail: (data: any) => request<any>('/notifications/test-email', { method: 'POST', body: JSON.stringify(data) }),
+  testTelegram: (data: any) => request<any>('/notifications/test-telegram', { method: 'POST', body: JSON.stringify(data) }),
 }

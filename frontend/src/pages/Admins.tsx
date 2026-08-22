@@ -18,7 +18,7 @@ export default function Admins() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<AdminUser | null>(null)
   const [formData, setFormData] = useState({ username: '', password: '', email: '', role: 'admin' })
-  const { toast, showToast } = useToast()
+  const { showToast, ToastContainer } = useToast()
 
   const load = () => {
     api.listAdmins().then(setAdmins).catch(e => showToast(e.message, 'error')).finally(() => setLoading(false))
@@ -191,7 +191,7 @@ export default function Admins() {
           </div>
         </div>
       )}
-      {toast && <div className={`fixed top-6 right-6 z-50 px-6 py-3 rounded-lg text-white ${toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-amber-600'}`}>{toast.msg}</div>}
+      <ToastContainer />
     </div>
   )
 }

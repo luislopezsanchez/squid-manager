@@ -9,6 +9,7 @@ interface NotifConfig {
   smtp_user: string | null
   smtp_password_set: boolean
   smtp_from: string | null
+  smtp_encryption: string
   email_recipients: string | null
   telegram_enabled: boolean
   telegram_bot_token_set: boolean
@@ -28,7 +29,7 @@ export default function Notifications() {
   const [telegramToken, setTelegramToken] = useState('')
   const [testingEmail, setTestingEmail] = useState(false)
   const [testingTelegram, setTestingTelegram] = useState(false)
-  const { toast, showToast } = useToast()
+  const { showToast, ToastContainer } = useToast()
 
   useEffect(() => {
     api.getNotificationConfig().then(setConfig).catch(e => showToast(e.message, 'error')).finally(() => setLoading(false))
@@ -45,6 +46,7 @@ export default function Notifications() {
         smtp_user: config.smtp_user,
         smtp_password: smtpPassword || undefined,
         smtp_from: config.smtp_from,
+        smtp_encryption: config.smtp_encryption,
         email_recipients: config.email_recipients,
         telegram_enabled: config.telegram_enabled,
         telegram_bot_token: telegramToken || undefined,
@@ -56,7 +58,7 @@ export default function Notifications() {
         notify_on_security_alert: config.notify_on_security_alert,
       }
       await api.updateNotificationConfig(payload)
-      showToast('Configuración guardada', 'success')
+      showToast('Configuración guardada correctamente', 'success')
       setSmtpPassword('')
       setTelegramToken('')
     } catch (e: any) {
@@ -67,9 +69,22 @@ export default function Notifications() {
   }
 
   const testEmail = async () => {
+    if (!config) return
+    // Validar campos mínimos
+    if (!config.smtp_host) { showToast('Falta el servidor SMTP (host)', 'error'); return }
+    if (!config.email_recipients) { showToast('Falta el destinatario (email)', 'error'); return }
+
     setTestingEmail(true)
     try {
-      const r = await api.testEmail()
+      const r = await api.testEmail({
+        smtp_host: config.smtp_host,
+        smtp_port: config.smtp_port,
+        smtp_user: config.smtp_user,
+        smtp_password: smtpPassword || undefined,
+        smtp_from: config.smtp_from,
+        smtp_encryption: config.smtp_encryption,
+        email_recipients: config.email_recipients,
+      })
       showToast(r.message, r.ok ? 'success' : 'error')
     } catch (e: any) {
       showToast(e.message, 'error')
@@ -79,9 +94,16 @@ export default function Notifications() {
   }
 
   const testTelegram = async () => {
+    if (!config) return
+    if (!telegramToken && !config.telegram_bot_token_set) { showToast('Falta el token del bot de Telegram', 'error'); return }
+    if (!config.telegram_chat_id) { showToast('Falta el Chat ID de Telegram', 'error'); return }
+
     setTestingTelegram(true)
     try {
-      const r = await api.testTelegram()
+      const r = await api.testTelegram({
+        telegram_bot_token: telegramToken || 'USE_SAVED',
+        telegram_chat_id: config.telegram_chat_id,
+      })
       showToast(r.message, r.ok ? 'success' : 'error')
     } catch (e: any) {
       showToast(e.message, 'error')
@@ -97,8 +119,8 @@ export default function Notifications() {
       <h1 className="text-2xl font-bold mb-6" style={{ color: '#083151' }}>Notificaciones</h1>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-xs text-blue-800">
-        Configura alertas por email y/o Telegram para enterarte de cambios críticos en el proxy:
-        aplicación de cambios, modificación de usuarios/ACLs/reglas, y alertas de seguridad.
+        Configura alertas por email y/o Telegram para enterarte de cambios críticos en el proxy.
+        Guarda la configuración primero, o usa los botones de prueba para validar los datos actuales del formulario.
       </div>
 
       {/* Email */}
@@ -128,6 +150,19 @@ export default function Notifications() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>
             </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Método de cifrado / seguridad de conexión</label>
+              <select value={config.smtp_encryption}
+                onChange={e => setConfig({ ...config, smtp_encryption: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                <option value="starttls">STARTTLS (puerto 587 — Gmail, Outlook, la mayoría)</option>
+                <option value="ssl">SSL/TLS implícito (puerto 465 — algunos servicios)</option>
+                <option value="none">Sin cifrado (servidores internos)</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                La mayoría de servicios usan STARTTLS en el puerto 587. Si tu servicio pide SSL/TLS, elige "SSL/TLS implícito" (puerto 465).
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Usuario SMTP</label>
@@ -156,10 +191,13 @@ export default function Notifications() {
                 onChange={e => setConfig({ ...config, email_recipients: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
-            <button onClick={testEmail} disabled={testingEmail}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
-              {testingEmail ? 'Enviando...' : '✉️ Enviar email de prueba'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={testEmail} disabled={testingEmail}
+                className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#299ac2' }}>
+                {testingEmail ? 'Enviando...' : '✉️ Enviar email de prueba'}
+              </button>
+              <span className="text-xs text-gray-400">Prueba con los datos actuales del formulario (no hace falta guardar antes)</span>
+            </div>
           </div>
         )}
       </div>
@@ -193,10 +231,10 @@ export default function Notifications() {
             </div>
             <p className="text-xs text-gray-400">
               Cómo obtener el token: habla con <code>@BotFather</code> en Telegram y crea un bot.
-              El Chat ID lo obtienes hablando con tu bot y consultando la API <code>getUpdates</code>.
+              El Chat ID lo obtienes hablando con tu bot y consultando <code>getUpdates</code>.
             </p>
             <button onClick={testTelegram} disabled={testingTelegram}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+              className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#299ac2' }}>
               {testingTelegram ? 'Enviando...' : '✈️ Enviar mensaje de prueba'}
             </button>
           </div>
@@ -234,7 +272,7 @@ export default function Notifications() {
         {saving ? 'Guardando...' : '💾 Guardar configuración'}
       </button>
 
-      {toast && <div className={`fixed top-6 right-6 z-50 px-6 py-3 rounded-lg text-white ${toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-amber-600'}`}>{toast.msg}</div>}
+      <ToastContainer />
     </div>
   )
 }

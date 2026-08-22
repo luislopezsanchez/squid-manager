@@ -3,7 +3,7 @@ import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
 
 export default function BackupRestore() {
-  const { toast, showToast } = useToast()
+  const { showToast, ToastContainer } = useToast()
   const [restoreBusy, setRestoreBusy] = useState(false)
   const [importBusy, setImportBusy] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
@@ -211,7 +211,7 @@ export default function BackupRestore() {
         </div>
       )}
 
-      {toast && <div className={`fixed top-6 right-6 z-50 px-6 py-3 rounded-lg text-white ${toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-amber-600'}`}>{toast.msg}</div>}
+      <ToastContainer />
     </div>
   )
 }
