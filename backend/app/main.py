@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
-from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit
+from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -93,6 +93,7 @@ app.include_router(squid_config.router, prefix="/api/squid", tags=["Configuraci�
 app.include_router(ldap.router, prefix="/api/ldap", tags=["LDAP"])
 app.include_router(delay_pools.router, prefix="/api/delay-pools", tags=["Delay Pools"])
 app.include_router(audit.router, prefix="/api/audit", tags=["Auditoría"])
+app.include_router(metrics.router, prefix="/api/metrics", tags=["Métricas"])
 
 
 @app.get("/")

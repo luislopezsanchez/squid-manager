@@ -44,6 +44,7 @@ services:
       - ./backend/app:/app/app
       - squid-config:/etc/squid
       - squid-spool:/var/spool/squid
+      - squid-logs:/var/log/squid
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8000:8000"

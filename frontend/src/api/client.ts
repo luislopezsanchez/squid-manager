@@ -98,4 +98,10 @@ export const api = {
   // Audit
   listAudit: (limit = 100, offset = 0) => request<any>(`/audit/?limit=${limit}&offset=${offset}`),
   auditStats: () => request<any>('/audit/stats'),
+
+  // Metrics
+  getDashboard: () => request<any>('/metrics/dashboard'),
+  getTraffic: (seconds = 60) => request<any>(`/metrics/traffic?seconds=${seconds}`),
+  getTimeline: (seconds = 60, interval = 5) => request<any>(`/metrics/timeline?seconds=${seconds}&interval=${interval}`),
+  getConnections: (limit = 20) => request<any>(`/metrics/connections?limit=${limit}`),
 }
