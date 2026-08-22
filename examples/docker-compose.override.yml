@@ -1,0 +1,54 @@
+# docker-compose.override.yml — Ejemplo para producción
+#
+# Copia este archivo a docker-compose.override.yml y ajusta los valores
+# Docker Compose lo carga automáticamente junto con docker-compose.yml
+#
+# cp examples/docker-compose.override.yml docker-compose.override.yml
+
+version: "3.8"
+
+services:
+  # ============================================
+  # Frontend con HTTPS (Let's Encrypt)
+  # ============================================
+  frontend:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+
+  # ============================================
+  # Backend con variables de producción
+  # ============================================
+  backend:
+    environment:
+      - SECRET_KEY=tu-clave-secreta-de-64-chars-aqui
+      - DEBUG=false
+    # No exponer el puerto 8000 al público en producción
+    # Solo accesible dentro de la red Docker
+    ports: []
+
+  # ============================================
+  # Squid con más recursos
+  # ============================================
+  squid:
+    # Aumentar límites si hay muchos usuarios
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Mapear más puertos si se usan múltiples
+    ports:
+      - "3128:3128"
+
+  # ============================================
+  # PostgreSQL con backup automático
+  # ============================================
+  db:
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    # Ejecutar backup diario (requiere cron en el host)
+    # 0 2 * * * docker exec squidmgr-db pg_dump -U squid squidmanager > /backups/squidmanager_$(date +\%Y\%m\%d).sql
