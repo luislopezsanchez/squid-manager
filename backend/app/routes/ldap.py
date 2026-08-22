@@ -146,7 +146,7 @@ async def test_ldap_connection(
     search_filter = data.user_filter.replace("%s", data.username) if "%s" in data.user_filter else data.user_filter
     try:
         conn.search(search_base=data.search_base, search_filter=search_filter,
-                    search_scope=SUBTREE, attributes=["dn", "cn", "mail", "sAMAccountName"])
+                    search_scope=SUBTREE, attributes=["cn", "mail", "sAMAccountName", "uid", "userPrincipalName"])
     except Exception as e:
         results.append({"step": "Búsqueda de usuario", "status": "error",
                         "detail": f"Error en la búsqueda: {e}"})
