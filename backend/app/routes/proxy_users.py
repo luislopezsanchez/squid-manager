@@ -1,7 +1,7 @@
 """Rutas de gestión de usuarios del proxy."""
 
 import subprocess
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -13,6 +13,7 @@ from app.schemas.proxy_user import (
 )
 from app.services.auth_service import get_password_hash, get_current_admin
 from app.services.squid_service import write_passwd_file, reload_squid
+from app.services.notification_service import queue_notification
 
 router = APIRouter()
 
@@ -80,6 +81,7 @@ async def create_proxy_user(
     data: ProxyUserCreate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Crea un nuevo usuario del proxy."""
     existing = db.query(ProxyUser).filter(ProxyUser.username == data.username).first()
@@ -108,6 +110,11 @@ async def create_proxy_user(
     db.commit()
 
     _sync_passwd_and_reload(db)
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "user_change",
+                           "Usuario de proxy creado",
+                           f"El admin {current_admin.username} creó el usuario '{data.username}'.")
     return user
 
 
@@ -117,6 +124,7 @@ async def update_proxy_user(
     data: ProxyUserUpdate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Actualiza un usuario del proxy."""
     user = db.query(ProxyUser).filter(ProxyUser.id == user_id).first()
@@ -138,6 +146,11 @@ async def update_proxy_user(
     db.commit()
 
     _sync_passwd_and_reload(db)
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "user_change",
+                           "Usuario de proxy actualizado",
+                           f"El admin {current_admin.username} actualizó el usuario '{user.username}'.")
     return user
 
 
@@ -146,6 +159,7 @@ async def delete_proxy_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Elimina un usuario del proxy."""
     user = db.query(ProxyUser).filter(ProxyUser.id == user_id).first()
@@ -162,12 +176,18 @@ async def delete_proxy_user(
 
     _sync_passwd_and_reload(db)
 
+    if background_tasks:
+        queue_notification(background_tasks, db, "user_change",
+                           "Usuario de proxy eliminado",
+                           f"El admin {current_admin.username} eliminó el usuario '{user.username}'.")
+
 
 @router.patch("/{user_id}/toggle", response_model=ProxyUserResponse)
 async def toggle_proxy_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Habilita/deshabilita un usuario del proxy."""
     user = db.query(ProxyUser).filter(ProxyUser.id == user_id).first()
@@ -183,4 +203,10 @@ async def toggle_proxy_user(
     db.commit()
 
     _sync_passwd_and_reload(db)
+
+    if background_tasks:
+        estado = "habilitó" if user.enabled else "deshabilitó"
+        queue_notification(background_tasks, db, "user_change",
+                           "Usuario de proxy modificado",
+                           f"El admin {current_admin.username} {estado} el usuario '{user.username}'.")
     return user

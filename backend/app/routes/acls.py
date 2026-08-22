@@ -1,6 +1,6 @@
 """Rutas de gestión de ACLs."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,6 +9,7 @@ from app.models.acl import Acl
 from app.models.audit_log import AuditLog
 from app.schemas.acl import AclCreate, AclUpdate, AclResponse
 from app.services.auth_service import get_current_admin
+from app.services.notification_service import queue_notification
 
 router = APIRouter()
 
@@ -27,6 +28,7 @@ async def create_acl(
     data: AclCreate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Crea una nueva ACL."""
     existing = db.query(Acl).filter(Acl.name == data.name).first()
@@ -42,6 +44,11 @@ async def create_acl(
         action="create", entity="acl", entity_id=acl.id, new_value=data.name,
     ))
     db.commit()
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "acl_change",
+                           "ACL creada",
+                           f"El admin {current_admin.username} creó la ACL '{data.name}' ({data.type}).")
     return acl
 
 
@@ -51,6 +58,7 @@ async def update_acl(
     data: AclUpdate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Actualiza una ACL."""
     acl = db.query(Acl).filter(Acl.id == acl_id).first()
@@ -64,6 +72,11 @@ async def update_acl(
         action="update", entity="acl", entity_id=acl.id,
     ))
     db.commit()
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "acl_change",
+                           "ACL actualizada",
+                           f"El admin {current_admin.username} actualizó la ACL '{acl.name}'.")
     return acl
 
 
@@ -72,6 +85,7 @@ async def delete_acl(
     acl_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Elimina una ACL."""
     acl = db.query(Acl).filter(Acl.id == acl_id).first()
@@ -84,3 +98,8 @@ async def delete_acl(
     ))
     db.delete(acl)
     db.commit()
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "acl_change",
+                           "ACL eliminada",
+                           f"El admin {current_admin.username} eliminó la ACL '{acl.name}'.")

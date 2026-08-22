@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 import docker as docker_sdk
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -16,6 +16,7 @@ from app.models.squid_settings import SquidSetting
 from app.services.auth_service import get_current_admin
 from app.services.config_generator import generate_squid_config, validate_squid_config
 from app.services.squid_service import reload_squid, get_squid_status, restart_squid
+from app.services.notification_service import queue_notification
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,8 @@ async def update_setting(
 @router.post("/apply")
 async def apply_config(
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Genera el squid.conf, valida y recarga o reinicia Squid.
 
@@ -132,6 +134,12 @@ async def apply_config(
                 container.exec_run(["squid", "-k", "reconfigure"])
             finally:
                 db2.close()
+
+            if background_tasks:
+                queue_notification(background_tasks, db, "apply",
+                                   "Cambios aplicados a Squid",
+                                   f"El admin {current_admin.username} aplicó cambios (reinicio con SSL Bump).")
+
             return {
                 "status": "ok",
                 "message": "Squid reiniciado con SSL Bump (configuración aplicada)",
@@ -149,6 +157,11 @@ async def apply_config(
     # 5a. Si no tiene ssl-bump, reconfigure normal
     success, reload_msg = reload_squid()
     action = "reconfigurado"
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "apply",
+                           "Cambios aplicados a Squid",
+                           f"El admin {current_admin.username} aplicó cambios (reconfigure).")
 
     return {
         "status": "ok" if success else "warning",

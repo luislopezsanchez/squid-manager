@@ -6,8 +6,59 @@ import urllib.parse
 import urllib.request
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from types import SimpleNamespace
 
 logger = logging.getLogger(__name__)
+
+# Mapa de eventos a atributos de config
+EVENT_CONFIG_MAP = {
+    "apply": "notify_on_apply",
+    "user_change": "notify_on_user_change",
+    "acl_change": "notify_on_acl_change",
+    "rule_change": "notify_on_rule_change",
+    "security_alert": "notify_on_security_alert",
+}
+
+
+def _snapshot_config(config) -> SimpleNamespace:
+    """Crea una copia plana de la config para usarla fuera de la sesión de BD."""
+    return SimpleNamespace(
+        email_enabled=config.email_enabled,
+        smtp_host=config.smtp_host,
+        smtp_port=config.smtp_port,
+        smtp_user=config.smtp_user,
+        smtp_password=config.smtp_password,
+        smtp_from=config.smtp_from,
+        smtp_encryption=config.smtp_encryption,
+        email_recipients=config.email_recipients,
+        telegram_enabled=config.telegram_enabled,
+        telegram_bot_token=config.telegram_bot_token,
+        telegram_chat_id=config.telegram_chat_id,
+    )
+
+
+def queue_notification(background_tasks, db, event_type: str, subject: str, message: str):
+    """Encarga el envío de una notificación en segundo plano si está habilitada.
+
+    - Verifica que el evento esté habilitado en la config (notify_on_*).
+    - Verifica que al menos un canal (email o Telegram) esté habilitado.
+    - Si corresponde, agrega un background task para enviar sin bloquear la petición.
+    """
+    from app.models.notification_config import NotificationConfig
+
+    config = db.query(NotificationConfig).first()
+    if not config:
+        return
+
+    attr = EVENT_CONFIG_MAP.get(event_type)
+    if attr and not getattr(config, attr, False):
+        return
+
+    if not (config.email_enabled or config.telegram_enabled):
+        return
+
+    snapshot = _snapshot_config(config)
+    background_tasks.add_task(notify, snapshot, subject, message)
 
 
 def send_email(config, subject: str, body: str) -> tuple[bool, str]:

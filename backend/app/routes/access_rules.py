@@ -1,6 +1,6 @@
 """Rutas de gestión de reglas de acceso (http_access)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -12,6 +12,7 @@ from app.schemas.access_rule import (
     AccessRuleCreate, AccessRuleUpdate, AccessRuleResponse,
 )
 from app.services.auth_service import get_current_admin
+from app.services.notification_service import queue_notification
 
 router = APIRouter()
 
@@ -34,6 +35,7 @@ async def create_access_rule(
     data: AccessRuleCreate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Crea una nueva regla de acceso."""
     rule = AccessRule(
@@ -48,6 +50,11 @@ async def create_access_rule(
         new_value=f"{data.action} {data.acl_names}",
     ))
     db.commit()
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "rule_change",
+                           "Regla de acceso creada",
+                           f"El admin {current_admin.username} creó la regla '{data.action} {data.acl_names}'.")
     return rule
 
 
@@ -57,6 +64,7 @@ async def reorder_rules(
     data: ReorderRequest,
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Reordena las reglas de acceso. Recibe una lista de IDs en el nuevo orden."""
     for new_order, rule_id in enumerate(data.rule_ids):
@@ -64,6 +72,11 @@ async def reorder_rules(
         if rule:
             rule.order = new_order
     db.commit()
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "rule_change",
+                           "Reglas de acceso reordenadas",
+                           f"El admin reordenó {len(data.rule_ids)} reglas de acceso.")
     return db.query(AccessRule).order_by(AccessRule.order).all()
 
 
@@ -73,6 +86,7 @@ async def update_access_rule(
     data: AccessRuleUpdate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Actualiza una regla de acceso."""
     rule = db.query(AccessRule).filter(AccessRule.id == rule_id).first()
@@ -86,6 +100,11 @@ async def update_access_rule(
         action="update", entity="access_rule", entity_id=rule.id,
     ))
     db.commit()
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "rule_change",
+                           "Regla de acceso actualizada",
+                           f"El admin {current_admin.username} actualizó la regla '{rule.action} {rule.acl_names}'.")
     return rule
 
 
@@ -94,6 +113,7 @@ async def delete_access_rule(
     rule_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
+    background_tasks: BackgroundTasks = None,
 ):
     """Elimina una regla de acceso."""
     rule = db.query(AccessRule).filter(AccessRule.id == rule_id).first()
@@ -107,3 +127,8 @@ async def delete_access_rule(
     ))
     db.delete(rule)
     db.commit()
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "rule_change",
+                           "Regla de acceso eliminada",
+                           f"El admin {current_admin.username} eliminó la regla '{rule.action} {rule.acl_names}'.")
