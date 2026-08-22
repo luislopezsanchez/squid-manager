@@ -102,7 +102,9 @@ http_access deny manager
 http_access {{ rule.action }} {{ rule.acl_names }}
 {% endfor %}
 
-http_access allow authenticated
+# Nota: las reglas "deny <grupo>" se convierten a "allow authenticated !<grupo>"
+# para evitar el bug de Squid (deny + proxy_auth devuelve 407 en vez de 403).
+http_access allow authenticated{{ denied_groups_str }}
 http_access deny all
 
 # --- Configuración de caché ---

@@ -45,13 +45,31 @@ def generate_squid_config(db: Session) -> str:
         ]
         groups.append({"name": g.name, "members": members})
 
+    # Separar reglas "deny <grupo>" para evitar el bug de Squid:
+    # `http_access deny` con ACL proxy_auth devuelve 407 en vez de 403.
+    # Se convierten a "allow authenticated !grupo" al final.
+    group_names = {g["name"] for g in groups}
+    denied_groups = []
+    filtered_rules = []
+    for rule in rules:
+        acl_names = rule.acl_names.split() if rule.acl_names else []
+        if rule.action == "deny" and acl_names and all(n in group_names for n in acl_names):
+            # Regla "deny <grupo>" → convertir a allow !grupo
+            denied_groups.extend(acl_names)
+        else:
+            filtered_rules.append(rule)
+
+    # String de negación para el "allow authenticated !grupo1 !grupo2 ..."
+    denied_groups_str = "".join(f" !{g}" for g in denied_groups)
+
     config = template.render(
         acls=acls,
-        rules=rules,
+        rules=filtered_rules,
         settings=settings,
         delay_pools=delay_pools,
         ldap=ldap,
         groups=groups,
+        denied_groups_str=denied_groups_str,
     )
     return config
 
