@@ -104,4 +104,25 @@ export const api = {
   getTraffic: (seconds = 60) => request<any>(`/metrics/traffic?seconds=${seconds}`),
   getTimeline: (seconds = 60, interval = 5) => request<any>(`/metrics/timeline?seconds=${seconds}&interval=${interval}`),
   getConnections: (limit = 20) => request<any>(`/metrics/connections?limit=${limit}`),
+
+  // Admins
+  listAdmins: () => request<any>('/admins/'),
+  createAdmin: (data: any) => request<any>('/admins/', { method: 'POST', body: JSON.stringify(data) }),
+  updateAdmin: (id: number, data: any) => request<any>(`/admins/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAdmin: (id: number) => request<any>(`/admins/${id}`, { method: 'DELETE' }),
+  changePassword: (current: string, newPass: string) => request<any>('/admins/change-password', { method: 'PUT', body: JSON.stringify({ current_password: current, new_password: newPass }) }),
+
+  // Backup
+  exportBackup: () => `${API_BASE}/backup/export`,
+  restoreBackup: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request<any>('/backup/restore', { method: 'POST', body: formData })
+  },
+  downloadSquidConf: () => `${API_BASE}/backup/squid-conf`,
+  importSquidConf: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request<any>('/backup/import-squid-conf', { method: 'POST', body: formData })
+  },
 }

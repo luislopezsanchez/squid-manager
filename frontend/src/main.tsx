@@ -12,6 +12,8 @@ import LdapConfig from './pages/LdapConfig'
 import DelayPools from './pages/DelayPools'
 import AuditLog from './pages/AuditLog'
 import CertificadoCA from './pages/CertificadoCA'
+import BackupRestore from './pages/BackupRestore'
+import Admins from './pages/Admins'
 import Layout from './components/Layout'
 import { getToken } from './api/client'
 
@@ -32,6 +34,8 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="certificate" element={<CertificadoCA />} />
           <Route path="audit" element={<AuditLog />} />
+          <Route path="backup" element={<BackupRestore />} />
+          <Route path="admins" element={<Admins />} />
         </Route>
       </Routes>
     </BrowserRouter>

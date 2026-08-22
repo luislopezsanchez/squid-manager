@@ -44,6 +44,8 @@ export default function Layout() {
     { to: '/settings', label: 'Configuración', icon: '⚙️' },
     { to: '/certificate', label: 'Certificado SSL', icon: '🔐' },
     { to: '/audit', label: 'Auditoría', icon: '📝' },
+    { to: '/backup', label: 'Backup/Migrar', icon: '💾' },
+    { to: '/admins', label: 'Admins', icon: '🛡️' },
   ]
 
   return (
