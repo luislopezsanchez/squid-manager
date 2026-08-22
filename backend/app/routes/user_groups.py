@@ -16,6 +16,7 @@ from app.models.admin import Admin
 from app.models.user_group import UserGroup, UserGroupMember
 from app.services.auth_service import get_current_admin
 from app.services.config_state import mark_dirty
+from app.services.squid_service import apply_squid_config
 
 router = APIRouter()
 
@@ -51,6 +52,20 @@ def _to_response(group: UserGroup, members: list[str]) -> GroupResponse:
         description=group.description,
         members=members,
     )
+
+
+def _apply_after_member_change(db: Session) -> dict:
+    """Aplica la config de Squid tras añadir/quitar un miembro de grupo.
+
+    Los cambios de miembros de grupo se aplican de inmediato (igual que usuarios
+    y LDAP), para que la política del grupo surta efecto sin pulsar
+    "Aplicar Cambios" manualmente. Si la config resultara inválida, se marca
+    "pendiente" como respaldo para reintentar manualmente.
+    """
+    result = apply_squid_config(db, force_reconfigure=True)
+    if result["status"] == "error":
+        mark_dirty()
+    return result
 
 
 @router.get("/", response_model=list[GroupResponse])
@@ -153,7 +168,7 @@ async def add_member(
 
     db.add(UserGroupMember(group_id=group_id, username=data.username))
     db.commit()
-    mark_dirty()
+    _apply_after_member_change(db)
 
     members = [
         m.username
@@ -178,7 +193,7 @@ async def remove_member(
         UserGroupMember.group_id == group_id, UserGroupMember.username == username
     ).delete()
     db.commit()
-    mark_dirty()
+    _apply_after_member_change(db)
 
     members = [
         m.username

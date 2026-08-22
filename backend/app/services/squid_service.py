@@ -223,6 +223,123 @@ def restart_squid() -> tuple[bool, str]:
         return False, f"Error: {e}"
 
 
+def apply_squid_config(db, force_reconfigure: bool = False) -> dict:
+    """Genera y aplica la configuración de Squid de extremo a extremo.
+
+    Flujo completo (el mismo que usaba el endpoint /squid/apply):
+      1. Genera squid.conf desde la BD.
+      2. Detecta cambio de puerto (requiere recrear contenedor).
+      3. Escribe squid.conf.
+      4. Escribe archivos auxiliares de auth LDAP (helper + allow-list).
+      5. Valida sintaxis.
+      6. Si hay SSL Bump -> reinicio completo del contenedor + regenera passwd.
+         Si no -> reconfigure normal.
+      7. Marca el estado "limpio" (sin cambios pendientes).
+
+    Parámetro `force_reconfigure`: cuando es True, se fuerza `squid -k reconfigure`
+    en lugar de un reinicio completo aunque el config tenga SSL Bump. Útil para
+    cambios de solo-ACL (p. ej. añadir/quitar miembros de un grupo), que
+    reconfigure recarga sin purgar credenciales ni cortar conexiones activas.
+
+    Devuelve un dict {status, message, needs_restart, config_preview} apto para
+    ser devuelto tal cual por el endpoint, o interpretado por otros servicios.
+    """
+    import re as regex
+    import time
+
+    from app.services.config_generator import generate_squid_config, validate_squid_config
+    from app.services.config_state import mark_clean
+    from app.models.ldap_config import LdapConfig
+    from app.models.ldap_user import LdapUser
+    from app.models.proxy_user import ProxyUser
+    from app.database import SessionLocal
+
+    config_text = generate_squid_config(db)
+
+    # 2. Extraer el puerto nuevo del config generado
+    new_port_match = regex.search(r"^http_port\s+(\d+)", config_text, regex.MULTILINE)
+    new_port = new_port_match.group(1) if new_port_match else None
+
+    # 3. Comparar con el puerto que Docker publica actualmente
+    needs_restart = False
+    if new_port:
+        try:
+            client = docker_sdk.from_env()
+            container = client.containers.get(settings.SQUID_CONTAINER_NAME)
+            container.reload()
+            published_ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
+            for port_key, bindings in published_ports.items():
+                if bindings and isinstance(bindings, list):
+                    for binding in bindings:
+                        published = binding.get("HostPort")
+                        if published and published != new_port:
+                            needs_restart = True
+                            logger.info(f"Puerto cambió: Docker publica {published}, BD dice {new_port}. Recreando contenedor.")
+                            break
+        except Exception as e:
+            logger.warning(f"No se pudo comparar puertos con Docker: {e}")
+
+    # 4. Escribir squid.conf
+    config_path = settings.SQUID_CONFIG_PATH
+    with open(config_path, "w") as f:
+        f.write(config_text)
+
+    # 4b. Escribir archivos auxiliares de auth LDAP
+    ldap_config = db.query(LdapConfig).first()
+    allowed_ldap = [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()]
+    write_ldap_aux_files(ldap_config, allowed_ldap)
+
+    # 5. Validar sintaxis
+    valid, msg = validate_squid_config(config_path)
+    if not valid:
+        return {"status": "error", "message": f"Configuración inválida: {msg}"}
+    mark_clean()
+
+    preview = config_text[:500] + ("..." if len(config_text) > 500 else "")
+
+    # 5b. SSL Bump -> reinicio completo (no reconfigure), salvo que se fuerce reconfigure
+    if "ssl-bump" in config_text and not force_reconfigure:
+        try:
+            client = docker_sdk.from_env()
+            container = client.containers.get(settings.SQUID_CONTAINER_NAME)
+            container.restart(timeout=10)
+            time.sleep(5)
+            # Regenerar usuarios tras el reinicio
+            db2 = SessionLocal()
+            try:
+                users = db2.query(ProxyUser).filter(ProxyUser.enabled == True).all()
+                passwd_path = Path("/etc/squid/squid_passwd")
+                with open(passwd_path, "w") as f:
+                    for u in users:
+                        if u.htpasswd_hash:
+                            f.write(f"{u.htpasswd_hash}\n")
+                container.exec_run(["squid", "-k", "reconfigure"])
+            finally:
+                db2.close()
+            return {
+                "status": "ok",
+                "message": "Squid reiniciado con SSL Bump (configuración aplicada)",
+                "needs_restart": True,
+                "config_preview": preview,
+            }
+        except Exception as e:
+            return {
+                "status": "warning",
+                "message": f"Config escrito pero error reiniciando: {e}",
+                "needs_restart": True,
+                "config_preview": preview,
+            }
+
+    # 5a. Sin SSL Bump -> reconfigure normal
+    success, reload_msg = reload_squid()
+    return {
+        "status": "ok" if success else "warning",
+        "message": f"Squid reconfigurado: {reload_msg}",
+        "needs_restart": needs_restart,
+        "config_preview": preview,
+    }
+
+
 def get_squid_status() -> dict:
     """Obtiene el estado del servicio Squid."""
     status = {"running": False, "state": "unknown", "pid": None, "errors": []}
