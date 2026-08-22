@@ -190,7 +190,14 @@ export default function LdapConfig() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="font-medium text-gray-900">Usuarios LDAP (allow-list)</h2>
-            <p className="text-sm text-gray-500">Solo los usuarios habilitados pueden navegar. Por defecto, ninguno.</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                {ldapUsers.length} sincronizados
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${ldapUsers.filter(u => u.enabled).length > 0 ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                {ldapUsers.filter(u => u.enabled).length} habilitados
+              </span>
+            </div>
           </div>
           <button
             onClick={handleSync}
@@ -199,6 +206,16 @@ export default function LdapConfig() {
           >
             {syncing ? 'Sincronizando...' : '🔄 Sincronizar con AD'}
           </button>
+        </div>
+
+        {/* Aviso de allow-list estricto */}
+        <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+          <p className="font-medium">⚠️ Modo allow-list estricto</p>
+          <p className="mt-1">
+            Al sincronizar, los usuarios quedan <strong>deshabilitados</strong> y no pueden navegar.
+            Pulsa <strong>«✅ Habilitar»</strong> en cada usuario que quieras autorizar.
+            Los usuarios no habilitados serán rechazados (se les pedirá credenciales sin éxito).
+          </p>
         </div>
 
         {ldapUsers.length === 0 ? (
