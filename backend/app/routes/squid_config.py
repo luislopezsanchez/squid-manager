@@ -202,3 +202,51 @@ async def download_ca_cert(_: Admin = Depends(get_current_admin)):
         )
     except FileNotFoundError:
         raise HTTPException(404, detail="Certificado CA no encontrado. Reinicia el contenedor Squid.")
+
+
+@router.get("/ca-deploy/install-cert.bat")
+async def download_bat_installer(_: Admin = Depends(get_current_admin)):
+    """Descarga el instalador .bat (Windows) con el certificado embebido."""
+    from fastapi import Response
+    from app.services.cert_deploy_service import generate_bat_installer, CaCertNotFound
+    try:
+        content = generate_bat_installer()
+    except CaCertNotFound as e:
+        raise HTTPException(404, detail=str(e))
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": "attachment; filename=install-cert.bat"},
+    )
+
+
+@router.get("/ca-deploy/deploy-gpo.ps1")
+async def download_gpo_script(_: Admin = Depends(get_current_admin)):
+    """Descarga el script PowerShell para desplegar el certificado vía GPO."""
+    from fastapi import Response
+    from app.services.cert_deploy_service import generate_gpo_script, CaCertNotFound
+    try:
+        content = generate_gpo_script()
+    except CaCertNotFound as e:
+        raise HTTPException(404, detail=str(e))
+    return Response(
+        content=content,
+        media_type="text/plain",
+        headers={"Content-Disposition": "attachment; filename=deploy-gpo.ps1"},
+    )
+
+
+@router.get("/ca-deploy/cert.mobileconfig")
+async def download_mobileconfig(_: Admin = Depends(get_current_admin)):
+    """Descarga el perfil .mobileconfig para iOS/macOS."""
+    from fastapi import Response
+    from app.services.cert_deploy_service import generate_mobileconfig, CaCertNotFound
+    try:
+        content = generate_mobileconfig()
+    except CaCertNotFound as e:
+        raise HTTPException(404, detail=str(e))
+    return Response(
+        content=content,
+        media_type="application/x-apple-aspen-config",
+        headers={"Content-Disposition": "attachment; filename=squidmanager-ca.mobileconfig"},
+    )
