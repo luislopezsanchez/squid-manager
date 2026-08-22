@@ -160,7 +160,7 @@ Para una guía detallada de instalación, ver [docs/installation.md](docs/instal
 
 ## 🔧 Configuración
 
-Todas las configuraciones se manejan через el archivo `.env`:
+Todas las configuraciones se manejan a través del archivo `.env`:
 
 ```env
 # PostgreSQL
