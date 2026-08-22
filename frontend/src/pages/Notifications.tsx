@@ -61,6 +61,9 @@ export default function Notifications() {
       showToast('Configuración guardada correctamente', 'success')
       setSmtpPassword('')
       setTelegramToken('')
+      // Recargar config para actualizar los indicadores "(guardado)"
+      const refreshed = await api.getNotificationConfig()
+      setConfig(refreshed)
     } catch (e: any) {
       showToast(e.message, 'error')
     } finally {
@@ -101,8 +104,8 @@ export default function Notifications() {
     setTestingTelegram(true)
     try {
       const r = await api.testTelegram({
-        telegram_bot_token: telegramToken || 'USE_SAVED',
-        telegram_chat_id: config.telegram_chat_id,
+        telegram_bot_token: telegramToken || undefined,
+        telegram_chat_id: config.telegram_chat_id || undefined,
       })
       showToast(r.message, r.ok ? 'success' : 'error')
     } catch (e: any) {

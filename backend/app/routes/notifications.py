@@ -45,8 +45,8 @@ class TestEmailIn(BaseModel):
 
 
 class TestTelegramIn(BaseModel):
-    telegram_bot_token: str
-    telegram_chat_id: str
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
 
 
 def _get_or_create_config(db: Session) -> NotificationConfig:
@@ -155,14 +155,21 @@ async def test_email_endpoint(
 @router.post("/test-telegram")
 async def test_telegram_endpoint(
     data: TestTelegramIn,
+    db: Session = Depends(get_db),
     _: Admin = Depends(_require_admin),
 ):
-    """Enviar mensaje de prueba por Telegram usando los datos del formulario."""
+    """Enviar mensaje de prueba por Telegram.
+
+    Usa el token/chat_id del formulario si se proporcionan; si están vacíos,
+    usa la configuración guardada en la base de datos.
+    """
+    saved = _get_or_create_config(db)
+
     class _TmpConfig:
         telegram_enabled = True
 
     tmp = _TmpConfig()
-    tmp.telegram_bot_token = data.telegram_bot_token
-    tmp.telegram_chat_id = data.telegram_chat_id
+    tmp.telegram_bot_token = data.telegram_bot_token or saved.telegram_bot_token
+    tmp.telegram_chat_id = data.telegram_chat_id or saved.telegram_chat_id
 
     return test_telegram(tmp)
