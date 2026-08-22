@@ -86,10 +86,10 @@ acl {{ acl.name }} {{ acl.type }} {{ acl.value }}
 {% endfor %}
 
 # --- Grupos de usuarios (ACLs proxy_auth) ---
+# Siempre se genera la ACL del grupo (incluso vacío) para evitar "ACL not found"
+# si una regla lo referencia. El placeholder __EMPTY_GROUP__ no coincide con nadie.
 {% for group in groups %}
-{% if group.members %}
-acl {{ group.name }} proxy_auth {{ group.members|join(' ') }}
-{% endif %}
+acl {{ group.name }} proxy_auth {{ group.members|join(' ') if group.members else '__EMPTY_GROUP__' }}
 {% endfor %}
 
 # --- Reglas de acceso (http_access) ---
