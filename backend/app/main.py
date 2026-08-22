@@ -9,6 +9,7 @@ from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
 from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications
+from app.middleware import rate_limit_middleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -83,6 +84,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limiting (anti fuerza bruta)
+app.middleware("http")(rate_limit_middleware)
 
 # Registrar rutas
 app.include_router(auth.router, prefix="/api/auth", tags=["Autenticación"])

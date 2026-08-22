@@ -50,6 +50,12 @@ services:
       - "8000:8000"
     networks:
       - squidnet
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   # ============================================
   # Squid - Proxy Server
@@ -92,6 +98,11 @@ services:
       - "3000:80"
     networks:
       - squidnet
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 # ============================================
 # Volúmenes persistentes
