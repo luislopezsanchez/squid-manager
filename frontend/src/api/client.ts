@@ -156,4 +156,7 @@ export const api = {
   updateNotificationConfig: (data: any) => request<any>('/notifications/config', { method: 'PUT', body: JSON.stringify(data) }),
   testEmail: (data: any) => request<any>('/notifications/test-email', { method: 'POST', body: JSON.stringify(data) }),
   testTelegram: (data: any) => request<any>('/notifications/test-telegram', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Session management
+  purgeCredentials: () => request<any>('/proxy-users/purge-credentials', { method: 'POST' }),
 }

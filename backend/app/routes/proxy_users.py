@@ -12,7 +12,7 @@ from app.schemas.proxy_user import (
     ProxyUserCreate, ProxyUserUpdate, ProxyUserResponse,
 )
 from app.services.auth_service import get_password_hash, get_current_admin
-from app.services.squid_service import write_passwd_file, reload_squid
+from app.services.squid_service import write_passwd_file, reload_squid, purge_credentials
 from app.services.notification_service import queue_notification
 
 router = APIRouter()
@@ -210,3 +210,16 @@ async def toggle_proxy_user(
                            "Usuario de proxy modificado",
                            f"El admin {current_admin.username} {estado} el usuario '{user.username}'.")
     return user
+
+
+@router.post("/purge-credentials")
+async def purge_credentials_endpoint(
+    _: Admin = Depends(get_current_admin),
+):
+    """Purga la caché de credenciales de Squid (fuerza re-autenticación de todos).
+
+    IMPORTANTE: Squid mantiene una caché GLOBAL de credenciales, por lo que
+    esta acción afecta a TODOS los usuarios, no a uno solo.
+    """
+    success, message = purge_credentials()
+    return {"status": "ok" if success else "error", "message": message}

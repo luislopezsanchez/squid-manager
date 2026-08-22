@@ -17,6 +17,7 @@ export default function ProxyUsers() {
   const [showForm, setShowForm] = useState(false)
   const [newUser, setNewUser] = useState({ username: '', password: '' })
   const [error, setError] = useState('')
+  const [purging, setPurging] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
   const loadUsers = () => {
@@ -57,17 +58,47 @@ export default function ProxyUsers() {
     } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
   }
 
+  const handlePurge = async () => {
+    if (!confirm('¿Forzar re-autenticación de TODOS los usuarios?\n\nEsta acción purga la caché de credenciales de Squid y todos los usuarios deberán volver a introducir su contraseña.')) return
+    setPurging(true)
+    try {
+      const result = await api.purgeCredentials()
+      showToast(result.message, result.status === 'ok' ? 'success' : 'error')
+    } catch (e: any) {
+      showToast(`Error: ${e.message}`, 'error')
+    } finally {
+      setPurging(false)
+    }
+  }
+
   return (
     <div className="p-8">
       <ToastContainer />
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Usuarios del Proxy</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-primary-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-700 transition"
-        >
-          {showForm ? 'Cancelar' : '+ Nuevo Usuario'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handlePurge}
+            disabled={purging}
+            className="px-4 py-2 rounded-lg font-medium border border-red-200 text-red-700 hover:bg-red-50 transition disabled:opacity-50"
+            title="Purga la caché de credenciales de Squid: todos los usuarios deberán volver a autenticarse"
+          >
+            {purging ? 'Purgando...' : '🛑 Forzar re-autenticación'}
+          </button>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="bg-primary-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-700 transition"
+          >
+            {showForm ? 'Cancelar' : '+ Nuevo Usuario'}
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-xs text-blue-800">
+        <strong>💡 Dos acciones distintas:</strong>{" "}
+        <strong>Bloquear acceso</strong> (deshabilita al usuario, no puede navegar) es diferente de{" "}
+        <strong>Forzar re-autenticación</strong> (purga la caché de credenciales, pide contraseña de nuevo a todos).
+        La sesión de un usuario vive <strong>{`${2} horas`}</strong> por defecto (configurable en <em>credentialsttl</em>).
       </div>
 
       {showForm && (
@@ -128,8 +159,9 @@ export default function ProxyUsers() {
                   </td>
                   <td className="px-6 py-4 text-right space-x-2">
                     <button onClick={() => handleToggle(user.id)}
-                      className="text-primary-600 hover:text-primary-800 text-sm font-medium">
-                      {user.enabled ? 'Desactivar' : 'Activar'}
+                      className="text-primary-600 hover:text-primary-800 text-sm font-medium"
+                      title={user.enabled ? 'Bloquea su acceso a internet hasta que lo habilites' : 'Permite que navegue a través del proxy'}>
+                      {user.enabled ? '🚫 Bloquear acceso' : '✅ Habilitar acceso'}
                     </button>
                     <button onClick={() => handleDelete(user.id)}
                       className="text-red-600 hover:text-red-800 text-sm font-medium">

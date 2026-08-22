@@ -43,6 +43,21 @@ def reload_squid() -> tuple[bool, str]:
         return False, f"Error: {e}"
 
 
+def purge_credentials() -> tuple[bool, str]:
+    """Purga la caché de credenciales de autenticación de Squid.
+
+    Fuerza a que todos los usuarios vuelvan a autenticarse (no solo uno),
+    porque Squid mantiene una caché GLOBAL de credenciales (no hay purge por usuario).
+
+    Squid limpia la caché de credenciales al reconfigure. Si se necesita un
+    borrado más agresivo (garantizado), se reinicia el contenedor.
+    """
+    success, msg = reload_squid()
+    if success:
+        return True, "Caché de credenciales purgada. Los usuarios deberán volver a autenticarse."
+    return False, msg
+
+
 def restart_squid() -> tuple[bool, str]:
     """Recrea el contenedor Squid con el nuevo puerto.
 
