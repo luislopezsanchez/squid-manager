@@ -62,9 +62,26 @@ def generate_squid_config(db: Session) -> str:
     # String de negación para el "allow authenticated !grupo1 !grupo2 ..."
     denied_groups_str = "".join(f" !{g}" for g in denied_groups)
 
+    # Para reglas "allow ... <acl-dstdomain>", generar una regla SNI paralela
+    # para HTTPS (ssl::server_name). El ACL dstdomain NO matchea peticiones
+    # HTTPS descifradas por SSL Bump (solo matchea el CONNECT), así que sin
+    # esto un grupo restringido a dominios no podría abrir sitios HTTPS.
+    dstdomain_acls = {a.name for a in acls if a.type in ("dstdomain", "dstdom_regex")}
+    sni_rules = []
+    if dstdomain_acls:
+        for rule in filtered_rules:
+            if rule.action == "allow":
+                names = rule.acl_names.split() if rule.acl_names else []
+                if any(n in dstdomain_acls for n in names):
+                    sni_names = " ".join(
+                        f"sni_{n}" if n in dstdomain_acls else n for n in names
+                    )
+                    sni_rules.append({"action": "allow", "acl_names": sni_names})
+
     config = template.render(
         acls=acls,
         rules=filtered_rules,
+        sni_rules=sni_rules,
         settings=settings,
         delay_pools=delay_pools,
         ldap=ldap,

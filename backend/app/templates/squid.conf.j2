@@ -102,6 +102,13 @@ http_access deny manager
 http_access {{ rule.action }} {{ rule.acl_names }}
 {% endfor %}
 
+{# Reglas SNI paralelas para HTTPS: el ACL dstdomain no matchea peticiones
+   HTTPS descifradas, así que se genera una regla "allow" equivalente usando
+   el ACL sni_<acl> (ssl::server_name) para cubrir HTTPS. #}
+{% for rule in sni_rules %}
+http_access {{ rule.action }} {{ rule.acl_names }}
+{% endfor %}
+
 # Nota: las reglas "deny <grupo>" se convierten a "allow authenticated !<grupo>"
 # para evitar el bug de Squid (deny + proxy_auth devuelve 407 en vez de 403).
 http_access allow authenticated{{ denied_groups_str }}
