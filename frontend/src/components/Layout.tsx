@@ -47,21 +47,30 @@ export default function Layout() {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      <aside className="w-64 bg-slate-900 text-white flex flex-col fixed h-screen overflow-y-auto">
-        <div className="p-6 border-b border-slate-700">
+    <div className="min-h-screen flex" style={{ backgroundColor: '#f0f4f8' }}>
+      {/* Sidebar con colores del logo */}
+      <aside className="w-64 flex flex-col fixed h-screen overflow-y-auto" style={{ backgroundColor: '#083151' }}>
+        {/* Logo + título */}
+        <div className="p-6 border-b" style={{ borderColor: '#0b497c' }}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center">
-              <span className="text-xl font-bold">S</span>
+            <div className="flex items-center justify-center">
+              <svg width="40" height="40" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="32" cy="32" r="30" fill="#0b497c"/>
+                <circle cx="32" cy="32" r="22" fill="none" stroke="#299ac2" strokeWidth="2"/>
+                <path d="M20 32 L28 32 L28 24 L36 24 L36 40 L44 40" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <circle cx="20" cy="32" r="3" fill="#299ac2"/>
+                <circle cx="44" cy="40" r="3" fill="#299ac2"/>
+              </svg>
             </div>
             <div>
-              <h1 className="font-bold text-lg">SquidManager</h1>
-              <p className="text-xs text-slate-400">v0.3.0</p>
+              <h1 className="font-bold text-lg text-white">SquidManager</h1>
+              <p className="text-xs" style={{ color: '#299ac2' }}>v0.4.0</p>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
+        {/* Navegación */}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map(item => (
             <NavLink
               key={item.to}
@@ -69,8 +78,13 @@ export default function Layout() {
               end={item.to === '/'}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-2.5 rounded-lg transition ${
-                  isActive ? 'bg-primary-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+                  isActive
+                    ? 'text-white font-medium'
+                    : 'text-slate-400 hover:text-white'
                 }`
+              }
+              style={({ isActive }) =>
+                isActive ? { backgroundColor: '#0b497c' } : {}
               }
             >
               <span className="text-lg">{item.icon}</span>
@@ -79,19 +93,27 @@ export default function Layout() {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-700">
+        {/* Sección inferior: Aplicar Cambios separado de Cerrar Sesión */}
+        <div className="p-4 border-t" style={{ borderColor: '#0b497c' }}>
+          {/* Aplicar Cambios - destacado */}
           <button
             onClick={handleApply}
             disabled={applying}
-            className={`w-full px-4 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
-              applying ? 'bg-slate-600 text-slate-300' : 'bg-green-600 text-white hover:bg-green-700'
+            className={`w-full px-4 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 mb-3 ${
+              applying ? 'opacity-50 cursor-not-allowed' : ''
             }`}
+            style={{
+              backgroundColor: applying ? '#1a3a5c' : '#299ac2',
+              color: '#fff',
+            }}
+            onMouseEnter={(e) => { if (!applying) e.currentTarget.style.backgroundColor = '#1a7a9a' }}
+            onMouseLeave={(e) => { if (!applying) e.currentTarget.style.backgroundColor = '#299ac2' }}
           >
             {applying ? (
               <>
                 <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
                 </svg>
                 Aplicando...
               </>
@@ -99,25 +121,37 @@ export default function Layout() {
               <>⚡ Aplicar Cambios</>
             )}
           </button>
-          <p className="text-xs text-slate-500 mt-2 text-center">Genera squid.conf y recarga Squid</p>
-          <button
-            onClick={handleLogout}
-            className="w-full mt-3 text-left px-4 py-2.5 rounded-lg text-slate-300 hover:bg-red-900/50 transition flex items-center gap-3"
-          >
-            <span>🚪</span> Cerrar Sesión
-          </button>
+          <p className="text-xs text-center mb-4" style={{ color: '#4a6a8a' }}>
+            Genera squid.conf y recarga Squid
+          </p>
+
+          {/* Separador */}
+          <div className="border-t pt-3" style={{ borderColor: '#1a3a5c' }}>
+            <button
+              onClick={handleLogout}
+              className="w-full text-left px-4 py-2.5 rounded-lg transition flex items-center gap-3 text-slate-400 hover:text-white"
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#5a1a1a'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <span>🚪</span> Cerrar Sesión
+            </button>
+          </div>
         </div>
       </aside>
 
+      {/* Main content */}
       <main className="flex-1 overflow-auto ml-64">
         <Outlet />
       </main>
 
+      {/* Toast notification */}
       {toast && (
-        <div className={`fixed top-6 right-6 z-50 px-6 py-4 rounded-xl shadow-2xl text-white font-medium animate-slide-in ${
-          toast.type === 'success' ? 'bg-green-600' :
-          toast.type === 'warning' ? 'bg-yellow-600' : 'bg-red-600'
-        }`}>
+        <div
+          className="fixed top-6 right-6 z-50 px-6 py-4 rounded-xl shadow-2xl text-white font-medium animate-slide-in"
+          style={{
+            backgroundColor: toast.type === 'success' ? '#0b497c' : toast.type === 'warning' ? '#d97706' : '#dc2626',
+          }}
+        >
           {toast.msg}
         </div>
       )}

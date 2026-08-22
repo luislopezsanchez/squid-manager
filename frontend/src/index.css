@@ -2,23 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-primary: #0b497c;
+  --color-primary-dark: #083151;
+  --color-accent: #299ac2;
+  --color-accent-dark: #1a7a9a;
+  --color-bg: #f0f4f8;
+  --color-sidebar: #083151;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background-color: #f8fafc;
+  background-color: var(--color-bg);
 }
 
 @keyframes slide-in {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }
 
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
 }
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #e2e8f0; }
+::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #64748b; }
