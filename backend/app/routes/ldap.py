@@ -88,6 +88,7 @@ class LdapTestRequest(BaseModel):
     bind_dn: str
     bind_password: str
     search_base: str
+    user_filter: str = "(uid=%s)"
     username: str
     password: str
 
@@ -95,74 +96,90 @@ class LdapTestRequest(BaseModel):
 @router.post("/test")
 async def test_ldap_connection(
     data: LdapTestRequest,
+    db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """Prueba la conexión LDAP y la autenticación de un usuario."""
+    """Prueba la conexión LDAP y la autenticación de un usuario usando ldap3.
+
+    Pasos:
+      1. Conectar al servidor y hacer bind con la cuenta de servicio (bind_dn).
+      2. Buscar el usuario con el filtro configurado (user_filter).
+      3. Autenticar como el usuario encontrado (con su contraseña).
+    """
+    from ldap3 import Server, Connection, SUBTREE
+
     results = []
 
-    # 1. Probar conexión con ldapsearch
+    # Si la contraseña de bind viene enmascarada, usar la guardada en BD
+    bind_password = data.bind_password
+    if bind_password == "***":
+        saved = db.query(LdapConfig).first()
+        if saved:
+            bind_password = saved.bind_password
+
+    # 1. Conectar al servidor
     try:
-        cmd = [
-            "ldapsearch", "-x", "-H", data.server_url,
-            "-D", data.bind_dn, "-w", data.bind_password,
-            "-b", data.search_base,
-            "-s", "sub",
-            f"(uid={data.username})",
-            "dn", "cn", "mail",
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            results.append({"step": "Conexión LDAP", "status": "ok", "detail": "Bind exitoso"})
-            # Ver si se encontró el usuario
-            if "dn:" in result.stdout:
-                lines = [l for l in result.stdout.split("\n") if l.startswith("dn:")]
-                results.append({
-                    "step": "Búsqueda de usuario",
-                    "status": "ok",
-                    "detail": f"Usuario encontrado: {lines[0].replace('dn: ', '')}"
-                })
-            else:
-                results.append({
-                    "step": "Búsqueda de usuario",
-                    "status": "error",
-                    "detail": f"Usuario '{data.username}' no encontrado en {data.search_base}"
-                })
-                return {"results": results, "success": False}
-        else:
-            stderr = result.stderr.strip()
-            results.append({"step": "Conexión LDAP", "status": "error", "detail": stderr[:200]})
-            return {"results": results, "success": False}
-    except FileNotFoundError:
-        results.append({"step": "Conexión LDAP", "status": "error", "detail": "ldapsearch no instalado en el contenedor"})
-        return {"results": results, "success": False}
-    except subprocess.TimeoutExpired:
-        results.append({"step": "Conexión LDAP", "status": "error", "detail": "Timeout conectando al servidor LDAP"})
-        return {"results": results, "success": False}
+        server = Server(data.server_url, connect_timeout=10)
     except Exception as e:
-        results.append({"step": "Conexión LDAP", "status": "error", "detail": str(e)})
+        results.append({"step": "Conexión LDAP", "status": "error",
+                        "detail": f"URL de servidor inválida: {e}"})
         return {"results": results, "success": False}
 
-    # 2. Probar autenticación del usuario con ldapwhoami
+    # 2. Bind con la cuenta de servicio
     try:
-        # Buscar el DN del usuario primero
-        user_dn = None
-        for line in result.stdout.split("\n"):
-            if line.startswith("dn:"):
-                user_dn = line.replace("dn: ", "").strip()
-                break
+        conn = Connection(server, user=data.bind_dn, password=bind_password,
+                          auto_bind=True, receive_timeout=10)
+    except Exception as e:
+        results.append({"step": "Conexión LDAP", "status": "error",
+                        "detail": f"Error de conexión o bind: {e}"})
+        return {"results": results, "success": False}
 
-        if not user_dn:
-            results.append({"step": "Autenticación", "status": "error", "detail": "No se pudo obtener el DN del usuario"})
-            return {"results": results, "success": False}
+    if not conn.bound:
+        results.append({"step": "Conexión LDAP", "status": "error",
+                        "detail": "Bind fallido: revisa el servidor, bind_dn y la contraseña"})
+        return {"results": results, "success": False}
 
-        cmd = ["ldapwhoami", "-x", "-H", data.server_url, "-D", user_dn, "-w", data.password]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            results.append({"step": "Autenticación", "status": "ok", "detail": f"Usuario autenticado como {result.stdout.strip()}"})
+    results.append({"step": "Conexión LDAP", "status": "ok",
+                    "detail": "Conexión y bind con la cuenta de servicio exitosos"})
+
+    # 3. Buscar el usuario con el filtro configurado
+    search_filter = data.user_filter.replace("%s", data.username) if "%s" in data.user_filter else data.user_filter
+    try:
+        conn.search(search_base=data.search_base, search_filter=search_filter,
+                    search_scope=SUBTREE, attributes=["dn", "cn", "mail", "sAMAccountName"])
+    except Exception as e:
+        results.append({"step": "Búsqueda de usuario", "status": "error",
+                        "detail": f"Error en la búsqueda: {e}"})
+        conn.unbind()
+        return {"results": results, "success": False}
+
+    if not conn.entries:
+        results.append({"step": "Búsqueda de usuario", "status": "error",
+                        "detail": f"Usuario '{data.username}' no encontrado con filtro '{search_filter}' en {data.search_base}"})
+        conn.unbind()
+        return {"results": results, "success": False}
+
+    user_dn = conn.entries[0].entry_dn
+    results.append({"step": "Búsqueda de usuario", "status": "ok",
+                    "detail": f"Usuario encontrado: {user_dn}"})
+
+    # 4. Autenticar como el usuario
+    try:
+        user_conn = Connection(server, user=user_dn, password=data.password,
+                               auto_bind=True, receive_timeout=10)
+        if user_conn.bound:
+            results.append({"step": "Autenticación", "status": "ok",
+                            "detail": f"Usuario autenticado correctamente como {user_dn}"})
+            user_conn.unbind()
+            conn.unbind()
             return {"results": results, "success": True}
         else:
-            results.append({"step": "Autenticación", "status": "error", "detail": "Contraseña incorrecta o usuario no válido"})
+            results.append({"step": "Autenticación", "status": "error",
+                            "detail": "Contraseña de usuario incorrecta"})
+            conn.unbind()
             return {"results": results, "success": False}
     except Exception as e:
-        results.append({"step": "Autenticación", "status": "error", "detail": str(e)})
+        results.append({"step": "Autenticación", "status": "error",
+                        "detail": f"Contraseña incorrecta o error de autenticación: {e}"})
+        conn.unbind()
         return {"results": results, "success": False}
