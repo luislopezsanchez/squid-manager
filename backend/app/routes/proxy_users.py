@@ -223,3 +223,46 @@ async def purge_credentials_endpoint(
     """
     success, message = purge_credentials()
     return {"status": "ok" if success else "error", "message": message}
+
+
+@router.post("/{user_id}/reset-password")
+async def reset_password(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Resetea la contraseña de un usuario (fuerza re-autenticación real).
+
+    Genera una contraseña nueva, actualiza squid_passwd y reinicia Squid
+    para purgar la caché de credenciales. Así el navegador del usuario,
+    al reintentar con la contraseña vieja, será rechazado (407) y le
+    pedirá las credenciales nuevas.
+    """
+    import secrets
+    import string
+
+    user = db.query(ProxyUser).filter(ProxyUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, detail="Usuario no encontrado")
+
+    alphabet = string.ascii_letters + string.digits
+    new_password = "".join(secrets.choice(alphabet) for _ in range(12))
+
+    user.password_hash = get_password_hash(new_password)
+    user.htpasswd_hash = _generate_htpasswd_hash(user.username, new_password)
+
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="reset_password", entity="proxy_user", entity_id=user.id,
+    ))
+    db.commit()
+
+    # Regenerar squid_passwd y reiniciar Squid (purga la caché de credenciales)
+    _sync_passwd_and_reload(db)
+    purge_credentials()
+
+    return {
+        "status": "ok",
+        "message": f"Contraseña de '{user.username}' reseteada. El usuario deberá re-autenticarse.",
+        "new_password": new_password,
+    }

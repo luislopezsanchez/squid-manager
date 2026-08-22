@@ -170,5 +170,6 @@ export const api = {
 
   // Session management
   purgeCredentials: () => request<any>('/proxy-users/purge-credentials', { method: 'POST' }),
+  resetPassword: (id: number) => request<any>(`/proxy-users/${id}/reset-password`, { method: 'POST' }),
   getPending: () => request<{ dirty: boolean }>('/squid/pending'),
 }

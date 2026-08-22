@@ -71,6 +71,16 @@ export default function ProxyUsers() {
     }
   }
 
+  const handleResetPassword = async (id: number, username: string) => {
+    if (!confirm(`¿Resetear la contraseña de "${username}"?\n\nSe generará una contraseña nueva y el usuario deberá volver a autenticarse.`)) return
+    try {
+      const result = await api.resetPassword(id)
+      // Mostrar la nueva contraseña de forma clara
+      alert(`Contraseña de "${username}" reseteada.\n\nNueva contraseña: ${result.new_password}\n\nGuárdala y entrégasela al usuario.`)
+      showToast(`Contraseña de "${username}" reseteada`)
+    } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
+  }
+
   return (
     <div className="p-8">
       <ToastContainer />
@@ -162,6 +172,11 @@ export default function ProxyUsers() {
                       className="text-primary-600 hover:text-primary-800 text-sm font-medium"
                       title={user.enabled ? 'Bloquea su acceso a internet hasta que lo habilites' : 'Permite que navegue a través del proxy'}>
                       {user.enabled ? '🚫 Bloquear acceso' : '✅ Habilitar acceso'}
+                    </button>
+                    <button onClick={() => handleResetPassword(user.id, user.username)}
+                      className="text-amber-600 hover:text-amber-800 text-sm font-medium"
+                      title="Genera una contraseña nueva y fuerza a que el usuario vuelva a autenticarse">
+                      🔑 Reset contraseña
                     </button>
                     <button onClick={() => handleDelete(user.id)}
                       className="text-red-600 hover:text-red-800 text-sm font-medium">
