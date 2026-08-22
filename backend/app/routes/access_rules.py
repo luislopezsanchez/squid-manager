@@ -1,0 +1,109 @@
+"""Rutas de gestión de reglas de acceso (http_access)."""
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+
+from app.database import get_db
+from app.models.admin import Admin
+from app.models.access_rule import AccessRule
+from app.models.audit_log import AuditLog
+from app.schemas.access_rule import (
+    AccessRuleCreate, AccessRuleUpdate, AccessRuleResponse,
+)
+from app.services.auth_service import get_current_admin
+
+router = APIRouter()
+
+
+class ReorderRequest(BaseModel):
+    rule_ids: list[int]
+
+
+@router.get("/", response_model=list[AccessRuleResponse])
+async def list_access_rules(
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    """Lista todas las reglas de acceso ordenadas."""
+    return db.query(AccessRule).order_by(AccessRule.order).all()
+
+
+@router.post("/", response_model=AccessRuleResponse, status_code=201)
+async def create_access_rule(
+    data: AccessRuleCreate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Crea una nueva regla de acceso."""
+    rule = AccessRule(
+        action=data.action, acl_names=data.acl_names,
+        order=data.order, description=data.description, enabled=data.enabled,
+    )
+    db.add(rule)
+    db.flush()
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="create", entity="access_rule", entity_id=rule.id,
+        new_value=f"{data.action} {data.acl_names}",
+    ))
+    db.commit()
+    return rule
+
+
+# IMPORTANTE: /reorder debe ir ANTES de /{rule_id} para que no sea capturado
+@router.put("/reorder", response_model=list[AccessRuleResponse])
+async def reorder_rules(
+    data: ReorderRequest,
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    """Reordena las reglas de acceso. Recibe una lista de IDs en el nuevo orden."""
+    for new_order, rule_id in enumerate(data.rule_ids):
+        rule = db.query(AccessRule).filter(AccessRule.id == rule_id).first()
+        if rule:
+            rule.order = new_order
+    db.commit()
+    return db.query(AccessRule).order_by(AccessRule.order).all()
+
+
+@router.put("/{rule_id}", response_model=AccessRuleResponse)
+async def update_access_rule(
+    rule_id: int,
+    data: AccessRuleUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Actualiza una regla de acceso."""
+    rule = db.query(AccessRule).filter(AccessRule.id == rule_id).first()
+    if not rule:
+        raise HTTPException(404, detail="Regla no encontrada")
+
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(rule, field, value)
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="update", entity="access_rule", entity_id=rule.id,
+    ))
+    db.commit()
+    return rule
+
+
+@router.delete("/{rule_id}", status_code=204)
+async def delete_access_rule(
+    rule_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Elimina una regla de acceso."""
+    rule = db.query(AccessRule).filter(AccessRule.id == rule_id).first()
+    if not rule:
+        raise HTTPException(404, detail="Regla no encontrada")
+
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="delete", entity="access_rule", entity_id=rule.id,
+        old_value=rule.acl_names,
+    ))
+    db.delete(rule)
+    db.commit()

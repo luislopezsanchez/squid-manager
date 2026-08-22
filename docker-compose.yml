@@ -1,0 +1,110 @@
+version: "3.8"
+
+services:
+  # ============================================
+  # PostgreSQL - Base de datos
+  # ============================================
+  db:
+    image: postgres:16-alpine
+    container_name: squidmgr-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-squidmanager}
+      POSTGRES_USER: ${DB_USER:-squid}
+      POSTGRES_PASSWORD: ${DB_PASS:-squidpass123}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - squidnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-squid}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Backend - FastAPI (Python)
+  # ============================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: squidmgr-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${DB_USER:-squid}:${DB_PASS:-squidpass123}@db:5432/${DB_NAME:-squidmanager}
+      SECRET_KEY: ${SECRET_KEY:-changeme-in-production-please}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${TOKEN_EXPIRE:-480}
+      SQUID_CONFIG_PATH: /etc/squid/squid.conf
+      SQUID_CONTAINER_NAME: squidmgr-proxy
+    volumes:
+      - ./backend/app:/app/app
+      - squid-config:/etc/squid
+      - squid-spool:/var/spool/squid
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"
+    networks:
+      - squidnet
+
+  # ============================================
+  # Squid - Proxy Server
+  # ============================================
+  squid:
+    build:
+      context: ./squid
+      dockerfile: Dockerfile
+    container_name: squidmgr-proxy
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      - SQUID_PORT=${SQUID_PORT:-3128}
+    volumes:
+      - squid-config:/etc/squid
+      - squid-spool:/var/spool/squid
+      - squid-logs:/var/log/squid
+      - squid-crtd:/var/lib/ssl_crtd
+    ports:
+      - "${PROXY_PORT:-3128}:${SQUID_PORT:-3128}"
+    networks:
+      - squidnet
+    tty: true
+    stdin_open: true
+
+  # ============================================
+  # Frontend - React (Vite)
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: squidmgr-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    networks:
+      - squidnet
+
+# ============================================
+# Volúmenes persistentes
+# ============================================
+volumes:
+  pgdata:
+  squid-config:
+  squid-spool:
+  squid-logs:
+  squid-crtd:
+
+# ============================================
+# Red interna
+# ============================================
+networks:
+  squidnet:
+    driver: bridge

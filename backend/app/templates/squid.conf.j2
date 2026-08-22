@@ -1,0 +1,129 @@
+{# Template Jinja2 para generar squid.conf #}
+{# Generado dinámicamente por SquidManager #}
+
+# ============================================
+# SquidManager - Configuración generada automáticamente
+# NO EDITAR MANUALMENTE - Usar el panel web
+# ============================================
+
+# --- Puerto de escucha con SSL Bump ---
+http_port {{ settings.get('http_port', '3128') }} ssl-bump \
+  generate-host-certificates=on \
+  cert=/etc/squid/ssl_cert/squid-ca.crt \
+  key=/etc/squid/ssl_cert/squid-ca.key
+
+# --- Configuración SSL Bump ---
+acl step1 at_step SslBump1
+acl step2 at_step SslBump2
+acl step3 at_step SslBump3
+
+# ACLs de SNI para bloquear HTTPS (solo dstdomain y dstdom_regex)
+{% for acl in acls %}
+{% if acl.type == 'dstdomain' %}
+acl sni_{{ acl.name }} ssl::server_name {{ acl.value }}
+{% elif acl.type == 'dstdom_regex' %}
+acl sni_{{ acl.name }} ssl::server_name_regex {{ acl.value }}
+{% endif %}
+{% endfor %}
+
+# Reglas de bloqueo HTTPS: si el SNI coincide con un dominio bloqueado, terminar
+{% for rule in rules %}
+{% if rule.action == 'deny' %}
+{% for acl in acls %}
+{% if acl.type == 'dstdomain' or acl.type == 'dstdom_regex' %}
+{% if rule.acl_names == acl.name %}
+ssl_bump terminate step2 sni_{{ acl.name }}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+# Peek: ver el SNI del cliente
+ssl_bump peek step1 all
+# Stare: permitir que el servidor envíe su certificado
+ssl_bump stare step2 all
+# Bump: interceptar y desencriptar el resto
+ssl_bump bump step3 all
+# Splice: cualquier resto pasa sin tocar
+ssl_bump splice all
+
+# Generador de certificados dinámicos
+sslcrtd_program /usr/lib/squid/security_file_certgen -s /tmp/ssl_crtd -M 4MB
+sslcrtd_children 5
+
+# --- Autenticación básica (usuarios locales) ---
+auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/squid_passwd
+auth_param basic children {{ settings.get('auth_children', '5') }}
+auth_param basic realm {{ settings.get('auth_realm', 'SquidManager Proxy') }}
+auth_param basic credentialsttl {{ settings.get('credentialsttl', '2 hours') }}
+
+{% if ldap and ldap.enabled %}
+# --- Autenticación LDAP ---
+auth_param basic program /usr/lib/squid/basic_ldap_auth -b "{{ ldap.search_base }}" -D "{{ ldap.bind_dn }}" -w "{{ ldap.bind_password }}" "{{ ldap.server_url }}"
+{% endif %}
+
+# --- ACLs predefinidas ---
+acl localnet src 10.0.0.0/8
+acl localnet src 172.16.0.0/12
+acl localnet src 192.168.0.0/16
+acl localnet src fc00::/7
+acl localnet src fe80::/10
+acl SSL_ports port 443
+acl Safe_ports port 80          # http
+acl Safe_ports port 443         # https
+acl Safe_ports port 21          # ftp
+acl Safe_ports port 70          # gopher
+acl Safe_ports port 210         # wais
+acl Safe_ports port 1025-65535  # unregistered ports
+acl Safe_ports port 280         # http-mgmt
+acl Safe_ports port 488         # gss-http
+acl Safe_ports port 591         # filemaker
+acl Safe_ports port 777         # multiling http
+acl CONNECT method CONNECT
+acl authenticated proxy_auth REQUIRED
+
+# --- ACLs personalizadas (desde BD) ---
+{% for acl in acls %}
+acl {{ acl.name }} {{ acl.type }} {{ acl.value }}
+{% endfor %}
+
+# --- Reglas de acceso (http_access) ---
+http_access deny !Safe_ports
+http_access deny CONNECT !SSL_ports
+http_access allow localhost manager
+http_access deny manager
+
+{% for rule in rules %}
+http_access {{ rule.action }} {{ rule.acl_names }}
+{% endfor %}
+
+http_access allow authenticated
+http_access deny all
+
+# --- Configuración de caché ---
+cache_mem {{ settings.get('cache_mem', '128 MB') }}
+{% if settings.get('cache_dir') %}
+cache_dir {{ settings.get('cache_dir', 'ufs /var/spool/squid 100 16 256') }}
+{% endif %}
+maximum_object_size {{ settings.get('maximum_object_size', '4 MB') }}
+
+{% if delay_pools and delay_pools|length > 0 %}
+# --- Delay Pools (control de ancho de banda) ---
+delay_pools {{ delay_pools|length }}
+{% for pool in delay_pools %}
+delay_class {{ loop.index }} {{ pool.pool_class }}
+delay_parameters {{ loop.index }} {{ pool.parameters }}
+delay_access {{ loop.index }} allow {{ pool.acl_name if pool.acl_name else 'all' }}
+{% endfor %}
+{% endif %}
+
+# --- Logging ---
+access_log {{ settings.get('access_log', '/var/log/squid/access.log') }}
+cache_log {{ settings.get('cache_log', '/var/log/squid/cache.log') }}
+cache_store_log {{ settings.get('cache_store_log', '/var/log/squid/store.log') }}
+
+# --- Misc ---
+coredump_dir /var/spool/squid
+refresh_pattern {{ settings.get('refresh_pattern', '. 0 20% 4320') }}
+visible_hostname {{ settings.get('visible_hostname', 'squidmanager') }}
