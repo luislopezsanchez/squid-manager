@@ -4,24 +4,27 @@ import { useNavigate } from 'react-router-dom'
 
 interface DashboardData {
   traffic: {
-    total_requests: number
-    allowed_requests: number
-    denied_requests: number
-    total_bytes: number
-    bytes_per_second: number
-    active_connections: number
-    active_users: number
+    rx_bytes_per_second: number
+    tx_bytes_per_second: number
+    total_bytes_per_second: number
+    rx_avg_60s: number
+    tx_avg_60s: number
+    rx_total: number
+    tx_total: number
+    total_requests_60s: number
+    denied_requests_60s: number
     active_ips: string[]
+    active_users: string[]
   }
   top_users: { user: string; bytes: number; requests: number }[]
   top_domains: { domain: string; requests: number; bytes: number }[]
   top_blocked: { domain: string; requests: number; bytes: number }[]
   system: {
-    cpu: { load_1: number; load_5: number; load_15: number }
-    memory: { total: number; used: number; available: number; percent: number }
+    cpu: { percent: number; load_1?: number; load_5?: number; load_15?: number }
+    memory: { total: number; used: number; percent: number }
     disk: { total: number; used: number; free: number; percent: number }
   }
-  timeline: { time: string; bytes: number; requests: number; denied: number }[]
+  timeline: { time: string; rx_bytes: number; tx_bytes: number; total_bytes: number }[]
   connections: {
     time: string; ip: string; user: string; method: string
     domain: string; status: number; bytes: number; denied: boolean
@@ -36,6 +39,11 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
+function formatRate(bytesPerSec: number): string {
+  if (bytesPerSec === 0) return '0 B/s'
+  return formatBytes(bytesPerSec) + '/s'
+}
+
 function formatNumber(n: number): string {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
@@ -47,7 +55,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const navigate = useNavigate()
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const loadData = () => {
     api.getDashboard().then(setData).catch(console.error).finally(() => setLoading(false))
@@ -65,146 +73,181 @@ export default function Dashboard() {
 
   const t = data.traffic
   const s = data.system
-
-  // Calcular altura máxima del gráfico
-  const maxBytes = Math.max(...data.timeline.map(p => p.bytes), 1)
+  const timeline = data.timeline
+  const maxBytes = Math.max(...timeline.map(p => p.total_bytes), 1)
 
   return (
     <div className="p-8">
-      {/* Header con auto-refresh */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold" style={{ color: '#083151' }}>Dashboard</h1>
-        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={autoRefresh}
-            onChange={e => setAutoRefresh(e.target.checked)}
-            className="w-4 h-4 rounded"
-            style={{ accentColor: '#0b497c' }}
-          />
-          Auto-actualizar (5s)
-        </label>
+        <div className="flex items-center gap-4">
+          {autoRefresh && (
+            <span className="flex items-center gap-1 text-xs text-green-600">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              EN VIVO
+            </span>
+          )}
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={e => setAutoRefresh(e.target.checked)}
+              className="w-4 h-4 rounded"
+              style={{ accentColor: '#0b497c' }}
+            />
+            Auto-actualizar (5s)
+          </label>
+        </div>
       </div>
 
       {/* Métricas principales - 4 tarjetas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <MetricCard
-          title="Tráfico actual"
-          value={formatBytes(t.bytes_per_second) + '/s'}
-          sub={`${formatBytes(t.total_bytes)} en 60s`}
-          color="#0b497c"
-          icon="📊"
-        />
-        <MetricCard
-          title="Peticiones (60s)"
-          value={formatNumber(t.total_requests)}
-          sub={`${t.allowed_requests} OK / ${t.denied_requests} denegadas`}
-          color="#299ac2"
-          icon="🔄"
-        />
-        <MetricCard
-          title="Conexiones activas"
-          value={t.active_connections.toString()}
-          sub={`${t.active_users} usuarios`}
-          color="#083151"
-          icon="🔌"
-        />
-        <MetricCard
-          title="RAM del proxy"
-          value={s.memory.percent + '%'}
-          sub={`${formatBytes(s.memory.used)} / ${formatBytes(s.memory.total)}`}
-          color={s.memory.percent > 80 ? '#dc2626' : '#0b497c'}
-          icon="💾"
-        />
+        <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm text-gray-500">Tráfico actual</h3>
+            <span className="text-xl">📊</span>
+          </div>
+          <p className="text-2xl font-bold" style={{ color: '#0b497c' }}>{formatRate(t.total_bytes_per_second)}</p>
+          <div className="flex justify-between text-xs text-gray-400 mt-1">
+            <span>↓ {formatRate(t.rx_bytes_per_second)}</span>
+            <span>↑ {formatRate(t.tx_bytes_per_second)}</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm text-gray-500">Peticiones (60s)</h3>
+            <span className="text-xl">🔄</span>
+          </div>
+          <p className="text-2xl font-bold" style={{ color: '#299ac2' }}>{formatNumber(t.total_requests_60s)}</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {t.total_requests_60s - t.denied_requests_60s} OK / {t.denied_requests_60s} denegadas
+          </p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm text-gray-500">Conexiones activas</h3>
+            <span className="text-xl">🔌</span>
+          </div>
+          <p className="text-2xl font-bold" style={{ color: '#083151' }}>{t.active_ips.length}</p>
+          <p className="text-xs text-gray-400 mt-1">{t.active_users.length} usuarios</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm text-gray-500">RAM del proxy</h3>
+            <span className="text-xl">💾</span>
+          </div>
+          <p className="text-2xl font-bold" style={{ color: s.memory.percent > 80 ? '#dc2626' : '#0b497c' }}>
+            {s.memory.percent}%
+          </p>
+          <p className="text-xs text-gray-400 mt-1">{formatBytes(s.memory.used)} / {formatBytes(s.memory.total)}</p>
+        </div>
       </div>
 
       {/* Gráfico de tráfico + Sistema */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        {/* Gráfico de tráfico (2/3) */}
+        {/* Gráfico de tráfico - barras finas, más puntos */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="font-medium text-gray-900 mb-4">Tráfico por segundo (últimos 60s)</h3>
-          <div className="flex items-end gap-1 h-40">
-            {data.timeline.map((point, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center group relative">
-                {/* Bar */}
-                <div
-                  className="w-full rounded-t transition-all hover:opacity-80"
-                  style={{
-                    height: `${Math.max((point.bytes / maxBytes) * 100, 2)}%`,
-                    backgroundColor: point.denied > 0 ? '#dc2626' : '#299ac2',
-                    minHeight: '4px',
-                  }}
-                />
-                {/* Tooltip */}
-                <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
-                  {point.time} | {formatBytes(point.bytes)} | {point.requests} req
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-medium text-gray-900">Tráfico de red en tiempo real</h3>
+            <span className="text-xs text-gray-400">
+              Promedio: ↓{formatRate(t.rx_avg_60s)} ↑{formatRate(t.tx_avg_60s)}
+            </span>
           </div>
+
+          {/* Gráfico - barras finas con más puntos */}
+          <div className="relative">
+            <div className="flex items-end gap-px h-48 overflow-hidden">
+              {timeline.map((point, i) => {
+                const total = point.total_bytes || (point.rx_bytes + point.tx_bytes)
+                const heightPercent = Math.max((total / maxBytes) * 100, 0.5)
+                return (
+                  <div key={i} className="flex-1 flex flex-col justify-end items-center group relative h-full" style={{ minWidth: '2px' }}>
+                    <div
+                      className="w-full rounded-sm transition-all duration-300"
+                      style={{
+                        height: `${heightPercent}%`,
+                        backgroundColor: total > 0 ? '#299ac2' : '#e2e8f0',
+                        minHeight: '1px',
+                      }}
+                    />
+                    {/* Tooltip solo en hover */}
+                    <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-20 pointer-events-none">
+                      {point.time}<br/>
+                      ↓ {formatRate(point.rx_bytes)}<br/>
+                      ↑ {formatRate(point.tx_bytes)}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Línea base */}
+            <div className="border-t border-gray-200 mt-0"></div>
+          </div>
+
+          {/* Eje temporal */}
           <div className="flex justify-between text-xs text-gray-400 mt-2">
-            <span>Hace 60s</span>
+            <span>Hace 5 min</span>
+            <span>Hace 2.5 min</span>
             <span>Ahora</span>
           </div>
+
+          {/* Leyenda */}
           <div className="flex gap-4 mt-3 text-xs">
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded" style={{ backgroundColor: '#299ac2' }}></span>
-              Tráfico permitido
+              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#299ac2' }}></span>
+              Tráfico activo
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-red-600"></span>
-              Con denegaciones
+              <span className="w-3 h-3 rounded-sm bg-gray-200"></span>
+              Sin tráfico
+            </span>
+            <span className="text-gray-400 ml-auto">
+              {timeline.length} puntos · {timeline.length * 5}s de histórico
             </span>
           </div>
         </div>
 
-        {/* Sistema (1/3) */}
+        {/* Sistema */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="font-medium text-gray-900 mb-4">Sistema</h3>
           <div className="space-y-4">
-            {/* CPU */}
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600">CPU Load</span>
-                <span className="font-medium">{s.cpu.load_1?.toFixed(2) || 'N/A'}</span>
+                <span className="text-gray-600">CPU</span>
+                <span className="font-medium">{s.cpu.percent}% {s.cpu.load_1 !== undefined ? `(${s.cpu.load_1.toFixed(2)})` : ''}</span>
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${Math.min((s.cpu.load_1 || 0) * 25, 100)}%`, backgroundColor: '#0b497c' }}
-                />
+                <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(s.cpu.percent, 100)}%`, backgroundColor: '#0b497c' }} />
               </div>
             </div>
-            {/* RAM */}
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-gray-600">Memoria RAM</span>
                 <span className="font-medium">{s.memory.percent}%</span>
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${s.memory.percent}%`, backgroundColor: s.memory.percent > 80 ? '#dc2626' : '#299ac2' }}
-                />
+                <div className="h-full rounded-full transition-all" style={{ width: `${s.memory.percent}%`, backgroundColor: s.memory.percent > 80 ? '#dc2626' : '#299ac2' }} />
               </div>
             </div>
-            {/* Disco */}
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600">Disco (caché)</span>
-                <span className="font-medium">{s.disk.percent}%</span>
+            {s.disk.total > 0 && (
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-600">Disco (caché)</span>
+                  <span className="font-medium">{s.disk.percent}%</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${s.disk.percent}%`, backgroundColor: s.disk.percent > 80 ? '#dc2626' : '#0b497c' }} />
+                </div>
               </div>
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${s.disk.percent}%`, backgroundColor: s.disk.percent > 80 ? '#dc2626' : '#0b497c' }}
-                />
-              </div>
-            </div>
+            )}
             <div className="pt-2 border-t border-gray-100 text-xs text-gray-400 space-y-1">
               <div>RAM: {formatBytes(s.memory.used)} / {formatBytes(s.memory.total)}</div>
-              <div>Disco: {formatBytes(s.disk.used)} / {formatBytes(s.disk.total)}</div>
-              <div>Swap load: {s.cpu.load_5?.toFixed(2)} / {s.cpu.load_15?.toFixed(2)}</div>
+              {s.disk.total > 0 && <div>Disco: {formatBytes(s.disk.used)} / {formatBytes(s.disk.total)}</div>}
+              <div>Total transferido: ↓{formatBytes(t.rx_total)} ↑{formatBytes(t.tx_total)}</div>
             </div>
           </div>
         </div>
@@ -212,7 +255,6 @@ export default function Dashboard() {
 
       {/* Top usuarios + Top dominios + Top bloqueados */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        {/* Top usuarios */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="font-medium text-gray-900 mb-4">👥 Top usuarios por tráfico</h3>
           {data.top_users.length === 0 ? (
@@ -235,7 +277,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Top dominios visitados */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="font-medium text-gray-900 mb-4">🌐 Top sitios visitados</h3>
           {data.top_domains.length === 0 ? (
@@ -255,7 +296,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Top dominios bloqueados */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="font-medium text-gray-900 mb-4">🚫 Top sitios bloqueados</h3>
           {data.top_blocked.length === 0 ? (
@@ -301,9 +341,7 @@ export default function Dashboard() {
                   <td className="px-6 py-2">
                     <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
                       c.denied ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                    }`}>
-                      {c.status}
-                    </span>
+                    }`}>{c.status}</span>
                   </td>
                   <td className="px-6 py-2 text-right text-xs font-mono text-gray-500">{formatBytes(c.bytes)}</td>
                 </tr>
@@ -330,30 +368,14 @@ export default function Dashboard() {
             { icon: '🔐', label: 'Cert SSL', path: '/certificate' },
             { icon: '📝', label: 'Auditoría', path: '/audit' },
           ].map((a, i) => (
-            <button
-              key={i}
-              onClick={() => navigate(a.path)}
-              className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:shadow-md transition text-center"
-            >
+            <button key={i} onClick={() => navigate(a.path)}
+              className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 hover:shadow-md transition text-center">
               <div className="text-2xl mb-1">{a.icon}</div>
               <div className="text-sm font-medium text-gray-700">{a.label}</div>
             </button>
           ))}
         </div>
       </div>
-    </div>
-  )
-}
-
-function MetricCard({ title, value, sub, color, icon }: { title: string; value: string; sub: string; color: string; icon: string }) {
-  return (
-    <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm text-gray-500">{title}</h3>
-        <span className="text-xl">{icon}</span>
-      </div>
-      <p className="text-2xl font-bold" style={{ color }}>{value}</p>
-      <p className="text-xs text-gray-400 mt-1">{sub}</p>
     </div>
   )
 }
