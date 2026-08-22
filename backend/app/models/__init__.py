@@ -8,6 +8,7 @@ from app.models.squid_settings import SquidSetting
 from app.models.delay_pool import DelayPool
 from app.models.ldap_config import LdapConfig
 from app.models.audit_log import AuditLog
+from app.models.notification_config import NotificationConfig
 
 __all__ = [
     "Admin",
@@ -18,4 +19,5 @@ __all__ = [
     "DelayPool",
     "LdapConfig",
     "AuditLog",
+    "NotificationConfig",
 ]

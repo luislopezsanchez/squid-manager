@@ -125,4 +125,35 @@ export const api = {
     formData.append('file', file)
     return request<any>('/backup/import-squid-conf', { method: 'POST', body: formData })
   },
+
+  // Logs
+  getLogs: (params: { limit?: number; offset?: number; user?: string; status?: number; domain?: string; ip?: string; denied?: boolean } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.limit) qs.append('limit', String(params.limit))
+    if (params.offset) qs.append('offset', String(params.offset))
+    if (params.user) qs.append('user', params.user)
+    if (params.status) qs.append('status', String(params.status))
+    if (params.domain) qs.append('domain', params.domain)
+    if (params.ip) qs.append('ip', params.ip)
+    if (params.denied) qs.append('denied', 'true')
+    const q = qs.toString()
+    return request<any>(`/logs/access${q ? '?' + q : ''}`)
+  },
+  getLogStats: () => request<any>('/logs/stats'),
+  exportLogsCsv: (params: { user?: string; status?: number; domain?: string; ip?: string; denied?: boolean } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.user) qs.append('user', params.user)
+    if (params.status) qs.append('status', String(params.status))
+    if (params.domain) qs.append('domain', params.domain)
+    if (params.ip) qs.append('ip', params.ip)
+    if (params.denied) qs.append('denied', 'true')
+    const q = qs.toString()
+    return `${API_BASE}/logs/export${q ? '?' + q : ''}`
+  },
+
+  // Notifications
+  getNotificationConfig: () => request<any>('/notifications/config'),
+  updateNotificationConfig: (data: any) => request<any>('/notifications/config', { method: 'PUT', body: JSON.stringify(data) }),
+  testEmail: () => request<any>('/notifications/test-email', { method: 'POST' }),
+  testTelegram: () => request<any>('/notifications/test-telegram', { method: 'POST' }),
 }

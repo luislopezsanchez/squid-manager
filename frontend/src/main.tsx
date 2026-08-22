@@ -14,6 +14,8 @@ import AuditLog from './pages/AuditLog'
 import CertificadoCA from './pages/CertificadoCA'
 import BackupRestore from './pages/BackupRestore'
 import Admins from './pages/Admins'
+import LogsViewer from './pages/LogsViewer'
+import Notifications from './pages/Notifications'
 import Layout from './components/Layout'
 import { getToken } from './api/client'
 
@@ -35,6 +37,8 @@ function App() {
           <Route path="certificate" element={<CertificadoCA />} />
           <Route path="audit" element={<AuditLog />} />
           <Route path="backup" element={<BackupRestore />} />
+          <Route path="logs" element={<LogsViewer />} />
+          <Route path="notifications" element={<Notifications />} />
           <Route path="admins" element={<Admins />} />
         </Route>
       </Routes>
