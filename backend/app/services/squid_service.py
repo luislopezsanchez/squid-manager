@@ -44,18 +44,25 @@ def reload_squid() -> tuple[bool, str]:
 
 
 def purge_credentials() -> tuple[bool, str]:
-    """Purga la caché de credenciales de autenticación de Squid.
+    """Reinicia Squid para purgar la caché de credenciales de autenticación.
 
-    Fuerza a que todos los usuarios vuelvan a autenticarse (no solo uno),
-    porque Squid mantiene una caché GLOBAL de credenciales (no hay purge por usuario).
-
-    Squid limpia la caché de credenciales al reconfigure. Si se necesita un
-    borrado más agresivo (garantizado), se reinicia el contenedor.
+    IMPORTANTE: `squid -k reconfigure` NO limpia la caché de credenciales de
+    autenticación de Squid. La única forma fiable de forzar la re-autenticación
+    de todos los usuarios es REINICIAR el proceso de Squid, lo que purga la
+    caché por completo.
     """
-    success, msg = reload_squid()
-    if success:
-        return True, "Caché de credenciales purgada. Los usuarios deberán volver a autenticarse."
-    return False, msg
+    try:
+        client = _get_docker_client()
+        if not client:
+            return False, "No se pudo conectar al daemon Docker"
+
+        container = client.containers.get(settings.SQUID_CONTAINER_NAME)
+        container.restart(timeout=10)
+        logger.info("Squid reiniciado para purgar la caché de credenciales")
+        return True, "Caché de credenciales purgada (Squid reiniciado). Todos los usuarios deberán volver a autenticarse."
+    except Exception as e:
+        logger.error(f"Error purgando credenciales: {e}")
+        return False, f"Error: {e}"
 
 
 def write_ldap_aux_files(ldap_config, allowed_usernames: list[str]) -> bool:

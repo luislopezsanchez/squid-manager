@@ -13,6 +13,7 @@ from app.schemas.access_rule import (
 )
 from app.services.auth_service import get_current_admin
 from app.services.notification_service import queue_notification
+from app.services.config_state import mark_dirty
 
 router = APIRouter()
 
@@ -50,6 +51,7 @@ async def create_access_rule(
         new_value=f"{data.action} {data.acl_names}",
     ))
     db.commit()
+    mark_dirty()
 
     if background_tasks:
         queue_notification(background_tasks, db, "rule_change",
@@ -72,6 +74,7 @@ async def reorder_rules(
         if rule:
             rule.order = new_order
     db.commit()
+    mark_dirty()
 
     if background_tasks:
         queue_notification(background_tasks, db, "rule_change",
@@ -100,6 +103,7 @@ async def update_access_rule(
         action="update", entity="access_rule", entity_id=rule.id,
     ))
     db.commit()
+    mark_dirty()
 
     if background_tasks:
         queue_notification(background_tasks, db, "rule_change",
@@ -127,6 +131,7 @@ async def delete_access_rule(
     ))
     db.delete(rule)
     db.commit()
+    mark_dirty()
 
     if background_tasks:
         queue_notification(background_tasks, db, "rule_change",

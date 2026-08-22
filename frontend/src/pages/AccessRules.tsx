@@ -22,6 +22,7 @@ interface Acl {
 export default function AccessRules() {
   const [rules, setRules] = useState<AccessRule[]>([])
   const [acls, setAcls] = useState<Acl[]>([])
+  const [groups, setGroups] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -36,6 +37,7 @@ export default function AccessRules() {
   useEffect(() => {
     loadRules()
     api.listAcls().then(setAcls).catch(console.error)
+    api.listGroups().then(setGroups).catch(() => {})
   }, [])
 
   const handleSave = async (e: React.FormEvent) => {
@@ -92,6 +94,7 @@ export default function AccessRules() {
 
   const predefinedAcls = ['localnet', 'localhost', 'SSL_ports', 'Safe_ports', 'CONNECT', 'authenticated', 'all']
   const allAclNames = [...predefinedAcls, ...acls.map(a => a.name)]
+  const groupNames = groups.map(g => g.name)
 
   return (
     <div className="p-8">
@@ -139,6 +142,16 @@ export default function AccessRules() {
                 }}
                   className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-mono rounded hover:bg-blue-100">
                   {name}
+                </button>
+              ))}
+              {groupNames.length > 0 && <span className="w-full text-xs text-gray-400 mt-1">Grupos de usuarios:</span>}
+              {groupNames.map(name => (
+                <button key={`g-${name}`} type="button" onClick={() => {
+                  const current = form.acl_names.trim()
+                  setForm({ ...form, acl_names: current ? `${current} ${name}` : name })
+                }}
+                  className="px-2 py-1 bg-emerald-50 text-emerald-700 text-xs font-mono rounded hover:bg-emerald-100 border border-emerald-200">
+                  👥 {name}
                 </button>
               ))}
             </div>

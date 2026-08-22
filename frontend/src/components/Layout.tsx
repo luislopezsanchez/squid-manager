@@ -1,11 +1,22 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { clearToken, api } from '../api/client'
 
 export default function Layout() {
   const navigate = useNavigate()
   const [applying, setApplying] = useState(false)
+  const [pending, setPending] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
+
+  const checkPending = () => {
+    api.getPending().then(r => setPending(r.dirty)).catch(() => {})
+  }
+
+  useEffect(() => {
+    checkPending()
+    const interval = setInterval(checkPending, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   const handleLogout = () => {
     clearToken()
@@ -24,6 +35,7 @@ export default function Layout() {
       const result = await api.applyConfig()
       if (result.status === 'ok') {
         showToast('✅ Cambios aplicados correctamente. Squid reconfigurado.', 'success')
+        setPending(false)
       } else {
         showToast(`⚠️ ${result.message}`, 'warning')
       }
@@ -31,6 +43,7 @@ export default function Layout() {
       showToast(`❌ Error: ${e.message}`, 'error')
     } finally {
       setApplying(false)
+      checkPending()
     }
   }
 
@@ -100,7 +113,7 @@ export default function Layout() {
 
         {/* Sección inferior: Aplicar Cambios separado de Cerrar Sesión */}
         <div className="p-4 border-t" style={{ borderColor: '#0b497c' }}>
-          {/* Aplicar Cambios - destacado */}
+          {/* Aplicar Cambios - destacado, con indicador de pendientes */}
           <button
             onClick={handleApply}
             disabled={applying}
@@ -108,11 +121,11 @@ export default function Layout() {
               applying ? 'opacity-50 cursor-not-allowed' : ''
             }`}
             style={{
-              backgroundColor: applying ? '#1a3a5c' : '#299ac2',
+              backgroundColor: applying ? '#1a3a5c' : (pending ? '#d97706' : '#299ac2'),
               color: '#fff',
             }}
-            onMouseEnter={(e) => { if (!applying) e.currentTarget.style.backgroundColor = '#1a7a9a' }}
-            onMouseLeave={(e) => { if (!applying) e.currentTarget.style.backgroundColor = '#299ac2' }}
+            onMouseEnter={(e) => { if (!applying) e.currentTarget.style.backgroundColor = pending ? '#b45309' : '#1a7a9a' }}
+            onMouseLeave={(e) => { if (!applying) e.currentTarget.style.backgroundColor = pending ? '#d97706' : '#299ac2' }}
           >
             {applying ? (
               <>
@@ -122,12 +135,14 @@ export default function Layout() {
                 </svg>
                 Aplicando...
               </>
+            ) : pending ? (
+              <>⚠️ Aplicar Cambios (pendientes)</>
             ) : (
               <>⚡ Aplicar Cambios</>
             )}
           </button>
           <p className="text-xs text-center mb-4" style={{ color: '#4a6a8a' }}>
-            Genera squid.conf y recarga Squid
+            {pending ? 'Hay cambios sin aplicar en Squid' : 'Genera squid.conf y recarga Squid'}
           </p>
 
           {/* Separador */}

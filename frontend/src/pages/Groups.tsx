@@ -15,13 +15,21 @@ export default function Groups() {
   const [showForm, setShowForm] = useState(false)
   const [newGroup, setNewGroup] = useState({ name: '', description: '' })
   const [newMember, setNewMember] = useState<Record<number, string>>({})
+  const [allUsers, setAllUsers] = useState<string[]>([])
   const { showToast, ToastContainer } = useToast()
 
   const loadGroups = () => {
     api.listGroups().then(setGroups).catch(e => showToast('Error al cargar grupos', 'error')).finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadGroups() }, [])
+  useEffect(() => {
+    loadGroups()
+    // Combinar usuarios locales + LDAP para autocompletar
+    Promise.all([
+      api.listUsers().then(us => us.map((u: any) => u.username)).catch(() => []),
+      api.listLdapUsers().then(us => us.map((u: any) => u.username)).catch(() => []),
+    ]).then(([local, ldap]) => setAllUsers([...new Set([...local, ...ldap])]))
+  }, [])
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,6 +73,9 @@ export default function Groups() {
   return (
     <div className="p-8">
       <ToastContainer />
+      <datalist id="member-options">
+        {allUsers.map(u => <option key={u} value={u} />)}
+      </datalist>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Grupos de Usuarios</h1>
         <button
@@ -145,6 +156,7 @@ export default function Groups() {
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember(group.id) } }}
                   className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
                   placeholder="nombre de usuario (local o LDAP)"
+                  list="member-options"
                 />
                 <button onClick={() => handleAddMember(group.id)}
                   className="bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary-700">

@@ -9,6 +9,7 @@ from app.models.admin import Admin
 from app.models.delay_pool import DelayPool
 from app.models.audit_log import AuditLog
 from app.services.auth_service import get_current_admin
+from app.services.config_state import mark_dirty
 
 router = APIRouter()
 
@@ -72,6 +73,7 @@ async def create_delay_pool(
         new_value=f"class {data.pool_class}: {data.parameters}",
     ))
     db.commit()
+    mark_dirty()
     return pool
 
 
@@ -94,6 +96,7 @@ async def update_delay_pool(
         action="update", entity="delay_pool", entity_id=pool.id,
     ))
     db.commit()
+    mark_dirty()
     return pool
 
 
@@ -115,3 +118,4 @@ async def delete_delay_pool(
     ))
     db.delete(pool)
     db.commit()
+    mark_dirty()

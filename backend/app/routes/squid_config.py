@@ -17,6 +17,7 @@ from app.services.auth_service import get_current_admin
 from app.services.config_generator import generate_squid_config, validate_squid_config
 from app.services.squid_service import reload_squid, get_squid_status, restart_squid, write_ldap_aux_files
 from app.services.notification_service import queue_notification
+from app.services.config_state import mark_dirty, mark_clean, is_dirty
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ async def update_setting(
                                 category=data.category, description=data.description)
         db.add(setting)
     db.commit()
+    mark_dirty()
     return {"status": "ok", "key": data.key, "value": data.value}
 
 
@@ -116,6 +118,7 @@ async def apply_config(
     valid, msg = validate_squid_config(config_path)
     if not valid:
         return {"status": "error", "message": f"Configuración inválida: {msg}"}
+    mark_clean()
 
     # 5b. Si el config tiene ssl-bump, necesita reinicio completo (no reconfigure)
     if "ssl-bump" in config_text:
@@ -192,6 +195,14 @@ async def preview_config(
     """Previsualiza el squid.conf que se generaría."""
     config_text = generate_squid_config(db)
     return {"config": config_text}
+
+
+@router.get("/pending")
+async def pending_changes(
+    _: Admin = Depends(get_current_admin),
+):
+    """Indica si hay cambios en la BD que aún no se han aplicado a Squid."""
+    return {"dirty": is_dirty()}
 
 
 @router.get("/ca-cert")

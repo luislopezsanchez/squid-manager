@@ -170,4 +170,5 @@ export const api = {
 
   // Session management
   purgeCredentials: () => request<any>('/proxy-users/purge-credentials', { method: 'POST' }),
+  getPending: () => request<{ dirty: boolean }>('/squid/pending'),
 }

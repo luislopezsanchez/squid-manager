@@ -10,6 +10,7 @@ from app.models.audit_log import AuditLog
 from app.schemas.acl import AclCreate, AclUpdate, AclResponse
 from app.services.auth_service import get_current_admin
 from app.services.notification_service import queue_notification
+from app.services.config_state import mark_dirty
 
 router = APIRouter()
 
@@ -44,6 +45,7 @@ async def create_acl(
         action="create", entity="acl", entity_id=acl.id, new_value=data.name,
     ))
     db.commit()
+    mark_dirty()
 
     if background_tasks:
         queue_notification(background_tasks, db, "acl_change",
@@ -72,6 +74,7 @@ async def update_acl(
         action="update", entity="acl", entity_id=acl.id,
     ))
     db.commit()
+    mark_dirty()
 
     if background_tasks:
         queue_notification(background_tasks, db, "acl_change",
@@ -98,6 +101,7 @@ async def delete_acl(
     ))
     db.delete(acl)
     db.commit()
+    mark_dirty()
 
     if background_tasks:
         queue_notification(background_tasks, db, "acl_change",

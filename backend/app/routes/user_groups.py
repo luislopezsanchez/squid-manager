@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models.admin import Admin
 from app.models.user_group import UserGroup, UserGroupMember
 from app.services.auth_service import get_current_admin
+from app.services.config_state import mark_dirty
 
 router = APIRouter()
 
@@ -82,6 +83,7 @@ async def create_group(
     group = UserGroup(name=data.name, description=data.description)
     db.add(group)
     db.commit()
+    mark_dirty()
     db.refresh(group)
     return _to_response(group, [])
 
@@ -103,6 +105,7 @@ async def update_group(
     if data.description is not None:
         group.description = data.description
     db.commit()
+    mark_dirty()
 
     members = [
         m.username
@@ -125,6 +128,7 @@ async def delete_group(
     db.query(UserGroupMember).filter(UserGroupMember.group_id == group_id).delete()
     db.delete(group)
     db.commit()
+    mark_dirty()
 
 
 @router.post("/{group_id}/members", response_model=GroupResponse)
@@ -149,6 +153,7 @@ async def add_member(
 
     db.add(UserGroupMember(group_id=group_id, username=data.username))
     db.commit()
+    mark_dirty()
 
     members = [
         m.username
@@ -173,6 +178,7 @@ async def remove_member(
         UserGroupMember.group_id == group_id, UserGroupMember.username == username
     ).delete()
     db.commit()
+    mark_dirty()
 
     members = [
         m.username
