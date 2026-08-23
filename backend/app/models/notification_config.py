@@ -1,6 +1,6 @@
 """Modelo NotificationConfig: configuración de notificaciones (email + Telegram)."""
 
-from datetime import datetime
+from app.utils import utcnow
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from app.database import Base
 
@@ -31,5 +31,5 @@ class NotificationConfig(Base):
     notify_on_rule_change = Column(Boolean, default=False, nullable=False)
     notify_on_security_alert = Column(Boolean, default=True, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

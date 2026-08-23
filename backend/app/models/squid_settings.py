@@ -1,6 +1,6 @@
 """Modelo SquidSetting: configuración general de Squid (key-value)."""
 
-from datetime import datetime
+from app.utils import utcnow
 from sqlalchemy import Column, Integer, String, DateTime, Text
 from app.database import Base
 
@@ -15,5 +15,5 @@ class SquidSetting(Base):
     # Categoría: network, cache, logging, security, etc.
     category = Column(String(50), default="general", nullable=False)
     description = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

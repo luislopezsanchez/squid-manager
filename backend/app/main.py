@@ -1,12 +1,17 @@
 """App principal FastAPI - SquidManager Backend."""
 
 import logging
+import secrets
+import string
 from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect
 
 from app.config import settings
-from app.database import engine, Base, SessionLocal
+from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
 from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups
 from app.middleware import rate_limit_middleware
@@ -14,29 +19,71 @@ from app.middleware import rate_limit_middleware
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+BACKEND_DIR = Path(__file__).resolve().parent.parent
 
-def init_db():
-    """Crea tablas y datos iniciales."""
-    Base.metadata.create_all(bind=engine)
+
+def run_migrations():
+    """Pone el esquema al día con Alembic.
+
+    Si la base ya tiene tablas pero no historial de Alembic (instalaciones
+    anteriores, creadas con create_all), se marca la revisión baseline y a
+    partir de ahí se aplican las migraciones nuevas con normalidad.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+
+    if "alembic_version" not in tables and "admins" in tables:
+        logger.info("Base de datos preexistente sin historial de Alembic: marcando baseline 0001")
+        command.stamp(cfg, "0001")
+
+    command.upgrade(cfg, "head")
+    logger.info("Migraciones aplicadas")
+
+
+def seed_data():
+    """Crea el administrador inicial y la configuración por defecto de Squid."""
+    from app.models.admin import Admin
+    from app.models.squid_settings import SquidSetting
+    from app.services.auth_service import get_password_hash
+
     db = SessionLocal()
     try:
-        # Crear admin por defecto si no existe
-        from app.models.admin import Admin
-        from app.services.auth_service import get_password_hash
-
         admin = db.query(Admin).filter(Admin.username == "admin").first()
         if not admin:
+            # Sin contraseña fija en el código: o la define el operador por
+            # entorno, o se genera aleatoria y se muestra una única vez.
+            password = settings.ADMIN_INITIAL_PASSWORD
+            generated = False
+            if not password:
+                alphabet = string.ascii_letters + string.digits
+                password = "".join(secrets.choice(alphabet) for _ in range(16))
+                generated = True
+
             admin = Admin(
                 username="admin",
-                password_hash=get_password_hash("admin123"),
+                password_hash=get_password_hash(password),
                 email="admin@local",
                 role="superadmin",
+                must_change_password=True,
             )
             db.add(admin)
-            logger.info("Admin por defecto creado: admin / admin123")
+            if generated:
+                logger.warning(
+                    "Administrador inicial creado.\n"
+                    "    Usuario:    admin\n"
+                    f"    Contraseña: {password}\n"
+                    "    Se pedirá cambiarla en el primer inicio de sesión. "
+                    "Esta contraseña no se vuelve a mostrar."
+                )
+            else:
+                logger.info("Administrador inicial creado con ADMIN_INITIAL_PASSWORD")
 
-        # Configuración inicial de Squid
-        from app.models.squid_settings import SquidSetting
         defaults = {
             "http_port": ("3128", "network", "Puerto de escucha del proxy"),
             "cache_mem": ("128 MB", "cache", "Memoria RAM para caché"),
@@ -47,9 +94,13 @@ def init_db():
             "credentialsttl": ("2 hours", "security", "TTL de credenciales"),
             "access_log": ("/var/log/squid/access.log", "logging", "Ruta del log de acceso"),
             "cache_log": ("/var/log/squid/cache.log", "logging", "Ruta del log de caché"),
-            "cache_store_log": ("/var/log/squid/store.log", "logging", "Ruta del log de store"),
             "visible_hostname": ("squidmanager", "general", "Nombre visible del proxy"),
             "refresh_pattern": (". 0 20% 4320", "cache", "Patrón de refresco"),
+            "error_language": ("es", "general", "Idioma de las páginas de error"),
+            "ssl_bump_exclude": (
+                "", "security",
+                "Dominios que NO se descifran (uno por línea o separados por espacios)",
+            ),
         }
         for key, (value, category, description) in defaults.items():
             if not db.query(SquidSetting).filter(SquidSetting.key == key).first():
@@ -64,26 +115,34 @@ def init_db():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Iniciando SquidManager Backend...")
-    init_db()
+    run_migrations()
+    seed_data()
     logger.info("Base de datos inicializada")
     yield
     logger.info("Deteniendo SquidManager Backend...")
 
 
+# La documentación interactiva queda expuesta solo en modo depuración: sin
+# autenticación delante, es un mapa completo de la API para cualquiera.
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     lifespan=lifespan,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 
-# CORS: permitir frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS: lista explícita de orígenes. Con "*" y allow_credentials=True Starlette
+# refleja el origen de quien pregunte, que equivale a no tener CORS.
+if settings.cors_origin_list:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
 
 # Rate limiting (anti fuerza bruta)
 app.middleware("http")(rate_limit_middleware)
@@ -110,7 +169,6 @@ async def root():
     return {
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "docs": "/docs",
     }
 
 

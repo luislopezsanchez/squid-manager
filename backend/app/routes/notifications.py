@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.admin import Admin
 from app.models.notification_config import NotificationConfig
-from app.services.auth_service import get_current_admin
+from app.services.auth_service import get_current_admin, require_writer
 from app.services.notification_service import test_email, test_telegram, send_email, send_telegram
 
 router = APIRouter()
@@ -59,12 +59,6 @@ def _get_or_create_config(db: Session) -> NotificationConfig:
     return config
 
 
-def _require_admin(admin: Admin = Depends(get_current_admin)) -> Admin:
-    if admin.role == "viewer":
-        raise HTTPException(status_code=403, detail="Los viewers no pueden modificar configuraciones")
-    return admin
-
-
 @router.get("/config")
 async def get_config(
     db: Session = Depends(get_db),
@@ -96,7 +90,7 @@ async def get_config(
 async def update_config(
     data: NotificationConfigIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(_require_admin),
+    _: Admin = Depends(require_writer),
 ):
     """Actualizar configuración de notificaciones."""
     config = _get_or_create_config(db)
@@ -129,7 +123,7 @@ async def update_config(
 @router.post("/test-email")
 async def test_email_endpoint(
     data: TestEmailIn,
-    _: Admin = Depends(_require_admin),
+    _: Admin = Depends(require_writer),
 ):
     """Enviar email de prueba usando los datos del formulario (no la config guardada).
 
@@ -156,7 +150,7 @@ async def test_email_endpoint(
 async def test_telegram_endpoint(
     data: TestTelegramIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(_require_admin),
+    _: Admin = Depends(require_writer),
 ):
     """Enviar mensaje de prueba por Telegram.
 

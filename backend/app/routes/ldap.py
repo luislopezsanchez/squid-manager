@@ -10,8 +10,8 @@ from app.database import get_db
 from app.models.admin import Admin
 from app.models.ldap_config import LdapConfig
 from app.models.ldap_user import LdapUser
-from app.services.auth_service import get_current_admin
-from app.services.squid_service import write_ldap_aux_files, reload_squid
+from app.services.auth_service import get_current_admin, require_writer
+from app.services.squid_service import write_ldap_aux_files, reload_squid, purge_credentials
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -57,7 +57,7 @@ async def get_ldap_config(
 async def update_ldap_config(
     data: LdapConfigUpdate,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_writer),
 ):
     """Actualiza la configuración LDAP."""
     config = db.query(LdapConfig).first()
@@ -105,7 +105,7 @@ class LdapTestRequest(BaseModel):
 async def test_ldap_connection(
     data: LdapTestRequest,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_writer),
 ):
     """Prueba la conexión LDAP y la autenticación de un usuario usando ldap3.
 
@@ -228,7 +228,7 @@ async def list_ldap_users(
 @router.post("/sync")
 async def sync_ldap_users(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_writer),
 ):
     """Sincroniza los usuarios desde LDAP/Active Directory.
 
@@ -249,29 +249,45 @@ async def sync_ldap_users(
     except Exception as e:
         raise HTTPException(400, detail=f"Error conectando a LDAP: {e}")
 
+    # Búsqueda paginada: Active Directory corta las respuestas en 1000 entradas
+    # (MaxPageSize) y devuelve solo la primera página SIN error, así que sin
+    # paginar la sincronización parecía correcta y dejaba fuera a la mayoría.
+    # El filtro se acota a personas: (objectClass=user) también trae equipos.
     try:
-        conn.search(search_base=config.search_base,
-                    search_filter="(objectClass=user)",
-                    search_scope=SUBTREE,
-                    attributes=["sAMAccountName", "uid", "cn", "mail"])
+        entries = conn.extend.standard.paged_search(
+            search_base=config.search_base,
+            search_filter="(&(objectCategory=person)(objectClass=user))",
+            search_scope=SUBTREE,
+            attributes=["sAMAccountName", "uid", "cn", "mail"],
+            paged_size=500,
+            generator=False,
+        )
     except Exception as e:
         conn.unbind()
         raise HTTPException(400, detail=f"Error buscando usuarios: {e}")
 
     synced = 0
-    for entry in conn.entries:
+    for entry in entries:
+        if entry.get("type") != "searchResEntry":
+            continue
+        attrs = entry.get("attributes", {})
+
+        def _attr(name):
+            value = attrs.get(name)
+            if isinstance(value, list):
+                return value[0] if value else None
+            return value or None
+
         # En AD el login es sAMAccountName; en OpenLDAP suele ser uid
-        sam = entry.sAMAccountName.value if entry.sAMAccountName else None
-        uid = entry.uid.value if entry.uid else None
-        username = sam or uid
+        username = _attr("sAMAccountName") or _attr("uid")
         if not username:
             continue
         # Omitir cuentas de máquina (acaban en $) y cuentas del sistema
         if username.endswith("$") or username.lower() in ("krbtgt", "guest", "invitado"):
             continue
 
-        cn = entry.cn.value if entry.cn else None
-        mail = entry.mail.value if entry.mail else None
+        cn = _attr("cn")
+        mail = _attr("mail")
 
         existing = db.query(LdapUser).filter(LdapUser.username == username).first()
         if existing:
@@ -294,7 +310,7 @@ async def sync_ldap_users(
 async def toggle_ldap_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_writer),
 ):
     """Habilita/deshabilita un usuario LDAP (controla la allow-list)."""
     user = db.query(LdapUser).filter(LdapUser.id == user_id).first()
@@ -305,5 +321,9 @@ async def toggle_ldap_user(
     db.commit()
 
     _sync_ldap_files(db)
+    # Quitar a alguien de la allow-list no basta: Squid guarda en caché las
+    # credenciales ya validadas (credentialsttl) y seguiría dejándole navegar.
+    if not user.enabled:
+        purge_credentials()
 
     return user

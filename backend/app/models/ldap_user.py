@@ -5,7 +5,7 @@ La tabla sirve para gestionar la allow-list: solo los usuarios con `enabled=True
 pueden navegar (allow-list estricto).
 """
 
-from datetime import datetime
+from app.utils import utcnow
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from app.database import Base
 
@@ -20,5 +20,5 @@ class LdapUser(Base):
     email = Column(String(255), nullable=True)
     # allow-list estricto: por defecto NO navegan hasta que el admin los habilite
     enabled = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

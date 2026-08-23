@@ -1,6 +1,6 @@
 """Modelo LdapConfig: configuración LDAP/Active Directory."""
 
-from datetime import datetime
+from app.utils import utcnow
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from app.database import Base
 
@@ -15,5 +15,5 @@ class LdapConfig(Base):
     search_base = Column(String(255), nullable=False)  # ou=users,dc=...
     user_filter = Column(String(255), nullable=False, default="(uid=%s)")
     enabled = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

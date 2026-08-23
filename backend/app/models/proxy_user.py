@@ -1,6 +1,6 @@
 """Modelo ProxyUser: usuarios del proxy Squid (autenticación local)."""
 
-from datetime import datetime
+from app.utils import utcnow
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from app.database import Base
 
@@ -16,5 +16,5 @@ class ProxyUser(Base):
     htpasswd_hash = Column(String(255), nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
     expires_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

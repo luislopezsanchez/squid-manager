@@ -1,6 +1,6 @@
 """Modelo Acl: Listas de Control de Acceso de Squid."""
 
-from datetime import datetime
+from app.utils import utcnow
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text
 from app.database import Base
 
@@ -16,5 +16,5 @@ class Acl(Base):
     value = Column(Text, nullable=False)
     description = Column(String(255), nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

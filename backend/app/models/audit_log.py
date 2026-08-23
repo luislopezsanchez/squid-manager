@@ -1,6 +1,6 @@
 """Modelo AuditLog: registro de cambios para auditoría."""
 
-from datetime import datetime
+from app.utils import utcnow
 from sqlalchemy import Column, Integer, String, DateTime, Text
 from app.database import Base
 
@@ -16,4 +16,4 @@ class AuditLog(Base):
     entity_id = Column(Integer, nullable=True)
     old_value = Column(Text, nullable=True)
     new_value = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    timestamp = Column(DateTime, default=utcnow, index=True)

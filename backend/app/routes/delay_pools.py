@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.admin import Admin
 from app.models.delay_pool import DelayPool
 from app.models.audit_log import AuditLog
-from app.services.auth_service import get_current_admin
+from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_state import mark_dirty
 
 router = APIRouter()
@@ -55,7 +55,7 @@ async def list_delay_pools(
 async def create_delay_pool(
     data: DelayPoolCreate,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_writer),
 ):
     """Crea un nuevo delay pool."""
     pool = DelayPool(
@@ -82,7 +82,7 @@ async def update_delay_pool(
     pool_id: int,
     data: DelayPoolUpdate,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_writer),
 ):
     """Actualiza un delay pool."""
     pool = db.query(DelayPool).filter(DelayPool.id == pool_id).first()
@@ -104,7 +104,7 @@ async def update_delay_pool(
 async def delete_delay_pool(
     pool_id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_writer),
 ):
     """Elimina un delay pool."""
     pool = db.query(DelayPool).filter(DelayPool.id == pool_id).first()
