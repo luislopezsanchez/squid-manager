@@ -1,7 +1,9 @@
-"""Rutas de logs de Squid: listado, filtros y exportación CSV."""
+"""Rutas de logs de Squid: listado, filtros y exportación."""
 
 import csv
 import io
+import json
+from typing import Literal
 from app.utils import utcnow
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -79,6 +81,7 @@ async def security_alerts(
 
 @router.get("/export")
 async def export_logs(
+    format: Literal["csv", "ndjson", "raw"] = Query("csv"),
     user: str | None = Query(None),
     status: int | None = Query(None),
     domain: str | None = Query(None),
@@ -86,9 +89,38 @@ async def export_logs(
     denied: bool = Query(False),
     _: Admin = Depends(get_current_admin),
 ):
-    """Exportar logs filtrados a CSV."""
+    """Exportar logs filtrados, en tres formatos pensados para audiencias distintas.
+
+    - csv: para abrir en una hoja de cálculo o pegar en un informe.
+    - ndjson: un objeto JSON por línea, el formato estándar para ingesta en
+      herramientas externas (Splunk, ELK/Logstash, jq, cualquier SIEM) — cada
+      línea se procesa de forma independiente, sin cargar el archivo entero.
+    - raw: las líneas tal cual las escribió Squid, sin tocar. Sirve para
+      herramientas ya hechas para el formato nativo de Squid (módulo Squid de
+      Splunk/ELK, AWStats, SARG), que no saben interpretar CSV ni JSON.
+    """
     result = get_logs(limit=50000, offset=0, user=user, status=status, domain=domain, ip=ip, denied_only=denied)
     entries = result["entries"]
+    stamp = utcnow().strftime("%Y%m%d-%H%M%S")
+
+    if format == "raw":
+        content = "\n".join(e["raw_line"] for e in entries) + ("\n" if entries else "")
+        return StreamingResponse(
+            iter([content]),
+            media_type="text/plain",
+            headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.log"},
+        )
+
+    if format == "ndjson":
+        def _gen():
+            for e in entries:
+                # raw_line es un detalle interno del backend, no un dato del log.
+                yield json.dumps({k: v for k, v in e.items() if k != "raw_line"}, ensure_ascii=False) + "\n"
+        return StreamingResponse(
+            _gen(),
+            media_type="application/x-ndjson",
+            headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.ndjson"},
+        )
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -102,10 +134,9 @@ async def export_logs(
         ])
 
     output.seek(0)
-    filename = f"squid-logs-{utcnow().strftime('%Y%m%d-%H%M%S')}.csv"
 
     return StreamingResponse(
         output,
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.csv"}
     )

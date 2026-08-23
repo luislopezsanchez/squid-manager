@@ -115,6 +115,11 @@ def parse_line(line: str) -> dict | None:
         "content_type": m.group(11),
         # 407 es «hacen falta credenciales», que también es acceso denegado.
         "denied": status in (401, 403, 407) or "DENIED" in action,
+        # La línea original, sin tocar: para exportar en el formato nativo de
+        # Squid tal cual lo esperan herramientas externas ya hechas para él
+        # (módulo Squid de Splunk/ELK, AWStats, SARG), sin reconstruirla a
+        # mano a partir de los campos ya parseados.
+        "raw_line": line.strip(),
     }
 
 

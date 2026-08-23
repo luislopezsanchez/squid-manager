@@ -134,6 +134,11 @@ export const api = {
   getLdapConfig: () => request<any>('/ldap/config'),
   updateLdapConfig: (data: any) => request<any>('/ldap/config', { method: 'PUT', body: JSON.stringify(data) }),
   testLdap: (data: any) => request<any>('/ldap/test', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Syslog externo (opcional, apagado por defecto)
+  getSyslogConfig: () => request<any>('/syslog/config'),
+  updateSyslogConfig: (data: any) => request<any>('/syslog/config', { method: 'PUT', body: JSON.stringify(data) }),
+  testSyslog: (data: any) => request<any>('/syslog/test', { method: 'POST', body: JSON.stringify(data) }),
   syncLdapUsers: () => request<any>('/ldap/sync', { method: 'POST' }),
   listLdapUsers: () => request<any[]>('/ldap/users'),
   toggleLdapUser: (id: number) => request<any>(`/ldap/users/${id}/toggle`, { method: 'PATCH' }),
@@ -197,15 +202,15 @@ export const api = {
     return request<any>(`/logs/access${q ? '?' + q : ''}`)
   },
   getLogStats: () => request<any>('/logs/stats'),
-  exportLogsCsv: (params: { user?: string; status?: number; domain?: string; ip?: string; denied?: boolean } = {}) => {
+  exportLogs: (params: { format?: 'csv' | 'ndjson' | 'raw'; user?: string; status?: number; domain?: string; ip?: string; denied?: boolean } = {}) => {
     const qs = new URLSearchParams()
+    qs.append('format', params.format ?? 'csv')
     if (params.user) qs.append('user', params.user)
     if (params.status) qs.append('status', String(params.status))
     if (params.domain) qs.append('domain', params.domain)
     if (params.ip) qs.append('ip', params.ip)
     if (params.denied) qs.append('denied', 'true')
-    const q = qs.toString()
-    return `${API_BASE}/logs/export${q ? '?' + q : ''}`
+    return `${API_BASE}/logs/export?${qs.toString()}`
   },
 
   // Notifications

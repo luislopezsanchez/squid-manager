@@ -13,7 +13,7 @@ from sqlalchemy import inspect
 from app.config import settings
 from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
-from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups
+from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog
 from app.middleware import rate_limit_middleware
 
 logging.basicConfig(level=logging.INFO)
@@ -118,6 +118,10 @@ async def lifespan(app: FastAPI):
     run_migrations()
     seed_data()
     logger.info("Base de datos inicializada")
+
+    from app.services.syslog_service import start_syslog_forwarder
+    start_syslog_forwarder()
+
     yield
     logger.info("Deteniendo SquidManager Backend...")
 
@@ -162,6 +166,7 @@ app.include_router(backup.router, prefix="/api/backup", tags=["Backup/Restore/Im
 app.include_router(logs.router, prefix="/api/logs", tags=["Logs"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notificaciones"])
 app.include_router(user_groups.router, prefix="/api/groups", tags=["Grupos de usuarios"])
+app.include_router(syslog.router, prefix="/api/syslog", tags=["Syslog externo"])
 
 
 @app.get("/")

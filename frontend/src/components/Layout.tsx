@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { clearToken, api, canWrite, isSuperadmin, getRole } from '../api/client'
 import {
   IconDashboard, IconUsers, IconTag, IconRules, IconGauge, IconLink, IconGroups,
-  IconSettings, IconLock, IconAudit, IconBackup, IconLogs, IconBell, IconShield,
+  IconSettings, IconLock, IconAudit, IconBackup, IconLogs, IconBell, IconShield, IconSend,
   IconBolt, IconKey, IconLogout, IconSpinner, IconEye,
 } from './Icons'
 
@@ -88,6 +88,7 @@ export default function Layout() {
         { to: '/certificate', label: 'Certificado', Icon: IconLock },
         { to: '/settings', label: 'Configuración', Icon: IconSettings },
         { to: '/notifications', label: 'Notificaciones', Icon: IconBell },
+        { to: '/syslog', label: 'Syslog externo', Icon: IconSend },
         { to: '/backup', label: 'Backup y migración', Icon: IconBackup },
         ...(isSuperadmin() ? [{ to: '/admins', label: 'Administradores', Icon: IconShield }] : []),
       ],

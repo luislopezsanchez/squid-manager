@@ -107,9 +107,9 @@ export default function CertificadoCA() {
               </p>
               <button
                 onClick={() => downloadArtifact('/api/squid/ca-deploy/deploy-gpo.ps1', 'deploy-gpo.ps1', 'Script GPO descargado')}
-                className="w-full px-3 py-2 text-white rounded-lg text-sm font-medium bg-blue-700 hover:bg-blue-800"
+                className="w-full px-3 py-2 text-white rounded-lg text-sm font-medium bg-blue-700 hover:bg-blue-800 inline-flex items-center justify-center gap-1.5"
               >
-                <IconDownload /> deploy-gpo.ps1
+                <IconDownload className="w-4 h-4" /> deploy-gpo.ps1
               </button>
             </div>
 
@@ -123,9 +123,9 @@ export default function CertificadoCA() {
               </p>
               <button
                 onClick={() => downloadArtifact('/api/squid/ca-deploy/install-cert.bat', 'install-cert.bat', 'Instalador .bat descargado')}
-                className="w-full px-3 py-2 text-white rounded-lg text-sm font-medium bg-blue-700 hover:bg-blue-800"
+                className="w-full px-3 py-2 text-white rounded-lg text-sm font-medium bg-blue-700 hover:bg-blue-800 inline-flex items-center justify-center gap-1.5"
               >
-                <IconDownload /> install-cert.bat
+                <IconDownload className="w-4 h-4" /> install-cert.bat
               </button>
             </div>
 
@@ -139,9 +139,9 @@ export default function CertificadoCA() {
               </p>
               <button
                 onClick={() => downloadArtifact('/api/squid/ca-deploy/cert.mobileconfig', 'squidmanager-ca.mobileconfig', 'Perfil mobileconfig descargado')}
-                className="w-full px-3 py-2 text-white rounded-lg text-sm font-medium bg-blue-700 hover:bg-blue-800"
+                className="w-full px-3 py-2 text-white rounded-lg text-sm font-medium bg-blue-700 hover:bg-blue-800 inline-flex items-center justify-center gap-1.5"
               >
-                <IconDownload /> cert.mobileconfig
+                <IconDownload className="w-4 h-4" /> cert.mobileconfig
               </button>
             </div>
           </div>

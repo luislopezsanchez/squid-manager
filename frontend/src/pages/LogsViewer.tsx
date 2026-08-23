@@ -50,6 +50,7 @@ export default function LogsViewer() {
   const [loading, setLoading] = useState(true)
   const [offset, setOffset] = useState(0)
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [exportFormat, setExportFormat] = useState<'csv' | 'ndjson' | 'raw'>('csv')
   const limit = 100
 
   // Filtros
@@ -86,19 +87,28 @@ export default function LogsViewer() {
     return () => clearInterval(id)
   }, [autoRefresh, loadLogs, loadStats])
 
+  // Extensión y nombre por formato: cada uno apunta a una audiencia distinta
+  // (hoja de cálculo, ingesta en un SIEM/ELK/Splunk, o una herramienta ya
+  // hecha para el log nativo de Squid, como AWStats o SARG).
+  const EXPORT_EXT: Record<typeof exportFormat, string> = { csv: 'csv', ndjson: 'ndjson', raw: 'log' }
+
   const handleExport = () => {
     const token = getToken()
-    const url = api.exportLogsCsv({ user: fUser || undefined, status: fStatus ? Number(fStatus) : undefined, domain: fDomain || undefined, denied: fDenied })
+    const url = api.exportLogs({
+      format: exportFormat,
+      user: fUser || undefined, status: fStatus ? Number(fStatus) : undefined,
+      domain: fDomain || undefined, denied: fDenied,
+    })
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.blob())
       .then(blob => {
         const u = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = u
-        a.download = `squid-logs-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.csv`
+        a.download = `squid-logs-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.${EXPORT_EXT[exportFormat]}`
         a.click()
         URL.revokeObjectURL(u)
-        showToast('Logs exportados a CSV', 'success')
+        showToast(`Logs exportados (${exportFormat.toUpperCase()})`, 'success')
       })
       .catch(() => showToast('Error exportando logs', 'error'))
   }
@@ -123,10 +133,28 @@ export default function LogsViewer() {
               className="w-4 h-4 rounded" style={{ accentColor: '#0B497C' }} />
             Auto-actualizar (5s)
           </label>
-          <button onClick={handleExport}
-            className="px-4 py-2 text-white rounded-lg text-sm font-medium" style={{ backgroundColor: '#0B497C' }}>
-            <IconDownload /> Exportar CSV
-          </button>
+          {/* Tres formatos para audiencias distintas: CSV para abrir en una
+              hoja de cálculo, NDJSON para ingesta en un SIEM/ELK/Splunk (un
+              objeto por línea, el estándar para eso), y el log nativo de
+              Squid sin tocar, para herramientas ya hechas para ese formato
+              (AWStats, SARG, el módulo Squid de Splunk/ELK). */}
+          <div className="flex items-center rounded-lg overflow-hidden border border-line-soft">
+            <select
+              value={exportFormat}
+              onChange={e => setExportFormat(e.target.value as typeof exportFormat)}
+              className="text-sm px-2.5 py-2 border-0 bg-white text-ink-2 focus:outline-none"
+              title="Formato de exportación"
+            >
+              <option value="csv">CSV</option>
+              <option value="ndjson">NDJSON (SIEM / ELK / Splunk)</option>
+              <option value="raw">Log nativo de Squid (.log)</option>
+            </select>
+            <button onClick={handleExport}
+              className="px-4 py-2 text-white text-sm font-medium inline-flex items-center gap-1.5 h-full"
+              style={{ backgroundColor: '#0B497C' }}>
+              <IconDownload className="w-4 h-4" /> Exportar
+            </button>
+          </div>
         </div>
       </div>
 
@@ -171,16 +199,22 @@ export default function LogsViewer() {
         </div>
       </div>
 
-      {/* Resumen */}
+      {/* Resumen. Los dos números vienen de dos lecturas EN VIVO independientes
+          del access.log (una para los filtros, otra para la tabla), tomadas en
+          instantes distintos sobre un archivo que sigue creciendo mientras
+          tanto — así que pueden no coincidir exactamente entre sí, y el de la
+          derecha puede incluso superar al de la izquierda un instante. No es
+          que "filtradas" sea un subconjunto roto de "total": son dos conteos
+          en vivo, no una foto fija. */}
       {stats && (
         <div className="flex gap-4 mb-6 text-sm">
           <div className="bg-white rounded-lg border border-line-soft px-4 py-2">
-            <span className="text-ink-3">Total entradas: </span>
+            <span className="text-ink-3">Últimas líneas analizadas: </span>
             <span className="font-bold text-ink">{stats.total_entries}</span>
           </div>
           <div className="bg-white rounded-lg border border-line-soft px-4 py-2">
-            <span className="text-ink-3">Mostrando: </span>
-            <span className="font-bold text-ink">{total} filtradas</span>
+            <span className="text-ink-3">Coinciden con el filtro: </span>
+            <span className="font-bold text-ink">{total}</span>
           </div>
         </div>
       )}

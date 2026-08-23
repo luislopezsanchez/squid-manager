@@ -11,6 +11,7 @@ from app.models.audit_log import AuditLog
 from app.models.notification_config import NotificationConfig
 from app.models.ldap_user import LdapUser
 from app.models.user_group import UserGroup, UserGroupMember
+from app.models.syslog_config import SyslogConfig
 
 __all__ = [
     "Admin",
@@ -25,4 +26,5 @@ __all__ = [
     "LdapUser",
     "UserGroup",
     "UserGroupMember",
+    "SyslogConfig",
 ]

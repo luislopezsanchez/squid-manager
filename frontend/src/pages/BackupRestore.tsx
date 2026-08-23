@@ -118,8 +118,8 @@ export default function BackupRestore() {
         </p>
         <div className="flex gap-3 flex-wrap">
           <button onClick={handleExport}
-            className="px-4 py-2 text-white rounded-lg font-medium text-sm" style={{ backgroundColor: '#0B497C' }}>
-            <IconDownload /> Descargar backup (JSON)
+            className="px-4 py-2 text-white rounded-lg font-medium text-sm inline-flex items-center gap-1.5" style={{ backgroundColor: '#0B497C' }}>
+            <IconDownload className="w-4 h-4" /> Descargar backup (JSON)
           </button>
           <div>
             <input ref={restoreRef} type="file" accept=".json" onChange={handleRestore} className="hidden" id="restore-input" />
@@ -148,8 +148,8 @@ export default function BackupRestore() {
           </ul>
         </div>
         <button onClick={handleDownloadConf}
-          className="px-4 py-2 text-white rounded-lg font-medium text-sm" style={{ backgroundColor: '#48B3D0' }}>
-          <IconFile /> Descargar squid.conf
+          className="px-4 py-2 text-white rounded-lg font-medium text-sm inline-flex items-center gap-1.5" style={{ backgroundColor: '#48B3D0' }}>
+          <IconFile className="w-4 h-4" /> Descargar squid.conf
         </button>
       </div>
 
