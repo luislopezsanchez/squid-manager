@@ -138,3 +138,100 @@ def test_generate_empty_config():
     db = FakeDB()
     config = generate_squid_config(db)
     assert "http_port" in config  # al menos el puerto por defecto
+
+
+class FakeGroup:
+    def __init__(self, name, description=""):
+        self.id = abs(hash(name)) % 1000
+        self.name = name
+        self.description = description
+
+
+def test_el_orden_de_las_reglas_se_respeta():
+    """Las reglas salen en el orden del panel.
+
+    La versión anterior extraía las reglas «deny <grupo>» del flujo y las
+    refundía al final, con lo que el orden mostrado dejaba de significar nada.
+    """
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("uy_domains", "dstdomain", ".uy")],
+        rules=[
+            FakeRule("allow", "Nacional uy_domains", 0),
+            FakeRule("deny", "Nacional", 1),
+        ],
+    )
+    config = generate_squid_config(db)
+    pos_allow = config.index("http_access allow Nacional uy_domains")
+    pos_deny = config.index("http_access deny Nacional")
+    assert pos_allow < pos_deny
+
+
+def test_se_fuerza_la_autenticacion_antes_de_las_reglas():
+    """`deny !authenticated` va antes: así un deny de grupo da 403 y no 407."""
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        rules=[FakeRule("deny", "Nacional", 0)],
+    )
+    config = generate_squid_config(db)
+    assert "http_access deny !authenticated" in config
+    assert config.index("deny !authenticated") < config.index("http_access deny Nacional")
+
+
+def test_regla_sni_paralela_para_reglas_con_varias_acls():
+    """Con varias ACLs en la misma regla también se genera la paralela por SNI.
+
+    Antes se comparaba el campo entero con el nombre de una ACL, así que en
+    cuanto la regla combinaba dos condiciones no se generaba nada para HTTPS.
+    """
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[
+            FakeAcl("redes_sociales", "dstdomain", ".facebook.com"),
+            FakeAcl("horario", "time", "M-F 09:00-17:00"),
+        ],
+        rules=[FakeRule("deny", "redes_sociales horario", 0)],
+    )
+    config = generate_squid_config(db)
+    assert "http_access deny sni_redes_sociales horario" in config
+    assert "ssl_bump terminate step2 sni_redes_sociales" in config
+
+
+def test_dominios_excluidos_del_descifrado():
+    """Los dominios excluidos se hacen splice antes del bump."""
+    db = FakeDB(
+        settings=[
+            FakeSetting("http_port", "3128", "network"),
+            FakeSetting("ssl_bump_exclude", ".banco.com .salud.gob", "security"),
+        ],
+    )
+    config = generate_squid_config(db)
+    assert "acl ssl_exclude ssl::server_name .banco.com .salud.gob" in config
+    assert config.index("ssl_bump splice step2 ssl_exclude") < config.index("ssl_bump bump step3 all")
+
+
+def test_store_log_desactivado_por_defecto():
+    """store.log escribe mucho y no lo consume nadie."""
+    db = FakeDB(settings=[FakeSetting("http_port", "3128", "network")])
+    config = generate_squid_config(db)
+    assert "cache_store_log none" in config
+
+
+def test_rutas_de_log_con_prefijo_stdio():
+    db = FakeDB(settings=[FakeSetting("http_port", "3128", "network")])
+    config = generate_squid_config(db)
+    assert "access_log stdio:/var/log/squid/access.log" in config
+
+
+def test_idioma_de_las_paginas_de_error():
+    db = FakeDB(settings=[FakeSetting("http_port", "3128", "network")])
+    config = generate_squid_config(db)
+    assert "error_default_language es" in config
+
+
+def test_base_de_certificados_en_el_volumen_persistente():
+    """La base vivía en /tmp y se perdía en cada reinicio del contenedor."""
+    db = FakeDB(settings=[FakeSetting("http_port", "3128", "network")])
+    config = generate_squid_config(db)
+    assert "-s /var/lib/ssl_crtd/db" in config
+    assert "/tmp/ssl_crtd" not in config

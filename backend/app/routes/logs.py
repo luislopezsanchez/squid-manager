@@ -2,7 +2,7 @@
 
 import csv
 import io
-from datetime import datetime
+from app.utils import utcnow
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.admin import Admin
 from app.services.auth_service import get_current_admin
-from app.services.log_service import get_logs, get_log_stats
+from app.services.log_service import get_logs, get_log_stats, get_recent_entries
 
 router = APIRouter()
 
@@ -51,18 +51,14 @@ async def security_alerts(
     (Proxy Authentication Required, es decir, credenciales inválidas o ausentes)
     en los últimos `minutes` minutos.
     """
-    from app.services.log_service import read_all_entries
-    import time
-
-    entries = read_all_entries()
-    now = time.time()
-    cutoff = now - (minutes * 60)
-
-    # Contar fallos de auth (407) por IP en la ventana de tiempo
     from collections import Counter
+
+    # Solo se recorre la ventana pedida, no el histórico completo.
+    entries = get_recent_entries(minutes * 60)
+
     auth_failures = Counter()
     for e in entries:
-        if e["timestamp"] >= cutoff and e["status"] == 407:
+        if e["status"] == 407:
             auth_failures[e["client_ip"]] += 1
 
     # Filtrar IPs que superan el umbral
@@ -91,7 +87,7 @@ async def export_logs(
     _: Admin = Depends(get_current_admin),
 ):
     """Exportar logs filtrados a CSV."""
-    result = get_logs(limit=100000, offset=0, user=user, status=status, domain=domain, ip=ip, denied_only=denied)
+    result = get_logs(limit=50000, offset=0, user=user, status=status, domain=domain, ip=ip, denied_only=denied)
     entries = result["entries"]
 
     output = io.StringIO()
@@ -106,10 +102,10 @@ async def export_logs(
         ])
 
     output.seek(0)
-    filename = f"squid-logs-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.csv"
+    filename = f"squid-logs-{utcnow().strftime('%Y%m%d-%H%M%S')}.csv"
 
     return StreamingResponse(
-        io.StringIO(output.getvalue()),
+        output,
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )

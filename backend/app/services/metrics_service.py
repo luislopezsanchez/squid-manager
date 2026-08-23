@@ -231,42 +231,46 @@ def _parse_log_line(line: str) -> dict | None:
         "method": m.group(7),
         "domain": domain,
         "user": m.group(9) if m.group(9) != "-" else None,
-        "denied": int(m.group(5)) in (403, 401) or "DENIED" in m.group(4),
+        "denied": int(m.group(5)) in (401, 403, 407) or "DENIED" in m.group(4),
     }
 
 
 def _read_last_n_lines(n: int = 1000) -> list[dict]:
-    log_path = Path(ACCESS_LOG_PATH)
-    if not log_path.exists():
-        return []
+    """Últimas n entradas del access.log, de la más antigua a la más reciente.
+
+    Delega en el lector incremental de log_service: antes hacía
+    readlines()[-n:], que carga el fichero entero en memoria.
+    """
+    from app.services.log_service import iter_lines_reverse
+
     entries = []
-    try:
-        with open(log_path, "r") as f:
-            lines = f.readlines()[-n:]
-        for line in lines:
-            entry = _parse_log_line(line)
-            if entry:
-                entries.append(entry)
-    except Exception as e:
-        logger.error(f"Error leyendo access.log: {e}")
+    for line in iter_lines_reverse(ACCESS_LOG_PATH, max_lines=n * 3):
+        entry = _parse_log_line(line)
+        if entry:
+            entries.append(entry)
+        if len(entries) >= n:
+            break
+    entries.reverse()
     return entries
 
 
 def _read_recent_logs(seconds: int = 60) -> list[dict]:
-    log_path = Path(ACCESS_LOG_PATH)
-    if not log_path.exists():
-        return []
+    """Entradas de los últimos `seconds` segundos."""
+    from app.services.log_service import iter_lines_reverse
+
     now = time.time()
     cutoff = now - seconds
     entries = []
-    try:
-        with open(log_path, "r") as f:
-            for line in f:
-                entry = _parse_log_line(line)
-                if entry and entry["timestamp"] >= cutoff:
-                    entries.append(entry)
-    except Exception as e:
-        logger.error(f"Error leyendo access.log: {e}")
+    for line in iter_lines_reverse(ACCESS_LOG_PATH, max_lines=50_000):
+        entry = _parse_log_line(line)
+        if not entry:
+            continue
+        # El fichero se recorre hacia atrás: al pasar el corte, lo que queda
+        # es todavía más antiguo.
+        if entry["timestamp"] < cutoff:
+            break
+        entries.append(entry)
+    entries.reverse()
     return entries
 
 
