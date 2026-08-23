@@ -4,24 +4,46 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Paleta tomada del logo: azules del cuerpo del calamar,
+        // cian de los brillos y verde de los LED del servidor.
+        brand: {
+          50:  '#EEF9FC',
+          100: '#D8F1F8',
+          200: '#B4E6F1',
+          300: '#7FD0E2',
+          400: '#48B3D0',
+          500: '#2E93BC',
+          600: '#1D6A96',
+          700: '#0B497C',
+          800: '#10466F',
+          900: '#0A2C48',
+        },
+        // Neutros con sesgo azul: un gris puro desentona con el logo
+        ink:   { DEFAULT: '#10222F', 2: '#40596B', 3: '#7A93A5' },
+        line:  { DEFAULT: '#DDE8EE', soft: '#EBF2F6' },
+        surface: '#FFFFFF',
+        ground:  '#F2F7FA',
+        ok:     { DEFAULT: '#2F9E75', soft: '#E3F5EE' },
+        warn:   { DEFAULT: '#B26A12', soft: '#FCF1E0' },
+        danger: { DEFAULT: '#C0392F', soft: '#FBEAE8' },
+        // Se conservan por compatibilidad con el código anterior
         primary: {
-          50: '#f0f4f8',
-          100: '#d9e6f2',
-          200: '#b3cce6',
-          300: '#80a8d2',
-          400: '#4a7fb5',
-          500: '#299ac2',
-          600: '#0b497c',
-          700: '#093d66',
-          800: '#083151',
-          900: '#061f35',
+          50: '#EEF9FC', 100: '#D8F1F8', 200: '#B4E6F1', 300: '#7FD0E2',
+          400: '#48B3D0', 500: '#2E93BC', 600: '#0B497C', 700: '#10466F',
+          800: '#0A2C48', 900: '#071E33',
         },
-        accent: {
-          400: '#4ab8d8',
-          500: '#299ac2',
-          600: '#1a7a9a',
-          700: '#155a70',
-        },
+        accent: { 400: '#7FD0E2', 500: '#48B3D0', 600: '#2E93BC', 700: '#1D6A96' },
+      },
+      fontFamily: {
+        sans: ['Figtree', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'Menlo', 'monospace'],
+      },
+      borderRadius: { lg: '11px', xl: '14px', '2xl': '18px' },
+      boxShadow: {
+        sm: '0 1px 2px rgba(16,34,47,.04)',
+        DEFAULT: '0 1px 2px rgba(16,34,47,.04), 0 6px 20px -8px rgba(16,34,47,.14)',
+        lg: '0 2px 4px rgba(16,34,47,.05), 0 18px 40px -14px rgba(16,34,47,.24)',
+        xl: '0 24px 60px -20px rgba(0,0,0,.35)',
       },
     },
   },

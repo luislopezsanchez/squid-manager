@@ -1,7 +1,7 @@
 # SquidManager - Bitácora del Proyecto
 
 **Proyecto:** SquidManager - Panel de gestión web para Squid Proxy  
-**Repositorio:** /opt/squid-manager (servidor 192.168.145.136)  
+**Repositorio:** /opt/squid-manager (servidor de pruebas)  
 **Licencia:** Apache-2.0  
 **Fecha de inicio:** 21 de Agosto, 2026
 
@@ -36,7 +36,7 @@ Investigar la documentación de Squid y proyectos similares para diseñar la arq
 Levantar los contenedores y lograr que Squid funcione con autenticación básica gestionada desde la web.
 
 ### Acciones realizadas
-1. Preparado servidor Ubuntu 24.04 (192.168.145.136): Docker 29.7.2 + Compose v5.5.0
+1. Preparado servidor Ubuntu 24.04: Docker 29.7.2 + Compose v5.5.0
 2. Creada estructura de directorios en /opt/squid-manager/
 3. Desarrollados 50+ archivos del proyecto:
    - Backend: FastAPI con 8 modelos, 5 routers, 3 servicios, Jinja2 template
@@ -76,9 +76,9 @@ curl -x http://localhost:3128 http://httpbin.org/ip
 | squidmgr-frontend | 3000 | Running |
 
 ### URLs de acceso
-- Panel web: http://192.168.145.136:3000
-- API docs: http://192.168.145.136:8000/docs
-- Proxy: http://192.168.145.136:3128
+- Panel web: http://TU_SERVIDOR:3000
+- API docs: http://TU_SERVIDOR:8000/docs
+- Proxy: http://TU_SERVIDOR:3128
 
 ### Credenciales por defecto
 - Admin panel: admin / admin123

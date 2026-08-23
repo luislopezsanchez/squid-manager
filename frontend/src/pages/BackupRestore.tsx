@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { IconDownload, IconFile } from '../components/Icons'
 import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
 
@@ -95,49 +96,49 @@ export default function BackupRestore() {
   }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6" style={{ color: '#083151' }}>Backup, Restore y Migración</h1>
+    <div className="p-6 md:p-7">
+      <h1 className="text-2xl font-bold mb-6" style={{ color: '#0A2C48' }}>Backup, Restore y Migración</h1>
 
       {/* Sección: Cambiar contraseña */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-        <h3 className="font-medium text-gray-900 mb-2">🔑 Cambiar contraseña</h3>
-        <p className="text-sm text-gray-500 mb-4">Cambia tu propia contraseña del panel. Debes conocer la contraseña actual.</p>
+      <div className="card p-6 mb-6">
+        <h3 className="font-medium text-ink mb-2">Cambiar contraseña</h3>
+        <p className="text-sm text-ink-3 mb-4">Cambia tu propia contraseña del panel. Debes conocer la contraseña actual.</p>
         <button onClick={() => setShowPasswordModal(true)}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50">
+          className="px-4 py-2 border border-line rounded-lg text-sm font-medium hover:bg-brand-50">
           Cambiar contraseña
         </button>
       </div>
 
       {/* Sección: Backup de la plataforma */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-        <h3 className="font-medium text-gray-900 mb-2">💾 Backup de SquidManager</h3>
-        <p className="text-sm text-gray-500 mb-4">
+      <div className="card p-6 mb-6">
+        <h3 className="font-medium text-ink mb-2">Backup de SquidManager</h3>
+        <p className="text-sm text-ink-3 mb-4">
           Exporta toda la configuración de SquidManager (ACLs, reglas, usuarios, settings, delay pools, LDAP) a un archivo JSON.
           Este backup solo sirve para restaurar dentro de SquidManager.
         </p>
         <div className="flex gap-3 flex-wrap">
           <button onClick={handleExport}
-            className="px-4 py-2 text-white rounded-lg font-medium text-sm" style={{ backgroundColor: '#0b497c' }}>
-            📥 Descargar Backup (JSON)
+            className="px-4 py-2 text-white rounded-lg font-medium text-sm" style={{ backgroundColor: '#0B497C' }}>
+            <IconDownload /> Descargar backup (JSON)
           </button>
           <div>
             <input ref={restoreRef} type="file" accept=".json" onChange={handleRestore} className="hidden" id="restore-input" />
             <button onClick={() => restoreRef.current?.click()} disabled={restoreBusy}
-              className="px-4 py-2 border border-gray-300 rounded-lg font-medium text-sm hover:bg-gray-50 disabled:opacity-50">
-              {restoreBusy ? 'Restaurando...' : '🔄 Restaurar Backup'}
+              className="px-4 py-2 border border-line rounded-lg font-medium text-sm hover:bg-brand-50 disabled:opacity-50">
+              {restoreBusy ? 'Restaurando…' : 'Restaurar backup'}
             </button>
           </div>
         </div>
       </div>
 
       {/* Sección: Exportar squid.conf */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-        <h3 className="font-medium text-gray-900 mb-2">📄 Descargar squid.conf</h3>
-        <p className="text-sm text-gray-500 mb-4">
+      <div className="card p-6 mb-6">
+        <h3 className="font-medium text-ink mb-2">Descargar squid.conf</h3>
+        <p className="text-sm text-ink-3 mb-4">
           Descarga el archivo squid.conf que SquidManager ha generado y que Squid está usando actualmente.
         </p>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-800 mb-4">
-          <strong>⚠️ Uso en un Squid tradicional (sin plataforma):</strong>
+          <strong>Uso en un Squid tradicional (sin plataforma):</strong>
           <ul className="mt-2 space-y-1 list-disc list-inside">
             <li>El archivo es válido para Squid estándar, pero ajusta las rutas (<code>/var/spool/squid</code>, <code>/var/log/squid</code>) según tu distribución</li>
             <li>Los helpers de autenticación (<code>basic_ncsa_auth</code>, <code>basic_ldap_auth</code>) deben existir en el servidor destino</li>
@@ -147,15 +148,15 @@ export default function BackupRestore() {
           </ul>
         </div>
         <button onClick={handleDownloadConf}
-          className="px-4 py-2 text-white rounded-lg font-medium text-sm" style={{ backgroundColor: '#299ac2' }}>
-          📄 Descargar squid.conf
+          className="px-4 py-2 text-white rounded-lg font-medium text-sm" style={{ backgroundColor: '#48B3D0' }}>
+          <IconFile /> Descargar squid.conf
         </button>
       </div>
 
       {/* Sección: Importar squid.conf tradicional */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-        <h3 className="font-medium text-gray-900 mb-2">📥 Importar squid.conf tradicional</h3>
-        <p className="text-sm text-gray-500 mb-4">
+      <div className="card p-6 mb-6">
+        <h3 className="font-medium text-ink mb-2">Importar squid.conf tradicional</h3>
+        <p className="text-sm text-ink-3 mb-4">
           Si tienes un Squid configurado a mano y quieres migrar a SquidManager, sube tu squid.conf
           y la plataforma importará las ACLs, reglas, delay pools y settings básicos.
         </p>
@@ -172,8 +173,8 @@ export default function BackupRestore() {
         <div>
           <input ref={importRef} type="file" accept=".conf,text/plain" onChange={handleImport} className="hidden" id="import-input" />
           <button onClick={() => importRef.current?.click()} disabled={importBusy}
-            className="px-4 py-2 text-white rounded-lg font-medium text-sm disabled:opacity-50" style={{ backgroundColor: '#0b497c' }}>
-            {importBusy ? 'Importando...' : '📥 Subir squid.conf'}
+            className="px-4 py-2 text-white rounded-lg font-medium text-sm disabled:opacity-50" style={{ backgroundColor: '#0B497C' }}>
+            {importBusy ? 'Importando…' : 'Subir squid.conf'}
           </button>
         </div>
       </div>
@@ -185,27 +186,27 @@ export default function BackupRestore() {
             <h2 className="text-xl font-bold mb-4">Cambiar contraseña</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña actual</label>
+                <label className="field-label block mb-1.5">Contraseña actual</label>
                 <input type="password" value={pwForm.current}
                   onChange={e => setPwForm({ ...pwForm, current: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                  className="input" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña</label>
+                <label className="field-label block mb-1.5">Nueva contraseña</label>
                 <input type="password" value={pwForm.newPass}
                   onChange={e => setPwForm({ ...pwForm, newPass: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                  className="input" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar nueva contraseña</label>
+                <label className="field-label block mb-1.5">Confirmar nueva contraseña</label>
                 <input type="password" value={pwForm.confirm}
                   onChange={e => setPwForm({ ...pwForm, confirm: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                  className="input" />
               </div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowPasswordModal(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg">Cancelar</button>
-              <button onClick={handleChangePassword} className="flex-1 px-4 py-2 text-white rounded-lg" style={{ backgroundColor: '#0b497c' }}>Cambiar</button>
+              <button onClick={() => setShowPasswordModal(false)} className="flex-1 px-4 py-2 border border-line rounded-lg">Cancelar</button>
+              <button onClick={handleChangePassword} className="flex-1 px-4 py-2 text-white rounded-lg" style={{ backgroundColor: '#0B497C' }}>Cambiar</button>
             </div>
           </div>
         </div>

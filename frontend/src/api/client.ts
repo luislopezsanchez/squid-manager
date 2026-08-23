@@ -10,6 +10,22 @@ export function setToken(token: string) {
 
 export function clearToken() {
   localStorage.removeItem('token')
+  localStorage.removeItem('role')
+  localStorage.removeItem('mustChangePassword')
+}
+
+/** Rol del administrador conectado: superadmin, admin o viewer. */
+export function getRole(): string {
+  return localStorage.getItem('role') || 'admin'
+}
+
+/** Un viewer solo consulta: la API rechaza cualquier escritura suya con 403. */
+export function canWrite(): boolean {
+  return getRole() !== 'viewer'
+}
+
+export function isSuperadmin(): boolean {
+  return getRole() === 'superadmin'
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -25,7 +41,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (res.status === 401) {
     clearToken()
     window.location.href = '/login'
-    throw new Error('No autorizado')
+    throw new Error('La sesión ha caducado. Vuelve a iniciar sesión.')
+  }
+
+  if (res.status === 403) {
+    const error = await res.json().catch(() => ({ detail: null }))
+    throw new Error(error.detail || 'Tu cuenta no tiene permiso para esta acción')
   }
 
   if (!res.ok) {

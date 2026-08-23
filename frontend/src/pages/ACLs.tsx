@@ -84,52 +84,52 @@ export default function ACLs() {
   const selectedType = ACL_TYPES.find(t => t.value === form.type)
 
   return (
-    <div className="p-8">
+    <div className="p-6 md:p-7">
       <ToastContainer />
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Listas de Control de Acceso (ACLs)</h1>
-          <p className="text-sm text-gray-500 mt-1">Define qué tráfico coincide con cada criterio</p>
+          <h1 className="page-title">Listas de Control de Acceso (ACLs)</h1>
+          <p className="page-sub">Define qué tráfico coincide con cada criterio</p>
         </div>
         <button
           onClick={() => { setShowForm(!showForm); setEditingId(null); setForm({ name: '', type: 'dstdomain', value: '', description: '', enabled: true }) }}
-          className="bg-primary-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-700 transition"
+          className="btn btn-primary"
         >
           {showForm ? 'Cancelar' : '+ Nueva ACL'}
         </button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleSave} className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-100">
-          <h3 className="font-medium text-gray-900 mb-4">{editingId ? 'Editar ACL' : 'Nueva ACL'}</h3>
+        <form onSubmit={handleSave} className="card p-6 mb-6">
+          <h3 className="font-medium text-ink mb-4">{editingId ? 'Editar ACL' : 'Nueva ACL'}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+              <label className="field-label block mb-1.5">Nombre</label>
               <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                placeholder="ej: redes_sociales" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" required />
+                placeholder="ej: redes_sociales" className="input" required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de ACL</label>
+              <label className="field-label block mb-1.5">Tipo de ACL</label>
               <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white">
+                className="input">
                 {ACL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
           </div>
           <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Valor</label>
+            <label className="field-label block mb-1.5">Valor</label>
             <input type="text" value={form.value} onChange={e => setForm({ ...form, value: e.target.value })}
-              placeholder={selectedType?.example || ''} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm" required />
-            {selectedType && <p className="text-xs text-gray-400 mt-1">Ejemplo: {selectedType.example}</p>}
+              placeholder={selectedType?.example || ''} className="input font-mono text-sm" required />
+            {selectedType && <p className="text-xs text-ink-3 mt-1">Ejemplo: {selectedType.example}</p>}
           </div>
           <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Descripción (opcional)</label>
+            <label className="field-label block mb-1.5">Descripción (opcional)</label>
             <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-              placeholder="ej: Bloquear acceso a redes sociales" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" />
+              placeholder="ej: Bloquear acceso a redes sociales" className="input" />
           </div>
-          {error && <div className="mt-4 bg-red-50 text-red-600 text-sm p-3 rounded-lg">{error}</div>}
+          {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
           <div className="mt-4 flex gap-3">
-            <button type="submit" className="bg-primary-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-primary-700">
+            <button type="submit" className="btn btn-primary">
               {editingId ? 'Guardar Cambios' : 'Crear ACL'}
             </button>
           </div>
@@ -137,38 +137,38 @@ export default function ACLs() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Cargando...</div>
+        <div className="text-center py-12 text-ink-3">Cargando...</div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
+        <div className="card overflow-hidden">
+          <table className="table-panel">
+            <thead>
               <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Tipo</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Valor</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Estado</th>
-                <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                <th className="text-left">Nombre</th>
+                <th className="text-left">Tipo</th>
+                <th className="text-left">Valor</th>
+                <th className="text-left">Estado</th>
+                <th className="text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-line-soft">
               {acls.map(acl => (
-                <tr key={acl.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium text-gray-900">{acl.name}</td>
-                  <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-mono rounded">{acl.type}</span></td>
-                  <td className="px-6 py-4 font-mono text-sm text-gray-600 max-w-xs truncate">{acl.value}</td>
+                <tr key={acl.id} className="hover:bg-brand-50">
+                  <td className="px-6 py-4 font-medium text-ink">{acl.name}</td>
+                  <td className="px-6 py-4"><span className="px-2 py-1 bg-brand-50 text-brand-700 text-xs font-mono rounded">{acl.type}</span></td>
+                  <td className="px-6 py-4 font-mono text-sm text-ink-2 max-w-xs truncate">{acl.value}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${acl.enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${acl.enabled ? 'pill-ok' : 'pill-danger'}`}>
                       {acl.enabled ? 'Activa' : 'Inactiva'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right space-x-2">
                     <button onClick={() => handleEdit(acl)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">Editar</button>
-                    <button onClick={() => handleDelete(acl.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">Eliminar</button>
+                    <button onClick={() => handleDelete(acl.id)} className="text-danger hover:text-danger text-sm font-medium">Eliminar</button>
                   </td>
                 </tr>
               ))}
               {acls.length === 0 && (
-                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-ink-3">
                   No hay ACLs personalizadas. Las ACLs predefinidas (localnet, Safe_ports, etc.) ya están incluidas automáticamente.
                 </td></tr>
               )}

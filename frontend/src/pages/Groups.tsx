@@ -71,80 +71,80 @@ export default function Groups() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-6 md:p-7">
       <ToastContainer />
       <datalist id="member-options">
         {allUsers.map(u => <option key={u} value={u} />)}
       </datalist>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Grupos de Usuarios</h1>
+        <h1 className="page-title">Grupos de Usuarios</h1>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="bg-primary-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-700 transition"
+          className="btn btn-primary"
         >
           {showForm ? 'Cancelar' : '+ Nuevo Grupo'}
         </button>
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-xs text-blue-800">
-        <strong>💡 Grupos = políticas por conjunto de usuarios.</strong> Cada grupo genera una ACL{" "}
+        <strong>Grupos: políticas por conjunto de usuarios.</strong> Cada grupo genera una ACL{" "}
         <code>proxy_auth</code> en Squid. Para aplicar una política, crea una <strong>regla de acceso</strong>{" "}
         que referencie el nombre del grupo (ej. <code>allow ventas</code>).
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreate} className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-100">
+        <form onSubmit={handleCreate} className="card p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del grupo</label>
+              <label className="field-label block mb-1.5">Nombre del grupo</label>
               <input
                 type="text" value={newGroup.name}
                 onChange={e => setNewGroup({ ...newGroup, name: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                className="input"
                 placeholder="ventas"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+              <label className="field-label block mb-1.5">Descripción</label>
               <input
                 type="text" value={newGroup.description}
                 onChange={e => setNewGroup({ ...newGroup, description: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                className="input"
                 placeholder="Equipo de ventas"
               />
             </div>
           </div>
-          <button type="submit" className="mt-4 bg-primary-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-primary-700">
+          <button type="submit" className="mt-4 btn btn-primary">
             Crear Grupo
           </button>
         </form>
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Cargando...</div>
+        <div className="text-center py-12 text-ink-3">Cargando...</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {groups.map(group => (
-            <div key={group.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <div key={group.id} className="card p-5">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{group.name}</h3>
-                  {group.description && <p className="text-sm text-gray-500">{group.description}</p>}
+                  <h3 className="font-semibold text-ink">{group.name}</h3>
+                  {group.description && <p className="text-sm text-ink-3">{group.description}</p>}
                 </div>
                 <button onClick={() => handleDelete(group.id, group.name)}
-                  className="text-red-600 hover:text-red-800 text-sm">Eliminar</button>
+                  className="text-danger hover:text-danger text-sm">Eliminar</button>
               </div>
 
               <div className="flex flex-wrap gap-2 mb-4">
                 {group.members.map(m => (
                   <span key={m} className="inline-flex items-center gap-1 bg-primary-50 text-primary-800 px-2 py-1 rounded-full text-xs font-medium">
                     {m}
-                    <button onClick={() => handleRemoveMember(group.id, m)} className="text-primary-500 hover:text-red-600">×</button>
+                    <button onClick={() => handleRemoveMember(group.id, m)} className="text-primary-500 hover:text-danger">×</button>
                   </span>
                 ))}
                 {group.members.length === 0 && (
-                  <span className="text-xs text-gray-400">Sin miembros</span>
+                  <span className="text-xs text-ink-3">Sin miembros</span>
                 )}
               </div>
 
@@ -154,19 +154,19 @@ export default function Groups() {
                   value={newMember[group.id] || ''}
                   onChange={e => setNewMember(prev => ({ ...prev, [group.id]: e.target.value }))}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember(group.id) } }}
-                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+                  className="flex-1 px-3 py-1.5 border border-line rounded-lg text-sm"
                   placeholder="nombre de usuario (local o LDAP)"
                   list="member-options"
                 />
                 <button onClick={() => handleAddMember(group.id)}
-                  className="bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary-700">
+                  className="btn btn-primary btn-sm">
                   Añadir
                 </button>
               </div>
             </div>
           ))}
           {groups.length === 0 && (
-            <div className="col-span-full text-center py-12 text-gray-500">No hay grupos. Crea el primero.</div>
+            <div className="col-span-full text-center py-12 text-ink-3">No hay grupos. Crea el primero.</div>
           )}
         </div>
       )}

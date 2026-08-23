@@ -223,12 +223,12 @@ export default function DelayPools() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-6 md:p-7">
       <ToastContainer />
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Delay Pools</h1>
-          <p className="text-sm text-gray-500 mt-1">Control de ancho de banda por usuario, red o grupo</p>
+          <h1 className="page-title">Delay Pools</h1>
+          <p className="page-sub">Control de ancho de banda por usuario, red o grupo</p>
         </div>
         <button
           onClick={() => {
@@ -237,7 +237,7 @@ export default function DelayPools() {
             setForm({ pool_class: 2, acl_name: '', description: '', enabled: true })
             setSpeeds({})
           }}
-          className="bg-primary-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-700 transition"
+          className="btn btn-primary"
         >
           {showForm ? 'Cancelar' : '+ Nuevo Delay Pool'}
         </button>
@@ -254,12 +254,12 @@ export default function DelayPools() {
       </div>
 
       {showForm && (
-        <form onSubmit={handleSave} className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-100">
-          <h3 className="font-medium text-gray-900 mb-4">{editingId ? 'Editar Delay Pool' : 'Nuevo Delay Pool'}</h3>
+        <form onSubmit={handleSave} className="card p-6 mb-6">
+          <h3 className="font-medium text-ink mb-4">{editingId ? 'Editar Delay Pool' : 'Nuevo Delay Pool'}</h3>
 
           {/* Selector de clase */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de limitación</label>
+            <label className="field-label block mb-1.5">Tipo de limitación</label>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {Object.values(CLASS_LEVELS).map(c => (
                 <button
@@ -268,11 +268,11 @@ export default function DelayPools() {
                   onClick={() => setForm({ ...form, pool_class: Object.keys(CLASS_LEVELS).find(k => CLASS_LEVELS[Number(k)].label === c.label) ? Number(Object.keys(CLASS_LEVELS).find(k => CLASS_LEVELS[Number(k)].label === c.label)) : form.pool_class })}
                   className={`text-left p-3 rounded-lg border-2 transition ${
                     form.pool_class === Object.keys(CLASS_LEVELS).find(k => CLASS_LEVELS[Number(k)].label === c.label)
-                      ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-primary-500 bg-primary-50' : 'border-line hover:border-line'
                   }`}
                 >
-                  <p className="font-medium text-sm text-gray-900">{c.label}</p>
-                  <p className="text-xs text-gray-500 mt-1">{c.levels.length} nivel(es) de limitación</p>
+                  <p className="font-medium text-sm text-ink">{c.label}</p>
+                  <p className="text-xs text-ink-3 mt-1">{c.levels.length} nivel(es) de limitación</p>
                 </button>
               ))}
             </div>
@@ -280,20 +280,20 @@ export default function DelayPools() {
 
           {/* Campos de velocidad por nivel */}
           <div className="space-y-4 mb-6">
-            <h4 className="text-sm font-medium text-gray-700">Configurar velocidades</h4>
+            <h4 className="text-sm font-medium text-ink-2">Configurar velocidades</h4>
             {currentClass?.levels.map((level, idx) => {
               const s = speeds[level.key] || { restore: 64, limit: 64, restoreUnit: 1024, limitUnit: 1024 }
               return (
-                <div key={level.key} className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                <div key={level.key} className="bg-brand-50 rounded-lg p-4 border border-line-soft">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="w-6 h-6 bg-primary-600 text-white text-xs font-bold rounded-full flex items-center justify-center">{idx + 1}</span>
-                    <span className="font-medium text-gray-900 text-sm">{level.label}</span>
+                    <span className="w-6 h-6 bg-brand-700 text-white text-xs font-bold rounded-full flex items-center justify-center">{idx + 1}</span>
+                    <span className="font-medium text-ink text-sm">{level.label}</span>
                   </div>
-                  <p className="text-xs text-gray-500 mb-3">{level.desc}</p>
+                  <p className="text-xs text-ink-3 mb-3">{level.desc}</p>
                   <div className="grid grid-cols-2 gap-4">
                     {/* Restauración */}
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Velocidad de restauración</label>
+                      <label className="block text-xs font-medium text-ink-2 mb-1">Velocidad de restauración</label>
                       <div className="flex gap-2">
                         <input
                           type="number"
@@ -301,21 +301,21 @@ export default function DelayPools() {
                           step="0.1"
                           value={s.restore}
                           onChange={e => updateSpeed(level.key, 'restore', parseFloat(e.target.value) || 0)}
-                          className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                          className="flex-1 px-3 py-1.5 border border-line rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
                         />
                         <select
                           value={s.restoreUnit}
                           onChange={e => updateSpeed(level.key, 'restoreUnit', parseInt(e.target.value))}
-                          className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary-500"
+                          className="px-2 py-1.5 border border-line rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary-500"
                         >
                           {UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                         </select>
                       </div>
-                      <p className="text-xs text-gray-400 mt-1">A qué velocidad se recupera el bucket</p>
+                      <p className="text-xs text-ink-3 mt-1">A qué velocidad se recupera el bucket</p>
                     </div>
                     {/* Límite */}
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Límite máximo</label>
+                      <label className="block text-xs font-medium text-ink-2 mb-1">Límite máximo</label>
                       <div className="flex gap-2">
                         <input
                           type="number"
@@ -323,17 +323,17 @@ export default function DelayPools() {
                           step="0.1"
                           value={s.limit}
                           onChange={e => updateSpeed(level.key, 'limit', parseFloat(e.target.value) || 0)}
-                          className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                          className="flex-1 px-3 py-1.5 border border-line rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
                         />
                         <select
                           value={s.limitUnit}
                           onChange={e => updateSpeed(level.key, 'limitUnit', parseInt(e.target.value))}
-                          className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary-500"
+                          className="px-2 py-1.5 border border-line rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary-500"
                         >
                           {UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                         </select>
                       </div>
-                      <p className="text-xs text-gray-400 mt-1">Velocidad máxima permitida</p>
+                      <p className="text-xs text-ink-3 mt-1">Velocidad máxima permitida</p>
                     </div>
                   </div>
                 </div>
@@ -350,33 +350,33 @@ export default function DelayPools() {
           {/* ACL y descripción */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">ACL asociada (opcional)</label>
+              <label className="field-label block mb-1.5">ACL asociada (opcional)</label>
               <select value={form.acl_name} onChange={e => setForm({ ...form, acl_name: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white">
+                className="input">
                 <option value="">Sin ACL (aplica a todos)</option>
                 {acls.map((a: any) => <option key={a.id} value={a.name}>{a.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Descripción (opcional)</label>
+              <label className="field-label block mb-1.5">Descripción (opcional)</label>
               <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-                placeholder="ej: Limitar a 64KB/s para red local" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500" />
+                placeholder="ej: Limitar a 64KB/s para red local" className="input" />
             </div>
           </div>
 
-          {error && <div className="mb-4 bg-red-50 text-red-600 text-sm p-3 rounded-lg">{error}</div>}
-          <button type="submit" className="bg-primary-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-primary-700">
+          {error && <div className="mb-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
+          <button type="submit" className="btn btn-primary">
             {editingId ? 'Guardar Cambios' : 'Crear Delay Pool'}
           </button>
         </form>
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Cargando...</div>
+        <div className="text-center py-12 text-ink-3">Cargando...</div>
       ) : (
         <div className="space-y-3">
           {pools.map(pool => (
-            <div key={pool.id} className={`bg-white rounded-xl shadow-sm border border-gray-100 p-5 ${!pool.enabled ? 'opacity-50' : ''}`}>
+            <div key={pool.id} className={`card p-5 ${!pool.enabled ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
@@ -384,34 +384,34 @@ export default function DelayPools() {
                       {CLASS_LEVELS[pool.pool_class]?.label || `Clase ${pool.pool_class}`}
                     </span>
                     {pool.acl_name && (
-                      <span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-mono rounded">ACL: {pool.acl_name}</span>
+                      <span className="px-2 py-1 bg-brand-50 text-brand-700 text-xs font-mono rounded">ACL: {pool.acl_name}</span>
                     )}
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${pool.enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${pool.enabled ? 'pill-ok' : 'pill-danger'}`}>
                       {pool.enabled ? 'Activo' : 'Inactivo'}
                     </span>
                   </div>
                   {/* Mostrar velocidades de forma legible */}
-                  <div className="text-sm text-gray-700 space-y-1 mb-2">
+                  <div className="text-sm text-ink-2 space-y-1 mb-2">
                     {formatDisplay(pool.parameters, pool.pool_class).split(' | ').map((part, i) => (
                       <div key={i} className="flex items-center gap-2">
-                        <span className="text-gray-400">•</span>
+                        <span className="text-ink-3">•</span>
                         <span>{part}</span>
                       </div>
                     ))}
                   </div>
-                  {pool.description && <p className="text-sm text-gray-500">{pool.description}</p>}
+                  {pool.description && <p className="text-sm text-ink-3">{pool.description}</p>}
                   {/* Formato técnico */}
-                  <p className="text-xs text-gray-400 font-mono mt-1">Squid: {pool.parameters}</p>
+                  <p className="text-xs text-ink-3 font-mono mt-1">Squid: {pool.parameters}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button onClick={() => handleEdit(pool)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">Editar</button>
-                  <button onClick={() => handleDelete(pool.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">Eliminar</button>
+                  <button onClick={() => handleDelete(pool.id)} className="text-danger hover:text-danger text-sm font-medium">Eliminar</button>
                 </div>
               </div>
             </div>
           ))}
           {pools.length === 0 && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center text-gray-500">
+            <div className="card p-8 text-center text-ink-3">
               No hay delay pools configurados. Crea uno para controlar el ancho de banda.
             </div>
           )}

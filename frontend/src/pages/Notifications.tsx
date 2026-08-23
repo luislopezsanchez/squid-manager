@@ -115,11 +115,11 @@ export default function Notifications() {
     }
   }
 
-  if (loading || !config) return <div className="p-8 text-center text-gray-500">Cargando...</div>
+  if (loading || !config) return <div className="p-8 text-center text-ink-3">Cargando...</div>
 
   return (
     <div className="p-8 max-w-3xl">
-      <h1 className="text-2xl font-bold mb-6" style={{ color: '#083151' }}>Notificaciones</h1>
+      <h1 className="text-2xl font-bold mb-6" style={{ color: '#0A2C48' }}>Notificaciones</h1>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-xs text-blue-800">
         Configura alertas por email y/o Telegram para enterarte de cambios críticos en el proxy.
@@ -127,13 +127,13 @@ export default function Notifications() {
       </div>
 
       {/* Email */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+      <div className="card p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-gray-900">📧 Notificaciones por Email</h3>
+          <h3 className="font-medium text-ink">Notificaciones por correo</h3>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={config.email_enabled}
               onChange={e => setConfig({ ...config, email_enabled: e.target.checked })}
-              className="w-4 h-4" style={{ accentColor: '#0b497c' }} />
+              className="w-4 h-4" style={{ accentColor: '#0B497C' }} />
             <span className="text-sm">Habilitar</span>
           </label>
         </div>
@@ -141,112 +141,112 @@ export default function Notifications() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Servidor SMTP</label>
+                <label className="block text-xs font-medium text-ink-3 mb-1">Servidor SMTP</label>
                 <input type="text" value={config.smtp_host || ''} placeholder="smtp.gmail.com"
                   onChange={e => setConfig({ ...config, smtp_host: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  className="input text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Puerto</label>
+                <label className="block text-xs font-medium text-ink-3 mb-1">Puerto</label>
                 <input type="number" value={config.smtp_port}
                   onChange={e => setConfig({ ...config, smtp_port: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  className="input text-sm" />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Método de cifrado / seguridad de conexión</label>
+              <label className="block text-xs font-medium text-ink-3 mb-1">Método de cifrado / seguridad de conexión</label>
               <select value={config.smtp_encryption}
                 onChange={e => setConfig({ ...config, smtp_encryption: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                className="input text-sm bg-white">
                 <option value="starttls">STARTTLS (puerto 587 — Gmail, Outlook, la mayoría)</option>
                 <option value="ssl">SSL/TLS implícito (puerto 465 — algunos servicios)</option>
                 <option value="none">Sin cifrado (servidores internos)</option>
               </select>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-ink-3 mt-1">
                 La mayoría de servicios usan STARTTLS en el puerto 587. Si tu servicio pide SSL/TLS, elige "SSL/TLS implícito" (puerto 465).
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Usuario SMTP</label>
+                <label className="block text-xs font-medium text-ink-3 mb-1">Usuario SMTP</label>
                 <input type="text" value={config.smtp_user || ''}
                   onChange={e => setConfig({ ...config, smtp_user: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  className="input text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Contraseña SMTP {config.smtp_password_set && <span className="text-green-600">(guardada)</span>}
+                <label className="block text-xs font-medium text-ink-3 mb-1">
+                  Contraseña SMTP {config.smtp_password_set && <span className="text-ok">(guardada)</span>}
                 </label>
                 <input type="password" value={smtpPassword} placeholder={config.smtp_password_set ? '••••••••' : 'Nueva contraseña'}
                   onChange={e => setSmtpPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  className="input text-sm" />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Remitente (From)</label>
+              <label className="block text-xs font-medium text-ink-3 mb-1">Remitente (From)</label>
               <input type="text" value={config.smtp_from || ''} placeholder="notificaciones@empresa.com"
                 onChange={e => setConfig({ ...config, smtp_from: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                className="input text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Destinatarios (separados por coma)</label>
+              <label className="block text-xs font-medium text-ink-3 mb-1">Destinatarios (separados por coma)</label>
               <input type="text" value={config.email_recipients || ''} placeholder="admin1@empresa.com, admin2@empresa.com"
                 onChange={e => setConfig({ ...config, email_recipients: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                className="input text-sm" />
             </div>
             <div className="flex items-center gap-3">
               <button onClick={testEmail} disabled={testingEmail}
-                className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#299ac2' }}>
-                {testingEmail ? 'Enviando...' : '✉️ Enviar email de prueba'}
+                className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#48B3D0' }}>
+                {testingEmail ? 'Enviando…' : 'Enviar correo de prueba'}
               </button>
-              <span className="text-xs text-gray-400">Prueba con los datos actuales del formulario (no hace falta guardar antes)</span>
+              <span className="text-xs text-ink-3">Prueba con los datos actuales del formulario (no hace falta guardar antes)</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Telegram */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+      <div className="card p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-gray-900">✈️ Notificaciones por Telegram</h3>
+          <h3 className="font-medium text-ink">Notificaciones por Telegram</h3>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={config.telegram_enabled}
               onChange={e => setConfig({ ...config, telegram_enabled: e.target.checked })}
-              className="w-4 h-4" style={{ accentColor: '#0b497c' }} />
+              className="w-4 h-4" style={{ accentColor: '#0B497C' }} />
             <span className="text-sm">Habilitar</span>
           </label>
         </div>
         {config.telegram_enabled && (
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Bot Token {config.telegram_bot_token_set && <span className="text-green-600">(guardado)</span>}
+              <label className="block text-xs font-medium text-ink-3 mb-1">
+                Bot Token {config.telegram_bot_token_set && <span className="text-ok">(guardado)</span>}
               </label>
               <input type="password" value={telegramToken} placeholder={config.telegram_bot_token_set ? '••••••••' : 'Nuevo token'}
                 onChange={e => setTelegramToken(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                className="input text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Chat ID</label>
+              <label className="block text-xs font-medium text-ink-3 mb-1">Chat ID</label>
               <input type="text" value={config.telegram_chat_id || ''} placeholder="123456789"
                 onChange={e => setConfig({ ...config, telegram_chat_id: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                className="input text-sm" />
             </div>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-ink-3">
               Cómo obtener el token: habla con <code>@BotFather</code> en Telegram y crea un bot.
               El Chat ID lo obtienes hablando con tu bot y consultando <code>getUpdates</code>.
             </p>
             <button onClick={testTelegram} disabled={testingTelegram}
-              className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#299ac2' }}>
-              {testingTelegram ? 'Enviando...' : '✈️ Enviar mensaje de prueba'}
+              className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#48B3D0' }}>
+              {testingTelegram ? 'Enviando…' : 'Enviar mensaje de prueba'}
             </button>
           </div>
         )}
       </div>
 
       {/* Eventos a notificar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-        <h3 className="font-medium text-gray-900 mb-4">🔔 Eventos a notificar</h3>
+      <div className="card p-6 mb-6">
+        <h3 className="font-medium text-ink mb-4">Eventos a notificar</h3>
         <div className="space-y-3">
           {[
             { key: 'notify_on_apply', label: 'Aplicación de cambios (reconfigure de Squid)', desc: 'Cuando alguien pulsa "Aplicar Cambios"' },
@@ -259,10 +259,10 @@ export default function Notifications() {
               <input type="checkbox"
                 checked={(config as any)[item.key]}
                 onChange={e => setConfig({ ...config, [item.key]: e.target.checked } as any)}
-                className="w-4 h-4 mt-0.5" style={{ accentColor: '#0b497c' }} />
+                className="w-4 h-4 mt-0.5" style={{ accentColor: '#0B497C' }} />
               <span>
-                <span className="block text-sm font-medium text-gray-800">{item.label}</span>
-                <span className="block text-xs text-gray-400">{item.desc}</span>
+                <span className="block text-sm font-medium text-ink">{item.label}</span>
+                <span className="block text-xs text-ink-3">{item.desc}</span>
               </span>
             </label>
           ))}
@@ -271,8 +271,8 @@ export default function Notifications() {
 
       {/* Guardar */}
       <button onClick={save} disabled={saving}
-        className="px-6 py-3 text-white rounded-lg font-medium disabled:opacity-50" style={{ backgroundColor: '#0b497c' }}>
-        {saving ? 'Guardando...' : '💾 Guardar configuración'}
+        className="px-6 py-3 text-white rounded-lg font-medium disabled:opacity-50" style={{ backgroundColor: '#0B497C' }}>
+        {saving ? 'Guardando…' : 'Guardar configuración'}
       </button>
 
       <ToastContainer />

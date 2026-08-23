@@ -15,10 +15,10 @@ interface AuditEntry {
 }
 
 const ACTION_LABELS: Record<string, { label: string; color: string }> = {
-  create: { label: 'Crear', color: 'bg-green-100 text-green-800' },
-  update: { label: 'Actualizar', color: 'bg-blue-100 text-blue-800' },
-  delete: { label: 'Eliminar', color: 'bg-red-100 text-red-800' },
-  toggle: { label: 'Toggle', color: 'bg-yellow-100 text-yellow-800' },
+  create: { label: 'Crear', color: 'pill-ok' },
+  update: { label: 'Actualizar', color: 'pill-info' },
+  delete: { label: 'Eliminar', color: 'pill-danger' },
+  toggle: { label: 'Toggle', color: 'pill-warn' },
   apply: { label: 'Aplicar', color: 'bg-purple-100 text-purple-800' },
 }
 
@@ -54,22 +54,22 @@ export default function AuditLog() {
   useEffect(() => { loadAudit() }, [filterEntity, filterAction])
 
   return (
-    <div className="p-8">
+    <div className="p-6 md:p-7">
       <ToastContainer />
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Auditoría</h1>
-      <p className="text-sm text-gray-500 mb-6">Registro de todos los cambios realizados en el sistema</p>
+      <h1 className="page-title mb-2">Auditoría</h1>
+      <p className="text-sm text-ink-3 mb-6">Registro de todos los cambios realizados en el sistema</p>
 
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-            <p className="text-sm text-gray-500">Total cambios</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+          <div className="card p-4 border border-line-soft">
+            <p className="text-sm text-ink-3">Total cambios</p>
+            <p className="page-title">{stats.total}</p>
           </div>
           {Object.entries(stats.by_entity || {}).slice(0, 3).map(([entity, count]: any) => (
-            <div key={entity} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-              <p className="text-sm text-gray-500">{ENTITY_LABELS[entity] || entity}</p>
-              <p className="text-2xl font-bold text-gray-900">{count}</p>
+            <div key={entity} className="card p-4 border border-line-soft">
+              <p className="text-sm text-ink-3">{ENTITY_LABELS[entity] || entity}</p>
+              <p className="page-title">{count}</p>
             </div>
           ))}
         </div>
@@ -78,7 +78,7 @@ export default function AuditLog() {
       {/* Filtros */}
       <div className="flex gap-4 mb-6">
         <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm">
+          className="px-4 py-2 border border-line rounded-lg bg-white text-sm">
           <option value="">Todas las entidades</option>
           <option value="proxy_user">Usuarios del Proxy</option>
           <option value="acl">ACLs</option>
@@ -86,7 +86,7 @@ export default function AuditLog() {
           <option value="delay_pool">Delay Pools</option>
         </select>
         <select value={filterAction} onChange={e => setFilterAction(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm">
+          className="px-4 py-2 border border-line rounded-lg bg-white text-sm">
           <option value="">Todas las acciones</option>
           <option value="create">Crear</option>
           <option value="update">Actualizar</option>
@@ -97,47 +97,47 @@ export default function AuditLog() {
 
       {/* Tabla */}
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Cargando...</div>
+        <div className="text-center py-12 text-ink-3">Cargando...</div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
+        <div className="card overflow-hidden">
+          <table className="table-panel">
+            <thead>
               <tr>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Fecha</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Admin</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Acción</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Entidad</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Detalle</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-ink-3 uppercase">Fecha</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-ink-3 uppercase">Admin</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-ink-3 uppercase">Acción</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-ink-3 uppercase">Entidad</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-ink-3 uppercase">Detalle</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-line-soft">
               {entries.map(entry => {
-                const actionInfo = ACTION_LABELS[entry.action] || { label: entry.action, color: 'bg-gray-100 text-gray-800' }
+                const actionInfo = ACTION_LABELS[entry.action] || { label: entry.action, color: 'bg-line-soft text-ink' }
                 return (
-                  <tr key={entry.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                  <tr key={entry.id} className="hover:bg-brand-50">
+                    <td className="px-4 py-3 text-sm text-ink-3 whitespace-nowrap">
                       {entry.timestamp ? new Date(entry.timestamp).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '-'}
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{entry.admin_username || 'sistema'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-ink">{entry.admin_username || 'sistema'}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${actionInfo.color}`}>
                         {actionInfo.label}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{ENTITY_LABELS[entry.entity] || entry.entity}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500 font-mono">
+                    <td className="px-4 py-3 text-sm text-ink-2">{ENTITY_LABELS[entry.entity] || entry.entity}</td>
+                    <td className="px-4 py-3 text-sm text-ink-3 font-mono">
                       {entry.new_value || entry.old_value || '-'}
                     </td>
                   </tr>
                 )
               })}
               {entries.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-gray-500">No hay registros de auditoría</td></tr>
+                <tr><td colSpan={5} className="px-4 py-12 text-center text-ink-3">No hay registros de auditoría</td></tr>
               )}
             </tbody>
           </table>
           {total > 100 && (
-            <div className="p-4 text-center text-sm text-gray-500 border-t border-gray-100">
+            <div className="p-4 text-center text-sm text-ink-3 border-t border-line-soft">
               Mostrando 100 de {total} registros
             </div>
           )}

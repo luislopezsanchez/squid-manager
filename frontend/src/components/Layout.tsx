@@ -1,12 +1,22 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { clearToken, api } from '../api/client'
+import { clearToken, api, canWrite, isSuperadmin, getRole } from '../api/client'
+import {
+  IconDashboard, IconUsers, IconTag, IconRules, IconGauge, IconLink, IconGroups,
+  IconSettings, IconLock, IconAudit, IconBackup, IconLogs, IconBell, IconShield,
+  IconBolt, IconKey, IconLogout, IconSpinner, IconEye,
+} from './Icons'
+
+type Item = { to: string; label: string; Icon: (p: { className?: string }) => JSX.Element }
+type Grupo = { titulo: string; items: Item[] }
 
 export default function Layout() {
   const navigate = useNavigate()
   const [applying, setApplying] = useState(false)
   const [pending, setPending] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
+
+  const readOnly = !canWrite()
 
   const checkPending = () => {
     api.getPending().then(r => setPending(r.dirty)).catch(() => {})
@@ -29,150 +39,217 @@ export default function Layout() {
   }
 
   const handleApply = async () => {
+    if (!canWrite()) {
+      showToast('Tu cuenta es de solo lectura: no puede aplicar cambios.', 'warning')
+      return
+    }
     setApplying(true)
     setToast(null)
     try {
       const result = await api.applyConfig()
       if (result.status === 'ok') {
-        showToast('✅ Cambios aplicados correctamente. Squid reconfigurado.', 'success')
+        showToast('Cambios aplicados. Squid está usando la configuración nueva.', 'success')
         setPending(false)
       } else {
-        showToast(`⚠️ ${result.message}`, 'warning')
+        showToast(result.message, 'warning')
       }
     } catch (e: any) {
-      showToast(`❌ Error: ${e.message}`, 'error')
+      showToast(e.message, 'error')
     } finally {
       setApplying(false)
       checkPending()
     }
   }
 
-  const navItems = [
-    { to: '/', label: 'Dashboard', icon: '📊' },
-    { to: '/users', label: 'Usuarios', icon: '👥' },
-    { to: '/acls', label: 'ACLs', icon: '🏷️' },
-    { to: '/rules', label: 'Reglas de Acceso', icon: '📋' },
-    { to: '/delay-pools', label: 'Ancho de Banda', icon: '🐌' },
-    { to: '/ldap', label: 'LDAP', icon: '🔗' },
-    { to: '/groups', label: 'Grupos', icon: '👥' },
-    { to: '/settings', label: 'Configuración', icon: '⚙️' },
-    { to: '/certificate', label: 'Certificado SSL', icon: '🔐' },
-    { to: '/audit', label: 'Auditoría', icon: '📝' },
-    { to: '/backup', label: 'Backup/Migrar', icon: '💾' },
-    { to: '/logs', label: 'Logs', icon: '📜' },
-    { to: '/notifications', label: 'Notificaciones', icon: '🔔' },
-    { to: '/admins', label: 'Admins', icon: '🛡️' },
+  // El menú va agrupado por tarea, no como una lista larga de catorce entradas.
+  const grupos: Grupo[] = [
+    {
+      titulo: 'Vigilancia',
+      items: [
+        { to: '/', label: 'Dashboard', Icon: IconDashboard },
+        { to: '/logs', label: 'Registros', Icon: IconLogs },
+        { to: '/audit', label: 'Auditoría', Icon: IconAudit },
+      ],
+    },
+    {
+      titulo: 'Políticas',
+      items: [
+        { to: '/users', label: 'Usuarios', Icon: IconUsers },
+        { to: '/groups', label: 'Grupos', Icon: IconGroups },
+        { to: '/acls', label: 'ACLs', Icon: IconTag },
+        { to: '/rules', label: 'Reglas de acceso', Icon: IconRules },
+        { to: '/delay-pools', label: 'Ancho de banda', Icon: IconGauge },
+      ],
+    },
+    {
+      titulo: 'Sistema',
+      items: [
+        { to: '/ldap', label: 'LDAP', Icon: IconLink },
+        { to: '/certificate', label: 'Certificado', Icon: IconLock },
+        { to: '/settings', label: 'Configuración', Icon: IconSettings },
+        { to: '/notifications', label: 'Notificaciones', Icon: IconBell },
+        { to: '/backup', label: 'Backup y migración', Icon: IconBackup },
+        ...(isSuperadmin() ? [{ to: '/admins', label: 'Administradores', Icon: IconShield }] : []),
+      ],
+    },
   ]
 
+  const navClass = ({ isActive }: { isActive: boolean }) =>
+    [
+      'flex items-center gap-3 px-2.5 py-2 rounded-lg text-[14px] transition',
+      isActive
+        ? 'text-white font-semibold bg-white/[.14] ring-1 ring-inset ring-brand-300/25'
+        : 'text-[#B9D2E0] font-medium hover:bg-white/[.07] hover:text-white',
+    ].join(' ')
+
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: '#f0f4f8' }}>
-      {/* Sidebar con colores del logo */}
-      <aside className="w-64 flex flex-col fixed h-screen overflow-y-auto" style={{ backgroundColor: '#083151' }}>
-        {/* Logo + título */}
-        <div className="p-6 border-b" style={{ borderColor: '#0b497c' }}>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center">
-              <svg width="40" height="40" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="32" cy="32" r="30" fill="#0b497c"/>
-                <circle cx="32" cy="32" r="22" fill="none" stroke="#299ac2" strokeWidth="2"/>
-                <path d="M20 32 L28 32 L28 24 L36 24 L36 40 L44 40" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                <circle cx="20" cy="32" r="3" fill="#299ac2"/>
-                <circle cx="44" cy="40" r="3" fill="#299ac2"/>
-              </svg>
-            </div>
-            <div>
-              <h1 className="font-bold text-lg text-white">SquidManager</h1>
-              <p className="text-xs" style={{ color: '#299ac2' }}>v0.4.0</p>
-            </div>
+    <div className="min-h-screen flex bg-ground">
+      {/* ---------- Barra lateral ---------- */}
+      <aside
+        className="w-[248px] fixed h-screen flex flex-col overflow-y-auto z-20"
+        style={{ background: 'var(--side-gradient)' }}
+      >
+        {/* Trama de circuito, guiño a los del logo */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[.16]"
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, rgba(127,208,226,.5) 1px, transparent 1px),' +
+              'linear-gradient(to bottom, rgba(127,208,226,.5) 1px, transparent 1px)',
+            backgroundSize: '34px 34px',
+            maskImage: 'radial-gradient(circle at 30% 10%, #000 0%, transparent 62%)',
+            WebkitMaskImage: 'radial-gradient(circle at 30% 10%, #000 0%, transparent 62%)',
+          }}
+        />
+
+        {/* Marca */}
+        <div className="relative flex items-center gap-3 px-4 pt-5 pb-4">
+          <img
+            src="/brand/logo-128.png"
+            alt=""
+            width={42}
+            height={40}
+            className="w-[42px] h-auto"
+            style={{ filter: 'drop-shadow(0 0 10px rgba(127,208,226,.28))' }}
+          />
+          <div className="flex flex-col leading-tight">
+            <span className="text-[17px] font-extrabold text-white tracking-tight">SquidManager</span>
+            <span className="text-[10.5px] font-semibold uppercase tracking-[.1em] text-brand-300">
+              Proxy
+            </span>
           </div>
         </div>
 
         {/* Navegación */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {navItems.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-2.5 rounded-lg transition ${
-                  isActive
-                    ? 'text-white font-medium'
-                    : 'text-slate-400 hover:text-white'
-                }`
-              }
-              style={({ isActive }) =>
-                isActive ? { backgroundColor: '#0b497c' } : {}
-              }
-            >
-              <span className="text-lg">{item.icon}</span>
-              {item.label}
-            </NavLink>
+        <nav className="relative flex-1 px-3 pb-3">
+          {grupos.map(grupo => (
+            <div key={grupo.titulo}>
+              <p className="px-2.5 pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-[.13em] text-brand-300/65">
+                {grupo.titulo}
+              </p>
+              <div className="flex flex-col gap-0.5">
+                {grupo.items.map(({ to, label, Icon }) => (
+                  <NavLink key={to} to={to} end={to === '/'} className={navClass}>
+                    {({ isActive }) => (
+                      <>
+                        <Icon className={`w-[18px] h-[18px] flex-none ${isActive ? 'text-brand-300' : 'opacity-85'}`} />
+                        {label}
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
-        {/* Sección inferior: Aplicar Cambios separado de Cerrar Sesión */}
-        <div className="p-4 border-t" style={{ borderColor: '#0b497c' }}>
-          {/* Aplicar Cambios - destacado, con indicador de pendientes */}
-          <button
-            onClick={handleApply}
-            disabled={applying}
-            className={`w-full px-4 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 mb-3 ${
-              applying ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-            style={{
-              backgroundColor: applying ? '#1a3a5c' : (pending ? '#d97706' : '#299ac2'),
-              color: '#fff',
-            }}
-            onMouseEnter={(e) => { if (!applying) e.currentTarget.style.backgroundColor = pending ? '#b45309' : '#1a7a9a' }}
-            onMouseLeave={(e) => { if (!applying) e.currentTarget.style.backgroundColor = pending ? '#d97706' : '#299ac2' }}
-          >
-            {applying ? (
-              <>
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
-                </svg>
-                Aplicando...
-              </>
-            ) : pending ? (
-              <>⚠️ Aplicar Cambios (pendientes)</>
-            ) : (
-              <>⚡ Aplicar Cambios</>
-            )}
-          </button>
-          <p className="text-xs text-center mb-4" style={{ color: '#4a6a8a' }}>
-            {pending ? 'Hay cambios sin aplicar en Squid' : 'Genera squid.conf y recarga Squid'}
-          </p>
+        {/* Pie: aplicar cambios y sesión */}
+        <div className="relative px-3 pb-4 pt-3 border-t border-white/10">
+          {!readOnly && (
+            <>
+              <button
+                onClick={handleApply}
+                disabled={applying}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px]
+                            text-[14px] font-bold text-white transition
+                            ${applying ? 'opacity-60 cursor-not-allowed' : 'hover:brightness-110'}`}
+                style={{
+                  background: pending
+                    ? 'linear-gradient(135deg, #E0A036, #C77C15)'
+                    : 'linear-gradient(135deg, var(--brand-400), var(--brand-500))',
+                  boxShadow: pending
+                    ? '0 4px 14px -4px rgba(199,124,21,.6)'
+                    : '0 4px 14px -4px rgba(72,179,208,.6)',
+                }}
+              >
+                {applying ? (
+                  <>
+                    <IconSpinner className="w-4 h-4 animate-spin" />
+                    Aplicando…
+                  </>
+                ) : (
+                  <>
+                    <IconBolt className="w-4 h-4" />
+                    Aplicar cambios
+                  </>
+                )}
+              </button>
+              <p className="text-[11px] text-center mt-2 text-[#B9D2E0]/60">
+                {pending ? 'Hay cambios sin aplicar' : 'Squid está al día'}
+              </p>
+            </>
+          )}
 
-          {/* Separador */}
-          <div className="border-t pt-3" style={{ borderColor: '#1a3a5c' }}>
+          <div className="mt-3 pt-3 border-t border-white/10 flex flex-col gap-0.5">
+            <NavLink
+              to="/cambiar-contrasena"
+              className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13.5px] font-medium
+                         text-[#B9D2E0] hover:bg-white/[.07] hover:text-white transition"
+            >
+              <IconKey className="w-[17px] h-[17px] flex-none opacity-85" />
+              Cambiar contraseña
+            </NavLink>
             <button
               onClick={handleLogout}
-              className="w-full text-left px-4 py-2.5 rounded-lg transition flex items-center gap-3 text-slate-400 hover:text-white"
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#5a1a1a'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13.5px] font-medium
+                         text-[#B9D2E0] hover:bg-danger/25 hover:text-white transition text-left"
             >
-              <span>🚪</span> Cerrar Sesión
+              <IconLogout className="w-[17px] h-[17px] flex-none opacity-85" />
+              Cerrar sesión
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto ml-64">
+      {/* ---------- Contenido ---------- */}
+      <main className="flex-1 ml-[248px] min-w-0">
+        {readOnly && (
+          <div className="flex items-center gap-2 px-6 py-2 text-[13px] font-medium bg-warn-soft text-warn border-b border-warn/20">
+            <IconEye className="w-4 h-4 flex-none" />
+            Cuenta de solo lectura ({getRole()}): puedes consultarlo todo, pero no guardar cambios.
+          </div>
+        )}
         <Outlet />
       </main>
 
-      {/* Toast notification */}
+      {/* ---------- Aviso emergente ---------- */}
       {toast && (
-        <div
-          className="fixed top-6 right-6 z-50 px-6 py-4 rounded-xl shadow-2xl text-white font-medium animate-slide-in"
-          style={{
-            backgroundColor: toast.type === 'success' ? '#0b497c' : toast.type === 'warning' ? '#d97706' : '#dc2626',
-          }}
-        >
-          {toast.msg}
+        <div className="fixed bottom-6 right-6 z-50 animate-slide-in max-w-md">
+          <div
+            className={`card flex items-start gap-3 p-4 shadow-lg
+              ${toast.type === 'success' ? 'note-ok' : toast.type === 'warning' ? 'note-warn' : 'note-danger'}`}
+          >
+            <span
+              className={`stat-icon flex-none ${
+                toast.type === 'success' ? 'stat-icon-ok' : toast.type === 'warning' ? 'stat-icon-warn' : ''
+              }`}
+              style={toast.type === 'error' ? { background: 'var(--danger-soft)', color: 'var(--danger)' } : undefined}
+            >
+              {toast.type === 'success' ? <IconShield /> : <IconBolt />}
+            </span>
+            <p className="text-[13.5px] text-ink-2 leading-snug">{toast.msg}</p>
+          </div>
         </div>
       )}
     </div>

@@ -9,11 +9,11 @@ interface Setting {
 }
 
 const CATEGORIES = [
-  { key: 'network', label: 'Red', icon: '🌐' },
-  { key: 'cache', label: 'Caché', icon: '💾' },
-  { key: 'security', label: 'Seguridad', icon: '🔒' },
-  { key: 'logging', label: 'Logging', icon: '📋' },
-  { key: 'general', label: 'General', icon: '⚙️' },
+  { key: 'network', label: 'Red' },
+  { key: 'cache', label: 'Caché' },
+  { key: 'security', label: 'Seguridad' },
+  { key: 'logging', label: 'Registros' },
+  { key: 'general', label: 'General' },
 ]
 
 export default function Settings() {
@@ -48,15 +48,15 @@ export default function Settings() {
     setSettings({ ...settings, [key]: { ...settings[key], value } })
   }
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>
+  if (loading) return <div className="p-8 text-center text-ink-3">Cargando...</div>
 
   return (
-    <div className="p-8">
+    <div className="p-6 md:p-7">
       <ToastContainer />
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Configuración de Squid</h1>
-      <p className="text-sm text-gray-500 mb-6">Parámetros generales del proxy. Los cambios se guardan en la BD.</p>
+      <h1 className="page-title mb-2">Configuración de Squid</h1>
+      <p className="text-sm text-ink-3 mb-6">Parámetros generales del proxy. Los cambios se guardan en la BD.</p>
 
-      {error && <div className="mb-4 bg-red-50 text-red-600 text-sm p-3 rounded-lg">{error}</div>}
+      {error && <div className="mb-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
 
       {CATEGORIES.map(cat => {
         const catSettings = Object.entries(settings).filter(([_, s]) => s.category === cat.key)
@@ -64,28 +64,26 @@ export default function Settings() {
 
         return (
           <div key={cat.key} className="mb-8">
-            <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-              <span>{cat.icon}</span> {cat.label}
-            </h2>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
+            <h2 className="text-lg font-bold text-ink mb-3">{cat.label}</h2>
+            <div className="card divide-y divide-line-soft">
               {catSettings.map(([key, setting]) => (
                 <div key={key} className="p-4 flex items-center gap-4">
                   <div className="flex-1">
-                    <label className="block text-sm font-mono font-medium text-gray-700">{key}</label>
-                    {setting.description && <p className="text-xs text-gray-400 mt-0.5">{setting.description}</p>}
+                    <label className="block text-sm font-mono font-medium text-ink-2">{key}</label>
+                    {setting.description && <p className="text-xs text-ink-3 mt-0.5">{setting.description}</p>}
                   </div>
                   <div className="flex-1">
                     <input
                       type="text"
                       value={setting.value}
                       onChange={e => updateValue(key, e.target.value)}
-                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                      className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                     />
                   </div>
                   <button
                     onClick={() => handleSave(key)}
                     disabled={saving === key}
-                    className="px-4 py-1.5 bg-primary-600 text-white text-sm rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50"
+                    className="btn btn-primary btn-sm"
                   >
                     {saving === key ? '...' : 'Guardar'}
                   </button>
