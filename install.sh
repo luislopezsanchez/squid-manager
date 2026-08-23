@@ -3,10 +3,9 @@
 # SquidManager - Script de instalación
 # ============================================
 # Despliega SquidManager desde cero en un servidor Ubuntu/Debian.
-# Uso:
-#   curl -fsSL https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install.sh | bash
-#   # o descargar y ejecutar:
+# Uso (descarga, revisa y ejecuta: no lo canalices directo a bash):
 #   wget https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install.sh
+#   less install.sh          # revisa qué va a hacer en tu servidor
 #   chmod +x install.sh
 #   sudo ./install.sh
 # ============================================
@@ -85,6 +84,13 @@ INSTALL_DIR="/opt/squid-manager"
 if [[ -d "$INSTALL_DIR/.git" ]]; then
     info "Actualizando SquidManager en $INSTALL_DIR..."
     cd "$INSTALL_DIR"
+    # Un git pull sobre cambios locales los pisa sin avisar.
+    if [[ -n "$(git status --porcelain)" ]]; then
+        BACKUP="/opt/squid-manager-backup-$(date +%Y%m%d-%H%M%S)"
+        warn "Hay cambios locales sin confirmar. Copia de seguridad en $BACKUP"
+        cp -a "$INSTALL_DIR" "$BACKUP"
+        fail "Revisa tus cambios locales (git status) y vuelve a ejecutar el instalador."
+    fi
     git pull origin main
 else
     info "Clonando SquidManager a $INSTALL_DIR..."
@@ -110,7 +116,21 @@ if [[ ! -f ".env" ]]; then
 
     ok ".env creado con SECRET_KEY y DB_PASS aleatorias"
 else
-    warn ".env ya existe. Manteniendo configuración actual."
+    # Un .env que viene de una versión anterior puede traer la clave de
+    # ejemplo, con la que cualquiera puede firmarse un token de admin.
+    if grep -qE '^SECRET_KEY=(|change-me-in-production|changeme-in-production-please|dev-secret-key-change-in-production-2026)$' .env; then
+        warn "El .env tiene una SECRET_KEY insegura. Generando una nueva..."
+        NEW_KEY=$(openssl rand -hex 32)
+        sed -i "s|^SECRET_KEY=.*|SECRET_KEY=$NEW_KEY|" .env
+        warn "SECRET_KEY regenerada: las sesiones abiertas se cerrarán."
+    fi
+    if grep -qE '^DB_PASS=(|squidpass123)$' .env; then
+        warn "El .env usa la contraseña de base de datos de ejemplo. Cámbiala manualmente:"
+        warn "  1) edita DB_PASS en .env"
+        warn "  2) ALTER USER squid WITH PASSWORD '...' en PostgreSQL"
+        warn "  3) docker compose up -d"
+    fi
+    ok ".env ya existe. Manteniendo el resto de la configuración."
 fi
 
 # ============================================
@@ -137,11 +157,11 @@ echo "  Panel web:   http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo
 echo "  API docs:    http://localhost:8000/docs"
 echo "  Proxy:       localhost:3128"
 echo ""
-echo "  Credenciales por defecto:"
-echo "    Admin panel:  admin / admin123"
-echo "    Usuario proxy: testuser / test123"
-echo ""
-warn "  IMPORTANTE: cambia las credenciales por defecto inmediatamente."
+echo "  Primer acceso:"
+echo "    Usuario: admin"
+echo "    La contraseña se generó al azar y aparece UNA vez en el log:"
+echo "      docker compose logs backend | grep -A3 'Administrador inicial'"
+echo "    Se te pedirá cambiarla al entrar."
 echo ""
 info "  Para ver el progreso de la compilación de Squid:"
 echo "    docker compose logs -f squid"
