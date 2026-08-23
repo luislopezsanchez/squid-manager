@@ -1,43 +1,57 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { IconCheck, IconClose } from '../components/Icons'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 
+/**
+ * Valores de partida por tipo de directorio. Son un punto de partida, no una
+ * restricción: los campos quedan como texto libre, así que un esquema
+ * personalizado (p. ej. otro atributo de login) se puede escribir a mano.
+ */
+const DIRECTORY_PRESETS: Record<string, { user_filter: string; sync_filter: string }> = {
+  ad: {
+    user_filter: '(sAMAccountName=%s)',
+    sync_filter: '(&(objectCategory=person)(objectClass=user))',
+  },
+  openldap: {
+    user_filter: '(uid=%s)',
+    sync_filter: '(objectClass=posixAccount)',
+  },
+  inetorg: {
+    user_filter: '(uid=%s)',
+    sync_filter: '(objectClass=inetOrgPerson)',
+  },
+}
+
 export default function LdapConfig() {
+  const navigate = useNavigate()
   const [config, setConfig] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResults, setTestResults] = useState<any[]>([])
   const [testUser, setTestUser] = useState({ username: '', password: '' })
-  const [ldapUsers, setLdapUsers] = useState<any[]>([])
+  const [ldapUserCount, setLdapUserCount] = useState(0)
   const [syncing, setSyncing] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
   useEffect(() => {
     api.getLdapConfig().then(setConfig).catch(e => showToast('Error al cargar config LDAP', 'error')).finally(() => setLoading(false))
-    api.listLdapUsers().then(setLdapUsers).catch(() => {})
+    api.listLdapUsers().then(u => setLdapUserCount(u.length)).catch(() => {})
   }, [])
 
   const handleSync = async () => {
     setSyncing(true)
     try {
       const result = await api.syncLdapUsers()
-      showToast(`Sincronizados ${result.synced} usuarios del directorio`, 'success')
-      api.listLdapUsers().then(setLdapUsers).catch(() => {})
+      showToast(`Sincronizados ${result.synced} usuarios del directorio. Gestiónalos en Usuarios.`, 'success')
+      api.listLdapUsers().then(u => setLdapUserCount(u.length)).catch(() => {})
     } catch (e: any) {
       showToast(`Error al sincronizar: ${e.message}`, 'error')
     } finally {
       setSyncing(false)
     }
-  }
-
-  const handleToggleLdapUser = async (id: number) => {
-    try {
-      const result = await api.toggleLdapUser(id)
-      api.listLdapUsers().then(setLdapUsers).catch(() => {})
-      showToast(`Usuario "${result.username}" ${result.enabled ? 'habilitado' : 'deshabilitado'}`)
-    } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
   }
 
   const handleSave = async () => {
@@ -104,7 +118,32 @@ export default function LdapConfig() {
 
       {/* Configuración */}
       <div className="card p-6 mb-6">
-        <h2 className="font-medium text-ink mb-4">Datos del servidor LDAP</h2>
+        <h2 className="font-medium text-ink mb-1">Datos del servidor LDAP</h2>
+        <p className="text-sm text-ink-3 mb-4">
+          Esta configuración sirve para cualquier directorio LDAPv3 (Active Directory, OpenLDAP, FreeIPA…),
+          no solo Active Directory — lo único que cambia entre uno y otro son los filtros de búsqueda de abajo.
+        </p>
+
+        {/* Preset: solo rellena los filtros con un valor de partida conocido
+            para el tipo de directorio elegido — no se guarda como tal, y los
+            campos se pueden seguir editando a mano después. */}
+        <div className="mb-4">
+          <label className="field-label block mb-1.5">Tipo de directorio</label>
+          <select
+            className="input md:w-80"
+            defaultValue=""
+            onChange={e => {
+              const preset = DIRECTORY_PRESETS[e.target.value]
+              if (preset) setConfig({ ...config, user_filter: preset.user_filter, sync_filter: preset.sync_filter })
+            }}
+          >
+            <option value="">Elegir para rellenar los filtros…</option>
+            <option value="ad">Active Directory</option>
+            <option value="openldap">OpenLDAP (posixAccount)</option>
+            <option value="inetorg">LDAP genérico (inetOrgPerson)</option>
+          </select>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="field-label block mb-1.5">URL del servidor</label>
@@ -129,9 +168,19 @@ export default function LdapConfig() {
               placeholder="ou=users,dc=domain,dc=com" className="input font-mono text-sm" />
           </div>
           <div>
-            <label className="field-label block mb-1.5">Filtro de usuario</label>
+            <label className="field-label block mb-1.5">Filtro de usuario (login)</label>
             <input type="text" value={config.user_filter} onChange={e => setConfig({ ...config, user_filter: e.target.value })}
               placeholder="(uid=%s)" className="input font-mono text-sm" />
+            <p className="text-xs text-ink-3 mt-1">Busca a UN usuario por su nombre al iniciar sesión.</p>
+          </div>
+          <div>
+            <label className="field-label block mb-1.5">Filtro de sincronización</label>
+            <input type="text" value={config.sync_filter} onChange={e => setConfig({ ...config, sync_filter: e.target.value })}
+              placeholder="(objectClass=person)" className="input font-mono text-sm" />
+            <p className="text-xs text-ink-3 mt-1">
+              Busca a TODOS los usuarios al pulsar "Sincronizar con AD". Antes estaba fijo a Active Directory:
+              contra otro directorio no encontraba a nadie, sin avisar.
+            </p>
           </div>
         </div>
         <button
@@ -188,19 +237,19 @@ export default function LdapConfig() {
         )}
       </div>
 
-      {/* Gestión de usuarios LDAP */}
+      {/* Usuarios importados del directorio: la lista y el habilitar/deshabilitar
+          viven en Usuarios, junto con los usuarios locales — antes estaban
+          separados y esa tabla no aparecía ahí, así que era fácil no verla. */}
       <div className="card p-6 mt-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-medium text-ink">Usuarios LDAP (allow-list)</h2>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-xs font-medium">
-                {ldapUsers.length} sincronizados
-              </span>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${ldapUsers.filter(u => u.enabled).length > 0 ? 'bg-green-50 text-ok' : 'bg-line-soft text-ink-3'}`}>
-                {ldapUsers.filter(u => u.enabled).length} habilitados
-              </span>
-            </div>
+            <h2 className="font-medium text-ink">Usuarios del directorio</h2>
+            <p className="text-sm text-ink-3 mt-1">
+              {ldapUserCount} sincronizados · gestionar quién puede navegar se hace en{' '}
+              <button onClick={() => navigate('/users')} className="text-brand-700 font-medium hover:underline">
+                Usuarios
+              </button>
+            </p>
           </div>
           <button
             onClick={handleSync}
@@ -211,50 +260,13 @@ export default function LdapConfig() {
           </button>
         </div>
 
-        {/* Aviso de allow-list estricto */}
-        <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
-          <p className="font-medium">Modo allow-list estricto</p>
-          <p className="mt-1">
-            Al sincronizar, los usuarios quedan <strong>deshabilitados</strong> y no pueden navegar.
-            Pulsa <strong>«Habilitar»</strong> en cada usuario que quieras autorizar.
-            Los usuarios no habilitados serán rechazados (se les pedirá credenciales sin éxito).
-          </p>
+        {/* Ya no es allow-list estricto: un usuario nuevo importado del
+            directorio puede navegar de inmediato. Se deshabilita a mano a
+            quien no deba tener acceso. */}
+        <div className="mt-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800">
+          Al sincronizar, los usuarios nuevos quedan <strong>habilitados</strong> para navegar de inmediato.
+          Si alguien no debe tener acceso, deshabilítalo manualmente desde la sección Usuarios.
         </div>
-
-        {ldapUsers.length === 0 ? (
-          <div className="text-center py-8 text-ink-3 text-sm">
-            No hay usuarios sincronizados. Pulsa "Sincronizar con AD" para importarlos del directorio.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table-panel">
-              <thead>
-                <tr>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">Usuario</th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">Nombre</th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">Email</th>
-                  <th className="text-right px-4 py-2 text-xs font-medium text-ink-3 uppercase">Navegación</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line-soft">
-                {ldapUsers.map(u => (
-                  <tr key={u.id} className="hover:bg-brand-50">
-                    <td className="px-4 py-2.5 font-medium text-ink">{u.username}</td>
-                    <td className="px-4 py-2.5 text-sm text-ink-2">{u.display_name || '—'}</td>
-                    <td className="px-4 py-2.5 text-sm text-ink-2">{u.email || '—'}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <button onClick={() => handleToggleLdapUser(u.id)}
-                        className={`text-sm font-medium ${u.enabled ? 'text-danger hover:text-danger' : 'text-ok hover:text-green-800'}`}
-                        title={u.enabled ? 'Bloquear navegación' : 'Permitir navegación'}>
-                        {u.enabled ? 'Bloquear' : 'Habilitar'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
     </div>
   )

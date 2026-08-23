@@ -54,117 +54,198 @@ def _save_prev_state(state: dict):
         pass
 
 
-def _get_network_stats_from_proc() -> dict:
-    """Lee estadísticas de red del contenedor Squid via docker exec /proc/net/dev.
+# El cliente de Docker se reutiliza: antes se creaba uno nuevo con from_env()
+# en cada peticion (y dos veces por peticion), abriendo una conexion al socket
+# cada vez.
+_docker_client = None
+_docker_client_lock = threading.Lock()
 
-    Esto es más preciso que Docker stats API porque lee directamente del kernel
-    del contenedor y se actualiza instantáneamente.
+# Las estadisticas del contenedor se cachean unos segundos. El dashboard las
+# pide dos veces (trafico y sistema) y antes pagaba el coste entero en cada una.
+_stats_cache = {"timestamp": 0.0, "data": None}
+_stats_cache_lock = threading.Lock()
+_STATS_TTL = 2.0
+
+_EMPTY_STATS = {
+    "rx_bytes_per_second": 0,
+    "tx_bytes_per_second": 0,
+    "rx_total": 0,
+    "tx_total": 0,
+    "cpu_percent": 0,
+    "mem_usage": 0,
+    "mem_limit": 0,
+    "mem_percent": 0,
+    "sampled_at": 0.0,
+}
+
+
+def _get_client():
+    """Cliente Docker compartido, creado una sola vez."""
+    global _docker_client
+    if _docker_client is None:
+        with _docker_client_lock:
+            if _docker_client is None:
+                _docker_client = docker_sdk.from_env()
+    return _docker_client
+
+
+# Un unico exec que trae red, memoria y CPU. Las etiquetas evitan tener que
+# adivinar que valor es cual por el orden de las lineas.
+_STATS_CMD = (
+    "cat /proc/net/dev; "
+    "echo '#CG#'; "
+    "echo \"memcur $(cat /sys/fs/cgroup/memory.current 2>/dev/null)\"; "
+    "echo \"memmax $(cat /sys/fs/cgroup/memory.max 2>/dev/null)\"; "
+    "grep -h usage_usec /sys/fs/cgroup/cpu.stat 2>/dev/null; "
+    "grep -h '^inactive_file ' /sys/fs/cgroup/memory.stat 2>/dev/null; "
+    "grep -h MemTotal /proc/meminfo"
+)
+
+
+def _read_container_stats_raw() -> dict:
+    """Lee red, memoria y CPU del contenedor Squid en un solo `docker exec`.
+
+    Sustituye a container.stats(stream=False), que tardaba ~1s por llamada: el
+    SDK espera dos muestreos del demonio para poder calcular el delta de CPU.
+    Aqui se leen los ficheros de cgroup v2 directamente (~0,07s) y el delta se
+    calcula con el mismo estado previo que ya se usaba para la red.
     """
+    container = _get_client().containers.get(SQUID_CONTAINER)
+    output = container.exec_run(["sh", "-c", _STATS_CMD]).output.decode(
+        "utf-8", errors="replace"
+    )
+    net_part, _, cg_part = output.partition("#CG#")
+
+    # --- red (/proc/net/dev) ---
+    ifaces = {}
+    for line in net_part.strip().split("\n"):
+        stripped = line.strip()
+        if ":" not in line or stripped.startswith("Inter") or stripped.startswith("face"):
+            continue
+        name, _, rest = line.partition(":")
+        cols = rest.split()
+        if len(cols) >= 9:
+            ifaces[name.strip()] = (int(cols[0]), int(cols[8]))
+
+    # Se prefiere la interfaz principal; si no aparece, se suman todas menos lo.
+    rx_bytes = tx_bytes = 0
+    for preferred in ("eth0", "ens0"):
+        if preferred in ifaces:
+            rx_bytes, tx_bytes = ifaces[preferred]
+            break
+    else:
+        for name, (rx, tx) in ifaces.items():
+            if name != "lo":
+                rx_bytes += rx
+                tx_bytes += tx
+
+    # --- memoria y CPU (cgroup v2) ---
+    mem_usage = mem_limit = cpu_usec = host_mem = inactive_file = 0
+    for line in cg_part.strip().split("\n"):
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        key, value = parts[0], parts[1]
+        if key == "memcur" and value.isdigit():
+            mem_usage = int(value)
+        elif key == "memmax" and value.isdigit():
+            # "max" significa sin limite; se queda en 0 y se usa la RAM del host.
+            mem_limit = int(value)
+        elif key == "usage_usec":
+            cpu_usec = int(value)
+        elif key == "inactive_file" and value.isdigit():
+            inactive_file = int(value)
+        elif key.startswith("MemTotal"):
+            host_mem = int(value) * 1024
+
+    return {
+        "rx_bytes": rx_bytes,
+        "tx_bytes": tx_bytes,
+        # memory.current incluye cache de pagina; `docker stats` descuenta el
+        # inactivo para reportar la memoria realmente en uso.
+        "mem_usage": max(0, mem_usage - inactive_file),
+        "mem_limit": mem_limit,
+        "cpu_usec": cpu_usec,
+        "host_mem": host_mem,
+    }
+
+
+def _compute_stats() -> dict:
+    """Muestra las estadisticas actuales y calcula las tasas contra la anterior."""
     global _prev_network
 
-    # Cargar estado previo desde archivo (sobrevive a reloads)
     if _prev_network["timestamp"] == 0:
         _prev_network = _load_prev_state()
 
     try:
-        client = docker_sdk.from_env()
-        container = client.containers.get(SQUID_CONTAINER)
-        result = container.exec_run(["cat", "/proc/net/dev"])
-        output = result.output.decode("utf-8", errors="replace")
-
-        # Parsear /proc/net/dev
-        rx_bytes = 0
-        tx_bytes = 0
-        for line in output.strip().split("\n"):
-            if ":" in line and not line.strip().startswith("Inter") and not line.strip().startswith("face"):
-                parts = line.split(":")
-                iface = parts[0].strip()
-                if iface == "eth0" or iface == "ens0":
-                    stats = parts[1].split()
-                    rx_bytes = int(stats[0])
-                    tx_bytes = int(stats[8])
-                    break
-
-        # Si no encontramos eth0, sumar todas menos lo
-        if rx_bytes == 0 and tx_bytes == 0:
-            for line in output.strip().split("\n"):
-                if ":" in line and not line.strip().startswith("Inter") and not line.strip().startswith("face"):
-                    parts = line.split(":")
-                    iface = parts[0].strip()
-                    if iface != "lo":
-                        stats = parts[1].split()
-                        rx_bytes += int(stats[0])
-                        tx_bytes += int(stats[8])
-
-        now = time.time()
-        prev = _prev_network
-
-        if prev["timestamp"] > 0:
-            delta_time = now - prev["timestamp"]
-            rx_rate = max(0, (rx_bytes - prev["rx_bytes"]) / delta_time) if delta_time > 0 else 0
-            tx_rate = max(0, (tx_bytes - prev["tx_bytes"]) / delta_time) if delta_time > 0 else 0
-        else:
-            rx_rate = 0
-            tx_rate = 0
-
-        _prev_network = {
-            "timestamp": now,
-            "rx_bytes": rx_bytes,
-            "tx_bytes": tx_bytes,
-        }
-        _save_prev_state(_prev_network)
-
-        return {
-            "rx_bytes_per_second": round(rx_rate),
-            "tx_bytes_per_second": round(tx_rate),
-            "rx_total": rx_bytes,
-            "tx_total": tx_bytes,
-        }
+        raw = _read_container_stats_raw()
     except Exception as e:
-        logger.error(f"Error leyendo /proc/net/dev: {e}")
-        return {"rx_bytes_per_second": 0, "tx_bytes_per_second": 0, "rx_total": 0, "tx_total": 0}
+        logger.error(f"Error leyendo estadisticas del contenedor Squid: {e}")
+        return dict(_EMPTY_STATS)
 
+    now = time.time()
+    prev = _prev_network
+    delta_time = now - prev["timestamp"] if prev["timestamp"] > 0 else 0
 
-def _get_docker_network_stats() -> dict:
-    """Estadísticas de red + CPU + RAM via Docker SDK + /proc/net/dev."""
-    net = _get_network_stats_from_proc()
+    if delta_time > 0:
+        rx_rate = max(0, (raw["rx_bytes"] - prev["rx_bytes"]) / delta_time)
+        tx_rate = max(0, (raw["tx_bytes"] - prev["tx_bytes"]) / delta_time)
+        # usage_usec es tiempo de CPU acumulado: 100% = un nucleo completo.
+        cpu_delta = max(0, raw["cpu_usec"] - prev.get("cpu_usec", 0))
+        cpu_percent = round(cpu_delta / 1_000_000 / delta_time * 100, 1)
+    else:
+        rx_rate = tx_rate = 0
+        cpu_percent = 0.0
 
-    # CPU y RAM desde Docker stats
-    try:
-        client = docker_sdk.from_env()
-        container = client.containers.get(SQUID_CONTAINER)
-        stats = container.stats(stream=False)
+    _prev_network = {
+        "timestamp": now,
+        "rx_bytes": raw["rx_bytes"],
+        "tx_bytes": raw["tx_bytes"],
+        "cpu_usec": raw["cpu_usec"],
+    }
+    _save_prev_state(_prev_network)
 
-        cpu_stats = stats.get("cpu_stats", {})
-        precpu_stats = stats.get("precpu_stats", {})
-        cpu_delta = cpu_stats.get("cpu_usage", {}).get("total_usage", 0) - precpu_stats.get("cpu_usage", {}).get("total_usage", 0)
-        system_delta = cpu_stats.get("system_cpu_usage", 0) - precpu_stats.get("system_cpu_usage", 0)
-        num_cpus = cpu_stats.get("online_cpus", 1)
-        cpu_percent = round((cpu_delta / system_delta * num_cpus * 100), 1) if system_delta > 0 else 0
-
-        mem_stats = stats.get("memory_stats", {})
-        mem_usage = mem_stats.get("usage", 0)
-        mem_limit = mem_stats.get("limit", 0)
-        mem_percent = round((mem_usage / mem_limit * 100), 1) if mem_limit > 0 else 0
-    except Exception:
-        cpu_percent = 0
-        mem_usage = 0
-        mem_limit = 0
-        mem_percent = 0
+    mem_limit = raw["mem_limit"] or raw["host_mem"]
+    mem_usage = raw["mem_usage"]
 
     return {
-        **net,
+        "rx_bytes_per_second": round(rx_rate),
+        "tx_bytes_per_second": round(tx_rate),
+        "rx_total": raw["rx_bytes"],
+        "tx_total": raw["tx_bytes"],
         "cpu_percent": cpu_percent,
         "mem_usage": mem_usage,
         "mem_limit": mem_limit,
-        "mem_percent": mem_percent,
+        "mem_percent": round(mem_usage / mem_limit * 100, 1) if mem_limit > 0 else 0,
+        "sampled_at": now,
     }
 
 
-def _update_network_buffer() -> dict:
-    """Actualiza el buffer de network stats y devuelve el punto actual."""
+def _get_docker_network_stats() -> dict:
+    """Estadisticas de red, CPU y RAM del contenedor Squid, cacheadas _STATS_TTL s."""
+    with _stats_cache_lock:
+        cached = _stats_cache["data"]
+        if cached is not None and time.time() - _stats_cache["timestamp"] < _STATS_TTL:
+            return cached
+
+    stats = _compute_stats()
+
+    with _stats_cache_lock:
+        _stats_cache["timestamp"] = time.time()
+        _stats_cache["data"] = stats
+    return stats
+
+
+def _update_network_buffer(extra: dict | None = None) -> dict:
+    """Actualiza el buffer de metricas y devuelve el punto actual.
+
+    `extra` trae los contadores derivados del access.log (peticiones,
+    denegadas, IPs activas) para que el historico sirva tambien a las
+    tarjetas de resumen, no solo al grafico de red.
+    """
     stats = _get_docker_network_stats()
-    now = time.time()
+    extra = extra or {}
+    now = stats.get("sampled_at") or time.time()
 
     point = {
         "timestamp": now,
@@ -173,13 +254,22 @@ def _update_network_buffer() -> dict:
         "tx_bytes_per_second": stats["tx_bytes_per_second"],
         "rx_total": stats["rx_total"],
         "tx_total": stats["tx_total"],
+        "requests": extra.get("requests", 0),
+        "denied": extra.get("denied", 0),
+        "connections": extra.get("connections", 0),
+        "cache_hit_ratio": extra.get("cache_hit_ratio"),
+        "mem_percent": stats.get("mem_percent", 0),
+        "cpu_percent": stats.get("cpu_percent", 0),
     }
 
     with _network_buffer_lock:
-        _network_buffer.append(point)
-        if len(_network_buffer) > _MAX_BUFFER:
-            _network_buffer.pop(0)
-        # Devolver copia del buffer
+        # Con la cache, dos llamadas seguidas devuelven la misma muestra: no
+        # tiene sentido duplicar el punto en el historico del grafico.
+        last = _network_buffer[-1] if _network_buffer else None
+        if last is None or point["timestamp"] != last["timestamp"]:
+            _network_buffer.append(point)
+            if len(_network_buffer) > _MAX_BUFFER:
+                _network_buffer.pop(0)
         buffer_copy = list(_network_buffer)
 
     return {"current": stats, "buffer": buffer_copy}
@@ -224,6 +314,9 @@ def _parse_log_line(line: str) -> dict | None:
 
     return {
         "timestamp": float(m.group(1)),
+        # Tiempo que tardo la peticion, en ms: ya venia en el log y se
+        # descartaba, pero es el mejor indicador de salud del proxy.
+        "elapsed_ms": int(m.group(2)),
         "client_ip": m.group(3),
         "action": m.group(4),
         "status": int(m.group(5)),
@@ -232,6 +325,66 @@ def _parse_log_line(line: str) -> dict | None:
         "domain": domain,
         "user": m.group(9) if m.group(9) != "-" else None,
         "denied": int(m.group(5)) in (401, 403, 407) or "DENIED" in m.group(4),
+    }
+
+
+# Squid marca cada peticion con el resultado de cache. No todas cuentan:
+# los tuneles HTTPS (TCP_TUNNEL) y las denegadas nunca llegan a consultarse,
+# asi que se excluyen del ratio en lugar de contarlas como fallo.
+_ACIERTOS = ("TCP_HIT", "TCP_MEM_HIT", "TCP_IMS_HIT", "TCP_INM_HIT", "TCP_REFRESH_UNMODIFIED")
+_FALLOS = ("TCP_MISS", "TCP_REFRESH_MODIFIED", "TCP_CLIENT_REFRESH_MISS", "TCP_SWAPFAIL_MISS")
+
+
+def _clasificar_cache(action: str) -> str | None:
+    """Devuelve 'hit', 'miss' o None si la peticion no es cacheable."""
+    base = action.split("_ABORTED")[0]
+    if base in _ACIERTOS:
+        return "hit"
+    if base in _FALLOS:
+        return "miss"
+    return None
+
+
+def _resumen_cache(entries: list[dict]) -> dict:
+    """Aciertos, fallos y ratio sobre un conjunto de entradas del log."""
+    hits = misses = 0
+    bytes_hit = 0
+    for e in entries:
+        tipo = _clasificar_cache(e["action"])
+        if tipo == "hit":
+            hits += 1
+            bytes_hit += e["bytes"]
+        elif tipo == "miss":
+            misses += 1
+    total = hits + misses
+    return {
+        "cache_hits": hits,
+        "cache_misses": misses,
+        # None (y no 0) cuando no hubo nada cacheable: un 0% haria pensar que
+        # la cache falla, cuando en realidad no se le pidio nada.
+        "cache_hit_ratio": round(hits / total * 100, 1) if total else None,
+        "cache_bytes_saved": bytes_hit,
+    }
+
+
+def _resumen_latencia(entries: list[dict]) -> dict:
+    """Media, mediana y p95 del tiempo de respuesta, en ms.
+
+    Los tuneles CONNECT (HTTPS) se excluyen: ahi `elapsed_ms` mide cuanto
+    estuvo abierta la conexion completa, no cuanto tardo en responder, y
+    puede ser de horas. Mezclarlo con el resto arruinaria el promedio.
+    """
+    valores = sorted(e["elapsed_ms"] for e in entries if e["method"] != "CONNECT")
+    if not valores:
+        return {"latency_avg_ms": None, "latency_p50_ms": None, "latency_p95_ms": None}
+
+    def percentil(p: float) -> int:
+        return valores[min(int(len(valores) * p), len(valores) - 1)]
+
+    return {
+        "latency_avg_ms": round(sum(valores) / len(valores)),
+        "latency_p50_ms": percentil(0.50),
+        "latency_p95_ms": percentil(0.95),
     }
 
 
@@ -280,7 +433,21 @@ def _read_recent_logs(seconds: int = 60) -> list[dict]:
 
 def get_realtime_traffic() -> dict:
     """Tráfico REAL en tiempo real desde Docker network stats."""
-    net = _update_network_buffer()
+    # El log se lee primero para que sus contadores entren en el mismo punto
+    # del historico que la muestra de red.
+    log_entries = _read_recent_logs(60)
+    active_ips = list(set(e["client_ip"] for e in log_entries))
+    denied_60s = sum(1 for e in log_entries if e["denied"])
+
+    cache = _resumen_cache(log_entries)
+    latencia = _resumen_latencia(log_entries)
+
+    net = _update_network_buffer({
+        "requests": len(log_entries),
+        "denied": denied_60s,
+        "connections": len(active_ips),
+        "cache_hit_ratio": cache["cache_hit_ratio"],
+    })
     current = net["current"]
 
     # Calcular promedio de los últimos puntos del buffer
@@ -288,9 +455,6 @@ def get_realtime_traffic() -> dict:
     recent = buffer[-12:] if len(buffer) >= 12 else buffer  # últimos 60s
     avg_rx = sum(p["rx_bytes_per_second"] for p in recent) / len(recent) if recent else 0
     avg_tx = sum(p["tx_bytes_per_second"] for p in recent) / len(recent) if recent else 0
-
-    # Combinar con access.log para conteo de peticiones
-    log_entries = _read_recent_logs(60)
 
     return {
         "rx_bytes_per_second": current["rx_bytes_per_second"],
@@ -302,8 +466,10 @@ def get_realtime_traffic() -> dict:
         "tx_total": current["tx_total"],
         # De access.log (metadata)
         "total_requests_60s": len(log_entries),
-        "denied_requests_60s": sum(1 for e in log_entries if e["denied"]),
-        "active_ips": list(set(e["client_ip"] for e in log_entries))[:20],
+        "denied_requests_60s": denied_60s,
+        **cache,
+        **latencia,
+        "active_ips": active_ips[:20],
         "active_users": list(set(e["user"] for e in log_entries if e["user"])),
     }
 
@@ -317,9 +483,15 @@ def get_traffic_timeline() -> list[dict]:
     return [
         {
             "time": p["time"],
+            "timestamp": p["timestamp"],
             "rx_bytes": p["rx_bytes_per_second"],
             "tx_bytes": p["tx_bytes_per_second"],
             "total_bytes": p["rx_bytes_per_second"] + p["tx_bytes_per_second"],
+            "requests": p.get("requests", 0),
+            "denied": p.get("denied", 0),
+            "connections": p.get("connections", 0),
+            "cache_hit_ratio": p.get("cache_hit_ratio"),
+            "mem_percent": p.get("mem_percent", 0),
         }
         for p in buffer[-60:]
     ]
@@ -396,6 +568,60 @@ def get_top_users(limit: int = 10) -> list[dict]:
     ]
 
 
+def get_top_blocked_users(limit: int = 10, db=None) -> dict:
+    """Usuarios con mas peticiones denegadas: quien choca mas con la politica.
+
+    Complementa a "top sitios bloqueados", que dice que se bloquea pero no
+    quien. IMPORTANTE: esto cuenta peticiones denegadas (407/403), que no es
+    lo mismo que "cuenta deshabilitada". Una peticion puede denegarse por
+    credenciales viejas cacheadas en el navegador, por una politica de grupo,
+    o porque la cuenta esta deshabilitada de verdad en Usuarios — son cosas
+    distintas. Por eso, si se pasa una sesion de BD, cada usuario de la lista
+    se cruza contra su estado real (local o LDAP) para no dejar la duda.
+
+    La mayoria de las peticiones denegadas de un navegador real son ruido de
+    fondo (telemetria, sondas de conectividad) que nunca llega a mandar
+    credenciales, asi que se informa aparte cuantos bloqueos quedaron sin
+    usuario para que la diferencia con "top sitios bloqueados" no se lea
+    como un fallo de esta tarjeta.
+    """
+    denegadas = [e for e in _read_last_n_lines(1000) if e["denied"]]
+    con_usuario = [e for e in denegadas if e["user"]]
+    conteo = Counter(e["user"] for e in con_usuario)
+    top = conteo.most_common(limit)
+
+    account_status: dict[str, str] = {}
+    if db is not None and top:
+        from app.models.proxy_user import ProxyUser
+        from app.models.ldap_user import LdapUser
+
+        nombres = [u for u, _ in top]
+        for pu in db.query(ProxyUser).filter(ProxyUser.username.in_(nombres)).all():
+            account_status[pu.username] = "enabled" if pu.enabled else "disabled"
+        for lu in db.query(LdapUser).filter(LdapUser.username.in_(nombres)).all():
+            # Si el mismo nombre existe local y LDAP (no deberia, pero por las
+            # dudas) se prioriza el estado local, que es el que de verdad usa
+            # Squid para autenticar via htpasswd.
+            account_status.setdefault(lu.username, "enabled" if lu.enabled else "disabled")
+
+    return {
+        "users": [
+            {
+                "user": u,
+                "blocked_requests": c,
+                # "disabled" = la cuenta esta apagada en Usuarios (bloqueo real).
+                # "enabled" = la cuenta sigue activa; los 407/403 son por otra
+                # causa (credenciales viejas, politica de grupo, etc).
+                # "unknown" = no se cruzo contra la BD, o el usuario no existe
+                # como cuenta local ni LDAP (p.ej. se borro despues).
+                "account_status": account_status.get(u, "unknown"),
+            }
+            for u, c in top
+        ],
+        "anonymous_blocked": len(denegadas) - len(con_usuario),
+    }
+
+
 def get_top_domains(limit: int = 10, denied_only: bool = False) -> list[dict]:
     entries = _read_last_n_lines(1000)
     if denied_only:
@@ -429,7 +655,7 @@ def get_recent_connections(limit: int = 20) -> list[dict]:
     ]
 
 
-def get_dashboard() -> dict:
+def get_dashboard(db=None) -> dict:
     """Dashboard completo: todas las métricas en una sola llamada."""
     traffic = get_realtime_traffic()
     return {
@@ -437,6 +663,7 @@ def get_dashboard() -> dict:
         "top_users": get_top_users(10),
         "top_domains": get_top_domains(10, denied_only=False),
         "top_blocked": get_top_domains(10, denied_only=True),
+        "top_blocked_users": get_top_blocked_users(10, db=db),
         "system": get_system_metrics(),
         "timeline": get_traffic_timeline(),
         "connections": get_recent_connections(10),

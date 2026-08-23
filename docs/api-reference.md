@@ -123,14 +123,6 @@ Genera una contraseña aleatoria de 16 caracteres, la aplica y purga la caché d
 }
 ```
 
-### Purgar credenciales manualmente
-```http
-POST /api/proxy-users/purge-credentials
-Authorization: Bearer <token>
-```
-
-Fuerza la re-autenticación de **todos** los usuarios del proxy reiniciando Squid.
-
 ### Regenerar el fichero de contraseñas
 ```http
 POST /api/proxy-users/sync
@@ -487,9 +479,14 @@ Content-Type: application/json
   "bind_password": "mi_password",
   "search_base": "ou=users,dc=empresa,dc=com",
   "user_filter": "(uid=%s)",
+  "sync_filter": "(objectClass=inetOrgPerson)",
   "enabled": false
 }
 ```
+
+`user_filter` busca a un usuario por su nombre al iniciar sesión; `sync_filter` busca a
+todos los usuarios al sincronizar. Son campos independientes — antes `sync_filter` no
+existía y el filtro de sincronización estaba fijo en el código al de Active Directory.
 
 ### Test de conexión LDAP
 ```http
@@ -525,7 +522,7 @@ POST /api/ldap/sync
 Authorization: Bearer <token>
 ```
 
-Importa usuarios del directorio (búsqueda paginada, 500 por página) filtrando por `(&(objectCategory=person)(objectClass=user))`. Los nuevos se crean **deshabilitados** (allow-list estricto).
+Importa usuarios del directorio (búsqueda paginada, 500 por página) filtrando por `sync_filter` (configurable — por defecto el de Active Directory, pero sirve cualquier filtro LDAPv3). Los nuevos se crean **habilitados** (deny-list): navegan de inmediato, hasta que se deshabilitan a mano desde `PATCH /api/proxy-users/{id}/toggle` o el equivalente LDAP.
 
 ```json
 {"status": "ok", "synced": 143}
@@ -650,7 +647,16 @@ GET /api/metrics/dashboard
 Authorization: Bearer <token>
 ```
 
-Todo lo que necesita la pantalla de inicio en una sola llamada: tráfico, top usuarios, top dominios, top bloqueados, estado del sistema, línea temporal y conexiones recientes.
+Todo lo que necesita la pantalla de inicio en una sola llamada: tráfico, top usuarios,
+top dominios, top bloqueados, top usuarios bloqueados, estado del sistema, línea temporal
+y conexiones recientes.
+
+Las estadísticas del contenedor (red, CPU, RAM) se leen directamente de los ficheros de
+cgroup dentro de un único `docker exec`, no con `container.stats()` del SDK de Docker:
+ese método fuerza dos muestreos separados por un segundo para calcular el delta de CPU, y
+el dashboard lo llamaba dos veces por carga (tráfico y sistema). El endpoint pasó de
+tardar 4-8 segundos a 20-70 ms, con una caché de 2 segundos para no repetir el `exec` si
+varias tarjetas piden datos casi al mismo tiempo.
 
 ### Tráfico en tiempo real
 ```http
@@ -659,6 +665,13 @@ Authorization: Bearer <token>
 ```
 
 Bytes/s de subida y bajada leídos directamente de `/proc/net/dev` dentro del contenedor de Squid (no del access.log, que llega con retraso).
+
+También incluye, calculado sobre los últimos 60 segundos del access.log:
+- `cache_hit_ratio` (0-100, o `null` si no hubo ninguna petición cacheable en la ventana —
+  no es lo mismo que 0%), `cache_hits`, `cache_misses`, `cache_bytes_saved`.
+- `latency_avg_ms`, `latency_p50_ms`, `latency_p95_ms` — excluyen los túneles CONNECT
+  (HTTPS), donde ese campo del log mide la duración de la conexión completa, no el tiempo
+  de respuesta.
 
 ### Top usuarios por tráfico
 ```http
@@ -671,6 +684,32 @@ Authorization: Bearer <token>
 GET /api/metrics/top-domains?limit=10&denied=false
 Authorization: Bearer <token>
 ```
+
+### Top usuarios con más peticiones denegadas
+```http
+GET /api/metrics/top-blocked-users?limit=10
+Authorization: Bearer <token>
+```
+
+Cuenta peticiones denegadas (407/403) por usuario en las últimas 1.000 líneas del log —
+**no** implica que la cuenta esté deshabilitada, solo que tuvo intentos denegados (pueden
+ser por credenciales viejas cacheadas en el navegador, una política de grupo, o sí, una
+cuenta deshabilitada). Cada fila se cruza contra el estado real de la cuenta:
+
+```json
+{
+  "users": [
+    {"user": "jperez", "blocked_requests": 12, "account_status": "enabled"},
+    {"user": "mgomez", "blocked_requests": 3, "account_status": "disabled"}
+  ],
+  "anonymous_blocked": 340
+}
+```
+
+`account_status` es `"enabled"`, `"disabled"` o `"unknown"` (la cuenta no existe ni local
+ni en LDAP, por ejemplo si se borró después). `anonymous_blocked` cuenta las denegadas sin
+usuario asociado — la mayoría es ruido de fondo del navegador (telemetría, sondas de
+conectividad) que nunca llega a mandar credenciales.
 
 ### Métricas del sistema
 ```http

@@ -130,7 +130,7 @@ El Squid que viene en Ubuntu 24.04 está compilado con GnuTLS, no con OpenSSL. S
 | squid_settings | Configuración key-value de Squid |
 | delay_pools | Delay pools (ancho de banda) |
 | ldap_config | Configuración LDAP |
-| ldap_users | Usuarios LDAP sincronizados (allow-list estricto) |
+| ldap_users | Usuarios LDAP sincronizados (deny-list: habilitados por defecto) |
 | user_groups | Grupos de usuarios |
 | user_group_members | Miembros de cada grupo (con clave foránea en cascada) |
 | notification_config | Configuración de notificaciones por email/Telegram |

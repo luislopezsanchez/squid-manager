@@ -46,8 +46,12 @@ implementa un helper personalizado que combina ambos orígenes:
 
 El helper consulta **primero local y luego LDAP**, de modo que ambas formas conviven. Cualquier fallo inesperado se registra y deniega esa petición sin matar el proceso — si el helper muriera, Squid dejaría de autenticar a todo el mundo.
 
-> ⚠️ **Allow-list estricto:** los usuarios LDAP **no navegan por defecto**. Solo navegan
-> los que el admin habilita explícitamente en el panel (ver "Gestión de usuarios LDAP").
+> ℹ️ **Deny-list:** los usuarios LDAP **navegan apenas se sincronizan**. Si alguien no
+> debe tener acceso, hay que deshabilitarlo a mano en el panel (ver "Gestión de usuarios LDAP").
+> Antes era al revés (allow-list estricto, nadie navegaba hasta habilitarlo uno por uno);
+> se invirtió a pedido explícito, con el trade-off documentado: si el directorio tiene
+> cuentas de servicio o gente sin acceso previsto, van a poder navegar automáticamente
+> tras la primera sincronización.
 
 ### Caducidad de usuarios locales
 
@@ -80,45 +84,65 @@ Login a las 09:00 con credentialsttl = 2 hours:
 
 ---
 
-## Dos acciones distintas: bloquear vs forzar re-autenticación
+## Bloquear acceso: la única forma real de interrumpir a alguien
 
-Son conceptos diferentes, aunque desde la corrección de seguridad ambas cortan el acceso de inmediato:
+Hubo un botón "Forzar re-autenticación" que se quitó del panel. Se dejó documentado el
+motivo porque es un límite real de HTTP Basic Auth, no un detalle interno: **ningún
+servidor puede borrar la caché de credenciales que un navegador ya tiene guardada**.
+Purgar la caché de Squid (lo que hacía ese botón) solo obliga a Squid a re-chequear
+contra la fuente en la siguiente petición de cada quien — si la contraseña sigue siendo
+válida, el navegador la reenvía solo y Squid la vuelve a aceptar sin que nadie vea un
+cartel de login. Se comprobó en vivo antes de sacarlo: no lograba lo que el nombre
+prometía, así que mantenerlo solo generaba confusión.
 
 ### Bloquear acceso (deshabilitar usuario)
 
-- **Qué hace:** elimina al usuario del archivo `squid_passwd` y **purga la caché de credenciales de Squid**.
-- **Efecto:** el usuario deja de poder navegar de inmediato, incluso si tenía una sesión ya autenticada dentro de su `credentialsttl`.
-- **Es temporal:** se puede volver a habilitar.
-- **Alcance del bloqueo en sí:** un solo usuario. La purga de credenciales que lo acompaña es global (ver más abajo), así que bloquear a un usuario también obliga a **todos** los demás a volver a autenticarse.
+- **Qué hace:** elimina al usuario del archivo `squid_passwd` (o de la allow-list LDAP) y
+  purga la caché de credenciales de Squid.
+- **Efecto:** es la única acción que corta el acceso de forma **visible**: al no encontrar
+  la credencial, Squid devuelve 407 y el navegador **sí** vuelve a preguntar usuario y
+  contraseña, sin importar si la sesión seguía dentro de su `credentialsttl`.
+- **Es temporal:** se puede volver a habilitar en cualquier momento.
+- **Alcance:** un solo usuario en la base de datos, pero la purga de credenciales que lo
+  acompaña es global (ver más abajo) — así que bloquear a alguien también obliga a
+  **todos** los demás a volver a autenticarse, aunque solo uno haya perdido el acceso.
 
-### Forzar re-autenticación (purgar caché de credenciales)
+### Purga de credenciales (interna, ya no es una acción manual)
 
-- **Qué hace:** purga la caché de credenciales de Squid reiniciando el proceso.
-- **Efecto:** todos los usuarios deben volver a introducir su contraseña.
-- **Alcance:** GLOBAL. Squid mantiene una caché única de credenciales, por lo que
-  **no existe "purgar a un solo usuario"** sin afectar a los demás. Esta es una limitación de Squid, no de
-  SquidManager. Cambiar la contraseña de un usuario o que le caduque la cuenta también dispara esta purga automáticamente.
+Squid mantiene una caché única y global de credenciales validadas. Purgarla (reiniciando
+el proceso) es necesario para que ciertos cambios surtan efecto sin esperar hasta dos
+horas, y ocurre **automáticamente** al bloquear a alguien, cambiar su contraseña,
+resetearla, o que le caduque la cuenta — no hace falta ni existe un botón separado para
+dispararla a mano. Como se explicó arriba, purgarla por sí sola **no** fuerza un re-login
+visible para quien conserve una contraseña válida.
 
-### Cuándo usar cada una
+### Cuándo usar bloquear acceso
 
 | Situación | Acción |
 |-----------|--------|
 | Un empleado deja la empresa o se le suspende el acceso | Bloquear acceso |
-| Sospechas de uso indebido y quieres que todos re-confirmen identidad | Forzar re-autenticación |
-| Cambiaste la política de contraseñas y quieres forzar el cambio | Forzar re-autenticación |
+| Sospechas que alguien usa credenciales ajenas | Bloquear acceso + resetear contraseña |
+| Cambiaste la política de contraseñas | Resetear la contraseña de cada usuario afectado |
 
 ---
 
-## Gestión de usuarios LDAP (allow-list estricto)
+## Gestión de usuarios LDAP (deny-list)
 
-Por seguridad, los usuarios LDAP **no navegan por defecto**. El flujo es:
+Los usuarios LDAP **navegan apenas se sincronizan**. El flujo es:
 
-1. **Sincronizar con AD** — el admin pulsa un botón que importa los usuarios del
-   directorio a SquidManager (solo metadatos: username, nombre, email; nunca contraseñas),
-   con búsqueda paginada para no perder usuarios en directorios de más de 1.000 cuentas.
-2. **Habilitar usuarios** — el admin marca qué usuarios LDAP pueden navegar.
+1. **Sincronizar** (panel → LDAP) — importa los usuarios del directorio a SquidManager
+   (solo metadatos: username, nombre, email; nunca contraseñas), con búsqueda paginada
+   para no perder usuarios en directorios de más de 1.000 cuentas. El filtro de búsqueda
+   es configurable (`sync_filter`) — no está atado a Active Directory: sirve para
+   cualquier directorio LDAPv3 (OpenLDAP, FreeIPA, AD), con un selector de tipo de
+   directorio en el panel que rellena un filtro de partida razonable para cada uno.
+2. **Quedan habilitados por defecto.** Si alguien no debe navegar, hay que
+   deshabilitarlo a mano desde **Usuarios** (no desde la página de LDAP: la gestión de
+   quién puede navegar vive junto a los usuarios locales, en una sola tabla con
+   buscador y filtro por origen/estado).
 3. **Solo los habilitados** tienen una entrada en la allow-list que el helper de
-   autenticación consulta.
+   autenticación consulta — el nombre de la lista interna no cambió, pero su política
+   de arranque sí: antes vacía por defecto, ahora llena.
 
 ### Grupos de usuarios
 
@@ -136,11 +160,18 @@ Cualquier admin puede cambiar su propia contraseña desde el panel (icono de lla
 
 Al cambiarla, el backend registra el momento exacto (`password_changed_at`). Los tokens JWT emitidos **antes** de ese momento dejan de aceptarse aunque no hayan expirado por tiempo — así, si un token se filtró, cambiar la contraseña lo invalida en el acto. Por eso cambiar la contraseña de un admin escribiendo directamente en la base de datos (sin pasar por este mecanismo) no revoca las sesiones existentes: hay que hacerlo siempre desde el panel.
 
+> **Nota técnica:** el JWT trunca `iat` a segundos enteros al codificarlo, pero
+> `password_changed_at` conserva microsegundos. Sin margen, iniciar sesión en el mismo
+> segundo del cambio de contraseña comparaba `iat < changed_at` por el redondeo y cerraba
+> la sesión recién creada con un 401 falso. Se corrigió con un margen de 2 segundos en la
+> comparación — no debilita la revocación real, solo evita el falso positivo del mismo
+> segundo.
+
 ---
 
 ## Notas de seguridad
 
 - Las contraseñas de los usuarios LDAP **nunca se almacenan** en SquidManager.
 - Solo se guarda el hash htpasswd de los usuarios **locales**, con permisos de fichero restringidos a `600`.
-- La purga de credenciales afecta a todos los usuarios (limitación de Squid), y ahora se dispara automáticamente en varias acciones (bloquear, cambiar contraseña, caducar) además del botón manual.
+- La purga de credenciales afecta a todos los usuarios (limitación de Squid) y se dispara automáticamente al bloquear, cambiar o resetear una contraseña, o al caducar una cuenta — no hay un botón manual separado.
 - Los intentos de login están limitados por IP y por cuenta (ver [docs/production.md](production.md)), para dificultar la fuerza bruta contra el panel.

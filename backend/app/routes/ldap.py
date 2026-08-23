@@ -4,12 +4,14 @@ import subprocess
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from datetime import datetime
 from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.admin import Admin
 from app.models.ldap_config import LdapConfig
 from app.models.ldap_user import LdapUser
+from app.models.audit_log import AuditLog
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.squid_service import write_ldap_aux_files, reload_squid, purge_credentials
 
@@ -23,6 +25,7 @@ class LdapConfigUpdate(BaseModel):
     bind_password: str
     search_base: str
     user_filter: str = "(uid=%s)"
+    sync_filter: str = "(&(objectCategory=person)(objectClass=user))"
     enabled: bool = False
 
 
@@ -40,6 +43,7 @@ async def get_ldap_config(
             "bind_password": "",
             "search_base": "",
             "user_filter": "(uid=%s)",
+            "sync_filter": "(&(objectCategory=person)(objectClass=user))",
             "enabled": False,
         }
     return {
@@ -49,6 +53,7 @@ async def get_ldap_config(
         "bind_password": "***" if config.bind_password else "",
         "search_base": config.search_base,
         "user_filter": config.user_filter,
+        "sync_filter": config.sync_filter or "(&(objectCategory=person)(objectClass=user))",
         "enabled": config.enabled,
     }
 
@@ -69,6 +74,7 @@ async def update_ldap_config(
             config.bind_password = data.bind_password
         config.search_base = data.search_base
         config.user_filter = data.user_filter
+        config.sync_filter = data.sync_filter
         config.enabled = data.enabled
     else:
         config = LdapConfig(
@@ -78,6 +84,7 @@ async def update_ldap_config(
             bind_password=data.bind_password if data.bind_password != "***" else "",
             search_base=data.search_base,
             user_filter=data.user_filter,
+            sync_filter=data.sync_filter,
             enabled=data.enabled,
         )
         db.add(config)
@@ -203,6 +210,7 @@ class LdapUserResponse(BaseModel):
     display_name: str | None
     email: str | None
     enabled: bool
+    created_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -233,7 +241,9 @@ async def sync_ldap_users(
     """Sincroniza los usuarios desde LDAP/Active Directory.
 
     - Importa (upsert) todos los usuarios del directorio a la tabla ldap_users.
-    - Los usuarios nuevos se crean con enabled=False (allow-list estricto).
+    - Los usuarios nuevos se crean con enabled=True: pueden navegar apenas se
+      sincronizan. Es un modelo deny-list, no allow-list — hay que
+      deshabilitar a mano a quien no deba tener acceso.
     - NO almacena contraseñas; solo username, nombre y email.
     """
     config = db.query(LdapConfig).first()
@@ -252,11 +262,16 @@ async def sync_ldap_users(
     # Búsqueda paginada: Active Directory corta las respuestas en 1000 entradas
     # (MaxPageSize) y devuelve solo la primera página SIN error, así que sin
     # paginar la sincronización parecía correcta y dejaba fuera a la mayoría.
-    # El filtro se acota a personas: (objectClass=user) también trae equipos.
+    #
+    # El filtro es configurable (sync_filter) porque no es lo mismo para todo
+    # tipo de directorio: (objectCategory=person) es exclusivo de Active
+    # Directory y contra OpenLDAP/FreeIPA no encuentra a nadie, sin error, solo
+    # "0 sincronizados". Se conserva el filtro de AD como valor por defecto.
+    filtro = config.sync_filter or "(&(objectCategory=person)(objectClass=user))"
     try:
         entries = conn.extend.standard.paged_search(
             search_base=config.search_base,
-            search_filter="(&(objectCategory=person)(objectClass=user))",
+            search_filter=filtro,
             search_scope=SUBTREE,
             attributes=["sAMAccountName", "uid", "cn", "mail"],
             paged_size=500,
@@ -294,8 +309,9 @@ async def sync_ldap_users(
             existing.display_name = cn
             existing.email = mail
         else:
-            # allow-list estricto: nuevos usuarios deshabilitados por defecto
-            db.add(LdapUser(username=username, display_name=cn, email=mail, enabled=False))
+            # deny-list: nuevos usuarios habilitados por defecto, se
+            # deshabilita a mano a quien no deba navegar
+            db.add(LdapUser(username=username, display_name=cn, email=mail, enabled=True))
         synced += 1
 
     conn.unbind()
@@ -312,12 +328,17 @@ async def toggle_ldap_user(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
 ):
-    """Habilita/deshabilita un usuario LDAP (controla la allow-list)."""
+    """Habilita/deshabilita un usuario LDAP para navegar por el proxy."""
     user = db.query(LdapUser).filter(LdapUser.id == user_id).first()
     if not user:
         raise HTTPException(404, detail="Usuario LDAP no encontrado")
 
     user.enabled = not user.enabled
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="toggle", entity="ldap_user", entity_id=user.id,
+        new_value=str(user.enabled),
+    ))
     db.commit()
 
     _sync_ldap_files(db)

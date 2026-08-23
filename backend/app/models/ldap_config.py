@@ -14,6 +14,11 @@ class LdapConfig(Base):
     bind_password = Column(String(255), nullable=False)
     search_base = Column(String(255), nullable=False)  # ou=users,dc=...
     user_filter = Column(String(255), nullable=False, default="(uid=%s)")
+    # Filtro para "traer TODOS los usuarios" al sincronizar. Es distinto de
+    # user_filter (que busca UNO por su nombre al hacer login): antes estaba
+    # fijo en el codigo al filtro de Active Directory, y contra cualquier
+    # otro directorio (OpenLDAP, FreeIPA...) no encontraba a nadie.
+    sync_filter = Column(String(255), nullable=True, default="(&(objectCategory=person)(objectClass=user))")
     enabled = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

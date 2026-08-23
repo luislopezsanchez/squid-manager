@@ -5,6 +5,33 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.7.0] - 2026-08-23
+
+Prueba funcional completa de la plataforma contra el sistema en marcha (no solo revisión de código), corrección de los bugs reales que salieron a la luz, y primera ronda de mejoras visuales del Dashboard y de Usuarios.
+
+### Corregido
+- **Condición de carrera en la sesión (`iat`/`password_changed_at`)**: el JWT trunca `iat` a segundos enteros al codificarlo, pero `password_changed_at` conserva microsegundos. Un login en el mismo segundo que un cambio de contraseña podía comparar `iat < changed_at` por el redondeo y cerrar la sesión recién creada con un 401 falso. Corregido con un margen de 2 segundos en la comparación.
+- **`[object Object]` al crear o editar un usuario**: los errores de validación de Pydantic (contraseña corta, campo faltante) llegan como una lista de objetos, no como texto; el cliente los pasaba directo a `new Error()`, que los convierte a esa cadena literal. Ahora se extrae un mensaje legible.
+- **Botones de Usuarios sin ninguna señal de que estaban trabajando**: bloquear a alguien reinicia Squid para purgar credenciales (10-20s reales). Sin ningún indicador visual, invitaba a hacer clic de nuevo — lo que de hecho encadenó varias acciones reales sobre las mismas cuentas durante las pruebas. Cada botón ahora se deshabilita y cambia de texto mientras la acción está en curso, con un guardado síncrono (no `useState`) para que ni siquiera clics disparados en el mismo instante generen una segunda petición.
+- **Usuarios LDAP sin fecha de creación**: el modelo la tenía, pero el schema de respuesta nunca la incluía — se mostraba como "Invalid Date".
+- **`index.html` sin cabeceras de caché**: un despliegue nuevo podía quedar invisible detrás de una copia vieja en el navegador. Ahora `index.html` se revalida siempre y los archivos con hash de la build se cachean un año sin riesgo.
+
+### Cambiado
+- **"Forzar re-autenticación" se eliminó.** Verificado en vivo: purgar la caché de Squid no fuerza un re-login visible si la contraseña sigue siendo válida — el navegador la reenvía solo y Squid la vuelve a aceptar sin preguntar nada. El botón prometía algo que no podía cumplir, por un límite real de HTTP Basic Auth (ningún servidor puede borrar la caché de un navegador ajeno), no un bug de código. "Bloquear acceso" queda como la única acción que interrumpe a alguien de verdad.
+- **Usuarios LDAP nuevos quedan habilitados por defecto** (antes: allow-list estricto, deshabilitados hasta que un admin los habilitaba uno por uno). Es un cambio de postura de seguridad deliberado, a pedido explícito: ahora es deny-list — hay que deshabilitar a mano a quien no deba navegar.
+- **Filtro de sincronización LDAP, configurable** (`sync_filter`, migración `0004`): antes estaba fijo en el código al filtro de Active Directory (`objectCategory=person`, atributo exclusivo de AD); contra OpenLDAP o cualquier otro LDAPv3 no encontraba a nadie, sin ningún error. Selector de "Tipo de directorio" en el panel con valores de partida para Active Directory, OpenLDAP y LDAP genérico.
+
+### Añadido
+- **Sección Usuarios unificada**: usuarios locales y LDAP en una sola tabla, con buscador, filtro por origen y por estado, columna de grupos a los que pertenece cada uno, e insignia de origen (Local/LDAP).
+- **Modal de contraseña**: generar una automática o establecer una propia, con botón de copiar (con reserva para cuando el panel se sirve por HTTP plano, donde la Clipboard API del navegador no funciona).
+- **Dashboard**: sparklines de tendencia en las 4 tarjetas superiores, tarjeta "Sistema" con indicadores circulares, curva de tráfico con interpolación monótona (sin inventar picos ni caer por debajo de los datos reales), tarjeta de aciertos de caché, latencia de respuesta (excluyendo túneles CONNECT, donde ese campo del log mide la duración de la conexión, no la respuesta), usuarios con más peticiones denegadas (cruzado contra el estado real de la cuenta, para no confundirlo con "cuenta bloqueada"), aviso de cambios sin aplicar.
+- Auditoría del habilitar/deshabilitar de un usuario LDAP (antes no dejaba rastro).
+
+### Rendimiento
+- **Dashboard, de 4-8 segundos a 20-70 ms.** `container.stats()` del SDK de Docker fuerza dos muestreos separados por un segundo para calcular el delta de CPU, y se llamaba dos veces por carga. Ahora se lee un único `docker exec` a los ficheros de cgroup, con una caché de 2 segundos.
+
+---
+
 ## [0.6.0] - 2026-08-23
 
 Auditoría de seguridad completa y rediseño visual. 93 ficheros modificados en 6 commits.

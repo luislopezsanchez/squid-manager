@@ -129,12 +129,20 @@ def reload_squid() -> tuple[bool, str]:
 
 
 def purge_credentials() -> tuple[bool, str]:
-    """Reinicia Squid para purgar la caché de credenciales de autenticación.
+    """Reinicia Squid para purgar SU caché de credenciales validadas.
 
-    IMPORTANTE: `squid -k reconfigure` NO limpia la caché de credenciales de
-    autenticación de Squid. La única forma fiable de forzar la re-autenticación
-    de todos los usuarios es REINICIAR el proceso de Squid, lo que purga la
-    caché por completo.
+    IMPORTANTE — límite real, no un detalle de implementación: esto NO hace
+    que el navegador de un usuario vuelva a pedirle la contraseña si esa
+    contraseña sigue siendo válida. El navegador tiene su propia caché de
+    credenciales (HTTP Basic Auth), separada de la de Squid, y ningún
+    servidor puede borrarla de forma remota. Lo único que hace esto es
+    obligar a Squid a re-validar contra la fuente (htpasswd o LDAP) en la
+    siguiente petición de cada quien, en vez de confiar en una validación
+    anterior hasta que venza `credentialsttl`. Sirve para que un cambio de
+    permisos (grupo, deshabilitar) surta efecto más rápido — no sirve para
+    "desloguear" a nadie que siga teniendo una contraseña válida. Para
+    forzar una re-autenticación visible de verdad hay que invalidar la
+    credencial: resetear la contraseña, o deshabilitar la cuenta.
     """
     try:
         client = _get_docker_client()
@@ -145,7 +153,12 @@ def purge_credentials() -> tuple[bool, str]:
         container.restart(timeout=10)
         _wait_until_running(container)
         logger.info("Squid reiniciado para purgar la caché de credenciales")
-        return True, "Caché de credenciales purgada (Squid reiniciado). Todos los usuarios deberán volver a autenticarse."
+        return True, (
+            "Caché de credenciales purgada (Squid reiniciado). Squid revalidará a cada usuario en su "
+            "próxima petición, pero quien tenga una contraseña todavía válida seguirá navegando sin que "
+            "se le pida nada: esto no fuerza un re-login visible. Para eso, reseteá su contraseña o "
+            "deshabilitá la cuenta desde Usuarios."
+        )
     except Exception as e:
         logger.error(f"Error purgando credenciales: {e}")
         return False, f"Error: {e}"

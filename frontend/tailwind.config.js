@@ -34,6 +34,18 @@ export default {
         },
         accent: { 400: '#7FD0E2', 500: '#48B3D0', 600: '#2E93BC', 700: '#1D6A96' },
       },
+      // Escala tipografica propia, un punto por encima de la de Tailwind:
+      // el panel se lee de lejos y con los tamanos por defecto los textos
+      // secundarios quedaban justos.
+      fontSize: {
+        xs:   ['0.8125rem', { lineHeight: '1.125rem' }],   // 13px
+        sm:   ['0.9375rem', { lineHeight: '1.375rem' }],   // 15px
+        base: ['1.0625rem', { lineHeight: '1.625rem' }],   // 17px
+        lg:   ['1.1875rem', { lineHeight: '1.8125rem' }],  // 19px
+        xl:   ['1.3125rem', { lineHeight: '1.875rem' }],   // 21px
+        '2xl': ['1.625rem', { lineHeight: '2.125rem' }],   // 26px
+        '3xl': ['2rem',     { lineHeight: '2.375rem' }],   // 32px
+      },
       fontFamily: {
         sans: ['Figtree', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'Menlo', 'monospace'],

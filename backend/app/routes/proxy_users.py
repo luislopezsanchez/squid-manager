@@ -256,19 +256,6 @@ async def toggle_proxy_user(
     return user
 
 
-@router.post("/purge-credentials")
-async def purge_credentials_endpoint(
-    _: Admin = Depends(require_writer),
-):
-    """Purga la caché de credenciales de Squid (fuerza re-autenticación de todos).
-
-    IMPORTANTE: Squid mantiene una caché GLOBAL de credenciales, por lo que
-    esta acción afecta a TODOS los usuarios, no a uno solo.
-    """
-    success, message = purge_credentials()
-    return {"status": "ok" if success else "error", "message": message}
-
-
 @router.post("/sync")
 async def sync_passwd_endpoint(
     db: Session = Depends(get_db),

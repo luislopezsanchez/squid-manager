@@ -82,8 +82,13 @@ async def get_current_admin(
         raise credentials_exception
 
     # Cambiar la contraseña cierra las sesiones abiertas.
+    # iat se trunca a segundos enteros al codificar el JWT, mientras que
+    # password_changed_at conserva microsegundos. Sin margen, un login en el
+    # mismo segundo que el cambio de contraseña compara iat < changed_at por
+    # error y cierra la sesión recién creada. Un margen de 2s cubre eso sin
+    # debilitar la protección real (revocar sesiones más viejas).
     if admin.password_changed_at and issued_at is not None:
-        changed_at = admin.password_changed_at.replace(tzinfo=timezone.utc)
+        changed_at = admin.password_changed_at.replace(tzinfo=timezone.utc) - timedelta(seconds=2)
         if datetime.fromtimestamp(issued_at, tz=timezone.utc) < changed_at:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

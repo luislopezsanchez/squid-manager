@@ -28,6 +28,28 @@ export function isSuperadmin(): boolean {
   return getRole() === 'superadmin'
 }
 
+/**
+ * Convierte el `detail` de un error de FastAPI en un mensaje legible.
+ *
+ * Puede llegar como texto ("El usuario ya existe"), como una lista de
+ * errores de validacion de Pydantic ([{loc, msg, type}, ...]) o ausente.
+ */
+function extraerMensajeError(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail
+      .map(d => {
+        if (d && typeof d === 'object' && 'msg' in d) {
+          const campo = Array.isArray((d as any).loc) ? (d as any).loc.at(-1) : null
+          return campo ? `${campo}: ${(d as any).msg}` : String((d as any).msg)
+        }
+        return typeof d === 'string' ? d : JSON.stringify(d)
+      })
+      .join(' · ')
+  }
+  return fallback
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
   const headers: Record<string, string> = {
@@ -46,12 +68,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 403) {
     const error = await res.json().catch(() => ({ detail: null }))
-    throw new Error(error.detail || 'Tu cuenta no tiene permiso para esta acción')
+    throw new Error(extraerMensajeError(error.detail, 'Tu cuenta no tiene permiso para esta acción'))
   }
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Error desconocido' }))
-    throw new Error(error.detail || `Error ${res.status}`)
+    const error = await res.json().catch(() => ({ detail: null }))
+    throw new Error(extraerMensajeError(error.detail, `Error ${res.status}`))
   }
 
   if (res.status === 204) return undefined as T
@@ -193,7 +215,6 @@ export const api = {
   testTelegram: (data: any) => request<any>('/notifications/test-telegram', { method: 'POST', body: JSON.stringify(data) }),
 
   // Session management
-  purgeCredentials: () => request<any>('/proxy-users/purge-credentials', { method: 'POST' }),
   resetPassword: (id: number) => request<any>(`/proxy-users/${id}/reset-password`, { method: 'POST' }),
   getPending: () => request<{ dirty: boolean }>('/squid/pending'),
 }

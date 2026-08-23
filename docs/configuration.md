@@ -169,16 +169,25 @@ Ejemplo: Clase 2 con 64 KB/s global y 32 KB/s por usuario → Squid recibe `6553
 | `bind_dn` | DN del usuario de bind | `cn=admin,dc=empresa,dc=com` |
 | `bind_password` | Contraseña del bind | `••••••••` |
 | `search_base` | Base de búsqueda de usuarios | `ou=users,dc=empresa,dc=com` |
-| `user_filter` | Filtro para buscar usuarios | `(uid=%s)` |
+| `user_filter` | Filtro para buscar y autenticar a UN usuario al iniciar sesión | `(uid=%s)` |
+| `sync_filter` | Filtro para traer TODOS los usuarios al sincronizar | `(objectClass=person)` |
 | `enabled` | Activar/desactivar LDAP | `true` / `false` |
+
+`user_filter` y `sync_filter` son dos cosas distintas y ambas configurables — no hay
+ningún filtro fijo en el código. Antes `sync_filter` estaba fijo al de Active Directory
+(`objectCategory=person`, un atributo exclusivo de AD); contra OpenLDAP o cualquier otro
+LDAPv3 no encontraba a nadie, sin ningún error visible. El panel ofrece un selector de
+"Tipo de directorio" que rellena ambos filtros con un punto de partida razonable, pero
+los campos son texto libre por si el esquema del directorio es distinto.
 
 ### Filtros comunes
 
-| Directorio | Filtro |
-|-----------|--------|
-| OpenLDAP | `(uid=%s)` |
-| Active Directory | `(sAMAccountName=%s)` |
-| Apple Open Directory | `(uid=%s)` |
+| Directorio | `user_filter` (login) | `sync_filter` (importar todos) |
+|-----------|------------------------|----------------------------------|
+| Active Directory | `(sAMAccountName=%s)` | `(&(objectCategory=person)(objectClass=user))` |
+| OpenLDAP (posixAccount) | `(uid=%s)` | `(objectClass=posixAccount)` |
+| LDAP genérico (inetOrgPerson) | `(uid=%s)` | `(objectClass=inetOrgPerson)` |
+| Apple Open Directory | `(uid=%s)` | `(objectClass=inetOrgPerson)` |
 
 ### Test de conexión
 
@@ -189,7 +198,7 @@ El panel incluye un test de conexión que usa la librería `ldap3` para:
 
 ### Sincronización de usuarios
 
-**Panel → LDAP → Sincronizar con AD** importa los usuarios del directorio (solo metadatos: usuario, nombre, correo — nunca contraseñas), usando búsqueda paginada para no perder usuarios en directorios grandes. Los nuevos se crean **deshabilitados**: hay que habilitarlos uno a uno para que puedan navegar (allow-list estricto).
+**Panel → LDAP → Sincronizar** importa los usuarios del directorio (solo metadatos: usuario, nombre, correo — nunca contraseñas), usando búsqueda paginada para no perder usuarios en directorios grandes, con el filtro `sync_filter` configurado. Los nuevos se crean **habilitados** (deny-list): navegan de inmediato, y hay que deshabilitar a mano desde **Usuarios** a quien no deba tener acceso. La lista de usuarios (locales y LDAP juntos, con buscador y filtro) vive en esa página, no en LDAP.
 
 ---
 

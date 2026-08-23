@@ -91,6 +91,8 @@ En esta fase el admin y un usuario de prueba se creaban con contraseñas fijas d
 
 Cubre lo registrado en el `CHANGELOG.md` bajo `0.2.0`, `0.3.0` y `0.5.0`: gestión visual de ACLs y reglas de acceso con reordenamiento, validador de sintaxis, aplicar cambios en caliente, configuración general de Squid, SSL Bump completo con bloqueo por SNI, delay pools con interfaz visual, integración LDAP con allow-list estricto, grupos de usuarios, auditoría y notificaciones. El detalle línea a línea está en el CHANGELOG; esta bitácora no repite lo que ya queda registrado ahí.
 
+> Nota de la Fase 5: el allow-list estricto se invirtió a deny-list — los usuarios LDAP navegan apenas se sincronizan, no al revés. Ver [docs/authentication.md](authentication.md).
+
 ---
 
 ## Fase 4: Auditoría de seguridad, corrección de datos y rediseño visual (COMPLETADA)
@@ -110,6 +112,26 @@ Ver el detalle completo en `CHANGELOG.md` bajo `[0.6.0]`. En resumen:
 
 ### Verificación
 Cada corrección se verificó ejecutándola contra el servidor en marcha, no solo revisando el código. El detalle de qué se probó y qué resultado dio está fuera de esta bitácora — quedó en la conversación de la sesión de auditoría, no en un documento del repositorio.
+
+---
+
+## Fase 5: Prueba funcional completa y primera ronda de mejoras visuales (COMPLETADA)
+
+### Objetivo
+Probar cada función de la plataforma contra el sistema en marcha, no solo revisar el código, y corregir los bugs reales que salieran a la luz — antes de tocar nada visual, a pedido explícito de que primero quedara confirmado que todo funciona como se espera.
+
+### Acciones realizadas
+Ver el detalle completo en `CHANGELOG.md` bajo `[0.7.0]`. En resumen:
+- Condición de carrera en la revocación de sesión (`iat` truncado vs `password_changed_at` con microsegundos)
+- Rendimiento del dashboard: de 4-8 segundos a 20-70 ms, cambiando `container.stats()` por lectura directa de cgroups
+- Botones de Usuarios sin feedback visual durante una acción de varios segundos, causa real de que parecieran no funcionar
+- "Forzar re-autenticación" eliminado: verificado en vivo que no lograba lo que prometía, por un límite real de HTTP Basic Auth
+- LDAP invertido de allow-list estricto a deny-list, y su filtro de sincronización dejó de estar fijo a Active Directory
+- Sección Usuarios unificada (local + LDAP, buscador, filtro, grupos por usuario)
+- Dashboard: sparklines, tarjeta Sistema con indicadores circulares, curva de tráfico sin artefactos visuales, aciertos de caché, latencia, usuarios con más peticiones denegadas cruzado contra el estado real de la cuenta
+
+### Verificación
+Cada corrección y cada función revisada se probó contra el servidor en marcha — incluyendo, en más de un caso, reproduciendo el problema primero para confirmar la causa antes de tocar código. El detalle línea a línea de qué se probó y qué resultado dio quedó en la conversación de la sesión, no en este documento.
 
 ---
 

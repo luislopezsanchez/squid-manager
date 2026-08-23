@@ -48,7 +48,7 @@ body {
   font-family: Figtree, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   background-color: var(--ground);
   color: var(--ink);
-  font-size: 15px;
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -214,12 +214,12 @@ h1, h2, h3, h4 {
   .stat-icon-ok   { background: var(--ok-soft);   color: var(--ok); }
   .stat-icon-warn { background: var(--warn-soft); color: var(--warn); }
   .stat-icon-danger { background: var(--danger-soft); color: var(--danger); }
-  .stat-label { @apply text-[12.5px] font-semibold text-ink-3; }
+  .stat-label { @apply text-[13.5px] font-semibold text-ink-3; }
   .stat-value {
-    @apply text-[27px] font-extrabold leading-none text-ink;
+    @apply text-[29px] font-extrabold leading-none text-ink;
     letter-spacing: -0.03em;
   }
-  .stat-value small { @apply text-[14px] font-semibold text-ink-3; letter-spacing: 0; }
+  .stat-value small { @apply text-[15px] font-semibold text-ink-3; letter-spacing: 0; }
   .stat-note { @apply text-[12px] font-semibold text-ink-3; }
 
   /* ---------- Avisos ---------- */
