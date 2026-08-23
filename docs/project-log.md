@@ -50,7 +50,7 @@ Levantar los contenedores y lograr que Squid funcione con autenticación básica
    - Backend sin acceso a Docker (montado /var/run/docker.sock)
 5. Verificado funcionamiento completo:
    - API responde en puerto 8000
-   - Login JWT funciona (admin/admin123)
+   - Login JWT funciona
    - CRUD de usuarios del proxy operativo
    - Squid proxy en puerto 3128 con autenticación básica
    - Proxy enruta tráfico correctamente con credenciales válidas
@@ -59,45 +59,67 @@ Levantar los contenedores y lograr que Squid funcione con autenticación básica
 ### Verificación final
 ```bash
 # Con credenciales → funciona
-curl -x http://testuser:test123@localhost:3128 http://httpbin.org/ip
-# → {"origin": "172.18.0.1, 179.24.100.152"}
+curl -x http://usuario:contraseña@localhost:3128 http://httpbin.org/ip
+# → {"origin": "..."}
 
 # Sin credenciales → denegado
 curl -x http://localhost:3128 http://httpbin.org/ip
 # → ERROR: Cache Access Denied
 ```
 
-### Estado de los contenedores
+### Estado de los contenedores (en esta fase)
 | Contenedor | Puerto | Estado |
 |-----------|--------|--------|
 | squidmgr-db | 5432 (interno) | Healthy |
-| squidmgr-backend | 8000 | Running |
+| squidmgr-backend | 8000 (público en esta fase) | Running |
 | squidmgr-proxy | 3128 | Running |
 | squidmgr-frontend | 3000 | Running |
 
-### URLs de acceso
+> Nota de la Fase 4: el puerto del backend ya no se publica al host desde la auditoría de seguridad — se accede solo por la red interna de Docker. Esta tabla refleja el estado en el momento de esta fase, no el actual.
+
+### URLs de acceso (en esta fase)
 - Panel web: http://TU_SERVIDOR:3000
 - API docs: http://TU_SERVIDOR:8000/docs
 - Proxy: http://TU_SERVIDOR:3128
 
-### Credenciales por defecto
-- Admin panel: admin / admin123
-- Usuario proxy de prueba: testuser / test123
+### Credenciales (en esta fase)
+En esta fase el admin y un usuario de prueba se creaban con contraseñas fijas de ejemplo. Desde la Fase 4, no hay contraseñas por defecto: se generan al azar y se exige cambiarlas en el primer acceso — ver [docs/authentication.md](authentication.md).
 
 ---
 
-## Próximos pasos (Fase 3)
+## Fase 3: ACLs, reglas, SSL Bump y LDAP (COMPLETADA)
 
-1. UI: Gestión de ACLs (crear, editar, eliminar ACLs personalizadas)
-2. UI: Gestión de reglas de acceso (http_access con orden drag-and-drop)
-3. Validador de sintaxis de ACLs antes de aplicar
-4. Aplicar cambios en caliente (squid -k reconfigure)
-5. Página de configuración general de Squid (puertos, caché, logging)
+Cubre lo registrado en el `CHANGELOG.md` bajo `0.2.0`, `0.3.0` y `0.5.0`: gestión visual de ACLs y reglas de acceso con reordenamiento, validador de sintaxis, aplicar cambios en caliente, configuración general de Squid, SSL Bump completo con bloqueo por SNI, delay pools con interfaz visual, integración LDAP con allow-list estricto, grupos de usuarios, auditoría y notificaciones. El detalle línea a línea está en el CHANGELOG; esta bitácora no repite lo que ya queda registrado ahí.
+
+---
+
+## Fase 4: Auditoría de seguridad, corrección de datos y rediseño visual (COMPLETADA)
+
+### Objetivo
+Auditar la plataforma completa contra su propio comportamiento en ejecución, corregir lo que no coincidía, y renovar la identidad visual con un logo nuevo.
+
+### Acciones realizadas
+Ver el detalle completo en `CHANGELOG.md` bajo `[0.6.0]`. En resumen:
+- Auditoría de seguridad: roles, rate limiting, CORS, exposición del puerto 8000, revocación de sesión al cambiar contraseña, retirada de contraseñas fijas del código
+- SSL Bump: diagnosticado y corregido el fallo de permisos que impedía generar certificados dinámicos
+- Validación real de la configuración antes de aplicarla (antes se daba por válida sin comprobar nada)
+- Integridad de datos: migraciones con Alembic, referencias entre ACLs/grupos/reglas, backup completo
+- Rendimiento: lectura del access.log desde el final en vez de cargarlo entero
+- Identidad visual: logo del calamar, paleta derivada del logo, iconos de línea propios sustituyendo a los emojis
+- Auditoría de la documentación: los 13 documentos del repositorio se contrastaron contra el código real y se actualizaron (esta misma bitácora incluida)
+
+### Verificación
+Cada corrección se verificó ejecutándola contra el servidor en marcha, no solo revisando el código. El detalle de qué se probó y qué resultado dio está fuera de esta bitácora — quedó en la conversación de la sesión de auditoría, no en un documento del repositorio.
 
 ---
 
 ## Riesgos activos
-1. **passlib + bcrypt 5.x**: Incompatible, fijado a 4.2.1. Monitorear futuras versiones.
-2. **Docker socket montado**: El backend tiene acceso completo a Docker. En producción, restringir permisos.
-3. **CORS abierto a ***: Restringir en producción al dominio del frontend.
-4. **Archivo htpasswd en volumen compartido**: Ambos contenedores (backend y squid) montan squid-config. Sincronización correcta verificada.
+
+| Riesgo | Estado |
+|--------|--------|
+| Docker socket montado en el backend | **Sigue abierto.** Es una decisión de arquitectura: el backend necesita controlar Squid. Contenerlo requeriría un proxy de socket restringido o un agente intermedio — ver `docs/architecture.md`. |
+| SSL Bump descifra todo el HTTPS salvo lo excluido explícitamente | **Mitigado, no eliminado.** Desde la Fase 4 existe `ssl_bump_exclude` para banca, sanidad y apps con certificate pinning, pero por defecto está vacío: hay que rellenarlo a propósito. |
+| ~~passlib + bcrypt 5.x incompatible~~ | **Resuelto en la Fase 4.** passlib se retiró; se usa bcrypt directamente. |
+| ~~CORS abierto a `*`~~ | **Resuelto en la Fase 4.** Lista explícita de orígenes, vacía por defecto. |
+| ~~Puerto 8000 del backend público~~ | **Resuelto en la Fase 4.** Ya no se publica al host. |
+| Archivo htpasswd en volumen compartido | Sigue siendo el mecanismo (backend y squid montan `squid-config`), ahora con permisos `600` en vez de los por defecto. Sincronización correcta verificada de nuevo tras la auditoría. |

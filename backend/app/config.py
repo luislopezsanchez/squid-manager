@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "SquidManager API"
-    APP_VERSION: str = "0.5.0"
+    APP_VERSION: str = "0.6.0"
     DEBUG: bool = False
 
     @property

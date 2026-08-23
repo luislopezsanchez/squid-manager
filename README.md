@@ -45,27 +45,31 @@ El sistema está pensado para ser **escalable y modular**: la base de datos es l
 ## ✨ Características
 
 ### Gestión de proxy
-- 🏷️ **ACLs visuales** — Crea listas de control de acceso por dominio, IP, horario, regex, puerto, método HTTP, etc. (14 tipos soportados)
-- 📋 **Reglas de acceso** — Ordena reglas `http_access` con botones ▲▼ (drag-and-drop)
-- 🐌 **Delay Pools** — Control de ancho de banda por usuario con interfaz visual (sin necesidad de entender el formato `64000/64000 64000/32000`)
-- ⚙️ **Configuración general** — Puerto, caché, logging, realm, hostname visible, todo editable desde la web
+- **ACLs visuales** — Crea listas de control de acceso por dominio, IP, horario, regex, puerto, método HTTP y más (27 tipos soportados)
+- **Reglas de acceso** — Ordena reglas `http_access` con botones de subir/bajar
+- **Grupos de usuarios** — Agrupa usuarios locales o LDAP y aplica políticas de acceso a todo el grupo de una vez
+- **Delay Pools** — Control de ancho de banda por usuario con interfaz visual (sin necesidad de entender el formato `64000/64000 64000/32000`)
+- **Configuración general** — Puerto, caché, logging, realm, hostname visible, todo editable desde la web
 
 ### Autenticación
-- 👥 **Usuarios locales** — Gestión completa de usuarios con autenticación básica (htpasswd)
-- 🔗 **LDAP / Active Directory** — Integración con directorio externo, con test de conexión integrado
-- 🔐 **Panel seguro** — Login con JWT para administradores
+- **Usuarios locales** — Gestión completa de usuarios con autenticación básica (htpasswd), con fecha de caducidad opcional
+- **LDAP / Active Directory** — Integración con directorio externo, con test de conexión integrado y sincronización paginada
+- **Panel seguro** — Login con JWT, roles (superadmin / admin / solo lectura) y cambio de contraseña obligatorio en el primer acceso
 
 ### Seguridad
-- 🔐 **SSL Bump** — Intercepta y filtra tráfico HTTPS (no solo HTTP)
-- 🚫 **Bloqueo HTTPS por SNI** — Bloquea dominios antes de desencriptar (ej: Facebook, YouTube por HTTPS)
-- 📝 **Auditoría completa** — Log de todos los cambios: quién, qué, cuándo
-- 🔐 **Certificado CA** — Generación automática + descarga desde el panel
+- **SSL Bump** — Intercepta y filtra tráfico HTTPS (no solo HTTP)
+- **Bloqueo HTTPS por SNI** — Bloquea dominios antes de desencriptar (ej: Facebook, YouTube por HTTPS)
+- **Exclusión de dominios sensibles** — Banca, sanidad o apps con *certificate pinning* pueden excluirse del descifrado
+- **Auditoría completa** — Log de todos los cambios: quién, qué, cuándo
+- **Certificado CA** — Generación automática + descarga desde el panel, con instaladores para Windows, macOS e iOS
 
 ### Operación
-- ⚡ **Aplicar cambios en caliente** — `squid -k reconfigure` desde un botón
-- 🔄 **Cambio de puerto automático** — Detecta cambios de puerto y recrea el contenedor
-- 📊 **Dashboard** — Estado del proxy en tiempo real
-- 🐳 **Todo en Docker** — Un solo comando levanta todo
+- **Aplicar cambios en caliente** — Valida la configuración contra Squid antes de escribirla; recarga o reinicia según haga falta
+- **Cambio de puerto automático** — Detecta cambios de puerto y recrea el contenedor sin perder la configuración si algo falla
+- **Dashboard** — Tráfico en tiempo real, top usuarios y dominios, estado del sistema
+- **Backup y migración** — Exporta toda la configuración a JSON (incluidos grupos y usuarios LDAP) o importa un `squid.conf` tradicional
+- **Notificaciones** — Avisos por email o Telegram cuando se aplican cambios o se detecta actividad sospechosa
+- **Todo en Docker** — Un solo comando levanta todo
 
 ---
 
@@ -91,7 +95,9 @@ Flujo de configuración:
   Admin → Panel web → API REST → PostgreSQL → Jinja2 → squid.conf → Squid
 ```
 
-**Principio clave:** La base de datos es la fuente de verdad. El `squid.conf` se genera dinámicamente con Jinja2 desde los datos en PostgreSQL. Al pulsar "Aplicar Cambios", el backend genera el archivo, lo escribe al volumen compartido, y recarga Squid.
+**Principio clave:** La base de datos es la fuente de verdad. El `squid.conf` se genera dinámicamente con Jinja2 desde los datos en PostgreSQL. Al pulsar "Aplicar Cambios", el backend genera el archivo, lo **valida ejecutando `squid -k parse` dentro del contenedor de Squid**, y solo si es válido lo escribe y recarga.
+
+> El puerto 8000 del backend es interno: el frontend habla con la API por la red Docker, no se publica al host.
 
 Para más detalles, ver [docs/architecture.md](docs/architecture.md).
 
@@ -126,7 +132,8 @@ cd squid-manager
 # 2. Copiar configuración
 cp .env.example .env
 
-# 3. Editar .env con tus valores (opcional, los defaults funcionan)
+# 3. Editar .env: DB_PASS y SECRET_KEY son OBLIGATORIOS
+#    Genera valores aleatorios con: openssl rand -hex 32
 nano .env
 
 # 4. Levantar todo el sistema
@@ -143,16 +150,18 @@ docker compose logs -f squid
 | Servicio | URL |
 |----------|-----|
 | **Panel web** | http://localhost:3000 |
-| **API docs (Swagger)** | http://localhost:8000/docs |
 | **Proxy Squid** | localhost:3128 |
 
-### Credenciales por defecto:
-| Tipo | Usuario | Contraseña |
-|------|---------|-----------|
-| **Admin del panel** | `admin` | `admin123` |
-| **Usuario proxy de prueba** | `testuser` | `test123` |
+> La API del backend (puerto 8000) no se publica al host: el panel habla con ella por la red interna de Docker. La documentación interactiva (`/docs`) solo está disponible si arrancas con `DEBUG=true` en el `.env`.
 
-> ⚠️ **Importante:** Cambia las credenciales por defecto en producción. Ver [Configuración](#-configuración).
+### Primer acceso:
+No hay contraseña por defecto. El usuario `admin` se crea con una **contraseña aleatoria** que aparece **una sola vez** en el log del backend:
+
+```bash
+docker compose logs backend | grep -A3 "Administrador inicial"
+```
+
+Se te pedirá cambiarla antes de poder usar el panel. Si prefieres fijarla tú mismo, define `ADMIN_INITIAL_PASSWORD` en el `.env` antes del primer arranque.
 
 Para una guía detallada de instalación, ver [docs/installation.md](docs/installation.md).
 
@@ -166,13 +175,21 @@ Todas las configuraciones se manejan a través del archivo `.env`:
 # PostgreSQL
 DB_NAME=squidmanager
 DB_USER=squid
-DB_PASS=squidpass123
+DB_PASS=                    # OBLIGATORIO: openssl rand -hex 16
 
 # Seguridad del panel
-SECRET_KEY=change-this-to-a-random-64-char-string
+SECRET_KEY=                 # OBLIGATORIO: openssl rand -hex 32
 TOKEN_EXPIRE=480
+ADMIN_INITIAL_PASSWORD=     # vacío = se genera al azar, visible una vez en el log
+BCRYPT_COST=12
 
-# Puerto del proxy
+# Red y CORS
+CORS_ORIGINS=                     # vacío si el panel se sirve desde su propia URL
+TRUSTED_PROXY_HOSTS=frontend      # hosts de los que se acepta X-Forwarded-For
+DEBUG=false                       # true expone /docs sin autenticación
+
+# Puertos
+WEB_PORT=3000
 SQUID_PORT=3128
 PROXY_PORT=3128
 ```
@@ -186,18 +203,19 @@ Para ver todas las opciones, ver [docs/configuration.md](docs/configuration.md).
 Después de la instalación:
 
 1. **Abre el panel** → http://localhost:3000
-2. **Inicia sesión** → admin / admin123
-3. **Crea un usuario del proxy** → Página "Usuarios" → "+ Nuevo Usuario"
-4. **Configura tu navegador** con el proxy:
+2. **Inicia sesión** con `admin` y la contraseña generada (ver arriba)
+3. **Cambia la contraseña** cuando el panel te lo pida
+4. **Crea un usuario del proxy** → Página "Usuarios" → "Nuevo usuario"
+5. **Configura tu navegador** con el proxy:
    - IP: `localhost` (o la IP del servidor)
    - Puerto: `3128`
    - Usuario: el que creaste
    - Contraseña: la que configuraste
-5. **Navega** → Tu tráfico pasa por Squid
-6. **Crea una ACL** → Página "ACLs" → "+ Nueva ACL" (ej: bloquear `.facebook.com`)
-7. **Crea una regla** → Página "Reglas de Acceso" → "+ Nueva Regla" → `deny` + tu ACL
-8. **Aplica cambios** → Botón "⚡ Aplicar Cambios" en el sidebar
-9. **Prueba** → Intenta navegar a Facebook → debería bloquearse
+6. **Navega** → Tu tráfico pasa por Squid
+7. **Crea una ACL** → Página "ACLs" → "Nueva ACL" (ej: bloquear `.facebook.com`)
+8. **Crea una regla** → Página "Reglas de acceso" → "Nueva regla" → `deny` + tu ACL
+9. **Aplica cambios** → Botón "Aplicar cambios" en el sidebar
+10. **Prueba** → Intenta navegar a Facebook → debería bloquearse
 
 ---
 
@@ -211,9 +229,11 @@ SquidManager incluye **SSL Bump**, que permite interceptar y filtrar tráfico HT
 3. Squid desencripta el tráfico, aplica las reglas (ACLs, delay pools), y lo vuelve a encriptar
 4. El navegador del cliente debe confiar en la CA de Squid
 
+Los dominios que no deben interceptarse (banca, sanidad, apps con *certificate pinning*) se pueden excluir del descifrado desde **Configuración → Seguridad → dominios excluidos**.
+
 ### Para habilitarlo en los clientes:
-1. Abre el panel → **"🔐 Certificado SSL"**
-2. Descarga el archivo `squidmanager-ca.crt`
+1. Abre el panel → **"Certificado"**
+2. Descarga el archivo `squidmanager-ca.crt` (o el instalador para tu sistema)
 3. Instálalo en el almacén de **"Entidades de certificación raíz de confianza"** del sistema/navegador
 4. Reinicia el navegador
 
@@ -223,25 +243,30 @@ Para instrucciones detalladas por sistema operativo, ver [docs/ssl-bump.md](docs
 
 ## 🖥️ Panel web
 
-El panel tiene 9 secciones:
+El panel se organiza en tres grupos:
 
-| Sección | Icono | Función |
-|---------|-------|---------|
-| Dashboard | 📊 | Estado del proxy, accesos rápidos |
-| Usuarios | 👥 | CRUD de usuarios del proxy |
-| ACLs | 🏷️ | CRUD de listas de control de acceso |
-| Reglas de Acceso | 📋 | CRUD de reglas http_access con reorder |
-| Ancho de Banda | 🐌 | CRUD de delay pools (limitación de velocidad) |
-| LDAP | 🔗 | Configuración LDAP/Active Directory |
-| Configuración | ⚙️ | Parámetros generales de Squid |
-| Certificado SSL | 🔐 | Descarga CA + instrucciones de instalación |
-| Auditoría | 📝 | Log de todos los cambios realizados |
+| Grupo | Sección | Función |
+|-------|---------|---------|
+| **Vigilancia** | Dashboard | Estado del proxy, tráfico en tiempo real, top usuarios y dominios |
+| | Registros | Visor del access.log, con filtros y alertas de fuerza bruta |
+| | Auditoría | Log de todos los cambios realizados |
+| **Políticas** | Usuarios | CRUD de usuarios del proxy |
+| | Grupos | Agrupa usuarios y aplica políticas al grupo completo |
+| | ACLs | CRUD de listas de control de acceso |
+| | Reglas de acceso | CRUD de reglas `http_access` con reordenamiento |
+| | Ancho de banda | CRUD de delay pools (limitación de velocidad) |
+| **Sistema** | LDAP | Configuración LDAP/Active Directory |
+| | Certificado | Descarga CA + instaladores por sistema operativo |
+| | Configuración | Parámetros generales de Squid |
+| | Notificaciones | Avisos por email y Telegram |
+| | Backup y migración | Exportar/restaurar configuración, importar squid.conf |
+| | Administradores | Gestión de cuentas del panel (solo superadmin) |
 
 ---
 
 ## 🔌 API REST
 
-La API está documentada con Swagger/OpenAPI en http://localhost:8000/docs
+La documentación interactiva (Swagger/OpenAPI) solo está disponible con `DEBUG=true`, en `http://localhost:8000/docs` desde la red interna de Docker.
 
 ### Endpoints principales:
 
@@ -250,20 +275,24 @@ La API está documentada con Swagger/OpenAPI en http://localhost:8000/docs
 | POST | `/api/auth/login` | Login admin (JWT) |
 | GET | `/api/proxy-users/` | Listar usuarios del proxy |
 | POST | `/api/proxy-users/` | Crear usuario |
+| GET | `/api/groups/` | Listar grupos de usuarios |
 | GET | `/api/acls/` | Listar ACLs |
 | POST | `/api/acls/` | Crear ACL |
 | GET | `/api/access-rules/` | Listar reglas |
 | PUT | `/api/access-rules/reorder` | Reordenar reglas |
 | GET | `/api/delay-pools/` | Listar delay pools |
 | GET | `/api/squid/settings` | Ver configuración |
-| POST | `/api/squid/apply` | Aplicar cambios a Squid |
+| POST | `/api/squid/apply` | Validar y aplicar cambios a Squid |
 | GET | `/api/squid/status` | Estado de Squid |
 | GET | `/api/squid/ca-cert` | Descargar certificado CA |
 | GET | `/api/ldap/config` | Ver config LDAP |
 | POST | `/api/ldap/test` | Probar conexión LDAP |
+| GET | `/api/backup/export` | Exportar toda la configuración a JSON |
+| GET | `/api/metrics/dashboard` | Métricas del dashboard |
+| GET | `/api/logs/access` | Consultar el access.log |
 | GET | `/api/audit/` | Listar log de auditoría |
 
-Para documentación completa, ver [docs/api-reference.md](docs/api-reference.md).
+Son 14 routers con 72 endpoints en total. Para la documentación completa, ver [docs/api-reference.md](docs/api-reference.md).
 
 ---
 
@@ -281,17 +310,21 @@ squid-manager/
 ├── backend/                    # API REST (Python + FastAPI)
 │   ├── Dockerfile
 │   ├── requirements.txt
+│   ├── alembic.ini
+│   ├── migrations/             # Migraciones del esquema (Alembic)
 │   └── app/
-│       ├── main.py             # Entry point de FastAPI
+│       ├── main.py             # Entry point de FastAPI + migraciones al arrancar
 │       ├── config.py           # Configuración (env vars)
 │       ├── database.py         # Conexión SQLAlchemy
-│       ├── models/             # Modelos de datos (8 modelos)
+│       ├── models/             # Modelos de datos (11 modelos)
 │       ├── schemas/            # Schemas Pydantic (validación)
-│       ├── routes/             # Endpoints REST (8 routers)
+│       ├── routes/             # Endpoints REST (14 routers)
 │       ├── services/           # Lógica de negocio
-│       │   ├── auth_service.py     # JWT + bcrypt
+│       │   ├── auth_service.py     # JWT + bcrypt, roles
 │       │   ├── config_generator.py # Jinja2 → squid.conf
-│       │   └── squid_service.py    # Control de Squid via Docker SDK
+│       │   ├── squid_service.py    # Control de Squid via Docker SDK, validación real
+│       │   ├── squid_names.py      # Validación anti-inyección de nombres y valores
+│       │   └── log_service.py      # Lectura eficiente del access.log
 │       └── templates/
 │           └── squid.conf.j2   # Template Jinja2 del squid.conf
 │
@@ -301,24 +334,29 @@ squid-manager/
 │   ├── nginx.conf              # Proxy reverso al backend
 │   └── src/
 │       ├── main.tsx            # Entry point + rutas
-│       ├── pages/              # 9 páginas
-│       ├── components/         # Layout, Toast, etc.
+│       ├── pages/              # 16 páginas
+│       ├── components/         # Layout, Icons, AuthShell, Toast
 │       └── api/client.ts       # Cliente HTTP
 │
 ├── squid/                      # Contenedor Squid (compilado desde fuente)
 │   ├── Dockerfile              # Compila Squid 6.12 con OpenSSL + ssl-crtd
-│   └── entrypoint.sh           # CA, ssl_crtd, squid.conf inicial, arranque
+│   ├── entrypoint.sh           # CA, ssl_crtd, squid.conf inicial, arranque
+│   ├── auth_helper.py          # Helper de autenticación local + LDAP
+│   └── squid-logrotate         # Rotación diaria de los logs de Squid
 │
 ├── docs/                       # Documentación
 │   ├── installation.md         # Guía detallada de instalación
 │   ├── configuration.md        # Todas las opciones de configuración
 │   ├── architecture.md         # Arquitectura técnica
+│   ├── authentication.md       # Cuentas, sesiones y roles
 │   ├── ssl-bump.md             # Guía de SSL Bump + certificados
+│   ├── backup-restore.md       # Backup, restore y migración
+│   ├── production.md           # Guía de despliegue en producción
 │   ├── api-reference.md        # Documentación de la API
 │   └── project-log.md          # Bitácora del proyecto
 │
 └── examples/                   # Ejemplos y configs
-    ├── docker-compose.override.yml  # Override para producción
+    ├── docker-compose.override.yml  # Ejemplo de override para producción (HTTPS, backups)
     └── acl-examples.md              # Ejemplos de ACLs
 ```
 
@@ -331,7 +369,10 @@ squid-manager/
 | [docs/installation.md](docs/installation.md) | Guía paso a paso de instalación |
 | [docs/configuration.md](docs/configuration.md) | Todas las opciones de configuración |
 | [docs/architecture.md](docs/architecture.md) | Arquitectura técnica detallada |
+| [docs/authentication.md](docs/authentication.md) | Cuentas, sesiones, roles y grupos |
 | [docs/ssl-bump.md](docs/ssl-bump.md) | Guía de SSL Bump + certificados CA |
+| [docs/backup-restore.md](docs/backup-restore.md) | Backup, restore y migración |
+| [docs/production.md](docs/production.md) | Despliegue en producción |
 | [docs/api-reference.md](docs/api-reference.md) | Documentación completa de la API |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Cómo contribuir al proyecto |
 
@@ -349,7 +390,7 @@ La primera vez, Squid se compila desde el código fuente (~10-15 minutos). Esper
 Necesitas SSL Bump. Ver [docs/ssl-bump.md](docs/ssl-bump.md).
 
 ### El navegador muestra advertencia de certificado
-Instala el certificado CA desde el panel → "🔐 Certificado SSL".
+Instala el certificado CA desde el panel → "Certificado".
 
 ### No puedo acceder al panel
 ```bash
@@ -357,10 +398,16 @@ docker compose ps    # Verificar que todos los contenedores están UP
 docker compose logs backend    # Ver errores del backend
 ```
 
+### No recuerdo la contraseña inicial del admin
+Cámbiala desde una sesión de base de datos, o revisa si sigue en el log:
+```bash
+docker compose logs backend | grep -A3 "Administrador inicial"
+```
+
 ### Cambiar el puerto del proxy
-1. Panel → ⚙️ Configuración → `http_port` → cambiar valor → Guardar
+1. Panel → Configuración → `http_port` → cambiar valor → Guardar
 2. Editar `.env`: `SQUID_PORT=nuevo_puerto` y `PROXY_PORT=nuevo_puerto`
-3. Panel → ⚡ Aplicar Cambios (el sistema recrea el contenedor automáticamente)
+3. Panel → Aplicar cambios (el sistema recrea el contenedor automáticamente)
 
 ---
 

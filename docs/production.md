@@ -8,15 +8,22 @@ Esta guía cubre los aspectos necesarios para desplegar SquidManager en un entor
 
 ### Con el script de instalación
 
+Descarga y revisa el script antes de ejecutarlo — no lo canalices directo a un intérprete con privilegios de root:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install.sh | sudo bash
+wget https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install.sh
+less install.sh          # revisa qué va a hacer en tu servidor
+chmod +x install.sh
+sudo ./install.sh
 ```
 
 El script:
 1. Instala Docker si no está
 2. Clona el repositorio a `/opt/squid-manager`
 3. Genera `.env` con `SECRET_KEY` y `DB_PASS` aleatorias
-4. Despliega los contenedores
+4. Si ya existe un `.env` con la clave de firma de ejemplo, la regenera
+5. Despliega los contenedores
+6. Muestra dónde leer la contraseña inicial del admin (no la imprime en claro)
 
 ### Manualmente
 
@@ -24,7 +31,7 @@ El script:
 git clone https://github.com/luislopezsanchez/squid-manager.git
 cd squid-manager
 cp .env.example .env
-nano .env  # Editar valores
+nano .env  # DB_PASS y SECRET_KEY son obligatorios
 docker compose up -d
 ```
 
@@ -47,20 +54,9 @@ make status     # Estado + uso de recursos
 
 ## Seguridad en producción
 
-### 1. Cambiar credenciales por defecto
+### 1. Contraseña del admin
 
-```bash
-# Cambiar contraseña del admin (desde el panel o manualmente)
-docker exec squidmgr-backend python3 -c "
-from app.database import SessionLocal
-from app.models.admin import Admin
-from app.services.auth_service import get_password_hash
-db = SessionLocal()
-admin = db.query(Admin).filter(Admin.username == 'admin').first()
-admin.password_hash = get_password_hash('NUEVA_CONTRASEÑA')
-db.commit()
-"
-```
+No hay contraseña por defecto: se genera al azar en el primer arranque y se pide cambiarla antes de poder usar el panel. Para cambiarla después, usa siempre el panel (icono de llave en la barra lateral) — así se invalidan las sesiones abiertas en otros navegadores. Evita escribir `password_hash` directamente en la base de datos: el cambio de contraseña también registra cuándo ocurrió, y saltarse ese registro deja tokens antiguos utilizables.
 
 ### 2. SECRET_KEY segura
 
@@ -69,13 +65,16 @@ openssl rand -hex 32
 # Poner el resultado en .env: SECRET_KEY=...
 ```
 
+Si arrancas con `DEBUG=false` (el valor por defecto) y la `SECRET_KEY` sigue siendo la de ejemplo, el backend genera una temporal en cada arranque y avisa en el log — las sesiones se cerrarán en cada reinicio hasta que definas una propia.
+
 ### 3. Rate limiting
 
-El backend incluye rate limiting por IP:
-- **Login:** máximo 10 intentos por minuto por IP (anti fuerza bruta)
-- **API general:** máximo 60 peticiones por minuto por IP
+El backend incluye rate limiting por IP y por cuenta:
+- **Login por IP:** máximo 10 intentos por minuto
+- **Login por cuenta:** máximo 5 intentos por minuto, independiente de la IP de origen — evita que rotar la IP sirva para esquivar el límite
+- **API general:** máximo 120 peticiones por minuto por IP
 
-Configurable en `backend/app/middleware/__init__.py`.
+Solo se confía en la cabecera `X-Forwarded-For` si la petición llega desde un host listado en `TRUSTED_PROXY_HOSTS` (por defecto, el propio frontend). Configurable en `backend/app/middleware/__init__.py`.
 
 ### 4. HTTPS para el panel
 
@@ -101,14 +100,18 @@ server {
 
 **Opción B — No exponer el panel a internet:** usar un túnel SSH o VPN para acceder solo desde la red interna.
 
-### 5. Restringir el puerto de la API
+### 5. Puerto de la API
 
-En producción, considera no exponer el puerto 8000 al público. Solo el frontend necesita acceder a la API (dentro de la red Docker). Edita `docker-compose.yml` y quita:
+El puerto 8000 del backend **ya no se publica al host** por defecto: el frontend le habla por la red interna de Docker (`squidnet`), así que no hace falta ninguna acción para restringirlo. Si en algún momento lo publicas para depurar, quítalo de `docker-compose.yml` antes de volver a producción:
 
 ```yaml
-ports:
-  - "8000:8000"
+expose:
+  - "8000"    # correcto: solo visible dentro de la red Docker
+# ports:
+#   - "8000:8000"   # evitar: publica la API al exterior
 ```
+
+La documentación interactiva (`/docs`, `/openapi.json`) solo se sirve si `DEBUG=true`; con `DEBUG=false` devuelven 404.
 
 ### 6. Docker socket
 
@@ -137,7 +140,7 @@ Crea `backups/squidmanager_YYYYMMDD_HHMMSS.sql`.
 
 ### Backup de la configuración (JSON)
 
-Desde el panel: **💾 Backup/Migrar** → **📥 Descargar Backup (JSON)**
+Desde el panel: **Backup y migración** → **Descargar backup (JSON)**. Incluye ACLs, reglas, delay pools, usuarios, grupos y la lista de usuarios LDAP autorizados. Ver [docs/backup-restore.md](backup-restore.md) para el detalle completo.
 
 ---
 
@@ -147,8 +150,9 @@ Desde el panel: **💾 Backup/Migrar** → **📥 Descargar Backup (JSON)**
 
 Todos los contenedores tienen healthchecks:
 - **db:** `pg_isready`
-- **backend:** `GET /health`
-- **frontend:** `GET /`
+- **backend:** `GET /health` (sobre `127.0.0.1`, dentro del contenedor)
+- **frontend:** `GET /` (sobre `127.0.0.1`, no `localhost` — en Alpine resuelve primero a IPv6 y el healthcheck fallaría)
+- **squid:** `squid -k check`
 
 Ver estado:
 ```bash
@@ -161,7 +165,7 @@ El panel tiene un dashboard con:
 - Tráfico de red en tiempo real
 - CPU, RAM, disco
 - Top usuarios y sitios
-- Logs en vivo
+- Conexiones recientes
 
 ---
 
@@ -172,6 +176,12 @@ cd /opt/squid-manager
 git pull origin main
 docker compose build
 docker compose up -d
+```
+
+El esquema se gestiona con Alembic: las migraciones pendientes se aplican solas al arrancar el backend. Revisa el log si actualizas una instalación muy antigua:
+
+```bash
+docker compose logs backend | grep -i alembic
 ```
 
 ---
@@ -189,6 +199,8 @@ make logs-squid
 docker compose logs -f backend
 ```
 
+Los logs de Squid (`access.log`, `cache.log`) rotan a diario dentro del contenedor con `logrotate`, con 7 días de retención.
+
 ---
 
 ## Tests automatizados
@@ -201,6 +213,5 @@ docker exec squidmgr-backend pytest -v
 ```
 
 Los tests cubren:
-- Parser del access.log de Squid
-- Generador de squid.conf (Jinja2)
-- Lógica de filtrado de logs
+- Parser del access.log de Squid, incluida la lectura del fichero desde el final
+- Generador de squid.conf (Jinja2): orden de reglas, reglas SNI paralelas, exclusión de dominios del descifrado

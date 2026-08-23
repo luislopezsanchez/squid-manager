@@ -28,7 +28,7 @@ from app.utils import utcnow
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-BACKUP_VERSION = "0.5.0"
+BACKUP_VERSION = "0.6.0"
 # Un backup de esta herramienta son unos pocos cientos de KB. El límite evita
 # que una subida grande se lea entera en memoria.
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024

@@ -69,15 +69,14 @@ Edita el archivo `.env` con tus valores:
 nano .env
 ```
 
-**Valores importantes a cambiar para producción:**
+**`DB_PASS` y `SECRET_KEY` son obligatorios** — el `docker-compose.yml` rechaza arrancar sin ellos. Genera ambos con:
 
-```env
-# Cambiar la contraseña de la base de datos
-DB_PASS=tu_contraseña_segura_aqui
-
-# Generar una clave secreta aleatoria
-SECRET_KEY=$(openssl rand -hex 32)
+```bash
+openssl rand -hex 16   # para DB_PASS
+openssl rand -hex 32   # para SECRET_KEY
 ```
+
+Si dejas `ADMIN_INITIAL_PASSWORD` vacío (el valor por defecto), el backend genera una contraseña aleatoria para la cuenta `admin` la primera vez que arranca; si prefieres elegirla tú, ponla ahí antes del primer `docker compose up`.
 
 ### Paso 3: Levantar los contenedores
 
@@ -87,12 +86,14 @@ docker compose up -d
 
 Esto creará 4 contenedores:
 
-| Contenedor | Servicio | Puerto | Descripción |
-|-----------|----------|--------|-------------|
-| squidmgr-db | PostgreSQL 16 | 5432 (interno) | Base de datos |
-| squidmgr-backend | FastAPI | 8000 | API REST |
+| Contenedor | Servicio | Puerto publicado | Descripción |
+|-----------|----------|-------------------|-------------|
+| squidmgr-db | PostgreSQL 16 | ninguno (interno) | Base de datos |
+| squidmgr-backend | FastAPI | ninguno (interno) | API REST |
 | squidmgr-proxy | Squid 6.12 | 3128 | Proxy con SSL Bump |
 | squidmgr-frontend | React + Nginx | 3000 | Panel web |
+
+> El backend ya no publica el puerto 8000 al host: el frontend le habla por la red interna de Docker. Si necesitas acceder a la API directamente (por ejemplo para depurar), usa `docker exec` o publica el puerto tú mismo en un override de desarrollo.
 
 ### Paso 4: Esperar la compilación de Squid
 
@@ -118,8 +119,9 @@ Presiona `Ctrl+C` para salir de los logs (el contenedor sigue corriendo).
 # Verificar que los 4 contenedores están UP
 docker compose ps
 
-# Probar la API
-curl http://localhost:8000/health
+# Probar el backend desde dentro de su propio contenedor
+# (el puerto no está publicado al host)
+docker exec squidmgr-backend python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').read())"
 # Debe responder: {"status":"ok"}
 
 # Probar el panel web
@@ -130,10 +132,14 @@ curl -o /dev/null -w "%{http_code}" http://localhost:3000/
 ### Paso 6: Acceder al panel
 
 1. Abre tu navegador: **http://IP_DEL_SERVIDOR:3000**
-2. Inicia sesión:
-   - Usuario: `admin`
-   - Contraseña: `admin123`
-3. ¡Ya estás dentro!
+2. Consulta la contraseña generada para `admin`:
+   ```bash
+   docker compose logs backend | grep -A3 "Administrador inicial"
+   ```
+   (Si definiste `ADMIN_INITIAL_PASSWORD` en el `.env`, usa esa.)
+3. Inicia sesión con `admin` y esa contraseña
+4. El panel te pedirá **cambiarla** antes de dejarte entrar — es obligatorio en el primer acceso
+5. ¡Ya estás dentro!
 
 ---
 
@@ -141,29 +147,17 @@ curl -o /dev/null -w "%{http_code}" http://localhost:3000/
 
 ### Cambiar la contraseña del admin
 
-Actualmente no hay una página para esto en el panel. Para cambiarla manualmente:
+Hazlo **siempre desde el panel**: inicia sesión → icono de llave en la barra lateral → "Cambiar contraseña". Cambiar la contraseña así invalida cualquier sesión abierta en otros navegadores.
 
-```bash
-# Acceder al contenedor backend
-docker exec -it squidmgr-backend python3 -c "
-from app.database import SessionLocal
-from app.models.admin import Admin
-from app.services.auth_service import get_password_hash
-db = SessionLocal()
-admin = db.query(Admin).filter(Admin.username == 'admin').first()
-admin.password_hash = get_password_hash('NUEVA_CONTRASEÑA')
-db.commit()
-print('Contraseña cambiada')
-"
-```
+> No la cambies escribiendo directamente en la base de datos ni con un script que solo actualice `password_hash`: el sistema también registra cuándo se cambió la contraseña para poder cerrar sesiones antiguas, y un cambio manual que se salte ese paso deja huérfanas las protecciones de sesión.
 
 ### Crear un usuario del proxy
 
 Desde el panel:
-1. Ve a **"👥 Usuarios"**
-2. Click en **"+ Nuevo Usuario"**
-3. Introduce usuario y contraseña
-4. Click en **"Crear Usuario"**
+1. Ve a **"Usuarios"**
+2. Click en **"Nuevo usuario"**
+3. Introduce usuario y contraseña (mínimo 8 caracteres)
+4. Click en **"Crear usuario"**
 
 ### Configurar el proxy en los clientes
 
@@ -203,4 +197,10 @@ docker rmi squid-manager-backend squid-manager-frontend squid-manager-squid
 git pull origin main
 docker compose build
 docker compose up -d
+```
+
+El esquema de la base de datos se gestiona con Alembic: las migraciones pendientes se aplican automáticamente al arrancar el backend. Si actualizas una instalación muy antigua (anterior a la adopción de Alembic), revisa el log del backend tras el `up -d`:
+
+```bash
+docker compose logs backend | grep -i alembic
 ```

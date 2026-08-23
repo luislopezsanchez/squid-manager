@@ -243,10 +243,18 @@ Regla: `deny` → `navegador_bloqueado`
 ### Bloquear todo excepto sitios permitidos (lista blanca)
 
 1. Crear ACL: `sitios_permitidos` (dstdomain, `.empresa.com .google.com .wikipedia.org`)
-2. Crear regla: `allow` → `sitios_permitidos authenticated` (orden 0)
-3. La regla por defecto `deny all` bloquea todo lo demás
+2. Crear regla: `allow` → `sitios_permitidos` (orden 0)
+3. Crear una segunda regla: `deny` → `all` (orden 1)
 
-> ⚠️ Con lista blanca, elimina la regla por defecto `allow authenticated` del template, o pon tu regla `allow sitios_permitidos` antes.
+> ⚠️ La plantilla siempre añade, después de tus reglas, un `allow authenticated` y un `deny all` fijos —no son editables desde el panel—, para que cualquier usuario autenticado navegue salvo que una regla anterior lo haya denegado. Para una lista blanca real, tu propia regla `deny all` debe ir justo después de la de `allow`, con un orden menor que el resto de tus reglas: así corta el tráfico antes de llegar al `allow authenticated` automático del final.
+
+### Restringir un grupo a un conjunto de dominios
+
+1. Panel → Grupos → crear el grupo `comercial` y añadir sus miembros (usuarios locales o LDAP)
+2. Crear ACL: `dominios_comercial` (dstdomain, `.crm.empresa.com .correo.empresa.com`)
+3. Crear regla: `allow` → `comercial dominios_comercial` (orden 0)
+4. Crear regla: `deny` → `comercial` (orden 1) — deniega el resto del tráfico de ese grupo a cualquier otro sitio
+5. El resto de usuarios autenticados, que no pertenecen al grupo, siguen navegando con normalidad por el `allow authenticated` automático del final
 
 ---
 

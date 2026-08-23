@@ -5,6 +5,51 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.6.0] - 2026-08-23
+
+Auditoría de seguridad completa y rediseño visual. 93 ficheros modificados en 6 commits.
+
+### Seguridad
+- **Control de roles real**: el rol `viewer` no restringía ninguna operación de escritura — solo dos endpoints de backup lo comprobaban. Ahora todas las rutas que modifican algo requieren rol de escritura, y la gestión de administradores requiere superadmin.
+- **Rate limiting robusto**: el límite de intentos de login se esquivaba rotando la cabecera `X-Forwarded-For`. Ahora esa cabecera solo se acepta desde un proxy de confianza, y hay un segundo límite por cuenta independiente de la IP de origen. El middleware devolvía 500 en vez de 429 al superar el límite; corregido.
+- **CORS restringido**: de `allow_origins=["*"]` con credenciales a una lista explícita, vacía por defecto.
+- **Puerto 8000 ya no se publica**: el frontend habla con el backend por la red interna de Docker. La documentación interactiva solo se expone con `DEBUG=true`.
+- **Revocación de sesión al cambiar contraseña**: los tokens JWT emitidos antes de un cambio de contraseña dejan de aceptarse, aunque no hayan expirado.
+- **Sin contraseña fija en el código**: el administrador inicial se genera con una contraseña aleatoria, visible una sola vez en el log, y se exige cambiarla en el primer acceso. Las cuentas nuevas creadas por un superadmin también.
+- **passlib retirado** (sin mantenimiento desde 2020) en favor de bcrypt directo; el coste de los hashes del proxy sube de 5 a 12 (configurable).
+- El instalador deja de recomendar `curl | bash` y de imprimir credenciales en la salida.
+
+### Squid y generación de configuración
+- **SSL Bump operativo**: la base de certificados dinámicos vivía en `/tmp`, propiedad de `root`, y el proceso de Squid (usuario `proxy`) no podía escribir su índice — 595 errores y el generador de certificados muerto 41 veces. Ahora vive en el volumen persistente `squid-crtd`, con el propietario correcto.
+- **Validación real antes de aplicar**: `squid -k parse` se ejecutaba en el contenedor del backend, donde no existe el binario, así que cualquier configuración se daba por válida. Ahora se valida dentro del contenedor de Squid y solo se escribe si es correcta.
+- **Bloqueo HTTPS por SNI corregido**: no se generaba nada cuando una regla combinaba más de una condición.
+- **Orden de las reglas respetado**: las reglas de denegación por grupo se refundían al final del fichero generado, independientemente del orden mostrado en el panel.
+- Nueva exclusión de dominios del descifrado de SSL Bump (`ssl_bump_exclude`), para banca, sanidad o apps con certificate pinning.
+- Validación de nombres, tipos y valores de ACLs/grupos contra inyección de directivas.
+- Páginas de error en español, rotación diaria de logs, `store.log` desactivado por defecto.
+- El cambio de puerto ya no borra el contenedor antes de crear el nuevo: lo renombra y lo restaura si la creación falla.
+
+### Integridad de datos
+- **Migraciones con Alembic** en lugar de `create_all`, que nunca alteraba tablas existentes.
+- Borrar o renombrar una ACL o un grupo en uso se bloquea, indicando qué regla lo referencia.
+- Clave foránea con borrado en cascada para los miembros de un grupo.
+- El backup ahora exporta e importa grupos y usuarios LDAP; antes se perdían al restaurar.
+- La caducidad de los usuarios del proxy (`expires_at`) se aplica de verdad al generar el fichero de contraseñas.
+- Deshabilitar un usuario purga la caché de credenciales de Squid de inmediato, en vez de esperar hasta dos horas.
+- El importador de squid.conf reconoce los parámetros de `auth_param` y ya no descarta ACLs declaradas en varias líneas.
+- Auditoría ampliada a la gestión de administradores y al reordenado de reglas.
+
+### Rendimiento
+- El access.log se lee desde el final en bloques, con un tope de líneas examinadas, en vez de cargarse entero en memoria en cada consulta del visor y del dashboard.
+
+### Interfaz
+- Tema visual nuevo con la identidad del logo: paleta derivada del calamar, tipografía Figtree + JetBrains Mono, 46 iconos de línea propios que sustituyen a los emojis del menú.
+- Menú agrupado en Vigilancia, Políticas y Sistema.
+- Pantalla de cambio de contraseña, obligatoria en el primer acceso.
+- Aviso visible cuando la cuenta conectada es de solo lectura.
+
+---
+
 ## [0.5.0] - 2026-08-22
 
 ### Añadido

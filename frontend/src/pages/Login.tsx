@@ -37,7 +37,7 @@ export default function Login() {
     <AuthShell
       titulo="SquidManager"
       subtitulo="Panel de gestión del proxy"
-      pie="SquidManager v0.5"
+      pie="SquidManager v0.6"
     >
       <form onSubmit={handleSubmit}>
         <div className="field">

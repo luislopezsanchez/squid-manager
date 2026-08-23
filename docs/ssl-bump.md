@@ -23,14 +23,27 @@ Esto permite:
 
 ---
 
+## Excluir dominios del descifrado
+
+Algunos sitios no se pueden interceptar sin romperlos (ver "Lo que Squid NO puede hacer" más abajo). Para esos casos, SquidManager permite dejarlos pasar cifrados de extremo a extremo, sin desencriptar:
+
+1. Panel → **Configuración** → categoría **Seguridad**
+2. Edita el parámetro **dominios excluidos del descifrado** (`ssl_bump_exclude`)
+3. Añade los dominios separados por espacios, por ejemplo: `.tubanco.com .miobrasocial.gob`
+4. **Aplicar cambios**
+
+Internamente, esto genera una ACL por SNI y una directiva `ssl_bump splice` que se evalúa antes del `bump`, así que esos dominios nunca llegan a desencriptarse.
+
+---
+
 ## Instalación del certificado CA
 
 Para que los navegadores confíen en Squid, debes instalar el certificado CA en cada equipo cliente.
 
 ### Descargar el certificado
 
-1. Abre el panel web → **"🔐 Certificado SSL"**
-2. Click en **"📥 Descargar squidmanager-ca.crt"**
+1. Abre el panel web → **"Certificado"**
+2. Click en **"Descargar squidmanager-ca.crt"** (o usa uno de los instaladores automáticos: `.bat` para Windows, script para GPO, `.mobileconfig` para iOS/macOS)
 3. Guarda el archivo
 
 ### Instalar en Windows (Chrome, Edge, Brave)
@@ -42,6 +55,8 @@ Para que los navegadores confíen en Squid, debes instalar el certificado CA en 
 5. Click en **"Examinar..."** y seleccionar **"Entidades de certificación raíz de confianza"**
 6. Click en **"Siguiente"** → **"Finalizar"**
 7. Reiniciar el navegador
+
+> Para varios equipos en un dominio de Windows, descarga el script de despliegue por GPO desde la página "Certificado" del panel en vez de instalarlo uno a uno.
 
 ### Instalar en Firefox (Windows, Linux, Mac)
 
@@ -73,6 +88,12 @@ sudo update-ca-trust
 5. Cerrar y escribir contraseña de administrador
 6. Reiniciar el navegador
 
+### Instalar en iOS
+
+1. Descarga el perfil `.mobileconfig` desde la página "Certificado" del panel
+2. Ajustes → Perfil descargado → Instalar
+3. Ajustes → General → Información → Ajustes de confianza de certificados → activa la confianza total para "SquidManager CA"
+
 ---
 
 ## Verificación
@@ -95,11 +116,11 @@ SSL Bump permite a Squid ver todo el tráfico HTTPS, incluyendo contenido. Esto 
 ### Recomendaciones
 - Usa SSL Bump solo en entornos corporativos donde sea necesario
 - Informa a los usuarios que su tráfico HTTPS está siendo inspeccionado
-- Protege el acceso al panel web (cambia las credenciales por defecto)
+- Excluye del descifrado la banca, la sanidad y cualquier dato especialmente sensible (ver arriba)
 - Considera usar HTTPS para el panel web mismo (proxy reverso con Nginx + Let's Encrypt)
 
 ### Lo que Squid NO puede hacer con SSL Bump
-- **Certificate Pinning:** Algunas apps (banco, Google) usan pinning de certificados y rechazarán el certificado de Squid. No hay forma de evitar esto.
+- **Certificate Pinning:** Algunas apps (banco, Google) usan pinning de certificados y rechazarán el certificado de Squid. Añade esos dominios a la lista de exclusión en vez de intentar interceptarlos.
 - **HTTP/2:** Squid 6.x tiene soporte limitado para HTTP/2 sobre SSL Bump.
 
 ---
@@ -116,10 +137,18 @@ Algunos antivirus inspeccionan HTTPS y detectan el certificado de Squid como sos
 3. Desactivar la inspección HTTPS del antivirus temporalmente
 
 ### Algunos sitios no funcionan (certificate pinning)
-Apps como Google, bancos, etc. usan certificate pinning. No se puede evitar. Para estos sitios, puedes configurar `ssl_bump splice` para que pasen sin interceptar.
+Apps como Google, bancos, etc. usan certificate pinning. No se puede evitar. Añade esos dominios a **Configuración → dominios excluidos del descifrado** para que pasen sin interceptar.
 
 ### Squid no arranca después de habilitar SSL Bump
+
 ```bash
 docker compose logs squid
 ```
-Verifica que `security_file_certgen` está disponible y que `/tmp/ssl_crtd` se inicializó correctamente.
+
+Verifica que la base de certificados dinámicos está en buen estado y con los permisos correctos:
+
+```bash
+docker exec squidmgr-proxy ls -l /var/lib/ssl_crtd/db/index.txt
+```
+
+Debe existir y pertenecer al usuario `proxy` (no a `root`). Si el propietario es incorrecto, Squid no podrá escribir su índice de certificados y el generador (`security_file_certgen`) morirá repetidamente con errores `Database search failure` en `cache.log`. La base vive en el volumen persistente `squid-crtd`, montado en `/var/lib/ssl_crtd`, no en un directorio temporal del contenedor.
