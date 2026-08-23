@@ -13,8 +13,8 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.admin import Admin
 from app.models.squid_settings import SquidSetting
-from app.services.auth_service import get_current_admin
-from app.services.config_generator import generate_squid_config, validate_squid_config
+from app.services.auth_service import get_current_admin, require_writer
+from app.services.config_generator import generate_squid_config
 from app.services.squid_service import reload_squid, get_squid_status, restart_squid, write_ldap_aux_files, apply_squid_config
 from app.services.notification_service import queue_notification
 from app.services.config_state import mark_dirty, mark_clean, is_dirty
@@ -46,7 +46,7 @@ async def get_settings(
 async def update_setting(
     data: SettingUpdate,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_writer),
 ):
     """Actualiza una configuración de Squid."""
     setting = db.query(SquidSetting).filter(SquidSetting.key == data.key).first()
@@ -67,7 +67,7 @@ async def update_setting(
 @router.post("/apply")
 async def apply_config(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_writer),
     background_tasks: BackgroundTasks = None,
 ):
     """Genera el squid.conf, valida y recarga o reinicia Squid.

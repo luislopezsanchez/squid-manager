@@ -17,7 +17,7 @@ acl step1 at_step SslBump1
 acl step2 at_step SslBump2
 acl step3 at_step SslBump3
 
-# ACLs de SNI para bloquear HTTPS (solo dstdomain y dstdom_regex)
+# ACLs de SNI para aplicar las políticas de dominio también a HTTPS
 {% for acl in acls %}
 {% if acl.type == 'dstdomain' %}
 acl sni_{{ acl.name }} ssl::server_name {{ acl.value }}
@@ -26,30 +26,31 @@ acl sni_{{ acl.name }} ssl::server_name_regex {{ acl.value }}
 {% endif %}
 {% endfor %}
 
-# Reglas de bloqueo HTTPS: si el SNI coincide con un dominio bloqueado, terminar
-{% for rule in rules %}
-{% if rule.action == 'deny' %}
-{% for acl in acls %}
-{% if acl.type == 'dstdomain' or acl.type == 'dstdom_regex' %}
-{% if rule.acl_names == acl.name %}
-ssl_bump terminate step2 sni_{{ acl.name }}
+{% if ssl_exclude %}
+# Dominios que NO se descifran: banca, sanidad y aplicaciones que fijan el
+# certificado (pinning) dejan de funcionar si se interceptan.
+acl ssl_exclude ssl::server_name {{ ssl_exclude|join(' ') }}
 {% endif %}
-{% endif %}
-{% endfor %}
-{% endif %}
+
+# Bloqueo de HTTPS por SNI: si el nombre coincide con un dominio denegado se
+# corta en el paso 2, sin llegar a descifrar la conexión.
+{% for name in terminate_acls %}
+ssl_bump terminate step2 sni_{{ name }}
 {% endfor %}
 
 # Peek: ver el SNI del cliente
 ssl_bump peek step1 all
+{% if ssl_exclude %}
+# Los dominios excluidos se dejan pasar cifrados de extremo a extremo.
+ssl_bump splice step2 ssl_exclude
+{% endif %}
 # Stare: permitir que el servidor envíe su certificado
 ssl_bump stare step2 all
 # Bump: interceptar y desencriptar el resto
 ssl_bump bump step3 all
-# Splice: cualquier resto pasa sin tocar
-ssl_bump splice all
 
-# Generador de certificados dinámicos
-sslcrtd_program /usr/lib/squid/security_file_certgen -s /tmp/ssl_crtd -M 4MB
+# Generador de certificados dinámicos (base persistente en el volumen)
+sslcrtd_program /usr/lib/squid/security_file_certgen -s /var/lib/ssl_crtd/db -M 4MB
 sslcrtd_children 5
 
 # --- Autenticación combinada (local + LDAP) ---
@@ -98,20 +99,18 @@ http_access deny CONNECT !SSL_ports
 http_access allow localhost manager
 http_access deny manager
 
+# Pedir credenciales una sola vez, antes de evaluar las reglas del panel.
+# A partir de aquí todas las peticiones llegan ya autenticadas, así que un
+# "deny <grupo>" devuelve 403 y no un 407 en bucle. Esto permite respetar el
+# orden de las reglas tal como se ve en el panel.
+http_access deny !authenticated
+
 {% for rule in rules %}
 http_access {{ rule.action }} {{ rule.acl_names }}
 {% endfor %}
 
-{# Reglas SNI paralelas para HTTPS: el ACL dstdomain no matchea peticiones
-   HTTPS descifradas, así que se genera una regla "allow" equivalente usando
-   el ACL sni_<acl> (ssl::server_name) para cubrir HTTPS. #}
-{% for rule in sni_rules %}
-http_access {{ rule.action }} {{ rule.acl_names }}
-{% endfor %}
-
-# Nota: las reglas "deny <grupo>" se convierten a "allow authenticated !<grupo>"
-# para evitar el bug de Squid (deny + proxy_auth devuelve 407 en vez de 403).
-http_access allow authenticated{{ denied_groups_str }}
+# Lo que ninguna regla haya denegado, se permite a los usuarios autenticados.
+http_access allow authenticated
 http_access deny all
 
 # --- Configuración de caché ---
@@ -128,15 +127,25 @@ delay_pools {{ delay_pools|length }}
 delay_class {{ loop.index }} {{ pool.pool_class }}
 delay_parameters {{ loop.index }} {{ pool.parameters }}
 delay_access {{ loop.index }} allow {{ pool.acl_name if pool.acl_name else 'all' }}
+delay_access {{ loop.index }} deny all
 {% endfor %}
 {% endif %}
 
 # --- Logging ---
-access_log {{ settings.get('access_log', '/var/log/squid/access.log') }}
+# El prefijo stdio: es el módulo de escritura; sin él Squid avisa en cada arranque.
+access_log stdio:{{ settings.get('access_log', '/var/log/squid/access.log') }}
 cache_log {{ settings.get('cache_log', '/var/log/squid/cache.log') }}
-cache_store_log {{ settings.get('cache_store_log', '/var/log/squid/store.log') }}
+{% if settings.get('cache_store_log') and settings.get('cache_store_log') != 'none' %}
+cache_store_log stdio:{{ settings.get('cache_store_log') }}
+{% else %}
+# store.log genera mucha escritura y no lo consume nadie: desactivado.
+cache_store_log none
+{% endif %}
 
 # --- Misc ---
 coredump_dir /var/spool/squid
 refresh_pattern {{ settings.get('refresh_pattern', '. 0 20% 4320') }}
 visible_hostname {{ settings.get('visible_hostname', 'squidmanager') }}
+# Idioma de las páginas de error. Squid no hace fallback de es-ES a es, así que
+# se fija explícitamente en lugar de negociarlo con el navegador.
+error_default_language {{ settings.get('error_language', 'es') }}

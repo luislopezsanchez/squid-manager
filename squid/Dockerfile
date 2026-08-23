@@ -24,6 +24,8 @@ RUN apt-get update && apt-get install -y \
     openssl \
     python3 \
     python3-pip \
+    cron \
+    logrotate \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar librerías Python para el helper de autenticación (local bcrypt + LDAP)
@@ -63,6 +65,14 @@ RUN wget -q "http://www.squid-cache.org/Versions/v6/squid-6.12.tar.gz" -O /tmp/s
     && cd / && rm -rf /tmp/squid* \
     && id proxy || useradd -r -s /usr/sbin/nologin proxy
 
+# Squid resuelve el idioma por el Accept-Language del navegador y no cae de
+# 'es-es' a 'es': sin estos alias, los usuarios con el navegador en español de
+# España veían un error genérico en lugar de la página de acceso denegado.
+RUN set -e;     if [ -d /usr/share/squid/errors/es ]; then         for variant in es-es es-ar es-cl es-co es-pe es-uy es-ve es-bo es-py es-ec; do             [ -e "/usr/share/squid/errors/$variant" ] || ln -s es "/usr/share/squid/errors/$variant";         done;     fi
+
+# Rotación diaria de los logs de Squid
+COPY squid-logrotate /etc/logrotate.d/squid
+
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
@@ -82,6 +92,7 @@ RUN mkdir -p /opt/squid-defaults && cp /etc/squid/mime.conf /opt/squid-defaults/
 
 RUN mkdir -p /var/spool/squid /var/log/squid /etc/squid/ssl_cert /var/lib/ssl_crtd
 RUN chown -R proxy:proxy /var/spool/squid /var/log/squid /etc/squid/ssl_cert /var/lib/ssl_crtd 2>/dev/null || true
+RUN chmod 755 /var/lib/ssl_crtd
 
 EXPOSE 3128
 

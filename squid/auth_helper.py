@@ -2,7 +2,8 @@
 """Helper de autenticación para Squid: combina usuarios locales y LDAP.
 
 Protocolo de Squid (auth básica):
-  - Squid escribe "username password\\n" en stdin
+  - Squid escribe "username password\\n" en stdin, con los valores escapados
+    en %XX cuando contienen espacios o caracteres especiales.
   - El helper responde "OK\\n" o "ERR\\n" en stdout
   - Es un proceso de larga duración (un helper atiende muchas peticiones)
 
@@ -12,6 +13,9 @@ Lógica:
      está autorizado, hace bind contra LDAP.
   3. Si ninguna vía funciona, responde ERR.
 
+Ninguna excepción debe escapar del bucle principal: si el proceso muere, Squid
+marca el helper como caído y deja de autenticar a todo el mundo.
+
 Archivos de configuración (escritos por el backend en el volumen compartido):
   - /etc/squid/squid_passwd       : htpasswd local (bcrypt)
   - /etc/squid/ldap_allowlist     : usuarios LDAP autorizados (allow-list estricto)
@@ -19,11 +23,25 @@ Archivos de configuración (escritos por el backend en el volumen compartido):
 """
 
 import sys
-import os
+import syslog
+from urllib.parse import unquote
 
 HTPASSWD_FILE = "/etc/squid/squid_passwd"
 ALLOWLIST_FILE = "/etc/squid/ldap_allowlist"
 LDAP_CONF_FILE = "/etc/squid/ldap_helper.conf"
+
+
+def log_error(message):
+    """Deja constancia del fallo sin escribir en stdout, que es el canal de Squid."""
+    try:
+        syslog.syslog(syslog.LOG_ERR, f"squidmanager_auth_helper: {message}")
+    except Exception:
+        pass
+    try:
+        sys.stderr.write(f"squidmanager_auth_helper: {message}\n")
+        sys.stderr.flush()
+    except Exception:
+        pass
 
 
 def check_local(username, password):
@@ -31,6 +49,7 @@ def check_local(username, password):
     try:
         import bcrypt
     except ImportError:
+        log_error("el módulo bcrypt no está instalado")
         return False
     try:
         with open(HTPASSWD_FILE) as f:
@@ -42,13 +61,15 @@ def check_local(username, password):
                 if u != username:
                     continue
                 # htpasswd genera $2y$; bcrypt de Python espera $2b$ (mismo algoritmo)
-                h_bcrypt = h.replace("$2y$", "$2b$")
+                h_bcrypt = h.replace("$2y$", "$2b$", 1)
                 try:
                     return bcrypt.checkpw(password.encode("utf-8"), h_bcrypt.encode("utf-8"))
                 except Exception:
                     return False
     except FileNotFoundError:
         pass
+    except Exception as e:
+        log_error(f"error leyendo {HTPASSWD_FILE}: {e}")
     return False
 
 
@@ -65,6 +86,8 @@ def load_ldap_config():
                 config[k.strip()] = v.strip()
     except FileNotFoundError:
         pass
+    except Exception as e:
+        log_error(f"error leyendo {LDAP_CONF_FILE}: {e}")
     return config
 
 
@@ -75,6 +98,9 @@ def is_allowed(username):
             allowed = {l.strip() for l in f if l.strip()}
             return username in allowed
     except FileNotFoundError:
+        return False
+    except Exception as e:
+        log_error(f"error leyendo {ALLOWLIST_FILE}: {e}")
         return False
 
 
@@ -89,6 +115,7 @@ def check_ldap(username, password):
     try:
         from ldap3 import Server, Connection, SUBTREE
     except ImportError:
+        log_error("el módulo ldap3 no está instalado")
         return False
 
     server_url = config.get("server_url")
@@ -97,72 +124,114 @@ def check_ldap(username, password):
     search_base = config.get("search_base", "")
     user_filter = config.get("user_filter", "(sAMAccountName=%s)")
 
+    # Un usuario sin contraseña haría un "unauthenticated bind", que LDAP
+    # acepta como correcto sin verificar nada.
+    if not password:
+        return False
+
+    conn = None
     try:
         server = Server(server_url, connect_timeout=5)
         conn = Connection(server, user=bind_dn, password=bind_password,
                           auto_bind=True, receive_timeout=5)
-    except Exception:
+    except Exception as e:
+        log_error(f"no se pudo conectar a LDAP: {e}")
         return False
 
-    # Construir filtro sustituyendo %s por el username
-    if "%s" in user_filter:
-        search_filter = user_filter.replace("%s", username)
-    else:
-        search_filter = user_filter
-
     try:
+        # Escapar el usuario para que no altere la estructura del filtro LDAP.
+        safe_username = (
+            username.replace("\\", "\\5c").replace("*", "\\2a")
+            .replace("(", "\\28").replace(")", "\\29").replace("\x00", "\\00")
+        )
+        search_filter = (
+            user_filter.replace("%s", safe_username) if "%s" in user_filter else user_filter
+        )
+
         conn.search(search_base=search_base, search_filter=search_filter,
                     search_scope=SUBTREE, attributes=["1.1"])
         if not conn.entries:
-            conn.unbind()
             return False
         user_dn = conn.entries[0].entry_dn
-    except Exception:
-        conn.unbind()
+    except Exception as e:
+        log_error(f"error buscando el usuario en LDAP: {e}")
         return False
+    finally:
+        if conn is not None:
+            try:
+                conn.unbind()
+            except Exception:
+                pass
 
-    # Bind como el usuario
     try:
         user_conn = Connection(server, user=user_dn, password=password,
                                auto_bind=True, receive_timeout=5)
         ok = user_conn.bound
-        user_conn.unbind()
+        try:
+            user_conn.unbind()
+        except Exception:
+            pass
+        return ok
     except Exception:
-        ok = False
-    conn.unbind()
-    return ok
+        # Contraseña incorrecta: es un resultado normal, no un error del helper.
+        return False
+
+
+def authenticate(username, password):
+    """Local primero, LDAP después."""
+    if check_local(username, password):
+        return True
+    return check_ldap(username, password)
+
+
+def handle(line):
+    """Procesa una línea del protocolo y devuelve la respuesta para Squid."""
+    parts = line.split(None, 1)
+    if not parts:
+        return "ERR"
+
+    raw_user = parts[0]
+    raw_pass = parts[1] if len(parts) > 1 else ""
+
+    # Squid escapa en %XX los valores con espacios o caracteres especiales.
+    # Se prueba primero el valor decodificado y, si no cuadra, el literal:
+    # así funciona tanto con Squid escapando como sin escapar.
+    candidates = []
+    decoded = (unquote(raw_user), unquote(raw_pass))
+    candidates.append(decoded)
+    if (raw_user, raw_pass) != decoded:
+        candidates.append((raw_user, raw_pass))
+
+    for username, password in candidates:
+        if not username:
+            continue
+        if authenticate(username, password):
+            return "OK"
+    return "ERR"
 
 
 def main():
-    # Bucle principal de Squid auth
     for line in sys.stdin:
         line = line.strip()
         if not line:
             continue
-        parts = line.split(None, 1)
-        username = parts[0] if parts else ""
-        password = parts[1] if len(parts) > 1 else ""
+        try:
+            response = handle(line)
+        except Exception as e:
+            # Un fallo inesperado deniega esta petición, pero el helper sigue
+            # vivo: si muriera, Squid dejaría de autenticar a todos.
+            log_error(f"error inesperado procesando una petición: {e}")
+            response = "ERR"
 
-        if not username:
-            sys.stdout.write("ERR\n")
-            sys.stdout.flush()
-            continue
-
-        # 1. Local primero
-        if check_local(username, password):
-            sys.stdout.write("OK\n")
-            sys.stdout.flush()
-            continue
-
-        # 2. LDAP (solo si está en allow-list)
-        if check_ldap(username, password):
-            sys.stdout.write("OK\n")
-            sys.stdout.flush()
-            continue
-
-        sys.stdout.write("ERR\n")
+        sys.stdout.write(response + "\n")
         sys.stdout.flush()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        log_error(f"el helper terminó por un error: {e}")
+        sys.exit(1)

@@ -1,0 +1,14 @@
+/var/log/squid/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    nocreate
+    sharedscripts
+    postrotate
+        # Reabrir los ficheros de log sin cortar las conexiones en curso.
+        test -e /var/run/squid.pid && squid -k rotate || true
+    endscript
+}

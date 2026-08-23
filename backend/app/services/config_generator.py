@@ -1,9 +1,10 @@
 """Generador de configuración de Squid usando Jinja2.
 
 Este servicio toma los datos de la BD y genera el archivo squid.conf completo.
+La validación de sintaxis vive en `squid_service.validate_squid_config`, que la
+ejecuta dentro del contenedor de Squid (en el del backend no hay binario).
 """
 
-import subprocess
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
 from sqlalchemy.orm import Session
@@ -17,6 +18,10 @@ from app.models.user_group import UserGroup, UserGroupMember
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
+# Tipos de ACL de dominio: son los que necesitan una regla paralela por SNI
+# para que la política también se aplique al tráfico HTTPS.
+DOMAIN_ACL_TYPES = ("dstdomain", "dstdom_regex")
+
 
 def generate_squid_config(db: Session) -> str:
     """Genera el contenido del squid.conf desde la base de datos."""
@@ -24,19 +29,17 @@ def generate_squid_config(db: Session) -> str:
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), trim_blocks=True)
     template = env.get_template("squid.conf.j2")
 
-    # Obtener todos los datos de configuración
-    acls = db.query(Acl).filter(Acl.enabled == True).order_by(Acl.name).all()
+    acls = db.query(Acl).filter(Acl.enabled == True).order_by(Acl.name).all()  # noqa: E712
     rules = (
         db.query(AccessRule)
-        .filter(AccessRule.enabled == True)
-        .order_by(AccessRule.order)
+        .filter(AccessRule.enabled == True)  # noqa: E712
+        .order_by(AccessRule.order, AccessRule.id)
         .all()
     )
     settings = {s.key: s.value for s in db.query(SquidSetting).all()}
-    delay_pools = db.query(DelayPool).filter(DelayPool.enabled == True).all()
+    delay_pools = db.query(DelayPool).filter(DelayPool.enabled == True).all()  # noqa: E712
     ldap = db.query(LdapConfig).first()
 
-    # Grupos de usuarios (mapeados a ACLs proxy_auth)
     groups = []
     for g in db.query(UserGroup).order_by(UserGroup.name).all():
         members = [
@@ -45,66 +48,58 @@ def generate_squid_config(db: Session) -> str:
         ]
         groups.append({"name": g.name, "members": members})
 
-    # Separar reglas "deny <grupo>" para evitar el bug de Squid:
-    # `http_access deny` con ACL proxy_auth devuelve 407 en vez de 403.
-    # Se convierten a "allow authenticated !grupo" al final.
-    group_names = {g["name"] for g in groups}
-    denied_groups = []
-    filtered_rules = []
+    domain_acls = {a.name for a in acls if a.type in DOMAIN_ACL_TYPES}
+
+    # Reglas http_access en su orden real. Para cada regla que menciona una ACL
+    # de dominio se emite además una regla equivalente por SNI: el ACL
+    # dstdomain no casa con las peticiones HTTPS ya descifradas, solo con el
+    # CONNECT, así que sin la paralela la política no se aplicaría a HTTPS.
+    rendered_rules = []
+    # ACLs de dominio que aparecen en alguna regla deny: su tráfico HTTPS se
+    # corta en el paso 2 del bump, antes de descifrar nada.
+    terminate_acls = []
+
     for rule in rules:
-        acl_names = rule.acl_names.split() if rule.acl_names else []
-        if rule.action == "deny" and acl_names and all(n in group_names for n in acl_names):
-            # Regla "deny <grupo>" → convertir a allow !grupo
-            denied_groups.extend(acl_names)
-        else:
-            filtered_rules.append(rule)
+        names = rule.acl_names.split() if rule.acl_names else []
+        if not names:
+            continue
 
-    # String de negación para el "allow authenticated !grupo1 !grupo2 ..."
-    denied_groups_str = "".join(f" !{g}" for g in denied_groups)
+        rendered_rules.append({"action": rule.action, "acl_names": " ".join(names)})
 
-    # Para reglas "allow ... <acl-dstdomain>", generar una regla SNI paralela
-    # para HTTPS (ssl::server_name). El ACL dstdomain NO matchea peticiones
-    # HTTPS descifradas por SSL Bump (solo matchea el CONNECT), así que sin
-    # esto un grupo restringido a dominios no podría abrir sitios HTTPS.
-    dstdomain_acls = {a.name for a in acls if a.type in ("dstdomain", "dstdom_regex")}
-    sni_rules = []
-    if dstdomain_acls:
-        for rule in filtered_rules:
-            if rule.action == "allow":
-                names = rule.acl_names.split() if rule.acl_names else []
-                if any(n in dstdomain_acls for n in names):
-                    sni_names = " ".join(
-                        f"sni_{n}" if n in dstdomain_acls else n for n in names
-                    )
-                    sni_rules.append({"action": "allow", "acl_names": sni_names})
+        mentioned_domains = [n for n in names if n.lstrip("!") in domain_acls]
+        if not mentioned_domains:
+            continue
+
+        sni_names = " ".join(
+            (f"!sni_{n[1:]}" if n.startswith("!") else f"sni_{n}")
+            if n.lstrip("!") in domain_acls
+            else n
+            for n in names
+        )
+        rendered_rules.append({"action": rule.action, "acl_names": sni_names})
+
+        if rule.action == "deny":
+            for n in mentioned_domains:
+                bare = n.lstrip("!")
+                if not n.startswith("!") and bare not in terminate_acls:
+                    terminate_acls.append(bare)
+
+    # Dominios excluidos del descifrado (banca, sanidad, apps con pinning).
+    ssl_exclude = [
+        d.strip()
+        for d in (settings.get("ssl_bump_exclude") or "").replace("\n", " ").split()
+        if d.strip()
+    ]
 
     config = template.render(
         acls=acls,
-        rules=filtered_rules,
-        sni_rules=sni_rules,
+        rules=rendered_rules,
+        terminate_acls=terminate_acls,
+        domain_acl_types=DOMAIN_ACL_TYPES,
         settings=settings,
         delay_pools=delay_pools,
         ldap=ldap,
         groups=groups,
-        denied_groups_str=denied_groups_str,
+        ssl_exclude=ssl_exclude,
     )
     return config
-
-
-def validate_squid_config(config_path: str) -> tuple[bool, str]:
-    """Valida la sintaxis del squid.conf usando squid -k parse."""
-    try:
-        result = subprocess.run(
-            ["squid", "-k", "parse", "-f", config_path],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            return True, "Configuración válida"
-        return False, result.stderr or result.stdout
-    except FileNotFoundError:
-        # Squid no está instalado en el contenedor backend, solo en squid
-        return True, "Squid no disponible para validar (skip)"
-    except Exception as e:
-        return False, str(e)
