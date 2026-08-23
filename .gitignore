@@ -44,3 +44,6 @@ ssl_crtd/
 # Temp
 create_examples.py
 *.tmp
+# Copias de seguridad del entorno
+.env.bak*
+.env.*.bak

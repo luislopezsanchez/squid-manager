@@ -20,5 +20,7 @@ COPY . .
 # Exponer puerto de la API
 EXPOSE 8000
 
-# Comando por defecto
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Sin --reload: en producción reinicia el proceso ante cualquier escritura en
+# el código, corta las peticiones en curso y vacía el estado en memoria.
+# Para desarrollo, examples/docker-compose.override.yml lo vuelve a activar.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
