@@ -67,7 +67,7 @@ del frontend, que hace de proxy reverso en /api/*.
 - **Esquema:** gestionado con Alembic — las migraciones se aplican automáticamente al arrancar; una base preexistente sin historial de Alembic se marca con la revisión inicial antes de aplicar el resto
 - **Auth:** JWT (python-jose) + bcrypt directo (sin passlib, retirado por incompatibilidad con bcrypt ≥ 4.1)
 
-**Routers (14):**
+**Routers (15):**
 | Router | Prefijo | Función |
 |--------|---------|---------|
 | auth | /api/auth | Login, info del admin |
@@ -79,13 +79,14 @@ del frontend, que hace de proxy reverso en /api/*.
 | squid_config | /api/squid | Settings, apply (con validación), status, preview, CA y sus instaladores |
 | ldap | /api/ldap | Config LDAP, test conexión, sincronización, allow-list de usuarios |
 | backup | /api/backup | Exportar/restaurar JSON, descargar/importar squid.conf |
-| logs | /api/logs | Consulta del access.log, alertas de fuerza bruta, export CSV |
+| logs | /api/logs | Consulta del access.log, alertas de fuerza bruta, export CSV/NDJSON/nativo |
 | metrics | /api/metrics | Dashboard, tráfico en vivo, top usuarios/dominios, conexiones |
 | notifications | /api/notifications | Configuración y prueba de email/Telegram |
 | admins | /api/admins | CRUD de administradores, cambio de contraseña propia (solo superadmin gestiona otros) |
 | audit | /api/audit | Log de auditoría + estadísticas |
+| syslog | /api/syslog | Configuración y prueba del reenvío del access.log a un SIEM externo (UDP/TCP, RFC 3164/5424) |
 
-72 endpoints en total. Ver [docs/api-reference.md](api-reference.md) para el detalle.
+75 endpoints en total. Ver [docs/api-reference.md](api-reference.md) para el detalle.
 
 **Servicios:**
 - `auth_service.py` — JWT, bcrypt, validación de credenciales, roles (`require_writer`, `require_superadmin`)
@@ -120,7 +121,7 @@ El Squid que viene en Ubuntu 24.04 está compilado con GnuTLS, no con OpenSSL. S
 - **Puerto:** 5432 (interno, no publicado)
 - **Función:** Almacenar toda la configuración
 
-**Tablas (12):**
+**Tablas (13):**
 | Tabla | Descripción |
 |-------|-------------|
 | admins | Administradores del panel (con `password_changed_at` para revocar sesiones) |
@@ -135,6 +136,7 @@ El Squid que viene en Ubuntu 24.04 está compilado con GnuTLS, no con OpenSSL. S
 | user_group_members | Miembros de cada grupo (con clave foránea en cascada) |
 | notification_config | Configuración de notificaciones por email/Telegram |
 | audit_log | Log de cambios |
+| syslog_config | Configuración del reenvío a syslog externo (fila única, apagada por defecto) |
 
 ---
 

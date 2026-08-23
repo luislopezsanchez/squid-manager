@@ -135,6 +135,23 @@ Cada corrección y cada función revisada se probó contra el servidor en marcha
 
 ---
 
+## Fase 6: Exportación NDJSON/nativa, syslog externo y auditoría de la página Auditoría (COMPLETADA)
+
+### Objetivo
+Seguir la misma disciplina de prueba en vivo aplicada en la Fase 5, esta vez sobre Registros (formatos de exportación y reenvío a un SIEM) y sobre la propia página de Auditoría.
+
+### Acciones realizadas
+Ver el detalle completo en `CHANGELOG.md` bajo `[0.8.0]`. En resumen:
+- Icono de descarga sin tamaño (misma causa raíz encontrada en 3 páginas: Registros, Backup, Certificado)
+- Exportación de logs en NDJSON y en formato nativo de Squid, además de CSV
+- Reenvío opcional a syslog externo (UDP/TCP, RFC 3164/5424), apagado por defecto, verificado en vivo con receptores reales
+- Auditoría: la página solo reconocía la mitad de las entidades y acciones reales que el backend genera, mostrando nombres técnicos en crudo; corregido el mapeo completo y las tarjetas de resumen, que antes mezclaban eventos de sesión con cambios de configuración reales
+
+### Verificación
+Icono corregido y validado contra el bundle desplegado; formatos de exportación y reenvío a syslog probados en vivo con receptores UDP/TCP reales y tráfico real del proxy; corrección de Auditoría verificada contrastando las entidades y acciones que el código realmente escribe (`grep` sobre `entity=`/`action=` en todo el backend) contra lo que el frontend reconocía.
+
+---
+
 ## Riesgos activos
 
 | Riesgo | Estado |

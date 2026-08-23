@@ -5,6 +5,23 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.8.0] - 2026-08-23
+
+Continuación de la prueba funcional completa: exportación de logs en más formatos, reenvío opcional a syslog externo, y corrección de la página de Auditoría (que hasta ahora solo reconocía la mitad de las entidades y acciones reales que genera el backend).
+
+### Corregido
+- **Iconos de descarga sin tamaño en Registros, Backup y Certificado**: `<IconDownload />` usado fuera de las clases `.btn`/`.stat-icon` (que dan tamaño implícito) se renderizaba al tamaño por defecto del navegador, ~300x150px. Corregido con clases de tamaño explícitas en los 6 casos.
+- **Etiquetas "Total entradas" / "Mostrando: N filtradas" en Registros**: implicaban que la segunda era un subconjunto de la primera, cuando en realidad son dos conteos independientes de un escaneo en vivo del log — renombradas a "Últimas líneas analizadas" / "Coinciden con el filtro".
+- **Auditoría solo reconocía 5 de 10 entidades y 4 de 12 acciones reales del backend**: el resto se mostraba con su nombre técnico en crudo (`ldap_user`, `login`, etc.) y no se podía filtrar por ellas. Completado el mapeo de etiquetas y las opciones de los dos filtros.
+- **Tarjetas de resumen de Auditoría poco precisas**: mostraban las 3 entidades con más filas sin distinguir eventos de sesión de cambios de configuración reales, lo que hacía subir "Delay Pool" o "Usuario LDAP" al top mientras "Administrador" (dominado por logins) quedaba afuera pese a ser la entidad más numerosa. Reemplazadas por cuatro métricas elegidas a propósito: total de eventos, inicios de sesión fallidos, cambios de configuración (excluyendo login/login_failed) y eliminaciones.
+
+### Añadido
+- **Exportación de logs en NDJSON y formato nativo de Squid**, además de CSV (`GET /api/logs/export?format=csv|ndjson|raw`). El formato nativo preserva la línea original del access.log sin modificar, para herramientas que la esperan tal cual (AWStats, SARG, módulos Squid de Splunk/ELK); NDJSON para ingesta genérica en un SIEM.
+- **Reenvío opcional a syslog externo** (página nueva "Syslog externo", tabla `syslog_config`, migración `0005`): un hilo de fondo seguido al access.log en tiempo real, con host/puerto/protocolo (UDP o TCP) y formato (RFC 3164 o RFC 5424, contenido raw o NDJSON) configurables desde el panel. Apagado por defecto — no se manda nada hasta configurar un host y habilitarlo a propósito. Probado en vivo con receptores UDP y TCP reales y con tráfico real del proxy, extremo a extremo.
+- `POST /api/syslog/test` prueba un destino sin necesidad de guardar ni activar el reenvío real antes.
+
+---
+
 ## [0.7.0] - 2026-08-23
 
 Prueba funcional completa de la plataforma contra el sistema en marcha (no solo revisión de código), corrección de los bugs reales que salieron a la luz, y primera ronda de mejoras visuales del Dashboard y de Usuarios.

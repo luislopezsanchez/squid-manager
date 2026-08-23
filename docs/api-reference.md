@@ -629,13 +629,54 @@ IPs con `threshold` o más respuestas `407` (credenciales inválidas o ausentes)
 }
 ```
 
-### Exportar logs a CSV
+### Exportar logs
 ```http
-GET /api/logs/export?denied=true
+GET /api/logs/export?format=csv&denied=true
 Authorization: Bearer <token>
 ```
 
-Mismos filtros que `/api/logs/access`, hasta 50.000 entradas.
+Mismos filtros que `/api/logs/access`, hasta 50.000 entradas. El parametro `format` elige el contenido del archivo:
+
+| `format` | Contenido | Uso tipico |
+|---|---|---|
+| `csv` (default) | Tabla, una fila por entrada | Abrir en una planilla |
+| `ndjson` | Un objeto JSON por linea | Ingesta generica en un SIEM |
+| `raw` | La linea del access.log de Squid sin modificar | AWStats, SARG, modulos Squid de Splunk/ELK |
+
+---
+
+## Syslog externo
+
+Reenvio continuo del access.log a un SIEM u otra herramienta externa, en formato RFC 3164 o RFC 5424, por UDP o TCP. Apagado por defecto: mientras `enabled` sea `false` no se manda nada. Un hilo de fondo relee esta configuracion cada pocos segundos, asi que activarlo, apagarlo o cambiar el destino no requiere reiniciar el backend.
+
+### Consultar y guardar la configuracion
+```http
+GET /api/syslog/config
+PUT /api/syslog/config
+Authorization: Bearer <token>
+```
+
+```json
+{
+  "enabled": true,
+  "host": "siem.empresa.com",
+  "port": 514,
+  "protocol": "udp",
+  "rfc_format": "rfc3164",
+  "facility": "local0",
+  "log_format": "raw"
+}
+```
+
+`protocol` acepta `udp`/`tcp`, `rfc_format` acepta `rfc3164`/`rfc5424`, `log_format` acepta `raw`/`ndjson` (mismo significado que en la exportacion). Habilitarlo (`enabled: true`) exige tener `host` seteado.
+
+### Probar el destino
+```http
+POST /api/syslog/test
+Authorization: Bearer <token>
+```
+
+Manda un mensaje de prueba con los datos del cuerpo de la peticion, sin necesidad de guardar la configuracion antes -- permite probar un destino nuevo sin activar el reenvio real. Por UDP no hay confirmacion de entrega: un "enviado" no garantiza que algo este escuchando del otro lado.
 
 ---
 

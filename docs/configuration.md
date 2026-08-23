@@ -226,3 +226,32 @@ El panel incluye un test de conexión que usa la librería `ldap3` para:
 Solo las ACLs tipo `dstdomain` y `dstdom_regex` generan reglas `ssl_bump terminate`. Las demás ACLs se aplican después del bump (tráfico desencriptado).
 
 Para más detalles, ver [docs/ssl-bump.md](ssl-bump.md).
+
+---
+
+## Exportación y reenvío de logs
+
+### Formatos de exportación
+
+Desde Registros, el botón de exportar admite tres formatos (parámetro `format` en `GET /api/logs/export`):
+
+| Formato | Contenido | Uso típico |
+|---|---|---|
+| CSV (default) | Tabla, una fila por entrada | Abrir en una planilla |
+| NDJSON | Un objeto JSON por línea | Ingesta genérica en un SIEM |
+| Nativo (raw) | La línea del access.log de Squid sin modificar | AWStats, SARG, módulos Squid de Splunk/ELK |
+
+### Reenvío a syslog externo (opcional)
+
+Además de la exportación puntual, hay un canal de reenvío continuo del access.log a un SIEM u otra herramienta externa (página **Syslog externo**). Es opcional y queda apagado por defecto — no se manda nada hasta que se configura un host y se habilita explícitamente.
+
+| Campo | Valores | Descripción |
+|---|---|---|
+| Host | IP o nombre | Destino del reenvío |
+| Puerto | 1-65535 (default 514) | Puerto del receptor syslog |
+| Protocolo | `udp` / `tcp` | UDP no confirma entrega; TCP reintenta en el siguiente lote si falla la conexión |
+| Formato del mensaje | `rfc3164` / `rfc5424` | RFC 3164 es el más compatible; RFC 5424 es estructurado, con fecha ISO |
+| Facility | `local0`-`local7`, `user`, `daemon`, `syslog` | Facility syslog estándar |
+| Contenido de cada línea | `raw` / `ndjson` | Mismo significado que en la exportación |
+
+Un proceso en segundo plano sigue el access.log (igual que `tail -f`) y reenvía cada línea nueva. Relee la configuración de la base de datos cada pocos segundos, así que activar, apagar o cambiar el destino surte efecto sin reiniciar el backend. Mientras está apagado no se acumula nada para mandar de golpe al activarlo — solo se reenvía lo que llegue después. El botón "Enviar mensaje de prueba" prueba un destino sin necesidad de guardar ni activar el reenvío real antes.

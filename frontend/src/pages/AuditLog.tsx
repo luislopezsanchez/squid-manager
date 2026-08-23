@@ -19,7 +19,14 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   update: { label: 'Actualizar', color: 'pill-info' },
   delete: { label: 'Eliminar', color: 'pill-danger' },
   toggle: { label: 'Toggle', color: 'pill-warn' },
-  apply: { label: 'Aplicar', color: 'bg-purple-100 text-purple-800' },
+  login: { label: 'Inicio de sesión', color: 'pill-ok' },
+  login_failed: { label: 'Inicio fallido', color: 'pill-danger' },
+  reset_password: { label: 'Restablecer contraseña', color: 'pill-warn' },
+  add_member: { label: 'Añadir miembro', color: 'pill-ok' },
+  remove_member: { label: 'Quitar miembro', color: 'pill-danger' },
+  reorder: { label: 'Reordenar', color: 'pill-info' },
+  import: { label: 'Importar', color: 'bg-purple-100 text-purple-800' },
+  restore: { label: 'Restaurar', color: 'bg-purple-100 text-purple-800' },
 }
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -27,7 +34,12 @@ const ENTITY_LABELS: Record<string, string> = {
   acl: 'ACL',
   access_rule: 'Regla de Acceso',
   delay_pool: 'Delay Pool',
-  squid_setting: 'Configuración',
+  admin: 'Administrador',
+  ldap_user: 'Usuario LDAP',
+  user_group: 'Grupo',
+  syslog_config: 'Syslog externo',
+  backup: 'Backup',
+  squid_conf: 'Configuración de Squid',
 }
 
 export default function AuditLog() {
@@ -60,20 +72,34 @@ export default function AuditLog() {
       <p className="text-sm text-ink-3 mb-6">Registro de todos los cambios realizados en el sistema</p>
 
       {/* Stats */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="card p-4 border border-line-soft">
-            <p className="text-sm text-ink-3">Total cambios</p>
-            <p className="page-title">{stats.total}</p>
-          </div>
-          {Object.entries(stats.by_entity || {}).slice(0, 3).map(([entity, count]: any) => (
-            <div key={entity} className="card p-4 border border-line-soft">
-              <p className="text-sm text-ink-3">{ENTITY_LABELS[entity] || entity}</p>
-              <p className="page-title">{count}</p>
+      {stats && (() => {
+        const byAction: Record<string, number> = stats.by_action || {}
+        const loginFailed = byAction.login_failed || 0
+        const deletes = byAction.delete || 0
+        const configChanges = Object.entries(byAction)
+          .filter(([action]) => action !== 'login' && action !== 'login_failed')
+          .reduce((sum, [, count]) => sum + count, 0)
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="card p-4 border border-line-soft">
+              <p className="text-sm text-ink-3">Total eventos</p>
+              <p className="page-title">{stats.total}</p>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="card p-4 border border-line-soft">
+              <p className="text-sm text-ink-3">Inicios de sesión fallidos</p>
+              <p className={`page-title ${loginFailed > 0 ? 'text-danger' : ''}`}>{loginFailed}</p>
+            </div>
+            <div className="card p-4 border border-line-soft">
+              <p className="text-sm text-ink-3">Cambios de configuración</p>
+              <p className="page-title">{configChanges}</p>
+            </div>
+            <div className="card p-4 border border-line-soft">
+              <p className="text-sm text-ink-3">Eliminaciones</p>
+              <p className="page-title">{deletes}</p>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Filtros */}
       <div className="flex gap-4 mb-6">
@@ -81,9 +107,15 @@ export default function AuditLog() {
           className="px-4 py-2 border border-line rounded-lg bg-white text-sm">
           <option value="">Todas las entidades</option>
           <option value="proxy_user">Usuarios del Proxy</option>
+          <option value="ldap_user">Usuarios LDAP</option>
+          <option value="user_group">Grupos</option>
           <option value="acl">ACLs</option>
           <option value="access_rule">Reglas de Acceso</option>
           <option value="delay_pool">Delay Pools</option>
+          <option value="admin">Administradores</option>
+          <option value="syslog_config">Syslog externo</option>
+          <option value="backup">Backup</option>
+          <option value="squid_conf">Configuración de Squid</option>
         </select>
         <select value={filterAction} onChange={e => setFilterAction(e.target.value)}
           className="px-4 py-2 border border-line rounded-lg bg-white text-sm">
@@ -92,6 +124,14 @@ export default function AuditLog() {
           <option value="update">Actualizar</option>
           <option value="delete">Eliminar</option>
           <option value="toggle">Toggle</option>
+          <option value="login">Inicio de sesión</option>
+          <option value="login_failed">Inicio fallido</option>
+          <option value="reset_password">Restablecer contraseña</option>
+          <option value="add_member">Añadir miembro</option>
+          <option value="remove_member">Quitar miembro</option>
+          <option value="reorder">Reordenar</option>
+          <option value="import">Importar</option>
+          <option value="restore">Restaurar</option>
         </select>
       </div>
 
