@@ -98,7 +98,7 @@ done
 # Escribir squid.conf inicial solo si NO existe
 # El backend escribirá el config real con SSL Bump mediante apply
 # ============================================
-if [ ! -f /etc/squid/squid.conf ] || [ ! -s /etc/squid/squid.conf ] || head -1 /etc/squid/squid.conf | grep -q 'Configuración inicial temporal'; then
+if [ ! -f /etc/squid/squid.conf ] || [ ! -s /etc/squid/squid.conf ] || head -1 /etc/squid/squid.conf | grep -q 'Configuración inicial temporal' || cmp -s /etc/squid/squid.conf /etc/squid/squid.conf.default; then
     cat > /etc/squid/squid.conf << EOF
 # SquidManager - Configuración inicial temporal
 http_port ${SQUID_PORT}
