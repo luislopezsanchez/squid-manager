@@ -41,8 +41,12 @@ export default function ChangePassword() {
     try {
       await api.changePassword(current, next)
       // El cambio invalida el token actual: hay que volver a entrar.
+      // window.location (no navigate): en el primer acceso App() monta un
+      // router restringido sin ruta /login, asi que una navegacion SPA
+      // rebota al *; hace falta una recarga dura para que App() reevalue
+      // mustChangePassword desde localStorage.
       clearToken()
-      navigate('/login')
+      window.location.href = '/login'
     } catch (err: any) {
       setError(err.message || 'No se pudo cambiar la contraseña')
     } finally {
