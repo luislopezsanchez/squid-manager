@@ -1,7 +1,7 @@
 """Modelo UserGroup: grupos de usuarios para aplicar políticas por grupo."""
 
 from app.utils import utcnow
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, Boolean
 from app.database import Base
 
 
@@ -11,6 +11,15 @@ class UserGroup(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, nullable=False, index=True)
     description = Column(String(255), nullable=True)
+
+    # Si está activo, el tráfico HTTPS de sus miembros no se descifra.
+    #
+    # Sirve para quien no puede instalar el certificado (móviles personales) o
+    # para herramientas que se rompen al interceptarlas (git, npm, apps con
+    # certificate pinning). No los deja sin filtrar: el bloqueo por dominio
+    # actúa antes de descifrar y les sigue afectando.
+    no_bump = Column(Boolean, default=False, nullable=False)
+
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 

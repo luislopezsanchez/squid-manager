@@ -567,6 +567,27 @@ pasa de `HIER_DIRECT` a `FIRSTUP_PARENT`.
 > síntoma cuál de los cuatro ajustes falta — todos dan errores que no mencionan
 > la causa.
 
+### Eximir a un grupo de la interceptación de HTTPS
+
+En **Grupos**, cada grupo tiene la casilla **«No interceptar el HTTPS de este
+grupo»**. Sus miembros navegan con el tráfico cifrado de extremo a extremo.
+
+Sirve para dos casos habituales:
+
+- **Equipos donde no se puede instalar el certificado**: móviles personales,
+  BYOD, dispositivos de invitados
+- **Herramientas que se rompen al interceptarlas**: git, npm, docker y
+  cualquier aplicación con *certificate pinning*
+
+> **Eximir del descifrado no es eximir del filtrado.** El bloqueo por dominio
+> actúa sobre el SNI, antes de descifrar, así que a esos usuarios les sigue
+> afectando. También siguen autenticándose y quedando registrados. Lo único que
+> se pierde es la inspección de la URL completa y del contenido.
+
+Para comprobar que está funcionando, en el registro de accesos sus conexiones
+HTTPS aparecen como `TCP_TUNNEL/200 CONNECT`, sin la petición descifrada
+(`GET https://…`) que sí se ve en los demás.
+
 ### Orígenes que no tienen que autenticarse
 
 En **Configuración → Seguridad**, el ajuste `trusted_sources` acepta IPs o

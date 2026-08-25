@@ -5,6 +5,38 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.13.0] - 2026-08-25
+
+### Añadido
+- **Grupos exentos de la interceptación de HTTPS** (casilla «No interceptar el
+  HTTPS de este grupo», migración `0012`). Hay equipos donde no se puede
+  instalar el certificado —móviles personales, BYOD— y herramientas que se
+  rompen al interceptarlas: git, npm, docker y cualquier aplicación con
+  *certificate pinning*. Hasta ahora la única salida era desactivar la
+  interceptación para todo el mundo.
+- **La exención no libra del filtrado.** El bloqueo por dominio actúa sobre el
+  SNI, antes de descifrar, así que sigue aplicándose a los miembros del grupo.
+  Lo que se pierde en ellos es la inspección de la URL completa y del
+  contenido. Siguen autenticándose y quedando registrados.
+- Los grupos exentos se marcan con una insignia en el panel, para verlos de un
+  vistazo.
+
+### Cambiado
+- **La plantilla del `squid.conf` se reordena**: el bloque de autenticación
+  pasa por delante del de SSL Bump. Squid lee la configuración de arriba abajo
+  y no admite una ACL de usuario mientras no exista un esquema de
+  autenticación: declarada antes, aborta el arranque con `Invalid ACL` y el
+  proxy se queda sin servicio. Verificado que el cambio de orden no altera nada
+  del comportamiento anterior.
+
+### Notas
+- Probado en ejecución, no solo generando el fichero: con dos usuarios, el no
+  exento aparece en el registro con su petición descifrada (`GET https://…`) y
+  el exento solo como `TCP_TUNNEL/200 CONNECT`, que es la señal de que el
+  tráfico pasó cifrado de extremo a extremo.
+
+---
+
 ## [0.12.1] - 2026-08-25
 
 ### Corregido

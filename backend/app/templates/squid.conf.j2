@@ -20,6 +20,19 @@ http_port {{ internal_port }} ssl-bump \
   cert=/etc/squid/ssl_cert/squid-ca.crt \
   key=/etc/squid/ssl_cert/squid-ca.key
 
+# --- Autenticación combinada (local + LDAP) ---
+# Un único helper que consulta local (htpasswd) primero y luego LDAP.
+# Squid solo soporta UN helper de auth básica; por eso usamos uno combinado.
+#
+# Este bloque va ANTES del de SSL Bump a propósito: Squid lee el fichero en
+# orden, y una ACL de usuario (proxy_auth) no se puede declarar mientras no
+# exista un esquema de autenticación. Poniéndolo después, cualquier regla de
+# interceptación por usuario aborta el arranque con «Invalid ACL».
+auth_param basic program /usr/lib/squid/squidmanager_auth_helper
+auth_param basic children {{ settings.get('auth_children', '5') }}
+auth_param basic realm {{ settings.get('auth_realm', 'SquidManager Proxy') }}
+auth_param basic credentialsttl {{ settings.get('credentialsttl', '2 hours') }}
+
 # --- Configuración SSL Bump ---
 acl step1 at_step SslBump1
 acl step2 at_step SslBump2
@@ -47,8 +60,18 @@ ssl_bump terminate step2 sni_{{ name }}
 {% endfor %}
 
 {% if ssl_bump_enabled %}
+{% for group in groups_sin_bump %}
+# Miembros de «{{ group.name }}»: su tráfico HTTPS no se descifra.
+acl nobump_{{ group.name }} proxy_auth {{ group.members|join(' ') if group.members else '__EMPTY_GROUP__' }}
+{% endfor %}
 # Peek: ver el SNI del cliente
 ssl_bump peek step1 all
+{% for group in groups_sin_bump %}
+# Se deja pasar cifrado de extremo a extremo. Va después del `terminate` de
+# más arriba, así que el bloqueo por dominio le sigue afectando: quedar exento
+# del descifrado no es quedar exento del filtrado.
+ssl_bump splice step2 nobump_{{ group.name }}
+{% endfor %}
 {% if ssl_exclude %}
 # Los dominios excluidos se dejan pasar cifrados de extremo a extremo.
 ssl_bump splice step2 ssl_exclude
@@ -74,14 +97,6 @@ ssl_bump splice all
 # Generador de certificados dinámicos (base persistente en el volumen)
 sslcrtd_program /usr/lib/squid/security_file_certgen -s /var/lib/ssl_crtd/db -M 4MB
 sslcrtd_children 5
-
-# --- Autenticación combinada (local + LDAP) ---
-# Un único helper que consulta local (htpasswd) primero y luego LDAP.
-# Squid solo soporta UN helper de auth básica; por eso usamos uno combinado.
-auth_param basic program /usr/lib/squid/squidmanager_auth_helper
-auth_param basic children {{ settings.get('auth_children', '5') }}
-auth_param basic realm {{ settings.get('auth_realm', 'SquidManager Proxy') }}
-auth_param basic credentialsttl {{ settings.get('credentialsttl', '2 hours') }}
 
 # --- ACLs predefinidas ---
 acl localnet src 10.0.0.0/8

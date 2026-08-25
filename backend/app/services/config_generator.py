@@ -48,12 +48,18 @@ def generate_squid_config(db: Session) -> str:
     ldap = db.query(LdapConfig).first()
 
     groups = []
+    groups_sin_bump = []
     for g in db.query(UserGroup).order_by(UserGroup.name).all():
         members = [
             m.username
             for m in db.query(UserGroupMember).filter(UserGroupMember.group_id == g.id).all()
         ]
-        groups.append({"name": g.name, "members": members})
+        grupo = {"name": g.name, "members": members}
+        groups.append(grupo)
+        # Solo interesa si tiene a alguien: una ACL de un grupo vacío no puede
+        # eximir a nadie, y ensucia la configuración.
+        if getattr(g, "no_bump", False) and members:
+            groups_sin_bump.append(grupo)
 
     domain_acls = {a.name for a in acls if a.type in DOMAIN_ACL_TYPES}
 
@@ -145,6 +151,7 @@ def generate_squid_config(db: Session) -> str:
         dns_nameservers=dns_nameservers,
         trusted_sources=trusted_sources,
         ssl_bump_enabled=ssl_bump_enabled,
+        groups_sin_bump=groups_sin_bump,
         parent_proxy=parent_proxy,
         direct_domains=direct_domains,
         parent_ca=parent_ca,

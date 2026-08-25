@@ -6,6 +6,7 @@ interface Group {
   id: number
   name: string
   description: string | null
+  no_bump: boolean
   members: string[]
 }
 
@@ -13,7 +14,7 @@ export default function Groups() {
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [newGroup, setNewGroup] = useState({ name: '', description: '' })
+  const [newGroup, setNewGroup] = useState({ name: '', description: '', no_bump: false })
   const [newMember, setNewMember] = useState<Record<number, string>>({})
   const [allUsers, setAllUsers] = useState<string[]>([])
   const { showToast, ToastContainer } = useToast()
@@ -34,8 +35,8 @@ export default function Groups() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await api.createGroup({ name: newGroup.name, description: newGroup.description })
-      setNewGroup({ name: '', description: '' })
+      await api.createGroup({ name: newGroup.name, description: newGroup.description, no_bump: newGroup.no_bump })
+      setNewGroup({ name: '', description: '', no_bump: false })
       setShowForm(false)
       loadGroups()
       showToast(`Grupo "${newGroup.name}" creado`)
@@ -115,6 +116,28 @@ export default function Groups() {
               />
             </div>
           </div>
+
+          <label className="flex items-start gap-3 mt-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={newGroup.no_bump}
+              onChange={e => setNewGroup({ ...newGroup, no_bump: e.target.checked })}
+              className="w-4 h-4 mt-0.5"
+            />
+            <div>
+              <span className="text-sm font-medium text-ink-2">
+                No interceptar el HTTPS de este grupo
+              </span>
+              <p className="text-xs text-ink-3 mt-0.5">
+                Para quien no puede instalar el certificado (móviles personales)
+                o usa herramientas que se rompen al interceptarlas (git, npm,
+                apps con <em>certificate pinning</em>). Siguen autenticándose y
+                el bloqueo por dominio les sigue afectando; lo que se pierde es
+                la inspección de la URL completa y del contenido.
+              </p>
+            </div>
+          </label>
+
           <button type="submit" className="mt-4 btn btn-primary">
             Crear Grupo
           </button>
@@ -129,7 +152,17 @@ export default function Groups() {
             <div key={group.id} className="card p-5">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="font-semibold text-ink">{group.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-ink">{group.name}</h3>
+                    {group.no_bump && (
+                      <span
+                        className="text-[11px] px-1.5 py-0.5 rounded bg-warn-soft text-warn font-medium"
+                        title="El tráfico HTTPS de este grupo no se descifra. El bloqueo por dominio le sigue afectando."
+                      >
+                        HTTPS sin interceptar
+                      </span>
+                    )}
+                  </div>
                   {group.description && <p className="text-sm text-ink-3">{group.description}</p>}
                 </div>
                 <button onClick={() => handleDelete(group.id, group.name)}

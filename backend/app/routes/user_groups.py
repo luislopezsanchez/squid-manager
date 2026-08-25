@@ -26,11 +26,13 @@ router = APIRouter()
 class GroupCreate(BaseModel):
     name: str
     description: str | None = None
+    no_bump: bool = False
 
 
 class GroupUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    no_bump: bool | None = None
 
 
 class MemberAdd(BaseModel):
@@ -41,6 +43,7 @@ class GroupResponse(BaseModel):
     id: int
     name: str
     description: str | None
+    no_bump: bool = False
     members: list[str] = []
 
     class Config:
@@ -62,6 +65,7 @@ def _to_response(group: UserGroup, members: list[str]) -> GroupResponse:
         id=group.id,
         name=group.name,
         description=group.description,
+        no_bump=bool(getattr(group, "no_bump", False)),
         members=members,
     )
 
@@ -104,7 +108,7 @@ async def create_group(
     if db.query(UserGroup).filter(UserGroup.name == name).first():
         raise HTTPException(400, detail="El grupo ya existe")
 
-    group = UserGroup(name=name, description=data.description)
+    group = UserGroup(name=name, description=data.description, no_bump=data.no_bump)
     db.add(group)
     db.flush()
     db.add(AuditLog(
@@ -139,6 +143,8 @@ async def update_group(
         group.name = new_name
     if data.description is not None:
         group.description = data.description
+    if data.no_bump is not None:
+        group.no_bump = data.no_bump
 
     db.add(AuditLog(
         admin_id=current_admin.id, admin_username=current_admin.username,
