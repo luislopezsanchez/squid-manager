@@ -667,6 +667,29 @@ def apply_squid_config(db, force_reconfigure: bool = False) -> dict:
                 "config_preview": preview,
             }
 
+    # 1c. Si la salida va por otro proxy, comprobar que ese proxy responde.
+    #     Un padre inalcanzable no degrada la navegación: la corta entera, para
+    #     todos los usuarios a la vez, y encima con `never_direct` activo Squid
+    #     ni siquiera intenta la salida directa.
+    from app.models.parent_proxy import ParentProxy
+    from app.services.parent_proxy_service import probar_configuracion
+
+    padre = db.query(ParentProxy).first()
+    if padre and padre.enabled:
+        padre_ok, padre_msg = probar_configuracion(padre)
+        if not padre_ok:
+            mark_dirty()
+            return {
+                "status": "error",
+                "message": (
+                    "El proxy padre no responde, no se ha aplicado nada:\n"
+                    f"{padre_msg}\n\nCorrige la configuración en «Proxy padre» "
+                    "o desactívalo para salir directamente a Internet."
+                ),
+                "needs_restart": False,
+                "config_preview": preview,
+            }
+
     # 2. El puerto elegido en el panel es el que Docker tiene que publicar.
     #    Ya no se deduce del squid.conf —donde ahora hay una constante— sino
     #    de la base de datos, que es donde lo deja el panel.

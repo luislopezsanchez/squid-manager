@@ -5,6 +5,43 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.11.0] - 2026-08-25
+
+### Añadido
+- **Salida a Internet a través de otro proxy** (tabla `parent_proxy`, migración
+  `0008`, página «Proxy padre»). En muchas empresas el cortafuegos cierra la
+  salida directa y todo el tráfico tiene que pasar por el proxy corporativo;
+  sin esta opción, SquidManager no se podía desplegar en esas redes. Apagado
+  por defecto: la salida sigue siendo directa mientras no se active.
+- **Autenticación opcional** contra el padre. Muchos proxies internos no piden
+  credenciales, así que los campos se dejan vacíos; la contraseña se enmascara
+  al devolverla al panel, igual que la de enlace de LDAP.
+- **Comprobación real antes de aplicar**, que distingue las cuatro formas de
+  fallar porque cada una se arregla distinto: no se llega al padre, pide
+  credenciales que no se le han dado, las rechaza, o exige un método de
+  autenticación que Squid no puede presentar. Un padre inalcanzable no degrada
+  la navegación: la corta entera y para todos a la vez.
+- **Aviso explícito ante NTLM o Kerberos.** Squid solo sabe presentar
+  autenticación básica a un padre. Si el proxy corporativo exige otra cosa
+  —habitual cuando está integrado con Active Directory— la prueba lo dice en
+  lugar de dejar a alguien buscando la combinación correcta de usuario y
+  contraseña durante una tarde.
+- **Destinos que no pasan por el padre** (`always_direct`), para la intranet.
+- **Opción «no intentar nunca la salida directa»** (`never_direct`), activada
+  por defecto: si el cortafuegos la bloquea, intentarla solo añade una espera
+  antes de fallar igual.
+- 22 pruebas, incluidas las de cada forma de fallar y la de que las
+  credenciales viajen realmente en la petición.
+
+### Notas
+- La contraseña del proxy padre acaba escrita en el `squid.conf` en texto
+  plano. Es una limitación de Squid, no del diseño: conviene usar una cuenta de
+  servicio con los permisos justos.
+- Para comprobar que el tráfico sale por el padre, la última columna del
+  registro de accesos pasa de `HIER_DIRECT` a `FIRSTUP_PARENT`.
+
+---
+
 ## [0.10.1] - 2026-08-25
 
 ### Corregido (el backend se quedaba sin logs)

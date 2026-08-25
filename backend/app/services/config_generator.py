@@ -102,6 +102,15 @@ def generate_squid_config(db: Session) -> str:
     # es el comportamiento de siempre.
     dns_nameservers = parsear_lista(settings.get("dns_nameservers"))
 
+    # Salida a través de otro proxy. Sin fila o apagado = salida directa.
+    from app.models.parent_proxy import ParentProxy
+    from app.services.parent_proxy_service import parsear_lista as parsear_destinos
+
+    parent_proxy = db.query(ParentProxy).first()
+    direct_domains = parsear_destinos(
+        parent_proxy.direct_domains if parent_proxy else None
+    )
+
     config = template.render(
         acls=acls,
         rules=rendered_rules,
@@ -114,5 +123,7 @@ def generate_squid_config(db: Session) -> str:
         ssl_exclude=ssl_exclude,
         internal_port=INTERNAL_SQUID_PORT,
         dns_nameservers=dns_nameservers,
+        parent_proxy=parent_proxy,
+        direct_domains=direct_domains,
     )
     return config

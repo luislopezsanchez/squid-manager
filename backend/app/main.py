@@ -14,7 +14,7 @@ from sqlalchemy.exc import OperationalError
 from app.config import settings
 from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
-from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog
+from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy
 from app.middleware import rate_limit_middleware
 
 logging.basicConfig(level=logging.INFO)
@@ -224,6 +224,7 @@ app.include_router(logs.router, prefix="/api/logs", tags=["Logs"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notificaciones"])
 app.include_router(user_groups.router, prefix="/api/groups", tags=["Grupos de usuarios"])
 app.include_router(syslog.router, prefix="/api/syslog", tags=["Syslog externo"])
+app.include_router(parent_proxy.router, prefix="/api/parent-proxy", tags=["Proxy padre"])
 
 
 @app.get("/")

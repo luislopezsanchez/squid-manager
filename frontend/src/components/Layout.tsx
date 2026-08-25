@@ -89,6 +89,7 @@ export default function Layout() {
         { to: '/settings', label: 'Configuración', Icon: IconSettings },
         { to: '/notifications', label: 'Notificaciones', Icon: IconBell },
         { to: '/syslog', label: 'Syslog externo', Icon: IconSend },
+        { to: '/parent-proxy', label: 'Proxy padre', Icon: IconLink },
         { to: '/backup', label: 'Backup y migración', Icon: IconBackup },
         ...(isSuperadmin() ? [{ to: '/admins', label: 'Administradores', Icon: IconShield }] : []),
       ],

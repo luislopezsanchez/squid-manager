@@ -134,6 +134,15 @@ export const api = {
   testDns: (servers: string) =>
     request<{ ok: boolean; message: string }>('/squid/dns/test', { method: 'POST', body: JSON.stringify({ servers }) }),
 
+  // Proxy padre: salida a Internet a traves de otro proxy.
+  getParentProxy: () => request<any>('/parent-proxy/config'),
+  updateParentProxy: (data: any) =>
+    request<any>('/parent-proxy/config', { method: 'PUT', body: JSON.stringify(data) }),
+  // Pregunta al padre sin guardar: mejor descubrir aqui que no responde
+  // que cuando ya nadie puede navegar.
+  testParentProxy: (data: any) =>
+    request<{ ok: boolean; message: string }>('/parent-proxy/test', { method: 'POST', body: JSON.stringify(data) }),
+
   // LDAP
   getLdapConfig: () => request<any>('/ldap/config'),
   updateLdapConfig: (data: any) => request<any>('/ldap/config', { method: 'PUT', body: JSON.stringify(data) }),

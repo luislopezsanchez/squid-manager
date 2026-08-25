@@ -532,6 +532,40 @@ Cámbiala desde una sesión de base de datos, o revisa si sigue en el log:
 docker compose logs backend | grep -A3 "Administrador inicial"
 ```
 
+### Salir a Internet a través de otro proxy (proxy padre)
+
+En muchas empresas el cortafuegos cierra la salida directa y todo el tráfico
+tiene que pasar por el proxy corporativo. Se configura en **Panel → Proxy
+padre**:
+
+1. Activa «Usar un proxy padre» e indica servidor y puerto
+2. Credenciales solo si tu proxy las pide — muchos internos no lo hacen
+3. **Probar conexión**, y luego Guardar → Aplicar cambios
+
+**Squid solo sabe presentar autenticación básica a un padre.** Si el tuyo exige
+NTLM o Kerberos —habitual cuando está integrado con Active Directory— no hay
+usuario y contraseña que lo resuelvan: haría falta un intermediario que traduzca
+la autenticación. El botón de probar te lo dice explícitamente en lugar de
+dejarte adivinando.
+
+**Destinos que no pasan por el padre**: normalmente la intranet. Un punto
+delante incluye los subdominios (`.intranet.local`).
+
+> **«No intentar nunca la salida directa»** viene activado. Es lo coherente
+> cuando hay proxy corporativo: si el cortafuegos bloquea la salida directa,
+> intentarla solo añade una espera antes de fallar igual. Desactívalo solo si
+> tu red permite ambas salidas.
+
+Al aplicar se comprueba que el padre responde, y el cambio se rechaza si no lo
+hace: un padre inalcanzable no degrada la navegación, la corta entera.
+
+Para verificar que está funcionando, mira la última columna del registro de
+accesos: pasa de `HIER_DIRECT` (salida directa) a `FIRSTUP_PARENT`.
+
+> La contraseña del padre acaba escrita en el `squid.conf`, que Squid guarda en
+> texto plano. Es una limitación de Squid: usa una cuenta de servicio con los
+> permisos justos, no una cuenta personal.
+
 ### Usar tus propios servidores DNS (por ejemplo, un Pi-hole)
 
 Squid resuelve los nombres por su cuenta, así que puedes indicarle a qué

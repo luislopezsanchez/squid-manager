@@ -17,6 +17,7 @@ import Admins from './pages/Admins'
 import LogsViewer from './pages/LogsViewer'
 import Notifications from './pages/Notifications'
 import SyslogConfig from './pages/SyslogConfig'
+import ParentProxy from './pages/ParentProxy'
 import Groups from './pages/Groups'
 import ChangePassword from './pages/ChangePassword'
 import Layout from './components/Layout'
@@ -58,6 +59,7 @@ function App() {
           <Route path="logs" element={<LogsViewer />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="syslog" element={<SyslogConfig />} />
+          <Route path="parent-proxy" element={<ParentProxy />} />
           <Route path="groups" element={<Groups />} />
           <Route path="admins" element={isSuperadmin() ? <Admins /> : <Navigate to="/" />} />
         </Route>

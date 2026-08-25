@@ -121,6 +121,28 @@ http_access {{ rule.action }} {{ rule.acl_names }}
 http_access allow authenticated
 http_access deny all
 
+{% if parent_proxy and parent_proxy.enabled and parent_proxy.host %}
+# --- Salida a Internet a través de otro proxy ---
+# En redes donde el cortafuegos cierra la salida directa, todo el tráfico tiene
+# que pasar por el proxy corporativo.
+#
+# El 0 es el puerto ICP, que no se usa: `no-query` desactiva ese sondeo, y
+# `default` marca a este peer como la salida a usar cuando no hay otra regla.
+cache_peer {{ parent_proxy.host }} parent {{ parent_proxy.port }} 0 no-query default{% if parent_proxy.username %} login={{ parent_proxy.username }}:{{ parent_proxy.password or '' }}{% endif %}
+
+{% if direct_domains %}
+# Destinos que NO pasan por el padre: la intranet, normalmente.
+acl salida_directa dstdomain {{ direct_domains|join(' ') }}
+always_direct allow salida_directa
+{% endif %}
+{% if parent_proxy.never_direct %}
+# Sin salida directa de reserva: si el cortafuegos la bloquea —lo habitual
+# cuando hay proxy corporativo—, intentarla solo añade una espera antes de
+# fallar igual. O pasa por el padre, o no pasa.
+never_direct allow all
+{% endif %}
+{% endif %}
+
 # --- Configuración de caché ---
 cache_mem {{ settings.get('cache_mem', '128 MB') }}
 {% if settings.get('cache_dir') %}
