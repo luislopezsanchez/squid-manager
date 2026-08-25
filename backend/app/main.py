@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect
+from sqlalchemy.exc import OperationalError
 
 from app.config import settings
 from app.database import engine, SessionLocal
@@ -20,6 +21,50 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+
+def _explicar_fallo_de_conexion(error: Exception) -> None:
+    """Traduce un fallo de conexión con la base a algo accionable.
+
+    Sin esto, el arranque muere con un volcado de más de cien líneas de
+    SQLAlchemy donde la causa real aparece enterrada en la penúltima. La más
+    habitual, además, no se adivina leyendo el error: el volumen de datos de
+    PostgreSQL viene de una instalación anterior y conserva su contraseña,
+    porque POSTGRES_PASSWORD solo se aplica al crear la base por primera vez.
+    """
+    detalle = str(error)
+
+    if "password authentication failed" in detalle:
+        logger.error(
+            "\n"
+            "  No se pudo entrar en la base de datos: contraseña rechazada.\n"
+            "\n"
+            "  Lo más probable es que el volumen de PostgreSQL venga de una\n"
+            "  instalación anterior. La contraseña de una base ya creada no se\n"
+            "  cambia poniendo otra en el .env: POSTGRES_PASSWORD solo surte\n"
+            "  efecto la primera vez, cuando la base se crea vacía.\n"
+            "\n"
+            "  Dos salidas:\n"
+            "\n"
+            "  1) Empezar de cero. BORRA TODOS LOS DATOS (usuarios del proxy,\n"
+            "     reglas, historial):\n"
+            "         docker compose down -v && docker compose up -d\n"
+            "\n"
+            "  2) Conservar los datos: recupera la DB_PASS con la que se creó\n"
+            "     la base y ponla en el .env, luego:\n"
+            "         docker compose up -d\n"
+        )
+    elif "could not translate host name" in detalle or "Connection refused" in detalle:
+        logger.error(
+            "\n"
+            "  No se pudo contactar con la base de datos.\n"
+            "\n"
+            "  Comprueba que el contenedor está en marcha y sano:\n"
+            "      docker compose ps db\n"
+            "      docker compose logs db\n"
+        )
+    else:
+        logger.error(f"No se pudo conectar a la base de datos: {detalle}")
 
 
 def run_migrations():
@@ -35,8 +80,12 @@ def run_migrations():
     cfg = Config(str(BACKEND_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
 
-    inspector = inspect(engine)
-    tables = set(inspector.get_table_names())
+    try:
+        inspector = inspect(engine)
+        tables = set(inspector.get_table_names())
+    except OperationalError as e:
+        _explicar_fallo_de_conexion(e)
+        raise
 
     if "alembic_version" not in tables and "admins" in tables:
         logger.info("Base de datos preexistente sin historial de Alembic: marcando baseline 0001")

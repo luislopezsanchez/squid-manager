@@ -122,6 +122,30 @@ ok "Código obtenido en $INSTALL_DIR"
 # 4. Configurar .env
 # ============================================
 if [[ ! -f ".env" ]]; then
+    # Un .env nuevo trae una DB_PASS nueva, y eso choca con una base que ya
+    # exista: PostgreSQL solo aplica POSTGRES_PASSWORD cuando crea la base
+    # vacía, así que un volumen heredado de otra instalación conserva su
+    # contraseña anterior y el backend no puede entrar. Como Compose nombra los
+    # volúmenes por el directorio del proyecto, basta con reinstalar en otra
+    # ruta con el mismo nombre de carpeta para tropezar con esto.
+    PGDATA_VOL="$(basename "$INSTALL_DIR")_pgdata"
+    if docker volume inspect "$PGDATA_VOL" &>/dev/null; then
+        warn "Existe el volumen de base de datos '$PGDATA_VOL' de una instalación anterior,"
+        warn "pero no hay un .env con su contraseña."
+        echo
+        echo "  Si genero una contraseña nueva, PostgreSQL seguirá esperando la anterior"
+        echo "  y el backend no podrá arrancar. Elige una de las dos:"
+        echo
+        echo "  1) Empezar de cero. BORRA LOS DATOS de esa instalación:"
+        echo "       docker volume rm $PGDATA_VOL"
+        echo "     y vuelve a ejecutar el instalador."
+        echo
+        echo "  2) Conservar los datos: recupera el .env anterior (con su DB_PASS),"
+        echo "     déjalo en $INSTALL_DIR y vuelve a ejecutar el instalador."
+        echo
+        fail "Instalación detenida para no dejar el sistema a medias."
+    fi
+
     info "Creando archivo .env desde .env.example..."
     cp .env.example .env
 

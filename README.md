@@ -468,6 +468,39 @@ docker compose ps    # Verificar que todos los contenedores están UP
 docker compose logs backend    # Ver errores del backend
 ```
 
+### Reinstalé y el backend no arranca: «password authentication failed»
+
+Sobrevivió el volumen de datos de la instalación anterior. La contraseña de una
+base de datos ya creada **no se cambia poniendo otra en el `.env`**:
+`POSTGRES_PASSWORD` solo surte efecto la primera vez, cuando PostgreSQL crea la
+base vacía. Si el volumen ya existía, conserva la contraseña original y el
+backend, que usa la nueva, no puede entrar.
+
+Ojo con esto al reinstalar en otra ruta: Compose nombra los volúmenes según el
+**nombre del directorio** del proyecto, así que dos instalaciones en rutas
+distintas pero con la misma carpeta (`squid-manager`) comparten volumen.
+
+```bash
+# Ver si existe el volumen de una instalación anterior
+docker volume ls | grep pgdata
+```
+
+Dos salidas:
+
+```bash
+# 1) Empezar de cero. BORRA TODOS LOS DATOS (usuarios, reglas, historial)
+docker compose down -v && docker compose up -d
+```
+
+```bash
+# 2) Conservar los datos: recupera la DB_PASS con la que se creó la base,
+#    ponla en el .env y levanta de nuevo
+docker compose up -d
+```
+
+El instalador comprueba esto antes de generar un `.env` nuevo y se detiene si
+encuentra un volumen huérfano, en lugar de dejar el sistema a medias.
+
 ### No recuerdo la contraseña inicial del admin
 Cámbiala desde una sesión de base de datos, o revisa si sigue en el log:
 ```bash

@@ -7,6 +7,22 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.10.1] - 2026-08-25
 
+### Corregido (reinstalación sobre datos anteriores)
+- **Reinstalar dejaba el backend en un bucle de reinicios imposible de
+  diagnosticar.** Si sobrevivía el volumen de PostgreSQL de una instalación
+  previa, el instalador generaba una `DB_PASS` nueva que la base ya creada
+  ignora —`POSTGRES_PASSWORD` solo se aplica al inicializarla vacía—, así que
+  el backend no podía entrar. Lo que veía el usuario era un volcado de más de
+  cien líneas de SQLAlchemy con la causa enterrada en la penúltima, y un
+  contenedor que aparecía como pausado. Es fácil de provocar sin saberlo:
+  Compose nombra los volúmenes por el directorio del proyecto, de modo que dos
+  instalaciones en rutas distintas con la misma carpeta comparten los datos.
+- `install.sh` ahora comprueba si existe ese volumen antes de generar un `.env`
+  nuevo, y se detiene explicando las dos salidas (empezar de cero borrando los
+  datos, o recuperar el `.env` anterior) en lugar de dejar el sistema a medias.
+- El backend traduce los fallos de conexión con la base a un mensaje legible
+  que apunta a la causa probable, en vez de morir con el volcado entero.
+
 ### Corregido (instalador)
 - **`install.sh` instalaba siempre en `/opt/squid-manager`, ignorando desde
   dónde se ejecutara.** Quien clonaba el repositorio en otra ruta y lanzaba
