@@ -1,6 +1,26 @@
 # API Reference — SquidManager
 
-La API tiene 14 routers y 72 endpoints. La documentación interactiva (Swagger/OpenAPI) solo se sirve con `DEBUG=true` en `http://localhost:8000/docs`, accesible desde dentro de la red Docker; con `DEBUG=false` (el valor por defecto) esa ruta devuelve 404.
+La API tiene 14 routers y 72 endpoints.
+
+**La documentación interactiva (Swagger/OpenAPI) no se alcanza desde fuera del
+servidor.** El puerto 8000 no se publica al host, así que
+`http://TU_SERVIDOR:8000/docs` no responde; en una máquina con otros servicios
+esa dirección puede llevarte incluso a la API de otro contenedor. Y solo se
+registra con `DEBUG=true`: con el valor por defecto devuelve 404.
+
+Para consultarla, con `DEBUG=true` y desde el propio servidor, hay que ir a la
+IP del contenedor del backend:
+
+```bash
+curl http://$(docker inspect squidmgr-backend --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'):8000/openapi.json
+```
+
+Ver la interfaz de Swagger en el navegador requiere un túnel SSH hasta esa IP,
+que el servidor alcanza pero tu equipo no. Deja `DEBUG=false` al terminar: la
+ruta se sirve sin autenticación.
+
+El panel consume la API por `/api/` a través de nginx, y ese camino sí está
+publicado en el puerto del panel.
 
 ---
 

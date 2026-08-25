@@ -336,7 +336,32 @@ El panel se organiza en tres grupos:
 
 ## 🔌 API REST
 
-La documentación interactiva (Swagger/OpenAPI) solo está disponible con `DEBUG=true`, en `http://localhost:8000/docs` desde la red interna de Docker.
+**La documentación interactiva no es accesible desde fuera del servidor.** El
+puerto 8000 no se publica al host, así que `http://TU_SERVIDOR:8000/docs` nunca
+responde — y en una máquina con otros servicios podrías acabar viendo la API de
+otro contenedor. Además solo se registra con `DEBUG=true`; con el valor por
+defecto devuelve 404.
+
+Si necesitas consultarla:
+
+```bash
+# 1. DEBUG=true en el .env, y recrear el backend
+docker compose up -d --force-recreate backend
+```
+
+```bash
+# 2. Desde el propio servidor, contra la IP del contenedor
+curl http://$(docker inspect squidmgr-backend --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'):8000/openapi.json
+```
+
+Para abrir la interfaz de Swagger en tu navegador hace falta un túnel SSH hasta
+esa IP del contenedor, ya que el servidor sí la alcanza pero tu equipo no.
+
+> Vuelve a dejar `DEBUG=false` al terminar: esa ruta se sirve sin
+> autenticación.
+
+El panel usa la API a través de nginx, en `/api/`, y ese camino sí está
+publicado — es el que responde en el puerto del panel.
 
 ### Endpoints principales:
 
