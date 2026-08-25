@@ -532,6 +532,29 @@ Cámbiala desde una sesión de base de datos, o revisa si sigue en el log:
 docker compose logs backend | grep -A3 "Administrador inicial"
 ```
 
+### Encadenar dos proxies: cada uno con su nombre
+
+**Cada proxy de la cadena necesita un `visible_hostname` distinto.** Squid añade
+su nombre a la cabecera `Via` al reenviar, y rechaza como bucle de reenvío
+cualquier petición que ya lleve el suyo. Dos instalaciones con el mismo nombre
+se cortan entre sí y devuelven un `403 Acceso Denegado` que no menciona la
+causa; solo el `cache.log` lo dice:
+
+```
+WARNING: Forwarding loop detected for:
+Via: 1.1 squidmanager (squid/6.12)
+```
+
+Curioso detalle: **HTTP falla y HTTPS funciona**, porque el tráfico HTTPS viaja
+dentro del túnel y esa cabecera no se inspecciona.
+
+Las instalaciones nuevas reciben un nombre único automáticamente. Si vienes de
+una anterior, cámbialo en **Configuración → General**:
+
+```
+visible_hostname = squidmanager-oficina
+```
+
 ### Encadenar dos proxies: quién intercepta el HTTPS
 
 **Solo uno de los dos puede interceptar HTTPS.** Si los dos lo hacen, el de

@@ -5,6 +5,26 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.12.1] - 2026-08-25
+
+### Corregido
+- **Dos SquidManager encadenados se cortaban entre sí.** Todas las
+  instalaciones se llamaban `squidmanager`, y Squid rechaza como bucle de
+  reenvío cualquier petición cuya cabecera `Via` ya lleve su propio nombre. El
+  proxy de arriba veía su nombre en el tráfico que le mandaba el de abajo y lo
+  denegaba con un `403 Acceso Denegado` que no mencionaba la causa; solo
+  aparecía en el `cache.log`, como `WARNING: Forwarding loop detected`.
+  Las instalaciones nuevas reciben un `visible_hostname` con sufijo único.
+- El síntoma despistaba: **HTTP fallaba y HTTPS funcionaba**, porque el tráfico
+  HTTPS viaja dentro del túnel y esa cabecera no se inspecciona. Parecía un
+  problema de HTTPS cuando era justo al revés.
+
+> Si vienes de una instalación anterior, tu `visible_hostname` sigue siendo
+> `squidmanager`. Cámbialo en Configuración → General si vas a encadenar
+> proxies.
+
+---
+
 ## [0.12.0] - 2026-08-25
 
 ### Añadido

@@ -151,7 +151,17 @@ def seed_data():
             "credentialsttl": ("2 hours", "security", "TTL de credenciales"),
             "access_log": ("/var/log/squid/access.log", "logging", "Ruta del log de acceso"),
             "cache_log": ("/var/log/squid/cache.log", "logging", "Ruta del log de caché"),
-            "visible_hostname": ("squidmanager", "general", "Nombre visible del proxy"),
+            # Con un sufijo único por instalación, no por capricho: Squid
+            # rechaza como bucle de reenvío cualquier petición cuya cabecera
+            # Via ya lleve su propio nombre. Dos SquidManager encadenados con
+            # el mismo nombre se cortan entre sí, y el error que devuelven
+            # ("403 Acceso Denegado") no menciona el motivo.
+            "visible_hostname": (
+                f"squidmanager-{secrets.token_hex(3)}", "general",
+                "Nombre con el que el proxy se identifica. Debe ser distinto "
+                "en cada proxy de una cadena: Squid corta como bucle lo que "
+                "ya lleve su nombre en la cabecera Via.",
+            ),
             "refresh_pattern": (". 0 20% 4320", "cache", "Patrón de refresco"),
             "error_language": ("es", "general", "Idioma de las páginas de error"),
             "ssl_bump_exclude": (
