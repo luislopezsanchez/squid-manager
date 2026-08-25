@@ -161,11 +161,6 @@ dns_nameservers {{ dns_nameservers|join(' ') }}
 {% else %}
 # Sin servidores propios configurados: Squid usa la resolución del sistema.
 {% endif %}
-{% if dns_v4_first %}
-# Probar primero IPv4: en redes sin IPv6 real, intentarlo antes añade una
-# espera inútil en cada resolución.
-dns_v4_first on
-{% endif %}
 
 # --- Misc ---
 coredump_dir /var/spool/squid

@@ -174,12 +174,19 @@ def test_los_servidores_configurados_llegan_al_squid_conf():
     assert "dns_nameservers 172.27.0.1 1.1.1.1" in config
 
 
-def test_dns_v4_first_solo_si_se_activa():
+def test_nunca_se_emite_dns_v4_first():
+    """Squid 6 rechaza esa directiva por obsoleta.
+
+    Llegó a ofrecerse como ajuste del panel: se guardaba, se escribía en el
+    squid.conf y Squid la descartaba con un ERROR en su log, así que no hacía
+    nada. Aunque quede el valor en la base de datos de una instalación
+    antigua, no debe acabar en la configuración.
+    """
     from test_config_generator import FakeDB, FakeSetting
     from app.services.config_generator import generate_squid_config
 
-    base = [FakeSetting("http_port", "3128", "network")]
-    assert "dns_v4_first" not in generate_squid_config(FakeDB(settings=base))
-
-    con_v4 = base + [FakeSetting("dns_v4_first", "true", "network")]
-    assert "dns_v4_first on" in generate_squid_config(FakeDB(settings=con_v4))
+    db = FakeDB(settings=[
+        FakeSetting("http_port", "3128", "network"),
+        FakeSetting("dns_v4_first", "true", "network"),
+    ])
+    assert "dns_v4_first" not in generate_squid_config(db)

@@ -101,7 +101,6 @@ def generate_squid_config(db: Session) -> str:
     # Servidores DNS propios. Vacío = Squid usa la resolución del sistema, que
     # es el comportamiento de siempre.
     dns_nameservers = parsear_lista(settings.get("dns_nameservers"))
-    dns_v4_first = str(settings.get("dns_v4_first", "")).lower() in ("1", "true", "on", "si", "sí")
 
     config = template.render(
         acls=acls,
@@ -115,6 +114,5 @@ def generate_squid_config(db: Session) -> str:
         ssl_exclude=ssl_exclude,
         internal_port=INTERNAL_SQUID_PORT,
         dns_nameservers=dns_nameservers,
-        dns_v4_first=dns_v4_first,
     )
     return config

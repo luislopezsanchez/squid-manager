@@ -209,13 +209,20 @@ def validate_squid_config(config_text: str) -> tuple[bool, str]:
     except Exception as e:
         return False, f"Error ejecutando la validación: {e}"
 
-    if result.exit_code != 0:
-        # Quedarse con las líneas de error, que es lo accionable.
-        errors = [
-            line for line in output.splitlines()
-            if "ERROR" in line or "FATAL" in line or "aborting" in line.lower()
-        ]
-        return False, "\n".join(errors[:10]) or output[-1000:]
+    # Quedarse con las líneas de error, que es lo accionable.
+    errors = [
+        line for line in output.splitlines()
+        if "ERROR" in line or "FATAL" in line or "aborting" in line.lower()
+    ]
+
+    # No basta con mirar el código de salida. Ante una directiva obsoleta o
+    # desconocida, `squid -k parse` avisa por ERROR pero termina con éxito: la
+    # configuración se daba por buena y la directiva quedaba en el fichero sin
+    # hacer nada, con el único rastro de una línea en un log que nadie mira.
+    # Así se coló un `dns_v4_first` que Squid 6 ya no soporta.
+    if result.exit_code != 0 or errors:
+        detalle = "\n".join(errors[:10]) or output[-1000:]
+        return False, detalle
 
     warnings = [line for line in output.splitlines() if "WARNING" in line]
     return True, "\n".join(warnings[:10]) if warnings else "Configuración válida"

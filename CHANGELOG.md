@@ -5,6 +5,24 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.10.1] - 2026-08-25
+
+### Corregido
+- **El ajuste `dns_v4_first` no hacía nada y se ha retirado** (migración
+  `0007`). La directiva está obsoleta desde Squid 5 y la 6 la rechaza al
+  arrancar: se guardaba, se escribía en el `squid.conf` y Squid la descartaba
+  dejando un `ERROR` en su log. Se ofrecía en el panel una opción sin efecto.
+  Quien necesite priorizar IPv4 tiene que hacerlo por otra vía (que el servidor
+  DNS no devuelva registros AAAA, o desactivar IPv6 en el contenedor).
+- **La validación daba por buena una configuración con directivas obsoletas.**
+  `squid -k parse` avisa por `ERROR` de una directiva que no reconoce pero
+  termina con éxito, y solo se miraba el código de salida. Ahora también se
+  revisan las líneas de error de la salida, así que una directiva obsoleta o
+  desconocida se detecta al aplicar en lugar de quedar escrita sin efecto. Es
+  la comprobación que habría evitado el fallo anterior.
+
+---
+
 ## [0.10.0] - 2026-08-24
 
 ### Añadido
@@ -22,8 +40,8 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
   no apunta a la causa.
 - **Botón «Probar» junto al campo**, que consulta los servidores sin guardar
   nada, para verificarlos antes de comprometerse.
-- Ajuste `dns_v4_first`: consultar IPv4 antes que IPv6. Útil en redes sin IPv6
-  real, donde intentarlo primero añade una espera en cada resolución.
+- ~~Ajuste `dns_v4_first`: consultar IPv4 antes que IPv6.~~ **Retirado en
+  0.10.1**: la directiva está obsoleta en Squid 6 y el ajuste no surtía efecto.
 - 21 pruebas nuevas, incluidas las de un servidor que rechaza la consulta
   (RCODE 5) y otro que responde sin resultados: dos formas de fallar que un
   simple "¿hay algo escuchando en el puerto 53?" daría por buenas.
