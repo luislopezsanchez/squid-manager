@@ -1,6 +1,9 @@
 """Servicio para controlar el contenedor Squid y generar archivos auxiliares."""
 
 import os
+import re
+import shutil
+import subprocess
 import time
 import logging
 from pathlib import Path
@@ -15,6 +18,15 @@ logger = logging.getLogger(__name__)
 PASSWD_PATH = Path("/etc/squid/squid_passwd")
 LDAP_CONF_PATH = Path("/etc/squid/ldap_helper.conf")
 LDAP_ALLOWLIST_PATH = Path("/etc/squid/ldap_allowlist")
+
+# Nombre del servicio Squid dentro del docker-compose.yml (distinto del nombre
+# del contenedor, que es SQUID_CONTAINER_NAME).
+SQUID_COMPOSE_SERVICE = "squid"
+
+# Puerto interno fijo en el que Squid escucha dentro del contenedor. El puerto
+# que se elige en el panel es el que Docker publica hacia fuera y se mapea
+# contra este.
+from app.services.config_generator import INTERNAL_SQUID_PORT  # noqa: E402
 
 # uid/gid del usuario 'proxy' en la imagen de Squid (Ubuntu 24.04).
 PROXY_UID = 13
@@ -241,13 +253,200 @@ def write_ldap_aux_files(ldap_config, allowed_usernames: list[str]) -> bool:
         return False
 
 
+def _project_dir() -> Path | None:
+    """Directorio del proyecto (docker-compose.yml + .env), si está montado.
+
+    El compose monta este directorio en el contenedor del backend usando la
+    MISMA ruta absoluta que tiene en el host. Esa igualdad no es un capricho:
+    Docker Compose graba la ruta de trabajo en las etiquetas del contenedor, y
+    si el backend la viera bajo otra ruta, cada `docker compose up -d` lanzado
+    desde el host detectaría una diferencia y recrearía Squid sin motivo.
+    """
+    raw = os.environ.get("PROJECT_DIR", "").strip()
+    if not raw:
+        return None
+    base = Path(raw)
+    return base if (base / "docker-compose.yml").is_file() else None
+
+
+def _compose_cmd() -> list[str] | None:
+    """Devuelve el comando de Docker Compose disponible, o None si no lo hay."""
+    if shutil.which("docker") is None:
+        return None
+    try:
+        probe = subprocess.run(
+            ["docker", "compose", "version"],
+            capture_output=True, timeout=15,
+        )
+        if probe.returncode == 0:
+            return ["docker", "compose"]
+    except Exception:
+        pass
+    if shutil.which("docker-compose"):
+        return ["docker-compose"]
+    return None
+
+
+def sync_env_port(new_port: str) -> tuple[bool, str]:
+    """Deja PROXY_PORT del .env en sintonía con el puerto elegido en el panel.
+
+    PROXY_PORT es el puerto que Docker publica hacia fuera, y es el único sitio
+    donde vive el puerto del proxy: Squid escucha siempre en un puerto interno
+    fijo (INTERNAL_SQUID_PORT) contra el que se mapea. Antes el puerto estaba
+    además en el squid.conf, y cuando las dos copias divergían Docker publicaba
+    un puerto donde Squid ya no escuchaba: el proxy quedaba inalcanzable desde
+    fuera y el contenedor seguía figurando como sano.
+
+    La escritura es atómica (fichero temporal + rename) porque este .env
+    contiene también la contraseña de la base de datos y la clave de firma de
+    los JWT: una escritura a medias dejaría el sistema sin arrancar.
+    """
+    base = _project_dir()
+    if not base:
+        return False, (
+            "El directorio del proyecto no está montado en el backend "
+            "(variable PROJECT_DIR): no se puede sincronizar el .env."
+        )
+
+    env_file = base / ".env"
+    if not env_file.is_file():
+        return False, f"No se encontró el fichero {env_file}"
+
+    try:
+        original = env_file.read_text()
+    except Exception as e:
+        return False, f"No se pudo leer el .env: {e}"
+
+    lines = original.splitlines()
+    found = False
+
+    for i, line in enumerate(lines):
+        # Solo asignaciones reales: una línea comentada que mencione la
+        # variable debe quedarse como está.
+        if re.match(r"^\s*PROXY_PORT\s*=", line):
+            lines[i] = f"PROXY_PORT={new_port}"
+            found = True
+
+    if not found:
+        lines.append(f"PROXY_PORT={new_port}")
+
+    updated = "\n".join(lines) + "\n"
+    if updated == original:
+        return True, "El .env ya estaba sincronizado"
+
+    tmp = env_file.with_name(f".env.tmp-{os.getpid()}")
+    try:
+        # Conservar los permisos del original: lleva secretos.
+        mode = env_file.stat().st_mode & 0o777
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+        with os.fdopen(fd, "w") as f:
+            f.write(updated)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, env_file)
+    except Exception as e:
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return False, f"No se pudo escribir el .env: {e}"
+
+    logger.info(f".env sincronizado: PROXY_PORT = {new_port}")
+    return True, f".env actualizado a {new_port}"
+
+
+def _recreate_with_compose(new_port: str) -> tuple[bool, str]:
+    """Recrea el contenedor de Squid con Docker Compose.
+
+    Se prefiere a construirlo a mano con el SDK porque Compose aplica el
+    docker-compose.yml entero: si mañana el servicio gana una opción nueva
+    (capabilities, sysctls, dns, límites), se respeta sola. La versión que
+    copiaba campos del contenedor viejo uno a uno perdía en silencio todo lo
+    que no estuviera en esa lista.
+    """
+    base = _project_dir()
+    if not base:
+        return False, "El directorio del proyecto no está montado (PROJECT_DIR)"
+
+    compose = _compose_cmd()
+    if not compose:
+        return False, "Docker Compose no está disponible dentro del backend"
+
+    # El nombre del proyecto se fija explícitamente: sin él, Compose lo deduce
+    # del nombre del directorio y podría no coincidir con el de los
+    # contenedores que ya existen.
+    project = os.environ.get("COMPOSE_PROJECT_NAME", "").strip() or base.name
+
+    # --no-deps es imprescindible, no una optimización: sin él, Compose puede
+    # arrastrar a los servicios de los que Squid depende, y uno de ellos es el
+    # propio backend, que es quien está ejecutando este comando. Se estaría
+    # matando a sí mismo a mitad de la operación.
+    cmd = compose + [
+        "--project-directory", str(base),
+        "-p", project,
+        "up", "-d", "--no-deps", "--force-recreate", SQUID_COMPOSE_SERVICE,
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd, cwd=str(base), capture_output=True, text=True, timeout=180,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "Docker Compose tardó demasiado (180 s) en recrear Squid"
+    except Exception as e:
+        return False, f"No se pudo ejecutar Docker Compose: {e}"
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        return False, f"Docker Compose falló: {detail[-500:]}"
+
+    return True, f"Contenedor recreado con Docker Compose en el puerto {new_port}"
+
+
+def verify_published_port(expected_port: str) -> tuple[bool, str]:
+    """Comprueba que Docker publica de verdad el puerto que Squid escucha.
+
+    Es la comprobación que faltaba: hasta ahora un desajuste entre el puerto
+    publicado y el de escucha no lo detectaba nadie, porque el contenedor
+    seguía estando «sano» (el proceso vivía) mientras el proxy era
+    inalcanzable desde fuera.
+    """
+    try:
+        client = _get_docker_client()
+        if not client:
+            return False, "No se pudo conectar a Docker para verificar el puerto"
+        container = client.containers.get(settings.SQUID_CONTAINER_NAME)
+        container.reload()
+        bindings = container.attrs.get("HostConfig", {}).get("PortBindings") or {}
+        published = {
+            b.get("HostPort")
+            for binds in bindings.values() if binds
+            for b in binds
+        }
+    except Exception as e:
+        return False, f"No se pudo comprobar el puerto publicado: {e}"
+
+    if expected_port in published:
+        return True, f"Docker publica el puerto {expected_port}"
+    return False, (
+        f"Squid escucha en el puerto {expected_port} pero Docker publica "
+        f"{sorted(p for p in published if p) or 'ninguno'}: el proxy no será "
+        f"accesible desde fuera."
+    )
+
+
 def restart_squid() -> tuple[bool, str]:
     """Recrea el contenedor Squid con el puerto que indica la base de datos.
 
-    El contenedor anterior se renombra en lugar de borrarse: si la creación del
-    nuevo falla, se restaura y el proxy sigue funcionando. También se copian la
-    política de reinicio, el healthcheck y las etiquetas de Docker Compose, que
-    antes se perdían al recrear.
+    Orden deliberado:
+      1. Sincronizar el .env con el puerto de la BD.
+      2. Recrear el contenedor con Docker Compose.
+      3. Verificar que el puerto publicado es el esperado.
+
+    El paso 1 va primero a propósito: aunque la recreación falle, el .env queda
+    correcto y el siguiente `docker compose up -d` deja el sistema bien. Al
+    revés (recrear y luego escribir) una caída a medias dejaba una divergencia
+    silenciosa entre lo que publica Docker y lo que escucha Squid.
     """
     try:
         from app.database import SessionLocal
@@ -265,6 +464,50 @@ def restart_squid() -> tuple[bool, str]:
         if not new_port.isdigit():
             return False, f"El puerto configurado no es un número: '{new_port}'"
 
+        # 1. El .env primero: es lo que hace que el cambio sobreviva a un
+        #    `docker compose up -d` o a un reinicio de la máquina.
+        env_ok, env_msg = sync_env_port(new_port)
+        if not env_ok:
+            logger.warning(f"No se pudo sincronizar el .env: {env_msg}")
+
+        # 2. Recrear con Compose; el SDK queda de reserva para instalaciones
+        #    donde el directorio del proyecto no esté montado en el backend.
+        ok, msg = _recreate_with_compose(new_port)
+        if not ok:
+            logger.warning(f"Compose no pudo recrear Squid ({msg}); se recurre al SDK")
+            ok, msg = _recreate_with_sdk(new_port)
+            if not ok:
+                return False, msg
+
+        # 3. Comprobar que el puerto quedó realmente publicado.
+        port_ok, port_msg = verify_published_port(new_port)
+        if not port_ok:
+            return False, f"{msg}, pero {port_msg}"
+
+        if not env_ok:
+            return True, (
+                f"{msg}, pero no se pudo actualizar el .env ({env_msg}): un "
+                f"`docker compose up -d` podría devolver el puerto al valor viejo."
+            )
+        return True, f"{msg} ({env_msg})"
+    except Exception as e:
+        logger.error(f"Error recreando Squid: {e}")
+        return False, f"Error: {e}"
+
+
+def _recreate_with_sdk(new_port: str) -> tuple[bool, str]:
+    """Recrea el contenedor a mano con el SDK de Docker (camino de reserva).
+
+    Solo se usa si Compose no está disponible. Reconstruye el contenedor
+    copiando la configuración del anterior, así que **solo conserva los campos
+    que se copian aquí de forma explícita**: cualquier opción que se añada al
+    docker-compose.yml y no se refleje en esta lista se perdería al cambiar el
+    puerto. Por eso el camino preferente es Compose.
+
+    El contenedor anterior se renombra en lugar de borrarse: si la creación del
+    nuevo falla, se restaura y el proxy sigue funcionando.
+    """
+    try:
         client = _get_docker_client()
         if not client:
             return False, "No se pudo conectar a Docker"
@@ -280,7 +523,6 @@ def restart_squid() -> tuple[bool, str]:
 
         image = old_config["Config"]["Image"]
         env = old_config["Config"].get("Env") or []
-        env = [e if not e.startswith("SQUID_PORT=") else f"SQUID_PORT={new_port}" for e in env]
 
         volumes = []
         for mount in old_config.get("Mounts", []):
@@ -307,7 +549,8 @@ def restart_squid() -> tuple[bool, str]:
                 image=image,
                 name=settings.SQUID_CONTAINER_NAME,
                 environment=env,
-                ports={f"{new_port}/tcp": int(new_port)},
+                # Puerto interno fijo, publicado en el que eligió el panel.
+                ports={f"{INTERNAL_SQUID_PORT}/tcp": int(new_port)},
                 volumes=volumes,
                 network=network,
                 labels=labels,
@@ -338,6 +581,8 @@ def restart_squid() -> tuple[bool, str]:
 
         _wait_until_running(new_container)
 
+        from app.database import SessionLocal
+
         db = SessionLocal()
         try:
             write_passwd_file(db)
@@ -348,7 +593,7 @@ def restart_squid() -> tuple[bool, str]:
         logger.info(f"Contenedor Squid recreado en puerto {new_port}")
         return True, f"Contenedor recreado en puerto {new_port} (usuarios regenerados)"
     except Exception as e:
-        logger.error(f"Error recreando Squid: {e}")
+        logger.error(f"Error recreando Squid con el SDK: {e}")
         return False, f"Error: {e}"
 
 
@@ -372,8 +617,6 @@ def apply_squid_config(db, force_reconfigure: bool = False) -> dict:
     solo-ACL (p. ej. miembros de un grupo), que reconfigure recarga sin purgar
     credenciales ni cortar conexiones activas.
     """
-    import re as regex
-
     from app.services.config_generator import generate_squid_config
     from app.services.config_state import mark_clean, mark_dirty
     from app.models.ldap_config import LdapConfig
@@ -393,32 +636,32 @@ def apply_squid_config(db, force_reconfigure: bool = False) -> dict:
             "config_preview": preview,
         }
 
-    # 2. ¿Cambió el puerto respecto a lo que Docker publica?
-    new_port_match = regex.search(r"^http_port\s+(\d+)", config_text, regex.MULTILINE)
-    new_port = new_port_match.group(1) if new_port_match else None
+    # 2. El puerto elegido en el panel es el que Docker tiene que publicar.
+    #    Ya no se deduce del squid.conf —donde ahora hay una constante— sino
+    #    de la base de datos, que es donde lo deja el panel.
+    from app.models.squid_settings import SquidSetting
+
+    port_setting = db.query(SquidSetting).filter(SquidSetting.key == "http_port").first()
+    desired_port = str(port_setting.value).strip() if port_setting else ""
     port_changed = False
-    if new_port:
-        try:
-            client = docker_sdk.from_env()
-            container = client.containers.get(settings.SQUID_CONTAINER_NAME)
-            container.reload()
-            published_ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
-            for _port_key, bindings in published_ports.items():
-                if bindings and isinstance(bindings, list):
-                    for binding in bindings:
-                        published = binding.get("HostPort")
-                        if published and published != new_port:
-                            port_changed = True
-                            logger.info(
-                                f"Puerto cambió: Docker publica {published}, BD dice {new_port}."
-                            )
-                            break
-        except Exception as e:
-            logger.warning(f"No se pudo comparar puertos con Docker: {e}")
+    if desired_port.isdigit():
+        published_ok, published_msg = verify_published_port(desired_port)
+        port_changed = not published_ok
+        if port_changed:
+            logger.info(f"Hay que recrear el contenedor: {published_msg}")
 
     # 3. Escribir la configuración ya validada.
     with open(settings.SQUID_CONFIG_PATH, "w") as f:
         f.write(config_text)
+
+    # El .env se sincroniza en cada aplicación, no solo cuando cambia el
+    # puerto: así una instalación antigua o una edición manual del fichero se
+    # corrigen solas en el siguiente «Aplicar cambios», en vez de quedar como
+    # una divergencia latente que solo se manifiesta al reiniciar la máquina.
+    if desired_port.isdigit():
+        env_ok, env_msg = sync_env_port(desired_port)
+        if not env_ok:
+            logger.warning(f"No se pudo sincronizar el .env: {env_msg}")
 
     # 4. Archivos auxiliares: LDAP y usuarios del proxy.
     ldap_config = db.query(LdapConfig).first()

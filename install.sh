@@ -133,6 +133,17 @@ else
     ok ".env ya existe. Manteniendo el resto de la configuración."
 fi
 
+# PROJECT_DIR tiene que apuntar siempre al sitio real del proyecto: el backend
+# lo usa para recrear el contenedor de Squid con Compose cuando cambias el
+# puerto desde el panel. Se reescribe en cada ejecución por si el proyecto se
+# movió de directorio desde la instalación anterior.
+if grep -qE '^PROJECT_DIR=' .env; then
+    sed -i "s|^PROJECT_DIR=.*|PROJECT_DIR=$INSTALL_DIR|" .env
+else
+    printf '\n# Ruta absoluta del proyecto (la usa el backend para invocar Compose)\nPROJECT_DIR=%s\n' "$INSTALL_DIR" >> .env
+fi
+ok "PROJECT_DIR apunta a $INSTALL_DIR"
+
 # ============================================
 # 5. Desplegar contenedores
 # ============================================

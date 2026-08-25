@@ -46,11 +46,21 @@ services:
       TRUSTED_PROXY_HOSTS: ${TRUSTED_PROXY_HOSTS:-frontend}
       BCRYPT_COST: ${BCRYPT_COST:-12}
       ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
+      # Directorio del proyecto, para que el backend pueda invocar
+      # `docker compose up -d squid` al cambiar el puerto y mantener el .env
+      # sincronizado con la base de datos.
+      PROJECT_DIR: ${PROJECT_DIR:-/opt/squid-manager}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-squid-manager}
     volumes:
       - squid-config:/etc/squid
       - squid-spool:/var/spool/squid
       - squid-logs:/var/log/squid
       - /var/run/docker.sock:/var/run/docker.sock
+      # El proyecto se monta en la MISMA ruta que tiene en el host. Compose
+      # graba su directorio de trabajo en las etiquetas del contenedor: si el
+      # backend lo viera en otra ruta, cada `docker compose up -d` lanzado a
+      # mano detectaría una diferencia y recrearía Squid sin necesidad.
+      - ${PROJECT_DIR:-/opt/squid-manager}:${PROJECT_DIR:-/opt/squid-manager}
     # El puerto 8000 NO se publica: el frontend habla con el backend por la red
     # interna. Exponerlo dejaba la API accesible sin pasar por nginx.
     expose:
@@ -76,25 +86,32 @@ services:
     depends_on:
       backend:
         condition: service_started
-    environment:
-      - SQUID_PORT=${SQUID_PORT:-3128}
     volumes:
       - squid-config:/etc/squid
       - squid-spool:/var/spool/squid
       - squid-logs:/var/log/squid
       - squid-crtd:/var/lib/ssl_crtd
+    # Squid escucha SIEMPRE en 3128 dentro del contenedor; lo único que cambia
+    # al elegir otro puerto en el panel es la parte publicada. Así el puerto
+    # vive en un solo sitio (PROXY_PORT) en lugar de dos que había que
+    # mantener iguales a mano.
     ports:
-      - "${PROXY_PORT:-3128}:${SQUID_PORT:-3128}"
+      - "${PROXY_PORT:-3128}:3128"
     networks:
       - squidnet
     tty: true
     stdin_open: true
     healthcheck:
-      test: ["CMD-SHELL", "squid -k check || exit 1"]
+      # No basta con que el proceso viva: hay que comprobar que Squid acepta
+      # conexiones de verdad. Con la comprobación anterior, un Squid que no
+      # llegaba a abrir su puerto figuraba como «sano».
+      test: >-
+        squid -k check || exit 1;
+        timeout 3 bash -c "</dev/tcp/127.0.0.1/3128" || exit 1
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 40s
 
   # ============================================
   # Frontend - React (Vite)

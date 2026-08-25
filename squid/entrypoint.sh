@@ -4,8 +4,11 @@ set -e
 # Limpiar PID file stale
 rm -f /run/squid.pid /var/run/squid.pid 2>/dev/null || true
 
-# Puerto desde variable de entorno o 3128 por defecto
-SQUID_PORT="${SQUID_PORT:-3128}"
+# Puerto de escucha DENTRO del contenedor. Es fijo a propósito: el puerto que
+# se elige en el panel es el que Docker publica hacia fuera y se mapea contra
+# este. Tenerlo también como variable hacía que el puerto viviera en dos
+# sitios, y cuando divergían el proxy quedaba inalcanzable.
+SQUID_PORT=3128
 
 # ============================================
 # Generar CA y certificados SSL si no existen

@@ -5,6 +5,68 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.9.0] - 2026-08-24
+
+El cambio de puerto del proxy desde el panel dejaba el sistema en un estado que
+parecía correcto y se rompía más tarde, sin aviso. Esta versión rehace el
+mecanismo para que el puerto viva en un solo sitio.
+
+### Corregido
+- **El cambio de puerto no sobrevivía a un `docker compose up -d` ni a un
+  reinicio de la máquina.** El puerto vivía en dos sitios: el `http_port` del
+  `squid.conf` (generado desde la base de datos) y el mapeo de puertos de
+  Docker (que sale del `.env`). Al cambiarlo desde el panel se recreaba el
+  contenedor con el puerto nuevo, pero **nadie actualizaba el `.env`**. El
+  sistema funcionaba hasta la siguiente recreación, momento en el que Docker
+  volvía a publicar el puerto viejo —donde Squid ya no escuchaba— y el proxy
+  quedaba inalcanzable desde fuera. El `.env.example` documentaba el fallo como
+  si fuera parte del uso normal ("si cambias el puerto en el panel, actualiza
+  también `SQUID_PORT` aquí").
+- **El healthcheck daba «sano» con el proxy caído.** `squid -k check` solo
+  comprueba que el proceso vive, no que acepte conexiones, así que un
+  contenedor publicando un puerto donde Squid no escuchaba figuraba como sano
+  mientras nadie podía navegar. Ahora también se comprueba que el puerto
+  responda.
+- **La recreación del contenedor perdía en silencio la configuración del
+  compose.** Se reconstruía a mano con el SDK de Docker copiando campo a campo
+  (imagen, volúmenes, red, etiquetas), de modo que cualquier opción del
+  `docker-compose.yml` que no estuviera en esa lista desaparecía al cambiar el
+  puerto. Ahora se recrea con `docker compose up -d`, que aplica el fichero
+  entero. El camino anterior se conserva solo como reserva.
+- El docstring de `POST /api/squid/apply` afirmaba que la recreación se hacía
+  con `docker compose up -d` cuando en realidad usaba el SDK.
+
+### Cambiado
+- **El puerto del proxy vive ahora en un único sitio: `PROXY_PORT` del `.env`.**
+  Squid escucha siempre en el 3128 interno del contenedor y ese valor es el que
+  Docker publica hacia fuera (`"${PROXY_PORT}:3128"`). Al no haber dos copias,
+  no pueden desincronizarse. El `http_port` de la base de datos pasa a
+  significar «puerto publicado» y ya no llega al `squid.conf`.
+- Al cambiar el puerto, el backend escribe el `.env` (de forma atómica, para no
+  corromper un fichero que contiene la contraseña de la base de datos y la
+  clave de firma de los JWT) y recrea el contenedor con Compose. El `.env` se
+  sincroniza además en cada «Aplicar cambios», de modo que una instalación
+  antigua o una edición manual se corrigen solas.
+- `SQUID_PORT` desaparece del `.env`: ya no hay un puerto interno configurable.
+- La imagen del backend incluye el cliente de Docker y el plugin de Compose, y
+  el proyecto se monta en la misma ruta absoluta que tiene en el host (variable
+  `PROJECT_DIR`, que `install.sh` rellena) para que Compose calcule las mismas
+  rutas que calcularía desde fuera.
+
+### Añadido
+- Verificación de que Docker publica de verdad el puerto esperado después de
+  recrear el contenedor, en lugar de dar por buena la operación.
+- 9 pruebas del cambio de puerto, incluida la que fija el diseño: con
+  `http_port = 9999` en la base de datos, el `squid.conf` generado sigue
+  diciendo `http_port 3128`. Si esa prueba falla, el puerto ha vuelto a vivir
+  en dos sitios.
+- El README documenta que **el firewall del servidor no se abre solo** al
+  cambiar el puerto. Es la causa más habitual de "cambié el puerto y dejó de
+  funcionar": Squid escucha bien, pero los clientes no llegan y la conexión se
+  queda colgada sin mensaje de error.
+
+---
+
 ## [0.8.0] - 2026-08-23
 
 Continuación de la prueba funcional completa: exportación de logs en más formatos, reenvío opcional a syslog externo, y corrección de la página de Auditoría (que hasta ahora solo reconocía la mitad de las entidades y acciones reales que genera el backend).

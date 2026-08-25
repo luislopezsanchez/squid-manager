@@ -18,6 +18,12 @@ from app.models.user_group import UserGroup, UserGroupMember
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
+# Puerto en el que Squid escucha DENTRO del contenedor. Es una constante a
+# propósito: el puerto que el administrador elige en el panel es el que Docker
+# publica hacia fuera y se mapea contra este. Así el puerto solo se guarda en
+# un sitio (el .env, que alimenta el mapeo) en lugar de dos.
+INTERNAL_SQUID_PORT = "3128"
+
 # Tipos de ACL de dominio: son los que necesitan una regla paralela por SNI
 # para que la política también se aplique al tráfico HTTPS.
 DOMAIN_ACL_TYPES = ("dstdomain", "dstdom_regex")
@@ -101,5 +107,6 @@ def generate_squid_config(db: Session) -> str:
         ldap=ldap,
         groups=groups,
         ssl_exclude=ssl_exclude,
+        internal_port=INTERNAL_SQUID_PORT,
     )
     return config

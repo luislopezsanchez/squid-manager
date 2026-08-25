@@ -7,7 +7,15 @@
 # ============================================
 
 # --- Puerto de escucha con SSL Bump ---
-http_port {{ settings.get('http_port', '3128') }} ssl-bump \
+# Este puerto es FIJO y es interno al contenedor: no es el puerto al que se
+# conectan los clientes. El que se elige desde el panel es el que Docker
+# publica hacia fuera, y se mapea contra este.
+#
+# Antes este valor salía de la base de datos, y entonces el puerto vivía en dos
+# sitios que había que mantener sincronizados a mano: aquí y en el mapeo de
+# Docker. Cuando divergían, Docker publicaba un puerto donde Squid ya no
+# escuchaba y el proxy quedaba inalcanzable sin que nada lo avisara.
+http_port {{ internal_port }} ssl-bump \
   generate-host-certificates=on \
   cert=/etc/squid/ssl_cert/squid-ca.crt \
   key=/etc/squid/ssl_cert/squid-ca.key

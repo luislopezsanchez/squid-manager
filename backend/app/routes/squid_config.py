@@ -72,9 +72,9 @@ async def apply_config(
 ):
     """Genera el squid.conf, valida y recarga o reinicia Squid.
 
-    Si el puerto http_port de la BD no coincide con el puerto que Docker
-    tiene publicado actualmente, recrea el contenedor con docker compose up -d
-    para actualizar el mapeo de puertos.
+    Si el http_port de la BD no coincide con el puerto que Docker publica,
+    sincroniza el .env y recrea el contenedor con `docker compose up -d squid`,
+    de modo que el mapeo de puertos sobreviva a cualquier recreación posterior.
     """
     result = apply_squid_config(db)
 

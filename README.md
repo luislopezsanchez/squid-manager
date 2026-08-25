@@ -188,11 +188,17 @@ CORS_ORIGINS=                     # vacío si el panel se sirve desde su propia 
 TRUSTED_PROXY_HOSTS=frontend      # hosts de los que se acepta X-Forwarded-For
 DEBUG=false                       # true expone /docs sin autenticación
 
+# Rutas
+PROJECT_DIR=/opt/squid-manager    # ruta ABSOLUTA de este directorio; install.sh la rellena
+
 # Puertos
 WEB_PORT=3000
-SQUID_PORT=3128
-PROXY_PORT=3128
+PROXY_PORT=3128                   # puerto del proxy; lo actualiza el panel al cambiarlo
 ```
+
+> `PROJECT_DIR` debe apuntar a donde está el proyecto: el backend la usa para
+> recrear el contenedor de Squid con Compose al cambiar el puerto. `install.sh`
+> la escribe sola; si instalas a mano o mueves el proyecto, ajústala.
 
 Para ver todas las opciones, ver [docs/configuration.md](docs/configuration.md).
 
@@ -405,9 +411,28 @@ docker compose logs backend | grep -A3 "Administrador inicial"
 ```
 
 ### Cambiar el puerto del proxy
-1. Panel → Configuración → `http_port` → cambiar valor → Guardar
-2. Editar `.env`: `SQUID_PORT=nuevo_puerto` y `PROXY_PORT=nuevo_puerto`
-3. Panel → Aplicar cambios (el sistema recrea el contenedor automáticamente)
+1. Panel → Configuración → `http_port` → poner el puerto nuevo → Guardar
+2. Panel → Aplicar cambios
+
+No hay que editar ningún fichero a mano: el backend actualiza `PROXY_PORT` en el
+`.env` y recrea el contenedor con Docker Compose, así que el cambio también
+sobrevive a un `docker compose up -d` o a un reinicio de la máquina.
+
+**Abre el puerto nuevo en el firewall del servidor** y cierra el anterior si ya
+no se usa:
+
+```bash
+sudo ufw allow 8128/tcp && sudo ufw delete allow 3128/tcp
+```
+
+El panel no gestiona el firewall. Sin esa regla, Squid escucha correctamente
+pero los clientes no llegan, y el síntoma es una conexión que se queda colgada
+sin ningún mensaje de error.
+
+> Squid escucha siempre en el **3128 dentro del contenedor**; el puerto que
+> eliges es el que Docker publica hacia fuera. Por eso `squid.conf` muestra
+> `http_port 3128` aunque los clientes se conecten a otro puerto: el puerto
+> vive en un único sitio (`PROXY_PORT`), y así no puede desincronizarse.
 
 ---
 
