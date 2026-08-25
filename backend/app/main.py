@@ -92,6 +92,14 @@ def run_migrations():
         command.stamp(cfg, "0001")
 
     command.upgrade(cfg, "head")
+
+    # Alembic reconfigura el logging al migrar y deja el nivel raíz en el que
+    # declara su alembic.ini (WARN), por debajo del que usa la aplicación. Sin
+    # devolverlo a su sitio, todo lo que el backend registre con logger.info()
+    # a partir de aquí se descarta en silencio: el arranque parecía cortarse a
+    # mitad y en producción se perdían los avisos informativos.
+    logging.getLogger().setLevel(logging.INFO)
+
     logger.info("Migraciones aplicadas")
 
 

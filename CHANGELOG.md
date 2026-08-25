@@ -7,6 +7,27 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.10.1] - 2026-08-25
 
+### Corregido (el backend se quedaba sin logs)
+- **Las migraciones dejaban muda a la aplicación.** Alembic reconfigura el
+  logging al arrancar sus migraciones, y `fileConfig()` desactiva por defecto
+  todos los loggers que no aparezcan en el `alembic.ini` —donde solo están
+  `root`, `sqlalchemy` y `alembic`—. Como las migraciones corren durante el
+  arranque del backend, a partir de ese punto **no se registraba nada más**:
+  ni «Migraciones aplicadas», ni la contraseña del administrador recién
+  creado, ni el «Application startup complete» de uvicorn, ni las peticiones
+  atendidas, ni ningún error posterior en producción. El síntoma engañaba: el
+  log se cortaba siempre en medio de Alembic y parecía que el backend se
+  hubiera colgado, cuando seguía funcionando con normalidad.
+- **Y el nivel de log quedaba en WARN.** Aunque los loggers ya no se
+  desactiven, `fileConfig()` aplica el nivel del `alembic.ini` al logger raíz.
+  Como la aplicación registra sus avisos con `logger.info()`, seguían
+  descartándose por nivel. Se restaura a INFO al terminar de migrar.
+- Consecuencia práctica: **la contraseña inicial del administrador era
+  inaccesible**. Se generaba, se guardaba, pero el mensaje que la mostraba
+  nunca llegaba al log, así que el comando que documentábamos para leerla no
+  devolvía nada. En una instalación nueva era imposible entrar al panel sin
+  fijar `ADMIN_INITIAL_PASSWORD` a mano.
+
 ### Cambiado (resumen del instalador)
 - **El instalador espera a que el backend arranque y muestra la contraseña del
   administrador** en el resumen final. Antes remitía a

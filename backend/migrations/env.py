@@ -13,7 +13,17 @@ config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False no es opcional aquí.
+    #
+    # fileConfig() desactiva por defecto todos los loggers que no aparezcan en
+    # el alembic.ini, y ahí solo están root, sqlalchemy y alembic. Como las
+    # migraciones se ejecutan durante el arranque del backend, en cuanto
+    # terminaban dejaban muda a la aplicación entera: no se veía «Migraciones
+    # aplicadas», ni la contraseña del administrador recién creado, ni el
+    # «Application startup complete» de uvicorn, ni ningún error posterior en
+    # producción. El log se cortaba siempre en la zona de Alembic y parecía que
+    # el backend se hubiera colgado, cuando en realidad seguía funcionando.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
