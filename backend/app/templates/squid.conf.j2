@@ -107,6 +107,18 @@ http_access deny CONNECT !SSL_ports
 http_access allow localhost manager
 http_access deny manager
 
+{% if trusted_sources %}
+# Orígenes que no tienen que autenticarse. Va ANTES de exigir credenciales: si
+# fuera después, no serviría de nada, porque a estas peticiones nunca se les
+# llegaría a preguntar.
+#
+# Pensado para un proxy hijo que ya autentica a sus usuarios: el padre no puede
+# volver a pedir credenciales cuando el tráfico viaja dentro de un túnel TLS
+# interceptado, y sin esta exención lo deniega con un 403.
+acl origenes_confianza src {{ trusted_sources|join(' ') }}
+http_access allow origenes_confianza
+
+{% endif %}
 # Pedir credenciales una sola vez, antes de evaluar las reglas del panel.
 # A partir de aquí todas las peticiones llegan ya autenticadas, así que un
 # "deny <grupo>" devuelve 403 y no un 407 en bucle. Esto permite respetar el

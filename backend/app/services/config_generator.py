@@ -102,6 +102,11 @@ def generate_squid_config(db: Session) -> str:
     # es el comportamiento de siempre.
     dns_nameservers = parsear_lista(settings.get("dns_nameservers"))
 
+    # Orígenes exentos de autenticación. Vacío = todos deben autenticarse.
+    from app.services.origenes_service import parsear_lista as parsear_origenes
+
+    trusted_sources = parsear_origenes(settings.get("trusted_sources"))
+
     # Salida a través de otro proxy. Sin fila o apagado = salida directa.
     from app.models.parent_proxy import ParentProxy
     from app.services.parent_proxy_service import parsear_lista as parsear_destinos
@@ -131,6 +136,7 @@ def generate_squid_config(db: Session) -> str:
         ssl_exclude=ssl_exclude,
         internal_port=INTERNAL_SQUID_PORT,
         dns_nameservers=dns_nameservers,
+        trusted_sources=trusted_sources,
         parent_proxy=parent_proxy,
         direct_domains=direct_domains,
         parent_ca=parent_ca,

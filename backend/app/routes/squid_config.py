@@ -59,6 +59,15 @@ async def update_setting(
         if not valido:
             raise HTTPException(400, detail=mensaje)
 
+    # Los orígenes de confianza eximen de autenticarse: un valor mal escrito
+    # aquí no da un error visible, deja pasar (o deja fuera) a quien no toca.
+    if data.key == "trusted_sources":
+        from app.services.origenes_service import parsear_lista, validar_origenes
+
+        valido, mensaje = validar_origenes(parsear_lista(data.value))
+        if not valido:
+            raise HTTPException(400, detail=mensaje)
+
     setting = db.query(SquidSetting).filter(SquidSetting.key == data.key).first()
     if setting:
         setting.value = data.value
