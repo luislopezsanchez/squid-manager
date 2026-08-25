@@ -46,6 +46,7 @@ acl ssl_exclude ssl::server_name {{ ssl_exclude|join(' ') }}
 ssl_bump terminate step2 sni_{{ name }}
 {% endfor %}
 
+{% if ssl_bump_enabled %}
 # Peek: ver el SNI del cliente
 ssl_bump peek step1 all
 {% if ssl_exclude %}
@@ -56,6 +57,19 @@ ssl_bump splice step2 ssl_exclude
 ssl_bump stare step2 all
 # Bump: interceptar y desencriptar el resto
 ssl_bump bump step3 all
+{% else %}
+# Interceptación de HTTPS desactivada: Squid solo tuneliza.
+#
+# Squid únicamente puede interceptar HTTPS una vez en una cadena de proxies. Si
+# este sale a través de otro que también intercepta, el de arriba recibe la
+# petición descifrada dentro de un túnel que él mismo cifró y la rechaza con un
+# 403 que no explica nada.
+#
+# Con esto no se puede filtrar por dominio dentro de HTTPS —el bloqueo por SNI
+# de más arriba sigue funcionando, porque actúa antes de descifrar—, pero el
+# tráfico pasa.
+ssl_bump splice all
+{% endif %}
 
 # Generador de certificados dinámicos (base persistente en el volumen)
 sslcrtd_program /usr/lib/squid/security_file_certgen -s /var/lib/ssl_crtd/db -M 4MB

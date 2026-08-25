@@ -107,6 +107,13 @@ def generate_squid_config(db: Session) -> str:
 
     trusted_sources = parsear_origenes(settings.get("trusted_sources"))
 
+    # Interceptación de HTTPS. Activada salvo que se diga lo contrario, que es
+    # como se ha comportado siempre. Se apaga cuando la salida va por otro
+    # proxy que ya intercepta: encadenar dos interceptaciones rompe HTTPS.
+    ssl_bump_enabled = str(
+        settings.get("ssl_bump_enabled", "true")
+    ).strip().lower() not in ("false", "0", "no", "off")
+
     # Salida a través de otro proxy. Sin fila o apagado = salida directa.
     from app.models.parent_proxy import ParentProxy
     from app.services.parent_proxy_service import parsear_lista as parsear_destinos
@@ -137,6 +144,7 @@ def generate_squid_config(db: Session) -> str:
         internal_port=INTERNAL_SQUID_PORT,
         dns_nameservers=dns_nameservers,
         trusted_sources=trusted_sources,
+        ssl_bump_enabled=ssl_bump_enabled,
         parent_proxy=parent_proxy,
         direct_domains=direct_domains,
         parent_ca=parent_ca,

@@ -5,6 +5,37 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.12.0] - 2026-08-25
+
+### Añadido
+- **Se puede desactivar la interceptación de HTTPS** (ajuste
+  `ssl_bump_enabled`, migración `0011`). Squid solo puede interceptar HTTPS una
+  vez en una cadena de proxies: si dos lo hacen, el de arriba recibe la
+  petición descifrada dentro de un túnel que él mismo cifró y la rechaza con un
+  `403` que no explica nada. Activado por defecto, que es el comportamiento de
+  siempre; se apaga en el proxy que no vaya a filtrar.
+- **Orígenes exentos de autenticación** (ajuste `trusted_sources`, migración
+  `0010`). Un proxy de arriba no puede pedir credenciales al de abajo —dentro
+  de un túnel TLS no hay forma de negociar un 407—, así que necesita confiar en
+  él por su dirección. La exención se emite **antes** de exigir credenciales;
+  puesta después no serviría, porque a esas peticiones no se les llegaría a
+  preguntar. Rechaza `0.0.0.0/0`.
+- **Certificado CA del proxy padre** (`ca_cert`, migración `0009`), con carga
+  desde archivo. Necesario cuando el padre también intercepta HTTPS: sin él,
+  Squid rechaza su certificado por autofirmado
+  (`X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN`) y no carga ninguna web HTTPS.
+
+### Notas
+- Encadenar dos SquidManager funciona ahora de punta a punta. Verificado con
+  dos instalaciones reales: el registro del de abajo muestra `FIRSTUP_PARENT`
+  en HTTP y HTTPS, y responden tanto sitios normales como los que redirigen.
+- El README documenta el reparto de papeles en una cascada: quién intercepta,
+  quién autentica y qué se pierde al dejar de interceptar (el filtrado por
+  dominio dentro de HTTPS; el bloqueo por SNI se mantiene, porque actúa antes
+  de descifrar).
+
+---
+
 ## [0.11.0] - 2026-08-25
 
 ### Añadido

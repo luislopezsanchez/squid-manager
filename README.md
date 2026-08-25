@@ -532,6 +532,44 @@ Cámbiala desde una sesión de base de datos, o revisa si sigue en el log:
 docker compose logs backend | grep -A3 "Administrador inicial"
 ```
 
+### Encadenar dos proxies: quién intercepta el HTTPS
+
+**Solo uno de los dos puede interceptar HTTPS.** Si los dos lo hacen, el de
+arriba recibe la petición ya descifrada dentro de un túnel que él mismo cifró y
+la rechaza con un `403 Acceso Denegado` que no explica la causa. El síntoma es
+claro en el registro: el `CONNECT` sale con 200 y la petición de dentro con 403.
+
+Lo normal es que **intercepte el de abajo** —es quien aplica las políticas de
+sus usuarios— y que el de arriba solo dé salida. En el proxy que no vaya a
+filtrar, poné en **Configuración → Seguridad**:
+
+```
+ssl_bump_enabled = false
+```
+
+Con eso Squid solo tuneliza: se pierde el filtrado por dominio dentro de HTTPS,
+pero el bloqueo por SNI sigue funcionando —actúa antes de descifrar— y el
+tráfico pasa.
+
+También hace falta que el de arriba **no le pida credenciales** al de abajo:
+dentro de un túnel TLS no hay forma de negociar la autenticación. Se resuelve
+con `trusted_sources` (más abajo).
+
+### Orígenes que no tienen que autenticarse
+
+En **Configuración → Seguridad**, el ajuste `trusted_sources` acepta IPs o redes
+que pueden navegar sin credenciales:
+
+```
+trusted_sources = 203.0.113.10 198.51.100.0/24
+```
+
+Pensado para un proxy hijo que ya autentica a sus propios usuarios. Vacío por
+defecto: todo el mundo debe autenticarse.
+
+> Es una exención de autenticación: indicá el origen concreto. Si esa IP es una
+> salida NAT compartida, **cualquier equipo detrás de ella queda exento**.
+
 ### Salir a Internet a través de otro proxy (proxy padre)
 
 En muchas empresas el cortafuegos cierra la salida directa y todo el tráfico
