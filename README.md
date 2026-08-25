@@ -466,6 +466,7 @@ squid-manager/
 | [docs/architecture.md](docs/architecture.md) | Arquitectura técnica detallada |
 | [docs/authentication.md](docs/authentication.md) | Cuentas, sesiones, roles y grupos |
 | [docs/ssl-bump.md](docs/ssl-bump.md) | Guía de SSL Bump + certificados CA |
+| [docs/proxy-padre.md](docs/proxy-padre.md) | Salir a Internet por otro proxy (padre e hijo) |
 | [docs/backup-restore.md](docs/backup-restore.md) | Backup, restore y migración |
 | [docs/production.md](docs/production.md) | Despliegue en producción |
 | [docs/api-reference.md](docs/api-reference.md) | Documentación completa de la API |
@@ -532,56 +533,44 @@ Cámbiala desde una sesión de base de datos, o revisa si sigue en el log:
 docker compose logs backend | grep -A3 "Administrador inicial"
 ```
 
-### Encadenar dos proxies: cada uno con su nombre
+### Salir a Internet a través de otro proxy (padre e hijo)
 
-**Cada proxy de la cadena necesita un `visible_hostname` distinto.** Squid añade
-su nombre a la cabecera `Via` al reenviar, y rechaza como bucle de reenvío
-cualquier petición que ya lleve el suyo. Dos instalaciones con el mismo nombre
-se cortan entre sí y devuelven un `403 Acceso Denegado` que no menciona la
-causa; solo el `cache.log` lo dice:
+En muchas empresas el cortafuegos cierra la salida directa y todo el tráfico
+tiene que pasar por el proxy corporativo. SquidManager puede colocarse detrás
+de otro proxy, y la configuración se hace en **Panel → Proxy padre**.
 
-```
-WARNING: Forwarding loop detected for:
-Via: 1.1 squidmanager (squid/6.12)
-```
+El reparto de papeles es lo que hace que funcione:
 
-Curioso detalle: **HTTP falla y HTTPS funciona**, porque el tráfico HTTPS viaja
-dentro del túnel y esa cabecera no se inspecciona.
+| | Hijo (el de abajo) | Padre (el de arriba) |
+|---|---|---|
+| Autentica usuarios | **Sí** | No: confía en el hijo |
+| Filtra por dominio | **Sí** | No |
+| Intercepta HTTPS | **Sí** | **No**: solo tuneliza |
+| Sale a Internet | No: por el padre | **Sí** |
 
-Las instalaciones nuevas reciben un nombre único automáticamente. Si vienes de
-una anterior, cámbialo en **Configuración → General**:
+Encadenar dos proxies necesita cuatro ajustes, y faltando cualquiera no
+funciona:
 
-```
-visible_hostname = squidmanager-oficina
-```
+1. **En el hijo**: servidor, puerto y —si las pide— credenciales del padre
+2. **En el hijo**: el certificado CA del padre, si el padre también intercepta HTTPS
+3. **En el padre**: `trusted_sources` con la IP del hijo, para que no le pida credenciales
+4. **En el padre**: `ssl_bump_enabled = false`, porque solo uno puede interceptar HTTPS
 
-### Encadenar dos proxies: quién intercepta el HTTPS
+Si ambos son SquidManager, además necesitan un `visible_hostname` distinto:
+Squid rechaza como bucle lo que ya lleve su nombre en la cabecera `Via`.
 
-**Solo uno de los dos puede interceptar HTTPS.** Si los dos lo hacen, el de
-arriba recibe la petición ya descifrada dentro de un túnel que él mismo cifró y
-la rechaza con un `403 Acceso Denegado` que no explica la causa. El síntoma es
-claro en el registro: el `CONNECT` sale con 200 y la petición de dentro con 403.
+Para comprobar que funciona, la última columna del registro de accesos del hijo
+pasa de `HIER_DIRECT` a `FIRSTUP_PARENT`.
 
-Lo normal es que **intercepte el de abajo** —es quien aplica las políticas de
-sus usuarios— y que el de arriba solo dé salida. En el proxy que no vaya a
-filtrar, poné en **Configuración → Seguridad**:
-
-```
-ssl_bump_enabled = false
-```
-
-Con eso Squid solo tuneliza: se pierde el filtrado por dominio dentro de HTTPS,
-pero el bloqueo por SNI sigue funcionando —actúa antes de descifrar— y el
-tráfico pasa.
-
-También hace falta que el de arriba **no le pida credenciales** al de abajo:
-dentro de un túnel TLS no hay forma de negociar la autenticación. Se resuelve
-con `trusted_sources` (más abajo).
+> **Guía completa en [docs/proxy-padre.md](docs/proxy-padre.md)**: el porqué de
+> cada pieza, la configuración paso a paso, y una tabla para identificar por el
+> síntoma cuál de los cuatro ajustes falta — todos dan errores que no mencionan
+> la causa.
 
 ### Orígenes que no tienen que autenticarse
 
-En **Configuración → Seguridad**, el ajuste `trusted_sources` acepta IPs o redes
-que pueden navegar sin credenciales:
+En **Configuración → Seguridad**, el ajuste `trusted_sources` acepta IPs o
+redes que pueden navegar sin credenciales:
 
 ```
 trusted_sources = 203.0.113.10 198.51.100.0/24
@@ -592,40 +581,6 @@ defecto: todo el mundo debe autenticarse.
 
 > Es una exención de autenticación: indicá el origen concreto. Si esa IP es una
 > salida NAT compartida, **cualquier equipo detrás de ella queda exento**.
-
-### Salir a Internet a través de otro proxy (proxy padre)
-
-En muchas empresas el cortafuegos cierra la salida directa y todo el tráfico
-tiene que pasar por el proxy corporativo. Se configura en **Panel → Proxy
-padre**:
-
-1. Activa «Usar un proxy padre» e indica servidor y puerto
-2. Credenciales solo si tu proxy las pide — muchos internos no lo hacen
-3. **Probar conexión**, y luego Guardar → Aplicar cambios
-
-**Squid solo sabe presentar autenticación básica a un padre.** Si el tuyo exige
-NTLM o Kerberos —habitual cuando está integrado con Active Directory— no hay
-usuario y contraseña que lo resuelvan: haría falta un intermediario que traduzca
-la autenticación. El botón de probar te lo dice explícitamente en lugar de
-dejarte adivinando.
-
-**Destinos que no pasan por el padre**: normalmente la intranet. Un punto
-delante incluye los subdominios (`.intranet.local`).
-
-> **«No intentar nunca la salida directa»** viene activado. Es lo coherente
-> cuando hay proxy corporativo: si el cortafuegos bloquea la salida directa,
-> intentarla solo añade una espera antes de fallar igual. Desactívalo solo si
-> tu red permite ambas salidas.
-
-Al aplicar se comprueba que el padre responde, y el cambio se rechaza si no lo
-hace: un padre inalcanzable no degrada la navegación, la corta entera.
-
-Para verificar que está funcionando, mira la última columna del registro de
-accesos: pasa de `HIER_DIRECT` (salida directa) a `FIRSTUP_PARENT`.
-
-> La contraseña del padre acaba escrita en el `squid.conf`, que Squid guarda en
-> texto plano. Es una limitación de Squid: usa una cuenta de servicio con los
-> permisos justos, no una cuenta personal.
 
 ### Usar tus propios servidores DNS (por ejemplo, un Pi-hole)
 
