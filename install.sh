@@ -79,14 +79,33 @@ ok "Docker Compose: $(docker compose version)"
 # ============================================
 # 3. Obtener el código
 # ============================================
-INSTALL_DIR="/opt/squid-manager"
+# Dónde se instala.
+#
+# Si este script se está ejecutando desde dentro de un clon del repositorio, se
+# usa ESE directorio. Antes la ruta estaba fija en /opt/squid-manager, así que
+# quien clonaba en otro sitio y ejecutaba ./install.sh acababa con dos copias:
+# el instalador descargaba una segunda a /opt y trabajaba allí, dejando el clon
+# original sin usar y sin avisar de nada.
+#
+# Se puede forzar otra ruta con: INSTALL_DIR=/donde/sea ./install.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${INSTALL_DIR:-}" ]]; then
+    info "Ruta indicada por INSTALL_DIR: $INSTALL_DIR"
+elif [[ -d "$SCRIPT_DIR/.git" && -f "$SCRIPT_DIR/docker-compose.yml" ]]; then
+    INSTALL_DIR="$SCRIPT_DIR"
+    info "Instalador ejecutado desde un clon: se usará $INSTALL_DIR"
+else
+    INSTALL_DIR="/opt/squid-manager"
+fi
 
 if [[ -d "$INSTALL_DIR/.git" ]]; then
     info "Actualizando SquidManager en $INSTALL_DIR..."
     cd "$INSTALL_DIR"
     # Un git pull sobre cambios locales los pisa sin avisar.
     if [[ -n "$(git status --porcelain)" ]]; then
-        BACKUP="/opt/squid-manager-backup-$(date +%Y%m%d-%H%M%S)"
+        # El respaldo se deja junto al proyecto, no en /opt: con la ruta fija
+        # acababa en un sitio que no tenía nada que ver con la instalación.
+        BACKUP="${INSTALL_DIR%/}-backup-$(date +%Y%m%d-%H%M%S)"
         warn "Hay cambios locales sin confirmar. Copia de seguridad en $BACKUP"
         cp -a "$INSTALL_DIR" "$BACKUP"
         fail "Revisa tus cambios locales (git status) y vuelve a ejecutar el instalador."

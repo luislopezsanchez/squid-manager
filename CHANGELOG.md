@@ -7,6 +7,19 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.10.1] - 2026-08-25
 
+### Corregido (instalador)
+- **`install.sh` instalaba siempre en `/opt/squid-manager`, ignorando desde
+  dónde se ejecutara.** Quien clonaba el repositorio en otra ruta y lanzaba
+  `./install.sh` acababa con dos copias: el instalador descargaba una segunda a
+  `/opt` y trabajaba allí, dejando el clon original sin usar y sin avisar de
+  nada. Si además ese clon tenía cambios propios, se ignoraban en silencio.
+  Ahora, si el script se ejecuta desde dentro de un clon, se instala ahí mismo;
+  si se ejecuta suelto, sigue usando `/opt/squid-manager`; y se puede imponer
+  la ruta con `INSTALL_DIR=/donde/sea ./install.sh`.
+- La copia de seguridad ante cambios locales sin confirmar se creaba siempre en
+  `/opt/squid-manager-backup-…`, aunque la instalación estuviera en otro sitio.
+  Ahora se deja junto al proyecto que respalda.
+
 ### Documentación
 - **Las dos formas de instalar están ahora explicadas como tales.** El
   repositorio traía un `install.sh` que no se mencionaba en ninguna parte del

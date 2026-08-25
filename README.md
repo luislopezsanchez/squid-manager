@@ -129,19 +129,31 @@ configuración.
 
 | | Opción A: `install.sh` | Opción B: manual |
 |---|---|---|
-| Dónde se instala | Siempre en `/opt/squid-manager` | Donde tú quieras |
+| Dónde se instala | Donde hayas clonado | Donde tú quieras |
 | `DB_PASS` y `SECRET_KEY` | Se generan solas | Las defines tú |
 | `PROJECT_DIR` | Se rellena sola | **Tienes que ajustarla** |
 
 ### Opción A — con el instalador
 
-Instala en `/opt/squid-manager`, genera las contraseñas y deja el `.env` listo.
+Genera las claves, deja el `.env` listo y levanta los contenedores.
 
 ```bash
 git clone https://github.com/luislopezsanchez/squid-manager.git
 cd squid-manager
 sudo ./install.sh
 ```
+
+**Se instala en el directorio donde lo hayas clonado**, no en una ruta fija. Si
+ejecutas el script suelto, fuera de un clon, usa `/opt/squid-manager`. Y puedes
+imponer la ruta que quieras:
+
+```bash
+sudo INSTALL_DIR=/srv/squid ./install.sh
+```
+
+Si ya había una instalación en esa ruta, la actualiza conservando la
+configuración; si tienes cambios locales sin confirmar, hace copia y se detiene
+en lugar de pisarlos.
 
 > No canalices el script directamente a `bash` desde internet: descárgalo,
 > léelo y ejecútalo, que es lo que se hace arriba.
@@ -180,11 +192,11 @@ PROJECT_DIR=        # la ruta ABSOLUTA donde acabas de clonar el proyecto
 ```
 
 > **`PROJECT_DIR` es el que se olvida.** Viene con `/opt/squid-manager` de
-> ejemplo, que es donde instala la Opción A. Si clonaste en otro sitio y no lo
-> cambias, el sistema arranca y funciona con normalidad, pero **cambiar el
-> puerto del proxy desde el panel deja de actualizar el `.env`**, y el puerto
-> vuelve al valor anterior en el siguiente `docker compose up -d`. Comprueba
-> con `pwd` y pon esa ruta exacta.
+> ejemplo. Si clonaste en otro sitio y no lo cambias, el sistema arranca y
+> funciona con normalidad, pero **cambiar el puerto del proxy desde el panel
+> deja de actualizar el `.env`**, y el puerto vuelve al valor anterior en el
+> siguiente `docker compose up -d`. Comprueba con `pwd` y pon esa ruta exacta.
+> (Con la Opción A no tienes que preocuparte: la rellena el instalador.)
 
 ### Después de instalar, con cualquiera de las dos
 

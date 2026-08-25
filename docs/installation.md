@@ -54,7 +54,7 @@ Hacen lo mismo; la diferencia es quién rellena la configuración.
 
 | | Con `install.sh` | Manual |
 |---|---|---|
-| Dónde se instala | Siempre en `/opt/squid-manager` | Donde tú quieras |
+| Dónde se instala | Donde hayas clonado | Donde tú quieras |
 | `DB_PASS` y `SECRET_KEY` | Se generan solas | Las defines tú |
 | `PROJECT_DIR` | Se rellena sola | **Tienes que ajustarla** |
 
@@ -66,9 +66,18 @@ cd squid-manager
 sudo ./install.sh
 ```
 
-El script instala en `/opt/squid-manager`, genera las claves, deja el `.env`
-listo y levanta los contenedores. Si ya había una instalación ahí, la actualiza
-conservando la configuración existente.
+El script genera las claves, deja el `.env` listo y levanta los contenedores.
+
+**Se instala en el directorio donde lo hayas clonado.** Si ejecutas el script
+suelto, fuera de un clon, usa `/opt/squid-manager`. Para imponer otra ruta:
+
+```bash
+sudo INSTALL_DIR=/srv/squid ./install.sh
+```
+
+Si ya había una instalación en esa ruta, la actualiza conservando la
+configuración existente. Si encuentra cambios locales sin confirmar, hace una
+copia junto al proyecto y se detiene, en lugar de pisarlos con el `git pull`.
 
 > No canalices el script directamente a `bash` desde internet: descárgalo,
 > léelo y ejecútalo, que es lo que se hace arriba.
