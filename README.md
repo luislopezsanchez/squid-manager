@@ -22,6 +22,7 @@
 - [Arquitectura](#-arquitectura)
 - [Requisitos](#-requisitos)
 - [Instalación](#-instalación)
+- [Actualizar](#-actualizar)
 - [Configuración](#-configuración)
 - [Primeros pasos](#-primeros-pasos)
 - [SSL Bump (HTTPS)](#-ssl-bump-https)
@@ -228,6 +229,36 @@ docker compose logs backend | grep -A3 "Administrador inicial"
 Se te pedirá cambiarla antes de poder usar el panel. Si prefieres fijarla tú mismo, define `ADMIN_INITIAL_PASSWORD` en el `.env` antes del primer arranque.
 
 Para una guía detallada de instalación, ver [docs/installation.md](docs/installation.md).
+
+---
+
+## 🔄 Actualizar
+
+```bash
+cd /ruta/a/squid-manager && git pull && docker compose up -d --build
+```
+
+Las migraciones de base de datos se aplican solas al arrancar el backend, y **tu
+configuración se conserva**: usuarios, reglas, puertos y certificados no se
+tocan.
+
+> **El `--build` no es opcional.** Sin él, Docker reutiliza las imágenes que ya
+> tiene y el código nuevo no llega a ejecutarse, aunque el `git pull` haya ido
+> bien. Todo parece correcto —repositorio al día, contenedores arrancados— pero
+> sigues usando la versión anterior.
+
+Para comprobar que fue bien:
+
+```bash
+cd /ruta/a/squid-manager && git log --oneline -1 && git status --porcelain | wc -l && docker compose ps
+```
+
+Debes ver el commit esperado, **0** ficheros pendientes y los cuatro
+contenedores en `healthy`.
+
+Ver [docs/actualizacion.md](docs/actualizacion.md) para verificar la revisión de
+la base de datos, resolver un `git pull` que aborta, una migración que falla, o
+volver a una versión anterior.
 
 ---
 
@@ -467,6 +498,7 @@ squid-manager/
 | [docs/authentication.md](docs/authentication.md) | Cuentas, sesiones, roles y grupos |
 | [docs/ssl-bump.md](docs/ssl-bump.md) | Guía de SSL Bump + certificados CA |
 | [docs/proxy-padre.md](docs/proxy-padre.md) | Salir a Internet por otro proxy (padre e hijo) |
+| [docs/actualizacion.md](docs/actualizacion.md) | Cómo actualizar, verificar y volver atrás |
 | [docs/backup-restore.md](docs/backup-restore.md) | Backup, restore y migración |
 | [docs/production.md](docs/production.md) | Despliegue en producción |
 | [docs/api-reference.md](docs/api-reference.md) | Documentación completa de la API |
