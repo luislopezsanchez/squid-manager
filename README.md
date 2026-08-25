@@ -410,6 +410,39 @@ Cámbiala desde una sesión de base de datos, o revisa si sigue en el log:
 docker compose logs backend | grep -A3 "Administrador inicial"
 ```
 
+### Usar tus propios servidores DNS (por ejemplo, un Pi-hole)
+
+Squid resuelve los nombres por su cuenta, así que puedes indicarle a qué
+servidores preguntar y hacer que la navegación del proxy herede el filtrado de
+un Pi-hole, un AdGuard o el DNS interno de tu empresa.
+
+1. Panel → Configuración → `dns_nameservers` → las IPs separadas por espacios
+2. Pulsa **Probar** para comprobar que responden
+3. Guardar → Aplicar cambios
+
+```
+dns_nameservers 172.27.0.1
+```
+
+Vacío = Squid usa la resolución del sistema (el comportamiento por defecto).
+
+**Solo IPs, no nombres de host.** Squid tiene que poder preguntar sin resolver
+nada primero, que es justo lo que aún no puede hacer.
+
+> **Si pones más de uno, el filtrado deja de estar garantizado.** Squid reparte
+> las consultas entre todos los servidores de la lista, no los usa como
+> respaldo: añadir un DNS público junto al Pi-hole hace que la parte de
+> consultas que le toquen al público se resuelva sin filtrar. Para que **todo**
+> pase por el filtro, deja un único servidor.
+
+Al aplicar, se comprueba que los servidores responden de verdad y el cambio se
+rechaza si no lo hacen. Es a propósito: un DNS inalcanzable no rompe una web,
+deja de resolver todas a la vez, y el síntoma no apunta a la causa.
+
+Si el Pi-hole corre como contenedor en la misma máquina, usa la IP de la
+pasarela de su red Docker (`docker network inspect`), no `127.0.0.1`: dentro
+del contenedor de Squid, esa dirección es el propio Squid.
+
 ### Cambiar el puerto del proxy
 1. Panel → Configuración → `http_port` → poner el puerto nuevo → Guardar
 2. Panel → Aplicar cambios

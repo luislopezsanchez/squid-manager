@@ -150,6 +150,23 @@ cache_store_log stdio:{{ settings.get('cache_store_log') }}
 cache_store_log none
 {% endif %}
 
+# --- Resolución de nombres ---
+{% if dns_nameservers %}
+# Servidores DNS a los que Squid pregunta, en lugar del resolutor del sistema.
+# Squid reparte las consultas entre todos los de la lista: si se quiere que
+# TODO el tráfico pase por un filtro (un Pi-hole, por ejemplo), debe ser el
+# único de la lista. Añadir uno público como respaldo mejora la disponibilidad
+# pero deja pasar sin filtrar la parte de consultas que le toquen.
+dns_nameservers {{ dns_nameservers|join(' ') }}
+{% else %}
+# Sin servidores propios configurados: Squid usa la resolución del sistema.
+{% endif %}
+{% if dns_v4_first %}
+# Probar primero IPv4: en redes sin IPv6 real, intentarlo antes añade una
+# espera inútil en cada resolución.
+dns_v4_first on
+{% endif %}
+
 # --- Misc ---
 coredump_dir /var/spool/squid
 refresh_pattern {{ settings.get('refresh_pattern', '. 0 20% 4320') }}

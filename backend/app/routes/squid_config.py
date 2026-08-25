@@ -49,6 +49,16 @@ async def update_setting(
     current_admin: Admin = Depends(require_writer),
 ):
     """Actualiza una configuración de Squid."""
+    # Los servidores DNS tienen que ser direcciones IP: Squid pregunta a esa
+    # lista sin poder resolver nada antes. Se rechaza al guardar, no al
+    # aplicar, para que el error salga junto al campo que lo provoca.
+    if data.key == "dns_nameservers":
+        from app.services.dns_service import parsear_lista, validar_servidores
+
+        valido, mensaje = validar_servidores(parsear_lista(data.value))
+        if not valido:
+            raise HTTPException(400, detail=mensaje)
+
     setting = db.query(SquidSetting).filter(SquidSetting.key == data.key).first()
     if setting:
         setting.value = data.value
@@ -88,6 +98,37 @@ async def apply_config(
                            f"El admin {current_admin.username} aplicó cambios ({action}).")
 
     return result
+
+
+class DnsTest(BaseModel):
+    servers: str
+
+
+@router.post("/dns/test")
+async def test_dns(
+    data: DnsTest,
+    _: Admin = Depends(require_writer),
+):
+    """Comprueba unos servidores DNS sin llegar a guardarlos.
+
+    Permite verificar el servidor antes de aplicarlo, en lugar de descubrir que
+    no responde cuando ya nadie puede navegar.
+    """
+    from app.services.dns_service import parsear_lista, validar_servidores, probar_servidores
+
+    servidores = parsear_lista(data.servers)
+    if not servidores:
+        return {
+            "ok": True,
+            "message": "Sin servidores: Squid usará la resolución del sistema.",
+        }
+
+    valido, mensaje = validar_servidores(servidores)
+    if not valido:
+        return {"ok": False, "message": mensaje}
+
+    ok, mensaje = probar_servidores(servidores)
+    return {"ok": ok, "message": mensaje}
 
 
 @router.get("/status")

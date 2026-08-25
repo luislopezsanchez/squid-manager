@@ -21,7 +21,23 @@ export default function Settings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [testingDns, setTestingDns] = useState(false)
+  const [dnsResult, setDnsResult] = useState<{ ok: boolean; message: string } | null>(null)
   const { showToast, ToastContainer } = useToast()
+
+  // Un DNS que no responde no rompe una web: deja de resolver todas a la vez.
+  // Por eso se puede comprobar antes de guardar, y no solo al aplicar.
+  const handleTestDns = async () => {
+    setTestingDns(true)
+    setDnsResult(null)
+    try {
+      setDnsResult(await api.testDns(settings['dns_nameservers']?.value || ''))
+    } catch (e: any) {
+      setDnsResult({ ok: false, message: e.message })
+    } finally {
+      setTestingDns(false)
+    }
+  }
 
   const loadSettings = () => {
     api.getSettings().then(setSettings).catch(e => showToast('Error al cargar configuración', 'error')).finally(() => setLoading(false))
@@ -67,26 +83,52 @@ export default function Settings() {
             <h2 className="text-lg font-bold text-ink mb-3">{cat.label}</h2>
             <div className="card divide-y divide-line-soft">
               {catSettings.map(([key, setting]) => (
-                <div key={key} className="p-4 flex items-center gap-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-mono font-medium text-ink-2">{key}</label>
-                    {setting.description && <p className="text-xs text-ink-3 mt-0.5">{setting.description}</p>}
+                <div key={key} className="p-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-mono font-medium text-ink-2">{key}</label>
+                      {setting.description && <p className="text-xs text-ink-3 mt-0.5">{setting.description}</p>}
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={setting.value}
+                        onChange={e => {
+                          updateValue(key, e.target.value)
+                          if (key === 'dns_nameservers') setDnsResult(null)
+                        }}
+                        placeholder={key === 'dns_nameservers' ? '172.27.0.1 1.1.1.1' : undefined}
+                        className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                      />
+                    </div>
+                    {key === 'dns_nameservers' && (
+                      <button
+                        onClick={handleTestDns}
+                        disabled={testingDns}
+                        className="btn btn-ghost btn-sm"
+                        title="Consulta a esos servidores para ver si responden, sin guardar nada"
+                      >
+                        {testingDns ? 'Probando...' : 'Probar'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleSave(key)}
+                      disabled={saving === key}
+                      className="btn btn-primary btn-sm"
+                    >
+                      {saving === key ? '...' : 'Guardar'}
+                    </button>
                   </div>
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={setting.value}
-                      onChange={e => updateValue(key, e.target.value)}
-                      className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                    />
-                  </div>
-                  <button
-                    onClick={() => handleSave(key)}
-                    disabled={saving === key}
-                    className="btn btn-primary btn-sm"
-                  >
-                    {saving === key ? '...' : 'Guardar'}
-                  </button>
+
+                  {key === 'dns_nameservers' && dnsResult && (
+                    <div
+                      className={`mt-3 text-[13px] p-2.5 rounded-lg ${
+                        dnsResult.ok ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger'
+                      }`}
+                    >
+                      {dnsResult.ok ? '✓ ' : '✕ '}{dnsResult.message}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

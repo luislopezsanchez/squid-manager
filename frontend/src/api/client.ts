@@ -129,6 +129,10 @@ export const api = {
   getSettings: () => request<any>('/squid/settings'),
   updateSetting: (key: string, value: string, category: string, description: string) =>
     request<any>('/squid/settings', { method: 'PUT', body: JSON.stringify({ key, value, category, description }) }),
+  // Comprueba unos servidores DNS sin guardarlos: mejor descubrir que no
+  // responden aqui que cuando ya nadie puede navegar.
+  testDns: (servers: string) =>
+    request<{ ok: boolean; message: string }>('/squid/dns/test', { method: 'POST', body: JSON.stringify({ servers }) }),
 
   // LDAP
   getLdapConfig: () => request<any>('/ldap/config'),

@@ -636,6 +636,30 @@ def apply_squid_config(db, force_reconfigure: bool = False) -> dict:
             "config_preview": preview,
         }
 
+    # 1b. Si hay servidores DNS propios, comprobar que responden de verdad.
+    #     La sintaxis puede ser correcta y el servidor estar caído: en ese caso
+    #     no falla una web, dejan de resolver todas a la vez, y el síntoma no
+    #     apunta a la causa. Mejor rechazar el cambio que dejar el proxy ciego.
+    from app.models.squid_settings import SquidSetting as _Ajuste
+    from app.services.dns_service import parsear_lista, probar_servidores
+
+    ajuste_dns = db.query(_Ajuste).filter(_Ajuste.key == "dns_nameservers").first()
+    servidores_dns = parsear_lista(ajuste_dns.value if ajuste_dns else None)
+    if servidores_dns:
+        dns_ok, dns_msg = probar_servidores(servidores_dns)
+        if not dns_ok:
+            mark_dirty()
+            return {
+                "status": "error",
+                "message": (
+                    "Los servidores DNS configurados no responden, no se ha "
+                    f"aplicado nada:\n{dns_msg}\n\nCorrige el ajuste «Servidores "
+                    "DNS» o déjalo vacío para usar la resolución del sistema."
+                ),
+                "needs_restart": False,
+                "config_preview": preview,
+            }
+
     # 2. El puerto elegido en el panel es el que Docker tiene que publicar.
     #    Ya no se deduce del squid.conf —donde ahora hay una constante— sino
     #    de la base de datos, que es donde lo deja el panel.

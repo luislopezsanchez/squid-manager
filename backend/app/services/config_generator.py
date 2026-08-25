@@ -15,6 +15,7 @@ from app.models.squid_settings import SquidSetting
 from app.models.delay_pool import DelayPool
 from app.models.ldap_config import LdapConfig
 from app.models.user_group import UserGroup, UserGroupMember
+from app.services.dns_service import parsear_lista
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
@@ -97,6 +98,11 @@ def generate_squid_config(db: Session) -> str:
         if d.strip()
     ]
 
+    # Servidores DNS propios. Vacío = Squid usa la resolución del sistema, que
+    # es el comportamiento de siempre.
+    dns_nameservers = parsear_lista(settings.get("dns_nameservers"))
+    dns_v4_first = str(settings.get("dns_v4_first", "")).lower() in ("1", "true", "on", "si", "sí")
+
     config = template.render(
         acls=acls,
         rules=rendered_rules,
@@ -108,5 +114,7 @@ def generate_squid_config(db: Session) -> str:
         groups=groups,
         ssl_exclude=ssl_exclude,
         internal_port=INTERNAL_SQUID_PORT,
+        dns_nameservers=dns_nameservers,
+        dns_v4_first=dns_v4_first,
     )
     return config

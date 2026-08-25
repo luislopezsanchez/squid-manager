@@ -5,6 +5,41 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.10.0] - 2026-08-24
+
+### Añadido
+- **Servidores DNS propios para las consultas de Squid** (ajuste
+  `dns_nameservers`, migración `0006`). Squid resuelve los nombres por su
+  cuenta, así que ahora se le puede indicar a qué servidores preguntar: sirve
+  para que la navegación del proxy herede el filtrado de un Pi-hole, un AdGuard
+  o el DNS interno de una empresa. Vacío por defecto, que es el comportamiento
+  de siempre (la resolución del sistema).
+- **Comprobación real del servidor antes de aplicar.** No se valida solo el
+  formato: se le envía una consulta DNS y se espera respuesta. Si no contesta,
+  rechaza la consulta o responde sin resultados, el cambio se rechaza y no se
+  toca el `squid.conf`. Un servidor inalcanzable aquí no rompe una web: deja al
+  proxy sin resolver ningún nombre, todas las webs caen a la vez y el síntoma
+  no apunta a la causa.
+- **Botón «Probar» junto al campo**, que consulta los servidores sin guardar
+  nada, para verificarlos antes de comprometerse.
+- Ajuste `dns_v4_first`: consultar IPv4 antes que IPv6. Útil en redes sin IPv6
+  real, donde intentarlo primero añade una espera en cada resolución.
+- 21 pruebas nuevas, incluidas las de un servidor que rechaza la consulta
+  (RCODE 5) y otro que responde sin resultados: dos formas de fallar que un
+  simple "¿hay algo escuchando en el puerto 53?" daría por buenas.
+
+### Notas
+- `dns_nameservers` solo acepta direcciones IP, no nombres de host: Squid tiene
+  que poder preguntar sin resolver nada primero. Se rechaza al guardar, para
+  que el error salga junto al campo que lo provoca.
+- Squid **reparte** las consultas entre todos los servidores de la lista, no
+  los usa como respaldo. Añadir un DNS público junto a un Pi-hole deja pasar
+  sin filtrar la fracción de consultas que le toquen al público. Para que todo
+  pase por el filtro, hay que dejar un único servidor. Queda documentado en el
+  README porque es contraintuitivo.
+
+---
+
 ## [0.9.0] - 2026-08-24
 
 El cambio de puerto del proxy desde el panel dejaba el sistema en un estado que
