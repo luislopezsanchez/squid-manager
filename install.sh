@@ -196,28 +196,94 @@ docker compose up -d
 ok "Contenedores desplegados"
 
 # ============================================
-# 6. Mostrar estado
+# 6. Esperar al backend y recoger la contraseña del admin
 # ============================================
+# La contraseña del administrador la genera el backend la primera vez que
+# arranca, y solo la escribe una vez en su log. Se espera a que termine para
+# poder mostrarla en el resumen: sin esta espera, el resumen remitía a un
+# comando que todavía no devolvía nada, y no había forma de distinguir «aún no
+# ha arrancado» de «ha fallado».
+echo ""
+info "Esperando a que el backend termine de arrancar..."
+
+ADMIN_PASS=""
+BACKEND_LISTO=""
+
+for _ in $(seq 1 90); do
+    LOG_BACKEND="$(docker compose logs backend 2>/dev/null || true)"
+
+    if grep -q "Administrador inicial" <<< "$LOG_BACKEND"; then
+        ADMIN_PASS="$(grep -A3 'Administrador inicial' <<< "$LOG_BACKEND" \
+            | grep 'Contrase' | tail -1 \
+            | sed 's/.*Contrase[^:]*:[[:space:]]*//' | tr -d '\r')"
+        BACKEND_LISTO="si"
+        break
+    fi
+
+    # Arrancó bien pero sin crear administrador: ya existía de antes.
+    if grep -q "Migraciones aplicadas" <<< "$LOG_BACKEND"; then
+        BACKEND_LISTO="si"
+        break
+    fi
+
+    if [[ "$(docker inspect squidmgr-backend --format '{{.State.Status}}' 2>/dev/null)" == "exited" ]]; then
+        break
+    fi
+
+    sleep 2
+done
+
+# ============================================
+# 7. Resumen
+# ============================================
+IP_SERVIDOR="$(hostname -I 2>/dev/null | awk '{print $1}')"
+[[ -z "$IP_SERVIDOR" ]] && IP_SERVIDOR="localhost"
+WEB_PORT_ACTUAL="$(grep -E '^WEB_PORT=' .env | cut -d= -f2 | tr -d ' \r')"
+PROXY_PORT_ACTUAL="$(grep -E '^PROXY_PORT=' .env | cut -d= -f2 | tr -d ' \r')"
+
 echo ""
 info "Estado de los contenedores:"
 docker compose ps
 
 echo ""
+if [[ -z "$BACKEND_LISTO" ]]; then
+    warn "=========================================="
+    warn "  El backend no llegó a arrancar"
+    warn "=========================================="
+    echo ""
+    echo "  El resto de la instalación está hecha, pero el panel no funcionará"
+    echo "  hasta resolverlo. Mira qué pasó con:"
+    echo ""
+    echo "      docker compose logs backend"
+    echo ""
+    exit 1
+fi
+
 ok "=========================================="
 ok "  SquidManager instalado correctamente"
 ok "=========================================="
 echo ""
-echo "  Panel web:   http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):3000"
-echo "  API docs:    http://localhost:8000/docs"
-echo "  Proxy:       localhost:3128"
+echo "  Panel web:   http://${IP_SERVIDOR}:${WEB_PORT_ACTUAL:-3000}"
+echo "  Proxy:       ${IP_SERVIDOR}:${PROXY_PORT_ACTUAL:-3128}"
 echo ""
-echo "  Primer acceso:"
-echo "    Usuario: admin"
-echo "    La contraseña se generó al azar y aparece UNA vez en el log:"
-echo "      docker compose logs backend | grep -A3 'Administrador inicial'"
-echo "    Se te pedirá cambiarla al entrar."
+echo "  Acceso al panel:"
+echo "    Usuario:     admin"
+if [[ -n "$ADMIN_PASS" ]]; then
+    echo "    Contraseña:  $ADMIN_PASS"
+    echo ""
+    echo "    Se te pedirá cambiarla al entrar. Queda en el historial de esta"
+    echo "    terminal: bórralo si el equipo no es solo tuyo."
+else
+    echo "    El usuario admin ya existía de una instalación anterior:"
+    echo "    entra con la contraseña que ya tenías."
+fi
 echo ""
-info "  Para ver el progreso de la compilación de Squid:"
-echo "    docker compose logs -f squid"
+echo "  Siguiente paso — para filtrar HTTPS:"
+echo "    El proxy descifra el tráfico HTTPS con su propio certificado, así que"
+echo "    hay que instalarlo en los equipos cliente:"
 echo ""
-info "  Cuando veas 'Accepting HTTP Socket connections', está listo."
+echo "        Panel web → Certificado CA → descargar"
+echo ""
+echo "    Hay instaladores listos para Windows, macOS e iOS. Sin ese"
+echo "    certificado, los sitios HTTPS fallarán en los clientes."
+echo ""

@@ -7,6 +7,27 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.10.1] - 2026-08-25
 
+### Cambiado (resumen del instalador)
+- **El instalador espera a que el backend arranque y muestra la contraseña del
+  administrador** en el resumen final. Antes remitía a
+  `docker compose logs backend | grep …`, que no devuelve nada si el backend
+  todavía no ha terminado —o si ha fallado—, y no había forma de distinguir un
+  caso del otro. Si el backend no llega a arrancar, el instalador ahora lo dice
+  y termina con error, en lugar de dar un resumen optimista.
+  > Esto revierte a propósito la decisión de no imprimir credenciales. El
+  > equilibrio cambia porque la contraseña ya está en el log del contenedor,
+  > al alcance de quien pueda usar Docker, y porque es de un solo uso: el panel
+  > obliga a cambiarla al entrar. El resumen avisa de que queda en el historial
+  > de la terminal.
+- **El resumen mandaba a una URL que no existe.** Anunciaba
+  `API docs: http://localhost:8000/docs`, pero el puerto 8000 no se publica al
+  host y `/docs` solo se sirve con `DEBUG=true`. Línea eliminada.
+- **Los puertos del resumen salen del `.env`**, en lugar de estar fijos a 3000
+  y 3128: quien cambiara `WEB_PORT` o `PROXY_PORT` recibía direcciones
+  equivocadas. La del proxy usa además la IP del servidor, no `localhost`.
+- Se añade el siguiente paso para filtrar HTTPS: instalar el certificado CA en
+  los equipos cliente, con la ruta del panel donde descargarlo.
+
 ### Corregido (reinstalación sobre datos anteriores)
 - **Reinstalar dejaba el backend en un bucle de reinicios imposible de
   diagnosticar.** Si sobrevivía el volumen de PostgreSQL de una instalación
