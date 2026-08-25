@@ -130,6 +130,14 @@ http_access deny all
 # `default` marca a este peer como la salida a usar cuando no hay otra regla.
 cache_peer {{ parent_proxy.host }} parent {{ parent_proxy.port }} 0 no-query default{% if parent_proxy.username %} login={{ parent_proxy.username }}:{{ parent_proxy.password or '' }}{% endif %}
 
+{% if parent_ca %}
+# El proxy padre también intercepta HTTPS, así que al reenviarle el tráfico
+# presenta su propio certificado. Sin declararlo aquí, Squid lo rechaza por
+# autofirmado (X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN) y no carga ninguna web
+# HTTPS. Los certificados del sistema se siguen usando: este se añade.
+tls_outgoing_options cafile=/etc/squid/parent_ca.crt
+{% endif %}
+
 {% if direct_domains %}
 # Destinos que NO pasan por el padre: la intranet, normalmente.
 acl salida_directa dstdomain {{ direct_domains|join(' ') }}

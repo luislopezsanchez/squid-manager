@@ -23,10 +23,19 @@ probando usuarios y contraseñas.
 import base64
 import ipaddress
 import logging
+import os
 import re
 import socket
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# El certificado del padre vive en el volumen que comparten backend y Squid.
+CA_PADRE_PATH = Path("/etc/squid/parent_ca.crt")
+
+# uid/gid del usuario 'proxy' dentro de la imagen de Squid.
+PROXY_UID = 13
+PROXY_GID = 13
 
 # Se pide un dominio de Internet cualquiera para ver si el padre lo sirve.
 # example.com está reservado por la IANA justo para esto.
@@ -171,6 +180,60 @@ def probar_padre(
         )
 
     return False, f"{host}:{port} respondió HTTP {codigo} al intentar salir"
+
+
+def validar_certificado(pem: str | None) -> tuple[bool, str]:
+    """Comprueba que el texto pegado parece un certificado PEM.
+
+    No se valida criptográficamente: basta con descartar lo que Squid no va a
+    poder leer, porque ante un fichero ilegible solo deja un WARNING en su log
+    y sigue arrancando —sin confiar en el padre—, con lo que el síntoma sería
+    otra vez la navegación HTTPS caída sin explicación aparente.
+    """
+    if not pem or not pem.strip():
+        return True, "Sin certificado (el padre no intercepta HTTPS)"
+
+    texto = pem.strip()
+    if "-----BEGIN CERTIFICATE-----" not in texto:
+        return False, (
+            "Eso no parece un certificado PEM: debe empezar por "
+            "«-----BEGIN CERTIFICATE-----». Descárgalo del panel del proxy "
+            "padre, en Certificado CA."
+        )
+    if "-----END CERTIFICATE-----" not in texto:
+        return False, "El certificado está incompleto: falta la línea final."
+
+    return True, "Certificado válido"
+
+
+def escribir_ca_padre(config) -> bool:
+    """Deja el certificado del padre en el volumen que lee Squid.
+
+    Devuelve si hay certificado en uso, que es lo que decide si el squid.conf
+    debe declararlo. Si no lo hay, el fichero se retira: dejarlo con contenido
+    viejo haría que Squid confiara en un certificado que ya no toca.
+    """
+    try:
+        if config and getattr(config, "enabled", False) and (config.ca_cert or "").strip():
+            CA_PADRE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            CA_PADRE_PATH.write_text(config.ca_cert.strip() + "\n")
+            # Legible por Squid, que corre como 'proxy'. No es un secreto: un
+            # certificado es público por definición.
+            os.chmod(CA_PADRE_PATH, 0o644)
+            try:
+                os.chown(CA_PADRE_PATH, PROXY_UID, PROXY_GID)
+            except (PermissionError, OSError):
+                pass
+            logger.info("Certificado CA del proxy padre escrito")
+            return True
+
+        if CA_PADRE_PATH.exists():
+            CA_PADRE_PATH.unlink()
+            logger.info("Certificado CA del proxy padre retirado")
+        return False
+    except Exception as e:
+        logger.error(f"No se pudo escribir el certificado del proxy padre: {e}")
+        return False
 
 
 def probar_configuracion(config) -> tuple[bool, str]:

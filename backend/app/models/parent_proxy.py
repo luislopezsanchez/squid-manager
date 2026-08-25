@@ -36,5 +36,13 @@ class ParentProxy(Base):
     # todo. Separados por espacios o saltos de línea.
     direct_domains = Column(Text, nullable=True)
 
+    # Certificado CA del padre, en formato PEM.
+    #
+    # Hace falta cuando el padre también intercepta HTTPS: al reenviarle el
+    # tráfico presenta su propio certificado, que Squid no conoce y rechaza por
+    # autofirmado (X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN), tumbando toda la
+    # navegación HTTPS. Guardándolo aquí, Squid pasa a confiar en él.
+    ca_cert = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

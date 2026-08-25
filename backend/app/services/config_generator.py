@@ -110,6 +110,14 @@ def generate_squid_config(db: Session) -> str:
     direct_domains = parsear_destinos(
         parent_proxy.direct_domains if parent_proxy else None
     )
+    # Solo se declara el certificado del padre si hay uno guardado: apuntar a
+    # un fichero inexistente deja un WARNING en el log de Squid y ninguna
+    # confianza añadida, que es peor que no declararlo.
+    parent_ca = bool(
+        parent_proxy
+        and parent_proxy.enabled
+        and (getattr(parent_proxy, "ca_cert", None) or "").strip()
+    )
 
     config = template.render(
         acls=acls,
@@ -125,5 +133,6 @@ def generate_squid_config(db: Session) -> str:
         dns_nameservers=dns_nameservers,
         parent_proxy=parent_proxy,
         direct_domains=direct_domains,
+        parent_ca=parent_ca,
     )
     return config

@@ -10,6 +10,7 @@ interface Config {
   password: string
   never_direct: boolean
   direct_domains: string
+  ca_cert: string
 }
 
 const VACIA: Config = {
@@ -20,6 +21,7 @@ const VACIA: Config = {
   password: '',
   never_direct: true,
   direct_domains: '',
+  ca_cert: '',
 }
 
 export default function ParentProxy() {
@@ -192,6 +194,27 @@ export default function ParentProxy() {
               </p>
             </div>
           </label>
+
+          <div>
+            <label className="block text-sm font-medium text-ink-2 mb-1">
+              Certificado CA del proxy padre
+            </label>
+            <textarea
+              value={config.ca_cert}
+              onChange={e => set('ca_cert', e.target.value)}
+              rows={4}
+              placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+              className="w-full px-3 py-2 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-xs"
+            />
+            <p className="text-xs text-ink-3 mt-1">
+              Solo si el padre <strong>también intercepta HTTPS</strong> (otro
+              SquidManager, o cualquier proxy con inspección TLS). Al reenviarle
+              el tráfico presenta su propio certificado, y sin esto Squid lo
+              rechaza por autofirmado y <strong>ninguna web HTTPS carga</strong>.
+              Si el padre es otro SquidManager, descárgalo de su panel en
+              «Certificado CA».
+            </p>
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-ink-2 mb-1">

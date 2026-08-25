@@ -194,6 +194,56 @@ def test_sin_configuracion_tampoco_estorba():
 
 # --- Generación del squid.conf ---------------------------------------------
 
+# --- Certificado del padre -------------------------------------------------
+
+CERT_DE_EJEMPLO = (
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIB0zCCAX2gAwIBAgIJAKm3nQ0bmHnRMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV\n"
+    "-----END CERTIFICATE-----\n"
+)
+
+
+def test_sin_certificado_es_valido():
+    """El padre puede no interceptar HTTPS: entonces no hace falta."""
+    from app.services.parent_proxy_service import validar_certificado
+    ok, _ = validar_certificado("")
+    assert ok
+    ok, _ = validar_certificado(None)
+    assert ok
+
+
+def test_certificado_pem_correcto():
+    from app.services.parent_proxy_service import validar_certificado
+    ok, _ = validar_certificado(CERT_DE_EJEMPLO)
+    assert ok
+
+
+def test_rechaza_algo_que_no_es_un_certificado():
+    """Squid solo dejaria un WARNING y seguiria sin confiar en nadie."""
+    from app.services.parent_proxy_service import validar_certificado
+    ok, mensaje = validar_certificado("aqui va el certificado supongo")
+    assert not ok
+    assert "BEGIN CERTIFICATE" in mensaje
+
+
+def test_rechaza_un_certificado_cortado():
+    from app.services.parent_proxy_service import validar_certificado
+    ok, mensaje = validar_certificado("-----BEGIN CERTIFICATE-----\nMIIB0zCC\n")
+    assert not ok
+    assert "incompleto" in mensaje
+
+
+def test_el_certificado_solo_se_declara_si_esta_guardado():
+    """Declarar un fichero que no existe deja a Squid sin confiar en nada."""
+    from test_config_generator import FakeDB, FakeSetting
+    from app.services.config_generator import generate_squid_config
+
+    config = generate_squid_config(
+        FakeDB(settings=[FakeSetting("http_port", "3128", "network")])
+    )
+    assert "tls_outgoing_options" not in config
+
+
 def test_sin_padre_no_se_emite_cache_peer():
     from test_config_generator import FakeDB, FakeSetting
     from app.services.config_generator import generate_squid_config

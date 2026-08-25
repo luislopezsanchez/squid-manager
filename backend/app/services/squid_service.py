@@ -718,6 +718,12 @@ def apply_squid_config(db, force_reconfigure: bool = False) -> dict:
             logger.warning(f"No se pudo sincronizar el .env: {env_msg}")
 
     # 4. Archivos auxiliares: LDAP y usuarios del proxy.
+    # Certificado del proxy padre: tiene que estar en el volumen antes de que
+    # Squid lea la configuración que lo declara.
+    from app.services.parent_proxy_service import escribir_ca_padre
+
+    escribir_ca_padre(padre)
+
     ldap_config = db.query(LdapConfig).first()
     allowed_ldap = [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()]  # noqa: E712
     write_ldap_aux_files(ldap_config, allowed_ldap)

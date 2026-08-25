@@ -11,7 +11,11 @@ from app.models.admin import Admin
 from app.models.parent_proxy import ParentProxy
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_state import mark_dirty
-from app.services.parent_proxy_service import probar_padre, validar_destino
+from app.services.parent_proxy_service import (
+    probar_padre,
+    validar_destino,
+    validar_certificado,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +35,7 @@ class ParentProxyIn(BaseModel):
     password: str | None = None
     never_direct: bool = True
     direct_domains: str | None = None
+    ca_cert: str | None = None
 
 
 class ParentProxyTest(BaseModel):
@@ -65,6 +70,9 @@ async def get_config(
         "password": MARCADOR if config.password else "",
         "never_direct": config.never_direct,
         "direct_domains": config.direct_domains or "",
+        # El certificado no es un secreto: se devuelve entero para poder
+        # revisarlo o sustituirlo desde el panel.
+        "ca_cert": config.ca_cert or "",
     }
 
 
@@ -85,6 +93,13 @@ async def update_config(
         if not valido:
             return {"status": "error", "message": mensaje}
 
+    # Un certificado ilegible no rompe el arranque de Squid: solo deja un aviso
+    # en su log y no confía en nadie, con lo que el síntoma vuelve a ser la
+    # navegación HTTPS caída sin causa aparente. Mejor rechazarlo aquí.
+    valido, mensaje = validar_certificado(data.ca_cert)
+    if not valido:
+        return {"status": "error", "message": mensaje}
+
     config = _obtener_o_crear(db)
     config.enabled = data.enabled
     config.host = (data.host or "").strip() or None
@@ -92,6 +107,7 @@ async def update_config(
     config.username = (data.username or "").strip() or None
     config.never_direct = data.never_direct
     config.direct_domains = data.direct_domains
+    config.ca_cert = (data.ca_cert or "").strip() or None
 
     # Solo se reescribe si llega una contraseña nueva de verdad.
     if data.password and data.password != MARCADOR:
