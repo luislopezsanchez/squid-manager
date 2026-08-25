@@ -48,7 +48,37 @@ docker compose version
 
 ---
 
-## Instalación paso a paso
+## Dos formas de instalar
+
+Hacen lo mismo; la diferencia es quién rellena la configuración.
+
+| | Con `install.sh` | Manual |
+|---|---|---|
+| Dónde se instala | Siempre en `/opt/squid-manager` | Donde tú quieras |
+| `DB_PASS` y `SECRET_KEY` | Se generan solas | Las defines tú |
+| `PROJECT_DIR` | Se rellena sola | **Tienes que ajustarla** |
+
+### Con el instalador
+
+```bash
+git clone https://github.com/luislopezsanchez/squid-manager.git
+cd squid-manager
+sudo ./install.sh
+```
+
+El script instala en `/opt/squid-manager`, genera las claves, deja el `.env`
+listo y levanta los contenedores. Si ya había una instalación ahí, la actualiza
+conservando la configuración existente.
+
+> No canalices el script directamente a `bash` desde internet: descárgalo,
+> léelo y ejecútalo, que es lo que se hace arriba.
+
+Si usas el instalador puedes saltar al [Paso 4](#paso-4-esperar-la-compilación-de-squid).
+El resto de esta guía describe la instalación manual.
+
+---
+
+## Instalación manual, paso a paso
 
 ### Paso 1: Clonar el repositorio
 
@@ -56,6 +86,8 @@ docker compose version
 git clone https://github.com/luislopezsanchez/squid-manager.git
 cd squid-manager
 ```
+
+Puedes clonarlo donde quieras. Apunta la ruta: hace falta en el paso siguiente.
 
 ### Paso 2: Configurar variables de entorno
 
@@ -77,6 +109,26 @@ openssl rand -hex 32   # para SECRET_KEY
 ```
 
 Si dejas `ADMIN_INITIAL_PASSWORD` vacío (el valor por defecto), el backend genera una contraseña aleatoria para la cuenta `admin` la primera vez que arranca; si prefieres elegirla tú, ponla ahí antes del primer `docker compose up`.
+
+**`PROJECT_DIR` es el tercer valor que hay que tocar**, y el que más se olvida
+porque el sistema arranca igual sin él:
+
+```bash
+pwd    # copia esta ruta
+```
+
+```env
+PROJECT_DIR=/la/ruta/que/te/dio/pwd
+```
+
+Viene con `/opt/squid-manager` de ejemplo, que es donde instala `install.sh`.
+Si has clonado en otro sitio y no lo cambias, todo funciona con normalidad
+salvo una cosa: **cambiar el puerto del proxy desde el panel deja de actualizar
+el `.env`**, y el puerto vuelve al valor anterior en el siguiente
+`docker compose up -d`, dejando el proxy inalcanzable sin ningún aviso.
+
+El backend usa esa ruta para recrear el contenedor de Squid con Docker Compose,
+y necesita verla en la misma ubicación que tiene en el servidor.
 
 ### Paso 3: Levantar los contenedores
 

@@ -7,6 +7,22 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.10.1] - 2026-08-25
 
+### Documentación
+- **Las dos formas de instalar están ahora explicadas como tales.** El
+  repositorio traía un `install.sh` que no se mencionaba en ninguna parte del
+  README, mientras la sección de instalación describía el método manual sin
+  decir que existía una alternativa. Ahora ambas aparecen comparadas, con lo
+  único que las diferencia de verdad: el instalador fija la ruta
+  (`/opt/squid-manager`) y rellena la configuración; la manual te deja elegir
+  la ruta pero exige ajustarla a mano.
+- **`PROJECT_DIR` se documenta donde hace falta**: en los pasos de instalación,
+  no solo en el `.env.example`. Es el ajuste que más se olvida porque el
+  sistema arranca igual sin él, y el único síntoma aparece mucho después
+  —cambiar el puerto desde el panel deja de tener efecto tras el siguiente
+  `docker compose up -d`—, cuando ya nadie lo relaciona con la instalación.
+- Se recuerda abrir el puerto del proxy en el firewall al terminar de
+  instalar. No lo hace ni el instalador ni el panel.
+
 ### Corregido
 - **El ajuste `dns_v4_first` no hacía nada y se ha retirado** (migración
   `0007`). La directiva está obsoleta desde Squid 5 y la 6 la rechaza al

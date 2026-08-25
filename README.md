@@ -21,7 +21,7 @@
 - [Características](#-características)
 - [Arquitectura](#-arquitectura)
 - [Requisitos](#-requisitos)
-- [Instalación rápida](#-instalación-rápida)
+- [Instalación](#-instalación)
 - [Configuración](#-configuración)
 - [Primeros pasos](#-primeros-pasos)
 - [SSL Bump (HTTPS)](#-ssl-bump-https)
@@ -122,18 +122,43 @@ Para más detalles, ver [docs/architecture.md](docs/architecture.md).
 
 ---
 
-## 🚀 Instalación rápida
+## 🚀 Instalación
+
+Hay dos formas de instalar. Hacen lo mismo; la diferencia es quién rellena la
+configuración.
+
+| | Opción A: `install.sh` | Opción B: manual |
+|---|---|---|
+| Dónde se instala | Siempre en `/opt/squid-manager` | Donde tú quieras |
+| `DB_PASS` y `SECRET_KEY` | Se generan solas | Las defines tú |
+| `PROJECT_DIR` | Se rellena sola | **Tienes que ajustarla** |
+
+### Opción A — con el instalador
+
+Instala en `/opt/squid-manager`, genera las contraseñas y deja el `.env` listo.
 
 ```bash
-# 1. Clonar el repositorio
+git clone https://github.com/luislopezsanchez/squid-manager.git
+cd squid-manager
+sudo ./install.sh
+```
+
+> No canalices el script directamente a `bash` desde internet: descárgalo,
+> léelo y ejecútalo, que es lo que se hace arriba.
+
+### Opción B — manual
+
+Elige esta si quieres el proyecto en otra ruta o prefieres controlar cada paso.
+
+```bash
+# 1. Clonar el repositorio (en la ruta que prefieras)
 git clone https://github.com/luislopezsanchez/squid-manager.git
 cd squid-manager
 
 # 2. Copiar configuración
 cp .env.example .env
 
-# 3. Editar .env: DB_PASS y SECRET_KEY son OBLIGATORIOS
-#    Genera valores aleatorios con: openssl rand -hex 32
+# 3. Editar el .env (ver más abajo qué es obligatorio)
 nano .env
 
 # 4. Levantar todo el sistema
@@ -143,8 +168,35 @@ docker compose up -d
 #    Ver progreso:
 docker compose logs -f squid
 
-# 6. Cuando vea "Accepting HTTP Socket connections", está listo
+# 6. Cuando veas "Accepting HTTP Socket connections", está listo
 ```
+
+**Tres valores hay que tocar sí o sí en el `.env`:**
+
+```env
+DB_PASS=            # obligatorio: openssl rand -hex 16
+SECRET_KEY=         # obligatorio: openssl rand -hex 32
+PROJECT_DIR=        # la ruta ABSOLUTA donde acabas de clonar el proyecto
+```
+
+> **`PROJECT_DIR` es el que se olvida.** Viene con `/opt/squid-manager` de
+> ejemplo, que es donde instala la Opción A. Si clonaste en otro sitio y no lo
+> cambias, el sistema arranca y funciona con normalidad, pero **cambiar el
+> puerto del proxy desde el panel deja de actualizar el `.env`**, y el puerto
+> vuelve al valor anterior en el siguiente `docker compose up -d`. Comprueba
+> con `pwd` y pon esa ruta exacta.
+
+### Después de instalar, con cualquiera de las dos
+
+**Abre el puerto del proxy en el firewall del servidor.** No lo hace ni el
+instalador ni el panel:
+
+```bash
+sudo ufw allow 3128/tcp
+```
+
+Sin esa regla Squid funciona pero los clientes no llegan, y el síntoma es una
+conexión que se queda colgada sin ningún mensaje de error.
 
 ### Acceso:
 | Servicio | URL |
