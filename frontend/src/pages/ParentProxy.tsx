@@ -44,6 +44,35 @@ export default function ParentProxy() {
     setResultado(null)
   }
 
+  // El archivo se lee en el navegador y rellena el campo, en lugar de subirlo:
+  // así se ve lo que se va a guardar antes de guardarlo, y el backend no
+  // necesita un endpoint aparte para recibir ficheros.
+  const cargarArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const archivo = e.target.files?.[0]
+    if (!archivo) return
+
+    const lector = new FileReader()
+    lector.onload = () => {
+      const texto = String(lector.result || '')
+      if (!texto.includes('-----BEGIN CERTIFICATE-----')) {
+        showToast(
+          `«${archivo.name}» no contiene un certificado en formato PEM. ` +
+          'Si es binario (DER), conviértelo antes: ' +
+          'openssl x509 -inform der -in cert.der -out cert.pem',
+          'error',
+        )
+        return
+      }
+      set('ca_cert', texto.trim())
+      showToast(`Certificado cargado desde ${archivo.name}`)
+    }
+    lector.onerror = () => showToast('No se pudo leer el archivo', 'error')
+    lector.readAsText(archivo)
+
+    // Permite volver a elegir el mismo archivo si hizo falta corregirlo.
+    e.target.value = ''
+  }
+
   const probar = async () => {
     setTesting(true)
     setResultado(null)
@@ -196,9 +225,20 @@ export default function ParentProxy() {
           </label>
 
           <div>
-            <label className="block text-sm font-medium text-ink-2 mb-1">
-              Certificado CA del proxy padre
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-ink-2">
+                Certificado CA del proxy padre
+              </label>
+              <label className="btn btn-ghost btn-sm cursor-pointer">
+                Cargar desde archivo
+                <input
+                  type="file"
+                  accept=".crt,.pem,.cer,.txt,application/x-x509-ca-cert"
+                  onChange={cargarArchivo}
+                  className="hidden"
+                />
+              </label>
+            </div>
             <textarea
               value={config.ca_cert}
               onChange={e => set('ca_cert', e.target.value)}
@@ -212,7 +252,7 @@ export default function ParentProxy() {
               el tráfico presenta su propio certificado, y sin esto Squid lo
               rechaza por autofirmado y <strong>ninguna web HTTPS carga</strong>.
               Si el padre es otro SquidManager, descárgalo de su panel en
-              «Certificado CA».
+              «Certificado CA» y cárgalo aquí con el botón, o pega su contenido.
             </p>
           </div>
 
