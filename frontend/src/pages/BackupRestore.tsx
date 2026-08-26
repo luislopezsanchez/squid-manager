@@ -7,8 +7,6 @@ export default function BackupRestore() {
   const { showToast, ToastContainer } = useToast()
   const [restoreBusy, setRestoreBusy] = useState(false)
   const [importBusy, setImportBusy] = useState(false)
-  const [showPasswordModal, setShowPasswordModal] = useState(false)
-  const [pwForm, setPwForm] = useState({ current: '', newPass: '', confirm: '' })
   const restoreRef = useRef<HTMLInputElement>(null)
   const importRef = useRef<HTMLInputElement>(null)
 
@@ -76,38 +74,9 @@ export default function BackupRestore() {
     }
   }
 
-  const handleChangePassword = async () => {
-    if (pwForm.newPass !== pwForm.confirm) {
-      showToast('Las contraseñas no coinciden', 'error')
-      return
-    }
-    if (pwForm.newPass.length < 6) {
-      showToast('La contraseña debe tener al menos 6 caracteres', 'error')
-      return
-    }
-    try {
-      await api.changePassword(pwForm.current, pwForm.newPass)
-      showToast('Contraseña cambiada correctamente', 'success')
-      setShowPasswordModal(false)
-      setPwForm({ current: '', newPass: '', confirm: '' })
-    } catch (e: any) {
-      showToast(e.message, 'error')
-    }
-  }
-
   return (
     <div className="p-6 md:p-7">
       <h1 className="text-2xl font-bold mb-6" style={{ color: '#0A2C48' }}>Backup, Restore y Migración</h1>
-
-      {/* Sección: Cambiar contraseña */}
-      <div className="card p-6 mb-6">
-        <h3 className="font-medium text-ink mb-2">Cambiar contraseña</h3>
-        <p className="text-sm text-ink-3 mb-4">Cambia tu propia contraseña del panel. Debes conocer la contraseña actual.</p>
-        <button onClick={() => setShowPasswordModal(true)}
-          className="px-4 py-2 border border-line rounded-lg text-sm font-medium hover:bg-brand-50">
-          Cambiar contraseña
-        </button>
-      </div>
 
       {/* Sección: Backup de la plataforma */}
       <div className="card p-6 mb-6">
@@ -178,39 +147,6 @@ export default function BackupRestore() {
           </button>
         </div>
       </div>
-
-      {/* Modal cambiar contraseña */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowPasswordModal(false)}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold mb-4">Cambiar contraseña</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="field-label block mb-1.5">Contraseña actual</label>
-                <input type="password" value={pwForm.current}
-                  onChange={e => setPwForm({ ...pwForm, current: e.target.value })}
-                  className="input" />
-              </div>
-              <div>
-                <label className="field-label block mb-1.5">Nueva contraseña</label>
-                <input type="password" value={pwForm.newPass}
-                  onChange={e => setPwForm({ ...pwForm, newPass: e.target.value })}
-                  className="input" />
-              </div>
-              <div>
-                <label className="field-label block mb-1.5">Confirmar nueva contraseña</label>
-                <input type="password" value={pwForm.confirm}
-                  onChange={e => setPwForm({ ...pwForm, confirm: e.target.value })}
-                  className="input" />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowPasswordModal(false)} className="flex-1 px-4 py-2 border border-line rounded-lg">Cancelar</button>
-              <button onClick={handleChangePassword} className="flex-1 px-4 py-2 text-white rounded-lg" style={{ backgroundColor: '#0B497C' }}>Cambiar</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <ToastContainer />
     </div>
