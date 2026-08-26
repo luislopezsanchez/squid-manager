@@ -214,6 +214,12 @@ delay_access {{ loop.index }} deny all
 # El prefijo stdio: es el módulo de escritura; sin él Squid avisa en cada arranque.
 access_log stdio:{{ settings.get('access_log', '/var/log/squid/access.log') }}
 cache_log {{ settings.get('cache_log', '/var/log/squid/cache.log') }}
+
+# De la rotacion se encarga logrotate (ver squid/squid-logrotate), no Squid.
+# Con 0, `squid -k rotate` se limita a cerrar y reabrir los ficheros sin
+# renumerarlos, que es justo lo que hace falta cuando rota otro. Con el valor
+# por defecto rotan los dos a la vez y las numeraciones se pisan entre si.
+logfile_rotate 0
 {% if settings.get('cache_store_log') and settings.get('cache_store_log') != 'none' %}
 cache_store_log stdio:{{ settings.get('cache_store_log') }}
 {% else %}

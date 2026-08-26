@@ -8,7 +8,20 @@
     nocreate
     sharedscripts
     postrotate
-        # Reabrir los ficheros de log sin cortar las conexiones en curso.
-        test -e /var/run/squid.pid && squid -k rotate || true
+        # `nocreate` es deliberado: logrotate renombra el fichero y no crea uno
+        # nuevo, porque de recrearlo se encarga Squid al reabrir. Si esto no se
+        # ejecuta, Squid se queda escribiendo en el fichero ya renombrado y
+        # /var/log/squid/access.log deja de existir. El panel se queda entonces
+        # a cero —tarjetas, graficas, registros y estadisticas salen todas de
+        # ahi— mientras la navegacion sigue funcionando con normalidad, asi que
+        # nada delata el fallo.
+        #
+        # La ruta es absoluta a proposito: cron ejecuta logrotate con un PATH
+        # minimo (/usr/bin:/bin) y el binario esta en /usr/sbin, de modo que
+        # invocarlo por su nombre falla con «squid: not found».
+        if [ -e /var/run/squid.pid ]; then
+            /usr/sbin/squid -k rotate || \
+                echo "[logrotate] ERROR: no se pudo reabrir el access.log de Squid; el panel se quedara sin datos" > /proc/1/fd/2
+        fi
     endscript
 }
