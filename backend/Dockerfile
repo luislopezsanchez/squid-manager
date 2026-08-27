@@ -19,31 +19,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Se usa Compose y no el SDK a propósito: así la recreación aplica el
 # docker-compose.yml completo y no solo los campos que el código recuerde
 # copiar, que era como se perdían opciones en silencio.
-#
-# Se instalan desde download.docker.com, que trae las versiones al dia. Muchas
-# redes corporativas bloquean ese dominio -a traves del proxy responde 403 y la
-# imagen no se puede construir-, asi que si no se puede llegar se recurre a los
-# paquetes de Debian: docker-cli y docker-compose, que ya es Compose v2 y se
-# instala como plugin, de modo que "docker compose" sigue funcionando igual.
-RUN set -eu; \
-    desde_docker_com() { \
-        install -m 0755 -d /etc/apt/keyrings \
-        && curl -fsSL --max-time 30 https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
-        && chmod a+r /etc/apt/keyrings/docker.asc \
-        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-           > /etc/apt/sources.list.d/docker.list \
-        && apt-get update \
-        && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin; \
-    }; \
-    if ! desde_docker_com; then \
-        echo "AVISO: no se pudo usar download.docker.com; instalando desde Debian"; \
-        rm -f /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.asc; \
-        apt-get update; \
-        apt-get install -y --no-install-recommends docker-cli docker-compose; \
-    fi; \
-    docker --version; \
-    docker compose version; \
-    rm -rf /var/lib/apt/lists/*
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+       > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements e instalar dependencias Python
 COPY requirements.txt .
