@@ -159,6 +159,34 @@ en lugar de pisarlos.
 > No canalices el script directamente a `bash` desde internet: descárgalo,
 > léelo y ejecútalo, que es lo que se hace arriba.
 
+#### Si el servidor sale a internet por un proxy
+
+`install.sh` da por hecho que hay salida directa. Cuando la red obliga a pasar
+por un proxy corporativo, hay **tres** capas que necesitan configurarse por
+separado —el host, el demonio de Docker y los builds— y configurar solo una
+deja la instalación a medias, normalmente con un `Could not resolve` en mitad
+de un `apt-get`. De eso se encarga otro script:
+
+```bash
+cp proxy.conf.example proxy.conf
+```
+
+Pon tus datos en `proxy.conf` (servidor, puerto y, si hacen falta, usuario y
+contraseña; los caracteres especiales no hay que escaparlos) y ejecuta:
+
+```bash
+sudo ./install-tras-proxy.sh
+```
+
+Configura las tres capas, comprueba que cada una sale a internet y solo
+entonces lanza `install.sh`. Las credenciales viven en `proxy.conf`, que está
+en `.gitignore`: no se edita ningún archivo del repositorio, porque un cambio
+local sin confirmar haría abortar al instalador.
+
+Esto es solo para **instalar**. Para que Squid salga a internet a través del
+proxy corporativo una vez instalado, se configura desde el panel en
+**Proxy padre** — ver [docs/proxy-padre.md](docs/proxy-padre.md).
+
 ### Opción B — manual
 
 Elige esta si quieres el proyecto en otra ruta o prefieres controlar cada paso.

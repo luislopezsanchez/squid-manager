@@ -47,3 +47,6 @@ create_examples.py
 # Copias de seguridad del entorno
 .env.bak*
 .env.*.bak
+
+# Credenciales del proxy corporativo (install-tras-proxy.sh)
+proxy.conf

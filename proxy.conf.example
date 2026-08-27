@@ -1,0 +1,37 @@
+# ============================================
+# SquidManager - Datos del proxy corporativo
+# ============================================
+# Copia este archivo a proxy.conf y pon tus datos:
+#
+#   cp proxy.conf.example proxy.conf
+#   nano proxy.conf
+#   sudo ./install-tras-proxy.sh
+#
+# proxy.conf esta en .gitignore: tus credenciales no se suben al repositorio
+# ni hacen que install.sh aborte por encontrar cambios locales.
+# ============================================
+
+# --- Servidor del proxy (OBLIGATORIO) ---
+PROXY_HOST=192.168.1.10
+PROXY_PORT=8080
+
+# --- Credenciales (dejar vacias si el proxy no las pide) ---
+# NO hace falta escapar nada: el script codifica los caracteres especiales
+# (@ # : / espacios...) automaticamente antes de armar la URL.
+PROXY_USER=
+PROXY_PASS=
+
+# --- Esquema del proxy: http o https (casi siempre http) ---
+PROXY_SCHEME=http
+
+# --- Destinos que NO deben pasar por el proxy ---
+# A la lista interna de SquidManager (localhost, los contenedores y la red
+# de Docker) se le suma lo que pongas aqui, separado por comas. Util para
+# los dominios y rangos internos de la empresa.
+PROXY_NO_PROXY_EXTRA=
+
+# --- CA corporativa (solo si el proxy intercepta HTTPS) ---
+# Si el proxy hace inspeccion TLS, las descargas fallan con errores de
+# certificado. Pon aqui la ruta al .crt que te de el area de redes y el
+# script lo instala en el sistema y en Docker.
+PROXY_CA_CERT=
