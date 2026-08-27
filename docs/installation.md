@@ -50,6 +50,12 @@ docker compose version
 
 ## Dos formas de instalar
 
+> **¿El servidor sale a Internet por un proxy?** Ninguna de las dos formas de
+> abajo funciona tal cual: hacen falta tres configuraciones de proxy distintas
+> antes de empezar. Ver
+> [instalacion-tras-proxy.md](instalacion-tras-proxy.md).
+
+
 Hacen lo mismo; la diferencia es quién rellena la configuración.
 
 | | Con `install.sh` | Manual |

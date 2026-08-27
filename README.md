@@ -187,6 +187,10 @@ Esto es solo para **instalar**. Para que Squid salga a internet a través del
 proxy corporativo una vez instalado, se configura desde el panel en
 **Proxy padre** — ver [docs/proxy-padre.md](docs/proxy-padre.md).
 
+El procedimiento manual equivalente, con qué toca cada paso y qué hacer si el
+proxy inspecciona TLS, está en
+[docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md).
+
 ### Opción B — manual
 
 Elige esta si quieres el proyecto en otra ruta o prefieres controlar cada paso.
@@ -526,6 +530,7 @@ squid-manager/
 | [docs/authentication.md](docs/authentication.md) | Cuentas, sesiones, roles y grupos |
 | [docs/ssl-bump.md](docs/ssl-bump.md) | Guía de SSL Bump + certificados CA |
 | [docs/proxy-padre.md](docs/proxy-padre.md) | Salir a Internet por otro proxy (padre e hijo) |
+| [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md) | Instalar en un servidor que sale por un proxy |
 | [docs/actualizacion.md](docs/actualizacion.md) | Cómo actualizar, verificar y volver atrás |
 | [docs/backup-restore.md](docs/backup-restore.md) | Backup, restore y migración |
 | [docs/production.md](docs/production.md) | Despliegue en producción |
