@@ -536,6 +536,7 @@ squid-manager/
 | [docs/production.md](docs/production.md) | Despliegue en producción |
 | [docs/api-reference.md](docs/api-reference.md) | Documentación completa de la API |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Cómo contribuir al proyecto |
+| [backups/](backups/README.md) | Backups de un despliegue completo, listos para restaurar en Proxmox |
 
 ---
 
