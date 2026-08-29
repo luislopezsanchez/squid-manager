@@ -410,6 +410,13 @@ server {
 
     client_max_body_size 10m;
 
+    # Sin esta regla, /health cae en el catch-all de la SPA y devuelve 200 con
+    # el HTML del panel: un monitor externo veria verde con el backend muerto.
+    location = /health {
+        proxy_pass http://127.0.0.1:${API_PORT}/health;
+        access_log off;
+    }
+
     location /api/ {
         proxy_pass http://127.0.0.1:${API_PORT};
         proxy_set_header Host \$host;

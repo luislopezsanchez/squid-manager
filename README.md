@@ -9,7 +9,7 @@
 
 <p align="center">
   <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg">
-  <img alt="Squid" src="https://img.shields.io/badge/Squid-6.12-green">
+  <img alt="Squid" src="https://img.shields.io/badge/Squid-6.12%20%7C%206.14-green">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115-teal">
   <img alt="React" src="https://img.shields.io/badge/React-18-blue">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-blue">

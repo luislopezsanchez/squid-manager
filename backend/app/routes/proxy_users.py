@@ -82,10 +82,26 @@ def _generate_htpasswd_hash(username: str, password: str) -> str:
     return result.stdout.strip()
 
 
-def _sync_passwd_and_reload(db: Session):
-    """Regenera el archivo htpasswd y recarga Squid."""
+def _sync_passwd(db: Session):
+    """Regenera el archivo htpasswd. No recarga Squid, y no hace falta.
+
+    El helper de autenticación (`squid/auth_helper.py`) abre este fichero en
+    cada petición, así que un usuario nuevo puede entrar en cuanto se escribe:
+    comprobado añadiendo una línea a mano y navegando sin tocar Squid.
+
+    Antes esto llamaba a `reload_squid()`, y ese `squid -k reconfigure` reinicia
+    los helpers de autenticación: unos 200 ms en los que el proxy rechaza
+    conexiones. El síntoma era desconcertante —crear el primer usuario y que la
+    primera navegación fallara con «Failed to connect», funcionando al
+    reintentar— y no servía para nada.
+
+    Tampoco aportaba nada al quitar acceso a alguien: `reconfigure` **no** purga
+    la caché de credenciales de Squid (medido: un usuario borrado del htpasswd
+    sigue navegando después de un reconfigure, y solo deja de hacerlo tras el
+    reinicio completo). De eso se encarga `purge_credentials()`, que reinicia
+    Squid a propósito y que estas rutas ya llaman cuando toca.
+    """
     write_passwd_file(db)
-    reload_squid()
 
 
 @router.get("/", response_model=list[ProxyUserResponse])
@@ -136,7 +152,7 @@ async def create_proxy_user(
     ))
     db.commit()
 
-    _sync_passwd_and_reload(db)
+    _sync_passwd(db)
     user.active = True
 
     if background_tasks:
@@ -180,7 +196,7 @@ async def update_proxy_user(
     ))
     db.commit()
 
-    _sync_passwd_and_reload(db)
+    _sync_passwd(db)
     # Squid guarda las credenciales validadas en caché (credentialsttl): sin
     # purgarlas, quitarle el acceso a alguien no surte efecto hasta dos horas.
     if revoke:
@@ -220,7 +236,7 @@ async def delete_proxy_user(
     db.delete(user)
     db.commit()
 
-    _sync_passwd_and_reload(db)
+    _sync_passwd(db)
     purge_credentials()
     if removed:
         mark_dirty()
@@ -251,7 +267,7 @@ async def toggle_proxy_user(
     ))
     db.commit()
 
-    _sync_passwd_and_reload(db)
+    _sync_passwd(db)
     if not user.enabled:
         purge_credentials()
 
@@ -313,7 +329,7 @@ async def reset_password(
     ))
     db.commit()
 
-    _sync_passwd_and_reload(db)
+    _sync_passwd(db)
     purge_credentials()
 
     return {

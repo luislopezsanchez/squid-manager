@@ -83,6 +83,23 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ### Corregido
 
+- **`/health` devolvía 200 con el HTML del panel.** nginx no definía una regla
+  para esa ruta, así que caía en el catch-all de la SPA: `/health` y
+  `/esto-no-existe` daban exactamente la misma respuesta. Un monitor apuntado a
+  `http://servidor:3000/health` habría visto verde para siempre, también con el
+  backend muerto. Las dos configuraciones de nginx —la del instalador nativo y
+  la de la imagen del frontend— tenían el mismo hueco.
+- **Crear un usuario del proxy cortaba el servicio unos 200 ms.** La ruta
+  llamaba a `squid -k reconfigure` tras escribir el htpasswd, y eso reinicia los
+  helpers de autenticación. El síntoma era desconcertante: crear el primer
+  usuario, probar a navegar y encontrarse un «Failed to connect» que al
+  reintentar funcionaba. La recarga no servía para nada, y se comprobó por
+  partida doble: el helper abre el fichero de contraseñas en cada petición (un
+  usuario escrito a mano entra sin tocar Squid), y `reconfigure` **no** purga la
+  caché de credenciales (un usuario borrado seguía navegando después de un
+  reconfigure, y solo dejaba de hacerlo tras el reinicio completo). Quitar el
+  acceso sigue reiniciando Squid con `purge_credentials()`, que es lo único que
+  funciona.
 - **El instalador nativo moría en el paso 4 sin DNS.** Al terminar el `apt`,
   `needrestart` reinicia `systemd-resolved`, y el `git clone` que va justo
   después fallaba con «Could not resolve host: github.com», dejando la máquina a
