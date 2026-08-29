@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import React from 'react'
 
 /**
@@ -40,7 +41,7 @@ export default function AuthShell({
           <div className="grid place-items-center mb-1">
             <img
               src="/brand/logo-256.png"
-              alt="SquidManager"
+              alt={traducir("SquidManager")}
               width={78}
               height={75}
               className="w-[78px] h-auto"

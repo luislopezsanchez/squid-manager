@@ -1,3 +1,4 @@
+import { idiomaActual } from '../i18n'
 const API_BASE = '/api'
 
 export function getToken(): string | null {
@@ -54,6 +55,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    // El backend traduce sus mensajes de error con esta cabecera. Se manda el
+    // idioma ELEGIDO en el panel, no el del navegador: son cosas distintas, y
+    // sin esto la aplicacion contestaria en espanol en cuanto algo fallara.
+    'Accept-Language': idiomaActual(),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers as Record<string, string> || {}),
   }
@@ -91,7 +96,10 @@ export const api = {
     formData.append('password', password)
     return fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept-Language': idiomaActual(),
+      },
       body: formData,
     }).then(async r => {
       if (!r.ok) {

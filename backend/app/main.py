@@ -11,7 +11,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect
 from sqlalchemy.exc import OperationalError
 
+from fastapi import Request
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 from app.config import settings
+from app.i18n import idioma_de_cabecera, traducir
 from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
 from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy
@@ -214,6 +219,25 @@ if settings.cors_origin_list:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
+
+# Traduccion de los mensajes de error.
+#
+# Se hace en un solo sitio, y no en los 60 puntos donde se lanzan, porque la
+# clave de cada mensaje es el propio texto en espanol: no hay que tocar ninguna
+# ruta, y un mensaje que todavia no este traducido sale en espanol en lugar de
+# como un codigo interno. Sin esto, traducir solo el panel deja una aplicacion
+# que esta en ingles hasta que algo falla y entonces contesta en espanol.
+@app.exception_handler(StarletteHTTPException)
+async def traducir_errores(request: Request, exc: StarletteHTTPException):
+    if isinstance(exc.detail, str):
+        idioma = idioma_de_cabecera(request.headers.get("accept-language"))
+        exc = StarletteHTTPException(
+            status_code=exc.status_code,
+            detail=traducir(exc.detail, idioma),
+            headers=getattr(exc, "headers", None),
+        )
+    return await http_exception_handler(request, exc)
+
 
 # Rate limiting (anti fuerza bruta)
 app.middleware("http")(rate_limit_middleware)

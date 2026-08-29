@@ -1,10 +1,11 @@
+import { traducir, cambiarIdioma, idiomaActual, IDIOMAS, type Idioma } from '../i18n'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { clearToken, api, canWrite, isSuperadmin, getRole } from '../api/client'
 import {
   IconDashboard, IconUsers, IconTag, IconRules, IconGauge, IconLink, IconGroups,
   IconSettings, IconLock, IconAudit, IconBackup, IconLogs, IconBell, IconShield, IconSend,
-  IconBolt, IconKey, IconLogout, IconSpinner, IconEye,
+  IconBolt, IconKey, IconLogout, IconSpinner, IconEye, IconGlobe,
 } from './Icons'
 
 type Item = { to: string; label: string; Icon: (p: { className?: string }) => JSX.Element }
@@ -40,7 +41,7 @@ export default function Layout() {
 
   const handleApply = async () => {
     if (!canWrite()) {
-      showToast('Tu cuenta es de solo lectura: no puede aplicar cambios.', 'warning')
+      showToast(traducir("Tu cuenta es de solo lectura: no puede aplicar cambios."), 'warning')
       return
     }
     setApplying(true)
@@ -48,7 +49,7 @@ export default function Layout() {
     try {
       const result = await api.applyConfig()
       if (result.status === 'ok') {
-        showToast('Cambios aplicados. Squid está usando la configuración nueva.', 'success')
+        showToast(traducir("Cambios aplicados. Squid está usando la configuración nueva."), 'success')
         setPending(false)
       } else {
         showToast(result.message, 'warning')
@@ -64,34 +65,34 @@ export default function Layout() {
   // El menú va agrupado por tarea, no como una lista larga de catorce entradas.
   const grupos: Grupo[] = [
     {
-      titulo: 'Vigilancia',
+      titulo: traducir("Vigilancia"),
       items: [
-        { to: '/', label: 'Dashboard', Icon: IconDashboard },
-        { to: '/logs', label: 'Registros', Icon: IconLogs },
-        { to: '/audit', label: 'Auditoría', Icon: IconAudit },
+        { to: '/', label: traducir("Dashboard"), Icon: IconDashboard },
+        { to: '/logs', label: traducir("Registros"), Icon: IconLogs },
+        { to: '/audit', label: traducir("Auditoría"), Icon: IconAudit },
       ],
     },
     {
-      titulo: 'Políticas',
+      titulo: traducir("Políticas"),
       items: [
-        { to: '/users', label: 'Usuarios', Icon: IconUsers },
-        { to: '/groups', label: 'Grupos', Icon: IconGroups },
-        { to: '/acls', label: 'ACLs', Icon: IconTag },
-        { to: '/rules', label: 'Reglas de acceso', Icon: IconRules },
-        { to: '/delay-pools', label: 'Ancho de banda', Icon: IconGauge },
+        { to: '/users', label: traducir("Usuarios"), Icon: IconUsers },
+        { to: '/groups', label: traducir("Grupos"), Icon: IconGroups },
+        { to: '/acls', label: traducir("ACLs"), Icon: IconTag },
+        { to: '/rules', label: traducir("Reglas de acceso"), Icon: IconRules },
+        { to: '/delay-pools', label: traducir("Ancho de banda"), Icon: IconGauge },
       ],
     },
     {
-      titulo: 'Sistema',
+      titulo: traducir("Sistema"),
       items: [
         { to: '/ldap', label: 'LDAP', Icon: IconLink },
-        { to: '/certificate', label: 'Certificado', Icon: IconLock },
-        { to: '/settings', label: 'Configuración', Icon: IconSettings },
-        { to: '/notifications', label: 'Notificaciones', Icon: IconBell },
-        { to: '/syslog', label: 'Syslog externo', Icon: IconSend },
-        { to: '/parent-proxy', label: 'Proxy padre', Icon: IconLink },
-        { to: '/backup', label: 'Backup y migración', Icon: IconBackup },
-        ...(isSuperadmin() ? [{ to: '/admins', label: 'Administradores', Icon: IconShield }] : []),
+        { to: '/certificate', label: traducir("Certificado"), Icon: IconLock },
+        { to: '/settings', label: traducir("Configuración"), Icon: IconSettings },
+        { to: '/notifications', label: traducir("Notificaciones"), Icon: IconBell },
+        { to: '/syslog', label: traducir("Syslog externo"), Icon: IconSend },
+        { to: '/parent-proxy', label: traducir("Proxy padre"), Icon: IconLink },
+        { to: '/backup', label: traducir("Backup y migración"), Icon: IconBackup },
+        ...(isSuperadmin() ? [{ to: '/admins', label: traducir("Administradores"), Icon: IconShield }] : []),
       ],
     },
   ]
@@ -136,10 +137,8 @@ export default function Layout() {
             style={{ filter: 'drop-shadow(0 0 10px rgba(127,208,226,.28))' }}
           />
           <div className="flex flex-col leading-tight">
-            <span className="text-[17px] font-extrabold text-white tracking-tight">SquidManager</span>
-            <span className="text-[10.5px] font-semibold uppercase tracking-[.1em] text-brand-300">
-              Proxy
-            </span>
+            <span className="text-[17px] font-extrabold text-white tracking-tight">{traducir("SquidManager")}</span>
+            <span className="text-[10.5px] font-semibold uppercase tracking-[.1em] text-brand-300">{traducir("Proxy")}</span>
           </div>
         </div>
 
@@ -187,14 +186,10 @@ export default function Layout() {
               >
                 {applying ? (
                   <>
-                    <IconSpinner className="w-4 h-4 animate-spin" />
-                    Aplicando…
-                  </>
+                    <IconSpinner className="w-4 h-4 animate-spin" />{traducir("Aplicando…")}</>
                 ) : (
                   <>
-                    <IconBolt className="w-4 h-4" />
-                    Aplicar cambios
-                  </>
+                    <IconBolt className="w-4 h-4" />{traducir("Aplicar cambios")}</>
                 )}
               </button>
               <p className="text-[11px] text-center mt-2 text-[#B9D2E0]/60">
@@ -204,22 +199,37 @@ export default function Layout() {
           )}
 
           <div className="mt-3 pt-3 border-t border-white/10 flex flex-col gap-0.5">
+            {/* Selector de idioma. Cambiarlo recarga la pagina: los textos se
+                resuelven al cargar el modulo, asi que es la unica forma de que
+                toda la interfaz quede coherente de una vez. */}
+            <label className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13.5px] font-medium
+                              text-[#B9D2E0] hover:bg-white/[.07] hover:text-white transition cursor-pointer">
+              <IconGlobe className="w-[17px] h-[17px] flex-none opacity-85" />
+              <select
+                aria-label={traducir("Idioma")}
+                value={idiomaActual()}
+                onChange={e => cambiarIdioma(e.target.value as Idioma)}
+                className="bg-transparent border-0 outline-none cursor-pointer w-full text-[13.5px]"
+              >
+                {IDIOMAS.map(i => (
+                  <option key={i.codigo} value={i.codigo} className="text-ink">
+                    {i.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
             <NavLink
               to="/cambiar-contrasena"
               className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13.5px] font-medium
                          text-[#B9D2E0] hover:bg-white/[.07] hover:text-white transition"
             >
-              <IconKey className="w-[17px] h-[17px] flex-none opacity-85" />
-              Cambiar contraseña
-            </NavLink>
+              <IconKey className="w-[17px] h-[17px] flex-none opacity-85" />{traducir("Cambiar contraseña")}</NavLink>
             <button
               onClick={handleLogout}
               className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13.5px] font-medium
                          text-[#B9D2E0] hover:bg-danger/25 hover:text-white transition text-left"
             >
-              <IconLogout className="w-[17px] h-[17px] flex-none opacity-85" />
-              Cerrar sesión
-            </button>
+              <IconLogout className="w-[17px] h-[17px] flex-none opacity-85" />{traducir("Cerrar sesión")}</button>
           </div>
         </div>
       </aside>

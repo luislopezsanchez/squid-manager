@@ -141,8 +141,9 @@ def generate_squid_config(db: Session) -> str:
     # directamente donde diga el panel.
     from app.services.runtime import get_runtime
 
+    runtime = get_runtime()
     puerto_deseado = str(settings.get("http_port") or INTERNAL_SQUID_PORT).strip()
-    puerto_escucha = get_runtime().listen_port(puerto_deseado)
+    puerto_escucha = runtime.listen_port(puerto_deseado)
 
     config = template.render(
         acls=acls,
@@ -155,6 +156,7 @@ def generate_squid_config(db: Session) -> str:
         groups=groups,
         ssl_exclude=ssl_exclude,
         internal_port=puerto_escucha,
+        modo_despliegue=runtime.name,
         dns_nameservers=dns_nameservers,
         trusted_sources=trusted_sources,
         ssl_bump_enabled=ssl_bump_enabled,

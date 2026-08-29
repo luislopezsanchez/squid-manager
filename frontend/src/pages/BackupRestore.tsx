@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import { useState, useRef } from 'react'
 import { IconDownload, IconFile } from '../components/Icons'
 import { api, getToken } from '../api/client'
@@ -21,8 +22,8 @@ export default function BackupRestore() {
       a.download = `squidmanager-backup-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.json`
       a.click()
       URL.revokeObjectURL(url)
-      showToast('Backup descargado correctamente', 'success')
-    }).catch(() => showToast('Error al descargar backup', 'error'))
+      showToast(traducir("Backup descargado correctamente"), 'success')
+    }).catch(() => showToast(traducir("Error al descargar backup"), 'error'))
   }
 
   const handleDownloadConf = () => {
@@ -37,8 +38,8 @@ export default function BackupRestore() {
       a.download = `squid.conf-${new Date().toISOString().slice(0, 10)}`
       a.click()
       URL.revokeObjectURL(url)
-      showToast('squid.conf descargado', 'success')
-    }).catch(() => showToast('Error al descargar squid.conf', 'error'))
+      showToast(traducir("squid.conf descargado"), 'success')
+    }).catch(() => showToast(traducir("Error al descargar squid.conf"), 'error'))
   }
 
   const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -76,20 +77,16 @@ export default function BackupRestore() {
 
   return (
     <div className="p-6 md:p-7">
-      <h1 className="text-2xl font-bold mb-6" style={{ color: '#0A2C48' }}>Backup, Restore y Migración</h1>
+      <h1 className="text-2xl font-bold mb-6" style={{ color: '#0A2C48' }}>{traducir("Backup, Restore y Migración")}</h1>
 
       {/* Sección: Backup de la plataforma */}
       <div className="card p-6 mb-6">
-        <h3 className="font-medium text-ink mb-2">Backup de SquidManager</h3>
-        <p className="text-sm text-ink-3 mb-4">
-          Exporta toda la configuración de SquidManager (ACLs, reglas, usuarios, settings, delay pools, LDAP) a un archivo JSON.
-          Este backup solo sirve para restaurar dentro de SquidManager.
-        </p>
+        <h3 className="font-medium text-ink mb-2">{traducir("Backup de SquidManager")}</h3>
+        <p className="text-sm text-ink-3 mb-4">{traducir("Exporta toda la configuración de SquidManager (ACLs, reglas, usuarios, settings, delay pools, LDAP) a un archivo JSON. Este backup solo sirve para restaurar dentro de SquidManager.")}</p>
         <div className="flex gap-3 flex-wrap">
           <button onClick={handleExport}
             className="px-4 py-2 text-white rounded-lg font-medium text-sm inline-flex items-center gap-1.5" style={{ backgroundColor: '#0B497C' }}>
-            <IconDownload className="w-4 h-4" /> Descargar backup (JSON)
-          </button>
+            <IconDownload className="w-4 h-4" />{traducir("Descargar backup (JSON)")}</button>
           <div>
             <input ref={restoreRef} type="file" accept=".json" onChange={handleRestore} className="hidden" id="restore-input" />
             <button onClick={() => restoreRef.current?.click()} disabled={restoreBusy}
@@ -102,41 +99,35 @@ export default function BackupRestore() {
 
       {/* Sección: Exportar squid.conf */}
       <div className="card p-6 mb-6">
-        <h3 className="font-medium text-ink mb-2">Descargar squid.conf</h3>
-        <p className="text-sm text-ink-3 mb-4">
-          Descarga el archivo squid.conf que SquidManager ha generado y que Squid está usando actualmente.
-        </p>
+        <h3 className="font-medium text-ink mb-2">{traducir("Descargar squid.conf")}</h3>
+        <p className="text-sm text-ink-3 mb-4">{traducir("Descarga el archivo squid.conf que SquidManager ha generado y que Squid está usando actualmente.")}</p>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-800 mb-4">
-          <strong>Uso en un Squid tradicional (sin plataforma):</strong>
+          <strong>{traducir("Uso en un Squid tradicional (sin plataforma):")}</strong>
           <ul className="mt-2 space-y-1 list-disc list-inside">
-            <li>El archivo es válido para Squid estándar, pero ajusta las rutas (<code>/var/spool/squid</code>, <code>/var/log/squid</code>) según tu distribución</li>
-            <li>Los helpers de autenticación (<code>basic_ncsa_auth</code>, <code>basic_ldap_auth</code>) deben existir en el servidor destino</li>
-            <li>El archivo <code>squid_passwd</code> (usuarios) debe copiarse aparte</li>
-            <li>Los certificados SSL de la CA deben copiarse aparte</li>
-            <li>Si usas SSL Bump, necesitas instalar <code>security_file_certgen</code> y la CA en los clientes</li>
+            <li>El archivo es válido para Squid estándar, pero ajusta las rutas (<code>/var/spool/squid</code>, <code>/var/log/squid</code>{traducir(") según tu distribución")}</li>
+            <li>Los helpers de autenticación (<code>basic_ncsa_auth</code>, <code>basic_ldap_auth</code>{traducir(") deben existir en el servidor destino")}</li>
+            <li>El archivo <code>squid_passwd</code>{traducir("(usuarios) debe copiarse aparte")}</li>
+            <li>{traducir("Los certificados SSL de la CA deben copiarse aparte")}</li>
+            <li>Si usas SSL Bump, necesitas instalar <code>security_file_certgen</code>{traducir("y la CA en los clientes")}</li>
           </ul>
         </div>
         <button onClick={handleDownloadConf}
           className="px-4 py-2 text-white rounded-lg font-medium text-sm inline-flex items-center gap-1.5" style={{ backgroundColor: '#48B3D0' }}>
-          <IconFile className="w-4 h-4" /> Descargar squid.conf
-        </button>
+          <IconFile className="w-4 h-4" />{traducir("Descargar squid.conf")}</button>
       </div>
 
       {/* Sección: Importar squid.conf tradicional */}
       <div className="card p-6 mb-6">
-        <h3 className="font-medium text-ink mb-2">Importar squid.conf tradicional</h3>
-        <p className="text-sm text-ink-3 mb-4">
-          Si tienes un Squid configurado a mano y quieres migrar a SquidManager, sube tu squid.conf
-          y la plataforma importará las ACLs, reglas, delay pools y settings básicos.
-        </p>
+        <h3 className="font-medium text-ink mb-2">{traducir("Importar squid.conf tradicional")}</h3>
+        <p className="text-sm text-ink-3 mb-4">{traducir("Si tienes un Squid configurado a mano y quieres migrar a SquidManager, sube tu squid.conf y la plataforma importará las ACLs, reglas, delay pools y settings básicos.")}</p>
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-xs text-amber-800 mb-4">
-          <strong>Limitaciones del importador:</strong>
+          <strong>{traducir("Limitaciones del importador:")}</strong>
           <ul className="mt-2 space-y-1 list-disc list-inside">
-            <li>Las ACLs simples (dstdomain, src, url_regex, etc.) se importan correctamente</li>
-            <li>Las reglas http_access se importan preservando el orden</li>
-            <li>Los delay pools se importan si siguen el formato estándar</li>
-            <li>Los usuarios (htpasswd) <strong>NO</strong> se importan — debes crearlos manualmente</li>
-            <li>Configuraciones muy complejas pueden no importarse perfectamente — revisa antes de aplicar</li>
+            <li>{traducir("Las ACLs simples (dstdomain, src, url_regex, etc.) se importan correctamente")}</li>
+            <li>{traducir("Las reglas http_access se importan preservando el orden")}</li>
+            <li>{traducir("Los delay pools se importan si siguen el formato estándar")}</li>
+            <li>Los usuarios (htpasswd) <strong>NO</strong>{traducir("se importan — debes crearlos manualmente")}</li>
+            <li>{traducir("Configuraciones muy complejas pueden no importarse perfectamente — revisa antes de aplicar")}</li>
           </ul>
         </div>
         <div>

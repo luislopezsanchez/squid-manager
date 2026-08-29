@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
@@ -20,7 +21,7 @@ export default function Groups() {
   const { showToast, ToastContainer } = useToast()
 
   const loadGroups = () => {
-    api.listGroups().then(setGroups).catch(e => showToast('Error al cargar grupos', 'error')).finally(() => setLoading(false))
+    api.listGroups().then(setGroups).catch(e => showToast(traducir("Error al cargar grupos"), 'error')).finally(() => setLoading(false))
   }
 
   useEffect(() => {
@@ -78,7 +79,7 @@ export default function Groups() {
         {allUsers.map(u => <option key={u} value={u} />)}
       </datalist>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="page-title">Grupos de Usuarios</h1>
+        <h1 className="page-title">{traducir("Grupos de Usuarios")}</h1>
         <button
           onClick={() => setShowForm(!showForm)}
           className="btn btn-primary"
@@ -88,16 +89,16 @@ export default function Groups() {
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-xs text-blue-800">
-        <strong>Grupos: políticas por conjunto de usuarios.</strong> Cada grupo genera una ACL{" "}
-        <code>proxy_auth</code> en Squid. Para aplicar una política, crea una <strong>regla de acceso</strong>{" "}
-        que referencie el nombre del grupo (ej. <code>allow ventas</code>).
+        <strong>{traducir("Grupos: políticas por conjunto de usuarios.")}</strong> Cada grupo genera una ACL{" "}
+        <code>proxy_auth</code> en Squid. Para aplicar una política, crea una <strong>{traducir("regla de acceso")}</strong>{" "}
+        que referencie el nombre del grupo (ej. <code>{traducir("allow ventas")}</code>).
       </div>
 
       {showForm && (
         <form onSubmit={handleCreate} className="card p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="field-label block mb-1.5">Nombre del grupo</label>
+              <label className="field-label block mb-1.5">{traducir("Nombre del grupo")}</label>
               <input
                 type="text" value={newGroup.name}
                 onChange={e => setNewGroup({ ...newGroup, name: e.target.value })}
@@ -107,12 +108,12 @@ export default function Groups() {
               />
             </div>
             <div>
-              <label className="field-label block mb-1.5">Descripción</label>
+              <label className="field-label block mb-1.5">{traducir("Descripción")}</label>
               <input
                 type="text" value={newGroup.description}
                 onChange={e => setNewGroup({ ...newGroup, description: e.target.value })}
                 className="input"
-                placeholder="Equipo de ventas"
+                placeholder={traducir("Equipo de ventas")}
               />
             </div>
           </div>
@@ -125,27 +126,23 @@ export default function Groups() {
               className="w-4 h-4 mt-0.5"
             />
             <div>
-              <span className="text-sm font-medium text-ink-2">
-                No interceptar el HTTPS de este grupo
-              </span>
+              <span className="text-sm font-medium text-ink-2">{traducir("No interceptar el HTTPS de este grupo")}</span>
               <p className="text-xs text-ink-3 mt-0.5">
                 Para quien no puede instalar el certificado (móviles personales)
                 o usa herramientas que se rompen al interceptarlas (git, npm,
-                apps con <em>certificate pinning</em>). Siguen autenticándose y
+                apps con <em>{traducir("certificate pinning")}</em>). Siguen autenticándose y
                 el bloqueo por dominio les sigue afectando; lo que se pierde es
                 la inspección de la URL completa y del contenido.
               </p>
             </div>
           </label>
 
-          <button type="submit" className="mt-4 btn btn-primary">
-            Crear Grupo
-          </button>
+          <button type="submit" className="mt-4 btn btn-primary">{traducir("Crear Grupo")}</button>
         </form>
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-ink-3">Cargando...</div>
+        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {groups.map(group => (
@@ -157,16 +154,14 @@ export default function Groups() {
                     {group.no_bump && (
                       <span
                         className="text-[11px] px-1.5 py-0.5 rounded bg-warn-soft text-warn font-medium"
-                        title="El tráfico HTTPS de este grupo no se descifra. El bloqueo por dominio le sigue afectando."
-                      >
-                        HTTPS sin interceptar
-                      </span>
+                        title={traducir("El tráfico HTTPS de este grupo no se descifra. El bloqueo por dominio le sigue afectando.")}
+                      >{traducir("HTTPS sin interceptar")}</span>
                     )}
                   </div>
                   {group.description && <p className="text-sm text-ink-3">{group.description}</p>}
                 </div>
                 <button onClick={() => handleDelete(group.id, group.name)}
-                  className="text-danger hover:text-danger text-sm">Eliminar</button>
+                  className="text-danger hover:text-danger text-sm">{traducir("Eliminar")}</button>
               </div>
 
               <div className="flex flex-wrap gap-2 mb-4">
@@ -177,7 +172,7 @@ export default function Groups() {
                   </span>
                 ))}
                 {group.members.length === 0 && (
-                  <span className="text-xs text-ink-3">Sin miembros</span>
+                  <span className="text-xs text-ink-3">{traducir("Sin miembros")}</span>
                 )}
               </div>
 
@@ -188,18 +183,16 @@ export default function Groups() {
                   onChange={e => setNewMember(prev => ({ ...prev, [group.id]: e.target.value }))}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember(group.id) } }}
                   className="flex-1 px-3 py-1.5 border border-line rounded-lg text-sm"
-                  placeholder="nombre de usuario (local o LDAP)"
+                  placeholder={traducir("nombre de usuario (local o LDAP)")}
                   list="member-options"
                 />
                 <button onClick={() => handleAddMember(group.id)}
-                  className="btn btn-primary btn-sm">
-                  Añadir
-                </button>
+                  className="btn btn-primary btn-sm">{traducir("Añadir")}</button>
               </div>
             </div>
           ))}
           {groups.length === 0 && (
-            <div className="col-span-full text-center py-12 text-ink-3">No hay grupos. Crea el primero.</div>
+            <div className="col-span-full text-center py-12 text-ink-3">{traducir("No hay grupos. Crea el primero.")}</div>
           )}
         </div>
       )}

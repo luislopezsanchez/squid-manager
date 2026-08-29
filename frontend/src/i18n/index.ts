@@ -69,7 +69,7 @@ export function cambiarIdioma(nuevo: Idioma): void {
  * @param texto  El original en espanol, que hace de clave.
  * @param vars   Sustituciones opcionales para los marcadores {nombre}.
  */
-export function t(texto: string, vars?: Record<string, string | number>): string {
+export function traducir(texto: string, vars?: Record<string, string | number>): string {
   const diccionario = DICCIONARIOS[idioma]
   let salida = (diccionario && diccionario[texto]) || texto
 
@@ -80,3 +80,8 @@ export function t(texto: string, vars?: Record<string, string | number>): string
   }
   return salida
 }
+
+// Alias corto para escribir a mano. El codigo generado usa `traducir` y no
+// `t` porque `t` ya es el nombre de variables locales en alguna pagina, y
+// la colision rompia la compilacion.
+export const t = traducir

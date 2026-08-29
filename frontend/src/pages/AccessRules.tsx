@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { IconChevronDown, IconChevronUp, IconUsers } from '../components/Icons'
 import { api } from '../api/client'
@@ -32,7 +33,7 @@ export default function AccessRules() {
   const { showToast, ToastContainer } = useToast()
 
   const loadRules = () => {
-    api.listAccessRules().then(setRules).catch(e => showToast('Error al cargar reglas', 'error')).finally(() => setLoading(false))
+    api.listAccessRules().then(setRules).catch(e => showToast(traducir("Error al cargar reglas"), 'error')).finally(() => setLoading(false))
   }
 
   useEffect(() => {
@@ -69,11 +70,11 @@ export default function AccessRules() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar esta regla?')) return
+    if (!confirm(traducir("¿Eliminar esta regla?"))) return
     try {
       await api.deleteAccessRule(id)
       loadRules()
-      showToast('Regla eliminada correctamente')
+      showToast(traducir("Regla eliminada correctamente"))
     } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
   }
 
@@ -86,7 +87,7 @@ export default function AccessRules() {
     const ruleIds = newRules.map(r => r.id)
     try {
       await api.reorderRules(ruleIds)
-      showToast('Orden de reglas actualizado')
+      showToast(traducir("Orden de reglas actualizado"))
     } catch (e: any) {
       showToast(`Error al reordenar: ${e.message}`, 'error')
       loadRules()
@@ -102,8 +103,8 @@ export default function AccessRules() {
       <ToastContainer />
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="page-title">Reglas de Acceso (http_access)</h1>
-          <p className="page-sub">El orden importa: la primera regla que coincide determina el acceso</p>
+          <h1 className="page-title">{traducir("Reglas de Acceso (http_access)")}</h1>
+          <p className="page-sub">{traducir("El orden importa: la primera regla que coincide determina el acceso")}</p>
         </div>
         <button
           onClick={() => { setShowForm(!showForm); setEditingId(null); setForm({ action: 'allow', acl_names: '', order: rules.length, description: '', enabled: true }) }}
@@ -118,23 +119,23 @@ export default function AccessRules() {
           <h3 className="font-medium text-ink mb-4">{editingId ? 'Editar Regla' : 'Nueva Regla de Acceso'}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="field-label block mb-1.5">Acción</label>
+              <label className="field-label block mb-1.5">{traducir("Acción")}</label>
               <select value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}
                 className="input">
-                <option value="allow">allow (Permitir)</option>
-                <option value="deny">deny (Denegar)</option>
+                <option value="allow">{traducir("allow (Permitir)")}</option>
+                <option value="deny">{traducir("deny (Denegar)")}</option>
               </select>
             </div>
             <div>
-              <label className="field-label block mb-1.5">Orden</label>
+              <label className="field-label block mb-1.5">{traducir("Orden")}</label>
               <input type="number" value={form.order} onChange={e => setForm({ ...form, order: parseInt(e.target.value) })}
                 className="input" />
             </div>
           </div>
           <div className="mt-4">
-            <label className="field-label block mb-1.5">ACLs (separadas por espacio)</label>
+            <label className="field-label block mb-1.5">{traducir("ACLs (separadas por espacio)")}</label>
             <input type="text" value={form.acl_names} onChange={e => setForm({ ...form, acl_names: e.target.value })}
-              placeholder="ej: localnet authenticated" className="input font-mono text-sm" required />
+              placeholder={traducir("ej: localnet authenticated")} className="input font-mono text-sm" required />
             <div className="mt-2 flex flex-wrap gap-2">
               {allAclNames.map(name => (
                 <button key={name} type="button" onClick={() => {
@@ -145,7 +146,7 @@ export default function AccessRules() {
                   {name}
                 </button>
               ))}
-              {groupNames.length > 0 && <span className="w-full text-xs text-ink-3 mt-1">Grupos de usuarios:</span>}
+              {groupNames.length > 0 && <span className="w-full text-xs text-ink-3 mt-1">{traducir("Grupos de usuarios:")}</span>}
               {groupNames.map(name => (
                 <button key={`g-${name}`} type="button" onClick={() => {
                   const current = form.acl_names.trim()
@@ -158,9 +159,9 @@ export default function AccessRules() {
             </div>
           </div>
           <div className="mt-4">
-            <label className="field-label block mb-1.5">Descripción (opcional)</label>
+            <label className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
             <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-              placeholder="ej: Permitir acceso a red local autenticada" className="input" />
+              placeholder={traducir("ej: Permitir acceso a red local autenticada")} className="input" />
           </div>
           {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
           <button type="submit" className="mt-4 btn btn-primary">
@@ -170,16 +171,16 @@ export default function AccessRules() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-ink-3">Cargando...</div>
+        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
       ) : (
         <div className="space-y-3">
           <div className="bg-line-soft rounded-xl p-4 border border-line">
-            <h3 className="text-sm font-medium text-ink-3 mb-2">Reglas predefinidas (siempre activas):</h3>
+            <h3 className="text-sm font-medium text-ink-3 mb-2">{traducir("Reglas predefinidas (siempre activas):")}</h3>
             <div className="space-y-1 text-sm font-mono text-ink-3">
-              <div>http_access deny !Safe_ports</div>
-              <div>http_access deny CONNECT !SSL_ports</div>
-              <div>http_access allow localhost manager</div>
-              <div>http_access deny manager</div>
+              <div>{traducir("http_access deny !Safe_ports")}</div>
+              <div>{traducir("http_access deny CONNECT !SSL_ports")}</div>
+              <div>{traducir("http_access allow localhost manager")}</div>
+              <div>{traducir("http_access deny manager")}</div>
             </div>
           </div>
 
@@ -187,9 +188,9 @@ export default function AccessRules() {
             <div key={rule.id} className={`card p-4 flex items-center gap-4 ${!rule.enabled ? 'opacity-50' : ''}`}>
               <div className="flex flex-col gap-1">
                 <button onClick={() => moveRule(index, 'up')} disabled={index === 0}
-                  className="text-ink-3 hover:text-ink-2 disabled:opacity-20 p-1" aria-label="Subir"><IconChevronUp className="w-4 h-4" /></button>
+                  className="text-ink-3 hover:text-ink-2 disabled:opacity-20 p-1" aria-label={traducir("Subir")}><IconChevronUp className="w-4 h-4" /></button>
                 <button onClick={() => moveRule(index, 'down')} disabled={index === rules.length - 1}
-                  className="text-ink-3 hover:text-ink-2 disabled:opacity-20 p-1" aria-label="Bajar"><IconChevronDown className="w-4 h-4" /></button>
+                  className="text-ink-3 hover:text-ink-2 disabled:opacity-20 p-1" aria-label={traducir("Bajar")}><IconChevronDown className="w-4 h-4" /></button>
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-3">
@@ -202,15 +203,13 @@ export default function AccessRules() {
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-ink-3">#{rule.order}</span>
-                <button onClick={() => handleEdit(rule)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">Editar</button>
-                <button onClick={() => handleDelete(rule.id)} className="text-danger hover:text-danger text-sm font-medium">Eliminar</button>
+                <button onClick={() => handleEdit(rule)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">{traducir("Editar")}</button>
+                <button onClick={() => handleDelete(rule.id)} className="text-danger hover:text-danger text-sm font-medium">{traducir("Eliminar")}</button>
               </div>
             </div>
           ))}
           {rules.length === 0 && (
-            <div className="card p-8 text-center text-ink-3">
-              No hay reglas personalizadas. Squid usará las reglas por defecto (permitir autenticados, denegar el resto).
-            </div>
+            <div className="card p-8 text-center text-ink-3">{traducir("No hay reglas personalizadas. Squid usará las reglas por defecto (permitir autenticados, denegar el resto).")}</div>
           )}
         </div>
       )}

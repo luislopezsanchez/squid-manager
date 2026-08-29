@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
@@ -146,36 +147,30 @@ function PasswordModal({ username, onClose, onSetPassword, onGenerate }: {
 
         {mode === 'choose' && (
           <>
-            <p className="text-sm text-ink-3 mb-5">Elegí cómo asignar la nueva contraseña.</p>
+            <p className="text-sm text-ink-3 mb-5">{traducir("Elegí cómo asignar la nueva contraseña.")}</p>
             <div className="space-y-3">
               <button onClick={handleGenerate} disabled={busy}
                 className="w-full btn btn-primary disabled:opacity-50">
                 {busy ? 'Generando…' : 'Generar automática'}
               </button>
               <button onClick={() => setMode('manual')} disabled={busy}
-                className="w-full px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">
-                Establecer una propia
-              </button>
+                className="w-full px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">{traducir("Establecer una propia")}</button>
             </div>
             {err && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{err}</div>}
-            <button onClick={onClose} className="mt-4 text-sm text-ink-3 hover:text-ink-2 w-full text-center">
-              Cancelar
-            </button>
+            <button onClick={onClose} className="mt-4 text-sm text-ink-3 hover:text-ink-2 w-full text-center">{traducir("Cancelar")}</button>
           </>
         )}
 
         {mode === 'manual' && (
           <form onSubmit={handleManualSubmit}>
-            <label className="field-label block mb-1.5 mt-4">Contraseña nueva</label>
+            <label className="field-label block mb-1.5 mt-4">{traducir("Contraseña nueva")}</label>
             <input type="text" value={manualPassword} onChange={e => setManualPassword(e.target.value)}
               className="input font-mono" minLength={8} required autoFocus
-              placeholder="Al menos 8 caracteres" />
+              placeholder={traducir("Al menos 8 caracteres")} />
             {err && <div className="mt-3 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{err}</div>}
             <div className="flex gap-2 mt-4">
               <button type="button" onClick={() => setMode('choose')}
-                className="flex-1 px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">
-                Atrás
-              </button>
+                className="flex-1 px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">{traducir("Atrás")}</button>
               <button type="submit" disabled={busy} className="flex-1 btn btn-primary disabled:opacity-50">
                 {busy ? 'Guardando…' : 'Guardar'}
               </button>
@@ -185,13 +180,9 @@ function PasswordModal({ username, onClose, onSetPassword, onGenerate }: {
 
         {mode === 'result' && (
           <>
-            <p className="text-sm text-ink-3 mb-3 mt-2">
-              Guardala ahora: no se puede volver a ver una vez que cierres esta ventana.
-            </p>
+            <p className="text-sm text-ink-3 mb-3 mt-2">{traducir("Guardala ahora: no se puede volver a ver una vez que cierres esta ventana.")}</p>
             <CopyField value={result} onCopied={() => {}} />
-            <button onClick={onClose} className="mt-5 btn btn-primary w-full">
-              Listo
-            </button>
+            <button onClick={onClose} className="mt-5 btn btn-primary w-full">{traducir("Listo")}</button>
           </>
         )}
       </div>
@@ -302,7 +293,7 @@ export default function ProxyUsers() {
     // Bloquear a alguien purga la caché de credenciales reiniciando Squid,
     // que tarda varios segundos. Sin este aviso, el botón deshabilitado y
     // el texto "Aplicando…" pueden pasar desapercibidos igual.
-    if (u.enabled) showToast('Aplicando… puede tardar unos segundos (reinicia Squid)', 'info')
+    if (u.enabled) showToast(traducir("Aplicando… puede tardar unos segundos (reinicia Squid)"), 'info')
     try {
       const result = u.source === 'local' ? await api.toggleUser(u.id) : await api.toggleLdapUser(u.id)
       loadUsers()
@@ -316,13 +307,13 @@ export default function ProxyUsers() {
 
   const handleDelete = async (u: LocalUser) => {
     if (isPending(u)) return
-    if (!confirm('¿Eliminar este usuario?')) return
+    if (!confirm(traducir("¿Eliminar este usuario?"))) return
     setRowPending(u, true)
-    showToast('Eliminando… puede tardar unos segundos (reinicia Squid)', 'info')
+    showToast(traducir("Eliminando… puede tardar unos segundos (reinicia Squid)"), 'info')
     try {
       await api.deleteUser(u.id)
       loadUsers()
-      showToast('Usuario eliminado correctamente')
+      showToast(traducir("Usuario eliminado correctamente"))
     } catch (e: any) {
       showToast(`Error: ${e.message}`, 'error')
     } finally {
@@ -337,7 +328,7 @@ export default function ProxyUsers() {
       <ToastContainer />
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="page-title">Usuarios</h1>
+          <h1 className="page-title">{traducir("Usuarios")}</h1>
           <p className="text-sm text-ink-3 mt-1">
             {allUsers.length} en total · {enabledCount} pueden navegar ahora mismo
           </p>
@@ -353,19 +344,17 @@ export default function ProxyUsers() {
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-xs text-blue-800">
-        <strong>Bloquear acceso</strong> deshabilita al usuario: no puede navegar hasta que lo vuelvas a habilitar.
+        <strong>{traducir("Bloquear acceso")}</strong> deshabilita al usuario: no puede navegar hasta que lo vuelvas a habilitar.
         Es la única forma de interrumpir a alguien de verdad — cambiar solo la contraseña no lo hace, porque el
         navegador reenvía la que ya tiene guardada sin preguntar nada mientras siga siendo válida.
         La validación de Squid vive <strong>{`${2} horas`}</strong> por defecto (configurable en <em>credentialsttl</em>).
-        Los usuarios <strong>LDAP</strong> se sincronizan desde <em>LDAP / Active Directory</em>, pero se habilitan
-        y deshabilitan desde aquí.
-      </div>
+        Los usuarios <strong>LDAP</strong> se sincronizan desde <em>{traducir("LDAP / Active Directory")}</em>{traducir(", pero se habilitan y deshabilitan desde aquí.")}</div>
 
       {showForm && (
         <form onSubmit={handleCreate} className="card p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="field-label block mb-1.5">Usuario</label>
+              <label className="field-label block mb-1.5">{traducir("Usuario")}</label>
               <input
                 type="text" value={newUser.username}
                 onChange={e => setNewUser({ ...newUser, username: e.target.value })}
@@ -374,7 +363,7 @@ export default function ProxyUsers() {
               />
             </div>
             <div>
-              <label className="field-label block mb-1.5">Contraseña</label>
+              <label className="field-label block mb-1.5">{traducir("Contraseña")}</label>
               <input
                 type="password" value={newUser.password}
                 onChange={e => setNewUser({ ...newUser, password: e.target.value })}
@@ -384,9 +373,7 @@ export default function ProxyUsers() {
             </div>
           </div>
           {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
-          <button type="submit" className="mt-4 btn btn-primary">
-            Crear Usuario
-          </button>
+          <button type="submit" className="mt-4 btn btn-primary">{traducir("Crear Usuario")}</button>
         </form>
       )}
 
@@ -397,34 +384,34 @@ export default function ProxyUsers() {
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por usuario, nombre o email…"
+          placeholder={traducir("Buscar por usuario, nombre o email…")}
           className="input flex-1"
         />
         <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value as any)} className="input sm:w-44">
-          <option value="all">Todos los orígenes</option>
-          <option value="local">Solo locales</option>
-          <option value="ldap">Solo LDAP</option>
+          <option value="all">{traducir("Todos los orígenes")}</option>
+          <option value="local">{traducir("Solo locales")}</option>
+          <option value="ldap">{traducir("Solo LDAP")}</option>
         </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="input sm:w-44">
-          <option value="all">Cualquier estado</option>
-          <option value="enabled">Solo habilitados</option>
-          <option value="disabled">Solo deshabilitados</option>
+          <option value="all">{traducir("Cualquier estado")}</option>
+          <option value="enabled">{traducir("Solo habilitados")}</option>
+          <option value="disabled">{traducir("Solo deshabilitados")}</option>
         </select>
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-ink-3">Cargando...</div>
+        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
       ) : (
         <div className="card overflow-hidden">
           <table className="table-panel">
             <thead>
               <tr>
-                <th className="text-left">Usuario</th>
-                <th className="text-left">Origen</th>
-                <th className="text-left">Estado</th>
-                <th className="text-left">Grupos</th>
-                <th className="text-left">Creado</th>
-                <th className="text-right">Acciones</th>
+                <th className="text-left">{traducir("Usuario")}</th>
+                <th className="text-left">{traducir("Origen")}</th>
+                <th className="text-left">{traducir("Estado")}</th>
+                <th className="text-left">{traducir("Grupos")}</th>
+                <th className="text-left">{traducir("Creado")}</th>
+                <th className="text-right">{traducir("Acciones")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line-soft">
@@ -478,9 +465,7 @@ export default function ProxyUsers() {
                         <button onClick={() => setPasswordModalFor(u)}
                           disabled={isPending(u)}
                           className="text-amber-600 hover:text-amber-800 text-sm font-medium disabled:opacity-50"
-                          title="Genera una contraseña nueva, o establece una tú mismo">
-                          Contraseña
-                        </button>
+                          title={traducir("Genera una contraseña nueva, o establece una tú mismo")}>{traducir("Contraseña")}</button>
                         <button onClick={() => handleDelete(u)}
                           disabled={isPending(u)}
                           className="text-danger hover:text-danger text-sm font-medium disabled:opacity-50 disabled:cursor-wait">

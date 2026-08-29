@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, clearToken } from '../api/client'
@@ -65,7 +66,7 @@ export default function ChangePassword() {
     >
       <form onSubmit={handleSubmit}>
         <div className="field">
-          <label className="field-label" htmlFor="actual">Contraseña actual</label>
+          <label className="field-label" htmlFor="actual">{traducir("Contraseña actual")}</label>
           <input
             id="actual" type="password" className="input" value={current}
             onChange={e => setCurrent(e.target.value)}
@@ -74,7 +75,7 @@ export default function ChangePassword() {
         </div>
 
         <div className="field">
-          <label className="field-label" htmlFor="nueva">Contraseña nueva</label>
+          <label className="field-label" htmlFor="nueva">{traducir("Contraseña nueva")}</label>
           <input
             id="nueva" type="password" className="input" value={next}
             onChange={e => setNext(e.target.value)}
@@ -84,7 +85,7 @@ export default function ChangePassword() {
         </div>
 
         <div className="field">
-          <label className="field-label" htmlFor="repetir">Repite la contraseña nueva</label>
+          <label className="field-label" htmlFor="repetir">{traducir("Repite la contraseña nueva")}</label>
           <input
             id="repetir" type="password" className="input" value={repeat}
             onChange={e => setRepeat(e.target.value)}
@@ -102,9 +103,7 @@ export default function ChangePassword() {
         <button type="submit" disabled={loading} className="btn btn-primary w-full py-2.5 text-[14.5px]">
           {loading ? (
             <>
-              <IconSpinner className="w-5 h-5 animate-spin" />
-              Guardando…
-            </>
+              <IconSpinner className="w-5 h-5 animate-spin" />{traducir("Guardando…")}</>
           ) : (
             'Cambiar contraseña'
           )}
@@ -115,9 +114,7 @@ export default function ChangePassword() {
             type="button"
             onClick={() => navigate('/')}
             className="w-full py-2 mt-2 text-[13px] text-ink-3 hover:text-ink-2 transition"
-          >
-            Volver al panel
-          </button>
+          >{traducir("Volver al panel")}</button>
         )}
       </form>
     </AuthShell>
