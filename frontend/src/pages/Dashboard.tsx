@@ -390,7 +390,10 @@ export default function Dashboard() {
           <p className="text-2xl font-bold tabular" style={{ color: '#2E93BC' }}>{formatNumber(t.total_requests_60s)}</p>
           <Sparkline values={sparkRequests} color="#2E93BC" />
           <p className="text-xs text-ink-3">
-            {t.total_requests_60s - t.denied_requests_60s} OK · {t.denied_requests_60s} denegadas
+            {traducir("{ok} OK · {denegadas} denegadas", {
+              ok: t.total_requests_60s - t.denied_requests_60s,
+              denegadas: t.denied_requests_60s,
+            })}
           </p>
         </div>
 
@@ -407,7 +410,12 @@ export default function Dashboard() {
               "N usuarios" ahí sugería que era un subconjunto del número de
               arriba, y "1 conexión · 0 usuarios" se leía como contradicción. */}
           <p className="text-xs text-ink-3">
-            {t.active_ips.length === 1 ? '1 IP' : `${t.active_ips.length} IPs`} · {t.active_users.length} autenticados
+            {traducir(
+              t.active_ips.length === 1
+                ? "1 IP · {n} autenticados"
+                : "{ips} IPs · {n} autenticados",
+              { ips: t.active_ips.length, n: t.active_users.length },
+            )}
           </p>
         </div>
 
@@ -428,8 +436,11 @@ export default function Dashboard() {
           <Sparkline values={sparkCache} color="#2F9E75" />
           <p className="text-xs text-ink-3 tabular">
             {t.cache_hit_ratio === null
-              ? 'Sin peticiones cacheables'
-              : `${t.cache_hits} desde caché · ${t.cache_misses} al origen`}
+              ? traducir("Sin peticiones cacheables")
+              : traducir("{hits} desde caché · {fallos} al origen", {
+                  hits: t.cache_hits,
+                  fallos: t.cache_misses,
+                })}
           </p>
         </div>
       </div>
@@ -440,7 +451,10 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-medium text-ink">{traducir("Tráfico de red en tiempo real")}</h3>
             <span className="text-xs text-ink-3 tabular">
-              Promedio: bajada {formatRate(t.rx_avg_60s)} · subida {formatRate(t.tx_avg_60s)}
+              {traducir("Promedio: bajada {bajada} · subida {subida}", {
+                bajada: formatRate(t.rx_avg_60s),
+                subida: formatRate(t.tx_avg_60s),
+              })}
             </span>
           </div>
 
@@ -516,7 +530,9 @@ export default function Dashboard() {
 
           {/* Eje temporal: el rango sale de las marcas reales de las muestras. */}
           <div className="flex justify-between text-xs text-ink-3 mt-2 pl-[72px]">
-            <span>{span > 90 ? `Hace ${Math.round(span / 60)} min` : `Hace ${Math.round(span)} s`}</span>
+            <span>{span > 90
+              ? traducir("Hace {n} min", { n: Math.round(span / 60) })
+              : traducir("Hace {n} s", { n: Math.round(span) })}</span>
             <span>{traducir("Ahora")}</span>
           </div>
 
@@ -527,7 +543,10 @@ export default function Dashboard() {
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#48B3D0' }}></span>{traducir("Subida")}</span>
             <span className="text-ink-3 ml-auto tabular">
-              {timeline.length} puntos · {Math.round(span)}s de histórico
+              {traducir("{puntos} puntos · {segundos}s de histórico", {
+                puntos: timeline.length,
+                segundos: Math.round(span),
+              })}
             </span>
           </div>
         </div>
@@ -539,7 +558,9 @@ export default function Dashboard() {
             <Gauge
               value={s.cpu.percent}
               label="CPU"
-              detail={s.cpu.load_1 !== undefined ? `carga ${s.cpu.load_1.toFixed(2)}` : ''}
+              detail={s.cpu.load_1 !== undefined
+                ? traducir("carga {n}", { n: s.cpu.load_1.toFixed(2) })
+                : ''}
               color="#0B497C"
               Icon={IconBolt}
             />
@@ -552,7 +573,7 @@ export default function Dashboard() {
             />
             <Gauge
               value={s.disk.percent}
-              label="Disco"
+              label={traducir("Disco")}
               detail={s.disk.total > 0 ? formatBytes(s.disk.used) : 'n/d'}
               color={s.disk.percent > 80 ? '#C0392F' : '#2F9E75'}
               Icon={IconBackup}
@@ -561,15 +582,26 @@ export default function Dashboard() {
 
           <div className="pt-4 mt-4 border-t border-line-soft text-xs text-ink-3 space-y-1 tabular">
             <div>RAM: {formatBytes(s.memory.used)} / {formatBytes(s.memory.total)}</div>
-            {s.disk.total > 0 && <div>Disco: {formatBytes(s.disk.used)} / {formatBytes(s.disk.total)}</div>}
-            <div>Total transferido: bajada {formatBytes(t.rx_total)} · subida {formatBytes(t.tx_total)}</div>
+            {s.disk.total > 0 && <div>{traducir("Disco: {usado} / {total}", {
+              usado: formatBytes(s.disk.used),
+              total: formatBytes(s.disk.total),
+            })}</div>}
+            <div>{traducir("Total transferido: bajada {bajada} · subida {subida}", {
+              bajada: formatBytes(t.rx_total),
+              subida: formatBytes(t.tx_total),
+            })}</div>
             {/* Latencia de respuesta: el mejor indicador de si el proxy va
                 lento. Se excluyen los túneles CONNECT (HTTPS) porque ahí el
                 tiempo medido es la duración de la conexión, no la respuesta. */}
             <div>
-              Latencia: {t.latency_p50_ms === null ? 'sin datos' : (
-                <>mediana {t.latency_p50_ms} ms · p95 {t.latency_p95_ms} ms</>
-              )}
+              {t.latency_p50_ms === null
+                ? traducir("Latencia: sin datos")
+                : traducir("Latencia: mediana {p50} ms · p95 {p95} ms", {
+                    p50: t.latency_p50_ms,
+                    // El p95 puede faltar aunque haya mediana. Antes se
+                    // interpolaba un null y salía «p95  ms», con el hueco.
+                    p95: t.latency_p95_ms ?? '—',
+                  })}
             </div>
           </div>
         </div>
@@ -594,7 +626,9 @@ export default function Dashboard() {
             </div>
           </div>
           <p className="text-[11px] text-ink-3 mb-4">
-            Ordenado por {userSort === 'bytes' ? 'datos transferidos' : 'número de peticiones'} · últimas 1.000 peticiones
+            {userSort === 'bytes'
+              ? traducir("Ordenado por datos transferidos · últimas 1.000 peticiones")
+              : traducir("Ordenado por número de peticiones · últimas 1.000 peticiones")}
           </p>
           {sortedUsers.length === 0 ? (
             <p className="text-sm text-ink-3">{traducir("Sin datos")}</p>
@@ -709,8 +743,10 @@ export default function Dashboard() {
               que es: la mayoría de esos bloqueos no tiene usuario. */}
           {data.top_blocked_users.anonymous_blocked > 0 && (
             <p className="text-[11px] text-ink-3 mt-3 pt-3 border-t border-line-soft">
-              + {data.top_blocked_users.anonymous_blocked} bloqueos sin usuario identificado
-              (tráfico de fondo del navegador, sin credenciales)
+              {traducir(
+                "+ {n} bloqueos sin usuario identificado (tráfico de fondo del navegador, sin credenciales)",
+                { n: data.top_blocked_users.anonymous_blocked },
+              )}
             </p>
           )}
         </div>

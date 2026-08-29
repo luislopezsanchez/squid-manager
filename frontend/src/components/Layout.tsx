@@ -193,7 +193,9 @@ export default function Layout() {
                 )}
               </button>
               <p className="text-[11px] text-center mt-2 text-[#B9D2E0]/60">
-                {pending ? 'Hay cambios sin aplicar' : 'Squid está al día'}
+                {pending
+                  ? traducir("Hay cambios sin aplicar")
+                  : traducir("Squid está al día")}
               </p>
             </>
           )}
