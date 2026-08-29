@@ -11,7 +11,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect
 from sqlalchemy.exc import OperationalError
 
+from fastapi import Request
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 from app.config import settings
+from app.i18n import idioma_de_cabecera, traducir
 from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
 from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy
@@ -179,12 +184,84 @@ def seed_data():
         db.close()
 
 
+def _es_configuracion_provisional(ruta: Path) -> bool:
+    """¿El squid.conf sigue siendo el que escribe el instalador/entrypoint?
+
+    Ambos ponen «Configuración inicial temporal» en la primera línea (el
+    instalador nativo sin tilde), así que basta con mirarla. Si el fichero no
+    existe todavía, también hay que generar el definitivo.
+    """
+    if not ruta.exists():
+        return True
+    try:
+        with ruta.open("r", errors="replace") as f:
+            primera = f.readline()
+    except OSError as e:
+        logger.warning(f"No se pudo leer {ruta}: {e}")
+        return False
+    return "inicial temporal" in primera
+
+
+def _aplicar_configuracion_definitiva():
+    """Escribe la configuración real de Squid si aún rige la provisional.
+
+    El arranque provisional niega todo salvo localhost a propósito, para no
+    dejar un proxy abierto a la LAN mientras nadie ha entrado al panel. El
+    precio es que el proxy no sirve a nadie hasta que se aplica la definitiva,
+    y hasta ahora eso había que hacerlo a mano sin que nada lo dijera.
+
+    Se reintenta en segundo plano porque en modo Docker el contenedor de Squid
+    puede tardar mucho en estar listo la primera vez (compila desde fuente), y
+    la validación de la configuración se ejecuta dentro de él.
+    """
+    import threading
+    import time
+
+    ruta = Path(settings.SQUID_CONFIG_PATH)
+    if not _es_configuracion_provisional(ruta):
+        return
+
+    def tarea():
+        from app.services.squid_service import apply_squid_config
+
+        for intento in range(1, 41):  # ~20 min de margen
+            try:
+                db = SessionLocal()
+                try:
+                    resultado = apply_squid_config(db)
+                finally:
+                    db.close()
+                if resultado.get("status") == "ok":
+                    logger.info(
+                        "Configuración definitiva de Squid aplicada automáticamente "
+                        f"en el arranque (intento {intento}). El proxy ya exige "
+                        "autenticación."
+                    )
+                    return
+                motivo = resultado.get("message", "sin detalle")
+            except Exception as e:  # noqa: BLE001 - nunca debe tumbar el arranque
+                motivo = str(e)
+            if intento == 1:
+                logger.info(f"Squid aún no está listo para aplicar la configuración: {motivo}")
+            time.sleep(30)
+
+        logger.warning(
+            "No se pudo aplicar la configuración definitiva de Squid. El proxy "
+            "sigue con el arranque provisional, que solo permite localhost: "
+            "entra al panel y pulsa «Aplicar cambios»."
+        )
+
+    threading.Thread(target=tarea, name="config-inicial", daemon=True).start()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Iniciando SquidManager Backend...")
     run_migrations()
     seed_data()
     logger.info("Base de datos inicializada")
+
+    _aplicar_configuracion_definitiva()
 
     from app.services.syslog_service import start_syslog_forwarder
     start_syslog_forwarder()
@@ -215,6 +292,25 @@ if settings.cors_origin_list:
         allow_headers=["Authorization", "Content-Type"],
     )
 
+# Traduccion de los mensajes de error.
+#
+# Se hace en un solo sitio, y no en los 60 puntos donde se lanzan, porque la
+# clave de cada mensaje es el propio texto en espanol: no hay que tocar ninguna
+# ruta, y un mensaje que todavia no este traducido sale en espanol en lugar de
+# como un codigo interno. Sin esto, traducir solo el panel deja una aplicacion
+# que esta en ingles hasta que algo falla y entonces contesta en espanol.
+@app.exception_handler(StarletteHTTPException)
+async def traducir_errores(request: Request, exc: StarletteHTTPException):
+    if isinstance(exc.detail, str):
+        idioma = idioma_de_cabecera(request.headers.get("accept-language"))
+        exc = StarletteHTTPException(
+            status_code=exc.status_code,
+            detail=traducir(exc.detail, idioma),
+            headers=getattr(exc, "headers", None),
+        )
+    return await http_exception_handler(request, exc)
+
+
 # Rate limiting (anti fuerza bruta)
 app.middleware("http")(rate_limit_middleware)
 
@@ -228,6 +324,19 @@ app.include_router(ldap.router, prefix="/api/ldap", tags=["LDAP"])
 app.include_router(delay_pools.router, prefix="/api/delay-pools", tags=["Delay Pools"])
 app.include_router(audit.router, prefix="/api/audit", tags=["Auditoría"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["Métricas"])
+
+# Las métricas se sirven además bajo /api/panel, y el panel web usa ESA ruta.
+#
+# No es un capricho: los bloqueadores de anuncios y los filtros de privacidad
+# (uBlock, AdGuard, los escudos de Brave) cortan por defecto cualquier URL que
+# contenga «metrics», porque la asocian a telemetría. La petición ni siquiera
+# sale del navegador, así que en el servidor no queda ni rastro: el dashboard
+# se quedaba cargando para siempre y no había nada que mirar.
+#
+# Justo la gente que administra un proxy es la que suele llevar bloqueador, así
+# que esto no era un caso raro. Se conserva /api/metrics para quien ya consuma
+# la API desde fuera.
+app.include_router(metrics.router, prefix="/api/panel", tags=["Métricas"])
 app.include_router(admins.router, prefix="/api/admins", tags=["Administradores"])
 app.include_router(backup.router, prefix="/api/backup", tags=["Backup/Restore/Import"])
 app.include_router(logs.router, prefix="/api/logs", tags=["Logs"])

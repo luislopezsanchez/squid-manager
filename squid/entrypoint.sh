@@ -105,16 +105,15 @@ if [ ! -f /etc/squid/squid.conf ] || [ ! -s /etc/squid/squid.conf ] || head -1 /
     cat > /etc/squid/squid.conf << EOF
 # SquidManager - Configuración inicial temporal
 http_port ${SQUID_PORT}
-acl localnet src 10.0.0.0/8
-acl localnet src 172.16.0.0/12
-acl localnet src 192.168.0.0/16
+# Este arranque NIEGA todo salvo localhost, a proposito. Rige solo entre que
+# Squid arranca y que el backend escribe la definitiva con autenticacion.
+# Permitir aqui la LAN dejaba un proxy ABIERTO a 10/8, 172.16/12 y 192.168/16.
 acl SSL_ports port 443
 acl Safe_ports port 80
 acl Safe_ports port 443
 acl CONNECT method CONNECT
 http_access deny !Safe_ports
 http_access deny CONNECT !SSL_ports
-http_access allow localnet
 http_access allow localhost
 http_access deny all
 cache_mem 128 MB

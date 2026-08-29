@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { IconCheck, IconClose } from '../components/Icons'
 import { api } from '../api/client'
@@ -14,7 +15,7 @@ export default function SyslogConfig() {
   const { showToast, ToastContainer } = useToast()
 
   useEffect(() => {
-    api.getSyslogConfig().then(setConfig).catch(() => showToast('Error al cargar la configuración de syslog', 'error')).finally(() => setLoading(false))
+    api.getSyslogConfig().then(setConfig).catch(() => showToast(traducir("Error al cargar la configuración de syslog"), 'error')).finally(() => setLoading(false))
   }, [])
 
   const handleSave = async () => {
@@ -42,17 +43,14 @@ export default function SyslogConfig() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">Cargando...</div>
-  if (!config) return <div className="p-8 text-center text-ink-3">No se pudo cargar la configuración</div>
+  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (!config) return <div className="p-8 text-center text-ink-3">{traducir("No se pudo cargar la configuración")}</div>
 
   return (
     <div className="p-6 md:p-7">
       <ToastContainer />
-      <h1 className="page-title mb-2">Syslog externo</h1>
-      <p className="text-sm text-ink-3 mb-6">
-        Reenvía los logs de acceso a un SIEM o herramienta de auditoría externa, en tiempo real. Es un canal
-        opcional: mientras esté apagado, no se manda nada a ningún lado.
-      </p>
+      <h1 className="page-title mb-2">{traducir("Syslog externo")}</h1>
+      <p className="text-sm text-ink-3 mb-6">{traducir("Reenvía los logs de acceso a un SIEM o herramienta de auditoría externa, en tiempo real. Es un canal opcional: mientras esté apagado, no se manda nada a ningún lado.")}</p>
 
       {/* Estado */}
       <div className={`rounded-xl p-4 mb-6 border ${config.enabled ? 'bg-green-50 border-green-200' : 'bg-brand-50 border-line'}`}>
@@ -68,50 +66,50 @@ export default function SyslogConfig() {
               onChange={e => setConfig({ ...config, enabled: e.target.checked })}
               className="w-5 h-5 rounded text-primary-600"
             />
-            <span className="text-sm text-ink-2">Habilitar</span>
+            <span className="text-sm text-ink-2">{traducir("Habilitar")}</span>
           </label>
         </div>
       </div>
 
       {/* Configuración */}
       <div className="card p-6 mb-6">
-        <h2 className="font-medium text-ink mb-4">Destino</h2>
+        <h2 className="font-medium text-ink mb-4">{traducir("Destino")}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="field-label block mb-1.5">Host</label>
+            <label className="field-label block mb-1.5">{traducir("Host")}</label>
             <input type="text" value={config.host ?? ''} onChange={e => setConfig({ ...config, host: e.target.value })}
-              placeholder="siem.empresa.com o 10.0.0.5" className="input font-mono text-sm" />
+              placeholder={traducir("siem.empresa.com o 10.0.0.5")} className="input font-mono text-sm" />
           </div>
           <div>
-            <label className="field-label block mb-1.5">Puerto</label>
+            <label className="field-label block mb-1.5">{traducir("Puerto")}</label>
             <input type="number" value={config.port} onChange={e => setConfig({ ...config, port: Number(e.target.value) })}
               placeholder="514" className="input font-mono text-sm" />
           </div>
           <div>
-            <label className="field-label block mb-1.5">Protocolo</label>
+            <label className="field-label block mb-1.5">{traducir("Protocolo")}</label>
             <select value={config.protocol} onChange={e => setConfig({ ...config, protocol: e.target.value })} className="input text-sm">
-              <option value="udp">UDP (más simple, puede perder paquetes)</option>
-              <option value="tcp">TCP (confiable, algo más de carga)</option>
+              <option value="udp">{traducir("UDP (más simple, puede perder paquetes)")}</option>
+              <option value="tcp">{traducir("TCP (confiable, algo más de carga)")}</option>
             </select>
           </div>
           <div>
-            <label className="field-label block mb-1.5">Facility</label>
+            <label className="field-label block mb-1.5">{traducir("Facility")}</label>
             <select value={config.facility} onChange={e => setConfig({ ...config, facility: e.target.value })} className="input text-sm">
               {FACILITIES.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </div>
           <div>
-            <label className="field-label block mb-1.5">Formato del mensaje syslog</label>
+            <label className="field-label block mb-1.5">{traducir("Formato del mensaje syslog")}</label>
             <select value={config.rfc_format} onChange={e => setConfig({ ...config, rfc_format: e.target.value })} className="input text-sm">
-              <option value="rfc3164">RFC 3164 (clásico, el más compatible)</option>
-              <option value="rfc5424">RFC 5424 (estructurado, con fecha ISO)</option>
+              <option value="rfc3164">{traducir("RFC 3164 (clásico, el más compatible)")}</option>
+              <option value="rfc5424">{traducir("RFC 5424 (estructurado, con fecha ISO)")}</option>
             </select>
           </div>
           <div>
-            <label className="field-label block mb-1.5">Contenido de cada línea</label>
+            <label className="field-label block mb-1.5">{traducir("Contenido de cada línea")}</label>
             <select value={config.log_format} onChange={e => setConfig({ ...config, log_format: e.target.value })} className="input text-sm">
-              <option value="raw">Log nativo de Squid (para AWStats, SARG, el módulo Squid de Splunk/ELK)</option>
-              <option value="ndjson">JSON (para ingesta genérica en un SIEM)</option>
+              <option value="raw">{traducir("Log nativo de Squid (para AWStats, SARG, el módulo Squid de Splunk/ELK)")}</option>
+              <option value="ndjson">{traducir("JSON (para ingesta genérica en un SIEM)")}</option>
             </select>
           </div>
         </div>
@@ -128,10 +126,7 @@ export default function SyslogConfig() {
             {testing ? 'Enviando...' : 'Enviar mensaje de prueba'}
           </button>
         </div>
-        <p className="text-xs text-ink-3 mt-2">
-          "Enviar mensaje de prueba" manda un mensaje ahora mismo con los datos de este formulario, sin necesidad
-          de guardar antes — así se puede probar un destino nuevo sin activarlo todavía.
-        </p>
+        <p className="text-xs text-ink-3 mt-2">{traducir("\"Enviar mensaje de prueba\" manda un mensaje ahora mismo con los datos de este formulario, sin necesidad de guardar antes — así se puede probar un destino nuevo sin activarlo todavía.")}</p>
 
         {testResult && (
           <div className={`mt-4 p-3 rounded-lg flex items-start gap-3 ${
@@ -146,12 +141,12 @@ export default function SyslogConfig() {
       </div>
 
       <div className="card p-6">
-        <h2 className="font-medium text-ink mb-2">Cómo funciona</h2>
+        <h2 className="font-medium text-ink mb-2">{traducir("Cómo funciona")}</h2>
         <ul className="text-sm text-ink-2 space-y-1.5 list-disc pl-5">
-          <li>Un proceso en segundo plano sigue el access.log igual que <code className="font-mono text-xs">tail -f</code> y reenvía cada línea nueva al destino configurado — no es una exportación puntual, es continuo mientras esté habilitado.</li>
-          <li>Revisa la configuración cada pocos segundos: activarlo, apagarlo o cambiar el destino surte efecto solo, sin reiniciar nada.</li>
-          <li>Mientras está apagado, no se acumula nada para mandar de golpe al activarlo — solo se reenvía lo que llegue después.</li>
-          <li>UDP no confirma entrega: si el destino no está escuchando, el mensaje se pierde en silencio. TCP si falla la conexión lo reintenta en el siguiente lote.</li>
+          <li>Un proceso en segundo plano sigue el access.log igual que <code className="font-mono text-xs">{traducir("tail -f")}</code>{traducir("y reenvía cada línea nueva al destino configurado — no es una exportación puntual, es continuo mientras esté habilitado.")}</li>
+          <li>{traducir("Revisa la configuración cada pocos segundos: activarlo, apagarlo o cambiar el destino surte efecto solo, sin reiniciar nada.")}</li>
+          <li>{traducir("Mientras está apagado, no se acumula nada para mandar de golpe al activarlo — solo se reenvía lo que llegue después.")}</li>
+          <li>{traducir("UDP no confirma entrega: si el destino no está escuchando, el mensaje se pierde en silencio. TCP si falla la conexión lo reintenta en el siguiente lote.")}</li>
         </ul>
       </div>
     </div>

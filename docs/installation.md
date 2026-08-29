@@ -1,6 +1,13 @@
 # Guía de Instalación — SquidManager
 
+**Español · [English](installation.en.md) · [Português](installation.pt.md)**
+
 Esta guía te llevará paso a paso desde un servidor vacío hasta tener SquidManager funcionando.
+
+> **Esta guía es la del despliegue con Docker.** Si no quieres Docker en esa
+> máquina, hay un segundo modo en el que todo corre como servicios del sistema:
+> [instalacion-nativa.md](instalacion-nativa.md). Se elige uno de los dos; en
+> una misma máquina no conviven.
 
 ---
 
@@ -207,6 +214,21 @@ curl -o /dev/null -w "%{http_code}" http://localhost:3000/
 3. Inicia sesión con `admin` y esa contraseña
 4. El panel te pedirá **cambiarla** antes de dejarte entrar — es obligatorio en el primer acceso
 5. ¡Ya estás dentro!
+
+---
+
+## Recién instalado, el proxy no deja pasar a nadie
+
+Igual que en el modo nativo, y por el mismo motivo.
+
+El `squid.conf` que escribe el contenedor al arrancar **niega todo salvo
+`localhost`**. El backend lo sustituye por la configuración definitiva —la que
+exige autenticación— en cuanto arranca; la primera vez puede tardar, porque la
+imagen compila Squid desde fuente, así que lo reintenta en segundo plano.
+
+Hasta que crees el primer usuario del proxy no navegará nadie. Es lo que se
+quiere: una instalación recién hecha no puede quedar abierta a la red mientras
+su dueño no ha entrado todavía al panel.
 
 ---
 

@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
@@ -45,7 +46,7 @@ export default function Admins() {
           email: formData.email || null,
           role: formData.role,
         })
-        showToast('Administrador actualizado', 'success')
+        showToast(traducir("Administrador actualizado"), 'success')
       } else {
         await api.createAdmin({
           username: formData.username,
@@ -53,7 +54,7 @@ export default function Admins() {
           email: formData.email || null,
           role: formData.role,
         })
-        showToast('Administrador creado', 'success')
+        showToast(traducir("Administrador creado"), 'success')
       }
       setShowModal(false)
       load()
@@ -66,7 +67,7 @@ export default function Admins() {
     if (!confirm(`¿Eliminar el administrador "${admin.username}"?`)) return
     try {
       await api.deleteAdmin(admin.id)
-      showToast('Administrador eliminado', 'success')
+      showToast(traducir("Administrador eliminado"), 'success')
       load()
     } catch (e: any) {
       showToast(e.message, 'error')
@@ -87,23 +88,21 @@ export default function Admins() {
     return <span className={`pill ${colors[role] || colors.admin}`}>{labels[role] || role}</span>
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">Cargando...</div>
+  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
 
   return (
     <div className="p-6 md:p-7">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: '#0A2C48' }}>Administradores</h1>
-        <button onClick={handleCreate} className="px-4 py-2 text-white rounded-lg font-medium" style={{ backgroundColor: '#0B497C' }}>
-          + Nuevo Admin
-        </button>
+        <h1 className="text-2xl font-bold" style={{ color: '#0A2C48' }}>{traducir("Administradores")}</h1>
+        <button onClick={handleCreate} className="px-4 py-2 text-white rounded-lg font-medium" style={{ backgroundColor: '#0B497C' }}>{traducir("+ Nuevo Admin")}</button>
       </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-sm text-amber-800">
-        <strong>Información sobre roles:</strong>
+        <strong>{traducir("Información sobre roles:")}</strong>
         <ul className="mt-2 space-y-1 text-xs">
-          <li><strong>Superadministrador</strong> — Gestiona otros admins, no puede ser eliminado ni degradado</li>
-          <li><strong>Administrador</strong> — Gestiona el proxy (ACLs, reglas, usuarios, settings) pero no otros admins</li>
-          <li><strong>Solo lectura</strong> — Solo lectura, no puede hacer cambios</li>
+          <li><strong>{traducir("Superadministrador")}</strong>{traducir("— Gestiona otros admins, no puede ser eliminado ni degradado")}</li>
+          <li><strong>{traducir("Administrador")}</strong>{traducir("— Gestiona el proxy (ACLs, reglas, usuarios, settings) pero no otros admins")}</li>
+          <li><strong>{traducir("Solo lectura")}</strong>{traducir("— Solo lectura, no puede hacer cambios")}</li>
         </ul>
       </div>
 
@@ -111,19 +110,19 @@ export default function Admins() {
         <table className="table-panel">
           <thead>
             <tr>
-              <th className="text-left">Usuario</th>
-              <th className="text-left">Rol</th>
-              <th className="text-left">Email</th>
-              <th className="text-left">Estado</th>
-              <th className="text-left">Creado</th>
-              <th className="text-left">Último login</th>
-              <th className="text-right">Acciones</th>
+              <th className="text-left">{traducir("Usuario")}</th>
+              <th className="text-left">{traducir("Rol")}</th>
+              <th className="text-left">{traducir("Email")}</th>
+              <th className="text-left">{traducir("Estado")}</th>
+              <th className="text-left">{traducir("Creado")}</th>
+              <th className="text-left">{traducir("Último login")}</th>
+              <th className="text-right">{traducir("Acciones")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {admins.map(a => (
               <tr key={a.id} className="hover:bg-brand-50">
-                <td className="px-6 py-3 font-medium">{a.username}{a.id === 1 && <span className="text-xs text-ink-3 ml-2">(principal)</span>}</td>
+                <td className="px-6 py-3 font-medium">{a.username}{a.id === 1 && <span className="text-xs text-ink-3 ml-2">{traducir("(principal)")}</span>}</td>
                 <td className="px-6 py-3">{roleBadge(a.role)}</td>
                 <td className="px-6 py-3 text-ink-2 text-xs">{a.email || '-'}</td>
                 <td className="px-6 py-3">
@@ -134,9 +133,9 @@ export default function Admins() {
                 <td className="px-6 py-3 text-xs text-ink-3">{new Date(a.created_at).toLocaleDateString()}</td>
                 <td className="px-6 py-3 text-xs text-ink-3">{a.last_login ? new Date(a.last_login).toLocaleString() : 'Nunca'}</td>
                 <td className="px-6 py-3 text-right space-x-2">
-                  <button onClick={() => handleEdit(a)} className="text-xs px-2 py-1 rounded text-blue-600 hover:bg-blue-50">Editar</button>
+                  <button onClick={() => handleEdit(a)} className="text-xs px-2 py-1 rounded text-blue-600 hover:bg-blue-50">{traducir("Editar")}</button>
                   {a.id !== 1 && (
-                    <button onClick={() => handleDelete(a)} className="text-xs px-2 py-1 rounded text-danger hover:bg-red-50">Eliminar</button>
+                    <button onClick={() => handleDelete(a)} className="text-xs px-2 py-1 rounded text-danger hover:bg-red-50">{traducir("Eliminar")}</button>
                   )}
                 </td>
               </tr>
@@ -152,41 +151,41 @@ export default function Admins() {
             <h2 className="text-xl font-bold mb-4">{editing ? 'Editar Admin' : 'Nuevo Admin'}</h2>
             <div className="space-y-4">
               <div>
-                <label className="field-label block mb-1.5">Usuario</label>
+                <label className="field-label block mb-1.5">{traducir("Usuario")}</label>
                 <input type="text" value={formData.username} disabled={!!editing}
                   onChange={e => setFormData({ ...formData, username: e.target.value })}
                   className="input disabled:bg-line-soft" />
               </div>
               {!editing && (
                 <div>
-                  <label className="field-label block mb-1.5">Contraseña</label>
+                  <label className="field-label block mb-1.5">{traducir("Contraseña")}</label>
                   <input type="password" value={formData.password}
                     onChange={e => setFormData({ ...formData, password: e.target.value })}
                     className="input" />
                 </div>
               )}
               <div>
-                <label className="field-label block mb-1.5">Email (opcional)</label>
+                <label className="field-label block mb-1.5">{traducir("Email (opcional)")}</label>
                 <input type="email" value={formData.email}
                   onChange={e => setFormData({ ...formData, email: e.target.value })}
                   className="input" />
               </div>
               <div>
-                <label className="field-label block mb-1.5">Rol</label>
+                <label className="field-label block mb-1.5">{traducir("Rol")}</label>
                 <select value={formData.role}
                   onChange={e => setFormData({ ...formData, role: e.target.value })}
                   className="input"
                   disabled={editing?.id === 1}>
-                  <option value="admin">Administrador — gestiona el proxy</option>
-                  <option value="viewer">Solo lectura — consulta sin modificar</option>
-                  {editing?.id === 1 && <option value="superadmin">Superadministrador</option>}
+                  <option value="admin">{traducir("Administrador — gestiona el proxy")}</option>
+                  <option value="viewer">{traducir("Solo lectura — consulta sin modificar")}</option>
+                  {editing?.id === 1 && <option value="superadmin">{traducir("Superadministrador")}</option>}
                 </select>
-                {editing?.id === 1 && <p className="text-xs text-ink-3 mt-1">El superadmin principal no puede cambiar de rol</p>}
+                {editing?.id === 1 && <p className="text-xs text-ink-3 mt-1">{traducir("El superadmin principal no puede cambiar de rol")}</p>}
               </div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 border border-line rounded-lg">Cancelar</button>
-              <button onClick={handleSave} className="flex-1 px-4 py-2 text-white rounded-lg" style={{ backgroundColor: '#0B497C' }}>Guardar</button>
+              <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 border border-line rounded-lg">{traducir("Cancelar")}</button>
+              <button onClick={handleSave} className="flex-1 px-4 py-2 text-white rounded-lg" style={{ backgroundColor: '#0B497C' }}>{traducir("Guardar")}</button>
             </div>
           </div>
         </div>

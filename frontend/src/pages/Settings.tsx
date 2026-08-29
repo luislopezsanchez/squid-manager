@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
@@ -9,11 +10,11 @@ interface Setting {
 }
 
 const CATEGORIES = [
-  { key: 'network', label: 'Red' },
-  { key: 'cache', label: 'Caché' },
-  { key: 'security', label: 'Seguridad' },
-  { key: 'logging', label: 'Registros' },
-  { key: 'general', label: 'General' },
+  { key: 'network', label: traducir("Red") },
+  { key: 'cache', label: traducir("Caché") },
+  { key: 'security', label: traducir("Seguridad") },
+  { key: 'logging', label: traducir("Registros") },
+  { key: 'general', label: traducir("General") },
 ]
 
 export default function Settings() {
@@ -40,7 +41,7 @@ export default function Settings() {
   }
 
   const loadSettings = () => {
-    api.getSettings().then(setSettings).catch(e => showToast('Error al cargar configuración', 'error')).finally(() => setLoading(false))
+    api.getSettings().then(setSettings).catch(e => showToast(traducir("Error al cargar configuración"), 'error')).finally(() => setLoading(false))
   }
 
   useEffect(() => { loadSettings() }, [])
@@ -64,13 +65,13 @@ export default function Settings() {
     setSettings({ ...settings, [key]: { ...settings[key], value } })
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">Cargando...</div>
+  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
 
   return (
     <div className="p-6 md:p-7">
       <ToastContainer />
-      <h1 className="page-title mb-2">Configuración de Squid</h1>
-      <p className="text-sm text-ink-3 mb-6">Parámetros generales del proxy. Los cambios se guardan en la BD.</p>
+      <h1 className="page-title mb-2">{traducir("Configuración de Squid")}</h1>
+      <p className="text-sm text-ink-3 mb-6">{traducir("Parámetros generales del proxy. Los cambios se guardan en la BD.")}</p>
 
       {error && <div className="mb-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
 
@@ -106,7 +107,7 @@ export default function Settings() {
                         onClick={handleTestDns}
                         disabled={testingDns}
                         className="btn btn-ghost btn-sm"
-                        title="Consulta a esos servidores para ver si responden, sin guardar nada"
+                        title={traducir("Consulta a esos servidores para ver si responden, sin guardar nada")}
                       >
                         {testingDns ? 'Probando...' : 'Probar'}
                       </button>

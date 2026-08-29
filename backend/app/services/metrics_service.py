@@ -1,9 +1,13 @@
-"""Servicio de métricas: combina Docker network stats + access.log parsing.
+"""Servicio de métricas: combina contadores del sistema + access.log parsing.
 
 Estrategia híbrida:
-- Docker network stats → tráfico REAL en bytes/s (instantáneo, no espera a que termine la transacción)
+- Contadores de red → tráfico REAL en bytes/s (instantáneo, no espera a que termine la transacción)
 - access.log → metadata histórica (usuarios, dominios, conexiones con detalle)
 - Buffer server-side → histórico de puntos para el gráfico
+
+De dónde salen esos contadores depende del despliegue y lo resuelve el runtime
+(`app.services.runtime`): del cgroup del contenedor o del servicio de systemd.
+Aquí solo se interpretan, y el formato del texto es el mismo en los dos casos.
 """
 
 import re
@@ -14,12 +18,11 @@ from pathlib import Path
 from collections import Counter, defaultdict
 from datetime import datetime
 
-import docker as docker_sdk
+from app.services.runtime import get_runtime
 
 logger = logging.getLogger(__name__)
 
 ACCESS_LOG_PATH = "/var/log/squid/access.log"
-SQUID_CONTAINER = "squidmgr-proxy"
 
 # ============================================
 # Buffer de network stats (server-side)
@@ -79,27 +82,13 @@ _EMPTY_STATS = {
 }
 
 
-def _get_client():
-    """Cliente Docker compartido, creado una sola vez."""
-    global _docker_client
-    if _docker_client is None:
-        with _docker_client_lock:
-            if _docker_client is None:
-                _docker_client = docker_sdk.from_env()
-    return _docker_client
+def _get_client():  # pragma: no cover - se conserva por compatibilidad
+    """Obsoleto: el acceso a los contadores lo resuelve ahora el runtime."""
+    raise RuntimeError(
+        "metrics_service ya no habla con Docker directamente; usa get_runtime()"
+    )
 
 
-# Un unico exec que trae red, memoria y CPU. Las etiquetas evitan tener que
-# adivinar que valor es cual por el orden de las lineas.
-_STATS_CMD = (
-    "cat /proc/net/dev; "
-    "echo '#CG#'; "
-    "echo \"memcur $(cat /sys/fs/cgroup/memory.current 2>/dev/null)\"; "
-    "echo \"memmax $(cat /sys/fs/cgroup/memory.max 2>/dev/null)\"; "
-    "grep -h usage_usec /sys/fs/cgroup/cpu.stat 2>/dev/null; "
-    "grep -h '^inactive_file ' /sys/fs/cgroup/memory.stat 2>/dev/null; "
-    "grep -h MemTotal /proc/meminfo"
-)
 
 
 def _read_container_stats_raw() -> dict:
@@ -110,10 +99,7 @@ def _read_container_stats_raw() -> dict:
     Aqui se leen los ficheros de cgroup v2 directamente (~0,07s) y el delta se
     calcula con el mismo estado previo que ya se usaba para la red.
     """
-    container = _get_client().containers.get(SQUID_CONTAINER)
-    output = container.exec_run(["sh", "-c", _STATS_CMD]).output.decode(
-        "utf-8", errors="replace"
-    )
+    output = get_runtime().read_stats_raw()
     net_part, _, cg_part = output.partition("#CG#")
 
     # --- red (/proc/net/dev) ---

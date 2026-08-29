@@ -6,11 +6,12 @@ import subprocess
 from pathlib import Path
 
 import docker as docker_sdk
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.database import get_db
+from app.i18n import idioma_de_cabecera, traducir
 from app.models.admin import Admin
 from app.models.squid_settings import SquidSetting
 from app.services.auth_service import get_current_admin, require_writer
@@ -85,6 +86,7 @@ async def update_setting(
 
 @router.post("/apply")
 async def apply_config(
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
     background_tasks: BackgroundTasks = None,
@@ -96,6 +98,12 @@ async def apply_config(
     de modo que el mapeo de puertos sobreviva a cualquier recreación posterior.
     """
     result = apply_squid_config(db)
+
+    # Esta respuesta no es una excepcion, asi que no pasa por el manejador que
+    # traduce los errores: hay que traducir su mensaje aqui.
+    idioma = idioma_de_cabecera(request.headers.get("accept-language"))
+    if isinstance(result.get("message"), str):
+        result["message"] = traducir(result["message"], idioma)
 
     if result["status"] == "error":
         return result
@@ -178,7 +186,16 @@ async def download_ca_cert(_: Admin = Depends(get_current_admin)):
             headers={"Content-Disposition": "attachment; filename=squidmanager-ca.crt"},
         )
     except FileNotFoundError:
-        raise HTTPException(404, detail="Certificado CA no encontrado. Reinicia el contenedor Squid.")
+        # Quien genera la CA es distinto en cada despliegue: el arranque del
+        # contenedor en uno, el instalador en el otro. Decir el remedio
+        # equivocado manda a dar vueltas.
+        from app.services.runtime import get_runtime
+
+        if get_runtime().name == "native":
+            remedio = "Vuelve a ejecutar install-nativo.sh para regenerarla."
+        else:
+            remedio = "Reinicia el contenedor Squid."
+        raise HTTPException(404, detail=f"Certificado CA no encontrado. {remedio}")
 
 
 @router.get("/ca-deploy/install-cert.bat")

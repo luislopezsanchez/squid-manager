@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import React, { useState } from 'react'
 import { api, setToken } from '../api/client'
 import AuthShell from '../components/AuthShell'
@@ -41,7 +42,7 @@ export default function Login() {
     >
       <form onSubmit={handleSubmit}>
         <div className="field">
-          <label className="field-label" htmlFor="usuario">Usuario</label>
+          <label className="field-label" htmlFor="usuario">{traducir("Usuario")}</label>
           <input
             id="usuario"
             type="text"
@@ -55,7 +56,7 @@ export default function Login() {
         </div>
 
         <div className="field">
-          <label className="field-label" htmlFor="clave">Contraseña</label>
+          <label className="field-label" htmlFor="clave">{traducir("Contraseña")}</label>
           <input
             id="clave"
             type="password"
@@ -77,9 +78,7 @@ export default function Login() {
         <button type="submit" disabled={loading} className="btn btn-primary w-full py-2.5 text-[14.5px]">
           {loading ? (
             <>
-              <IconSpinner className="w-5 h-5 animate-spin" />
-              Entrando…
-            </>
+              <IconSpinner className="w-5 h-5 animate-spin" />{traducir("Entrando…")}</>
           ) : (
             'Entrar'
           )}

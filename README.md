@@ -1,5 +1,7 @@
 # SquidManager
 
+**Español · [English](README.en.md) · [Português](README.pt.md)**
+
 <p align="center">
   <strong>Panel web de gestión para Squid Proxy con Docker, FastAPI, React y SSL Bump</strong>
 </p>
@@ -70,7 +72,11 @@ El sistema está pensado para ser **escalable y modular**: la base de datos es l
 - **Dashboard** — Tráfico en tiempo real, top usuarios y dominios, estado del sistema
 - **Backup y migración** — Exporta toda la configuración a JSON (incluidos grupos y usuarios LDAP) o importa un `squid.conf` tradicional
 - **Notificaciones** — Avisos por email o Telegram cuando se aplican cambios o se detecta actividad sospechosa
-- **Todo en Docker** — Un solo comando levanta todo
+
+### Despliegue e idiomas
+- **Dos modos de despliegue** — Con Docker (un solo comando levanta todo) o **sin Docker**, con Squid, el panel y PostgreSQL como servicios del sistema. Se elige con `DEPLOY_MODE` y el resto del producto es idéntico — ver [docs/instalacion-nativa.md](docs/instalacion-nativa.md)
+- **Sin root** — En modo nativo el panel corre con su propio usuario y un sudoers de tres órdenes, bastante menos de lo que concede el socket de Docker
+- **Panel en tres idiomas** — Español, inglés y portugués, seleccionable desde el propio panel. Los mensajes de error de la API también se traducen, y las páginas de error que ven los usuarios del proxy siguen su propio idioma — ver [docs/idiomas.md](docs/idiomas.md)
 
 ---
 
@@ -106,17 +112,24 @@ Para más detalles, ver [docs/architecture.md](docs/architecture.md).
 
 ## ✅ Requisitos
 
-### Sistema operativo
-- Linux (Ubuntu 24.04 recomendado)
-- También funciona en cualquier sistema con Docker
+Los requisitos dependen del modo de despliegue.
 
-### Software
+### Con Docker
+
+- **Sistema:** Linux (Ubuntu 24.04 recomendado), o cualquier sistema con Docker
 - **Docker** 20.10+ ([instalación](https://docs.docker.com/engine/install/))
 - **Docker Compose** v2+ ([instalación](https://docs.docker.com/compose/install/))
 - **Git** (para clonar el repo)
 
+### Sin Docker (instalación nativa)
+
+- **Sistema:** Ubuntu 22.04 / 24.04 o Debian 12, x86_64 — **no** vale cualquier
+  Linux, porque hace falta el paquete `squid-openssl`
+- **Acceso root** y salida a internet para descargar paquetes
+- Nada más: el instalador pone Squid, PostgreSQL, nginx, Node y Python
+
 ### Hardware mínimo
-- **CPU:** 2 núcleos (4 recomendado para compilación de Squid)
+- **CPU:** 2 núcleos (4 recomendado; con Docker se compila Squid al construir la imagen)
 - **RAM:** 2 GB (4 GB recomendado)
 - **Disco:** 5 GB libres
 - **Red:** Puerto 3128 accesible para los clientes del proxy
@@ -124,6 +137,32 @@ Para más detalles, ver [docs/architecture.md](docs/architecture.md).
 ---
 
 ## 🚀 Instalación
+
+SquidManager se puede desplegar **con Docker** (lo habitual) o **sin Docker**,
+con todo corriendo como servicios del sistema. Se elige uno de los dos: en una
+misma máquina no conviven.
+
+### Sin Docker (instalación nativa)
+
+Para redes donde la política interna no permite Docker, o para un equipo que ya
+hace de proxy y donde una capa de contenedores sobra:
+
+```bash
+wget https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install-nativo.sh
+less install-nativo.sh          # revisa qué va a hacer en tu servidor
+chmod +x install-nativo.sh
+sudo ./install-nativo.sh
+```
+
+Instala `squid-openssl` (no `squid`: ese es la variante GnuTLS y no soporta SSL
+bump), PostgreSQL, el panel bajo systemd y nginx. No compila nada. El panel
+corre con su propio usuario y un sudoers de tres órdenes, bastante menos de lo
+que concede el socket de Docker.
+
+Los detalles y las diferencias de comportamiento están en
+[docs/instalacion-nativa.md](docs/instalacion-nativa.md).
+
+### Con Docker
 
 Hay dos formas de instalar. Hacen lo mismo; la diferencia es quién rellena la
 configuración.
@@ -335,6 +374,13 @@ Para ver todas las opciones, ver [docs/configuration.md](docs/configuration.md).
 
 Después de la instalación:
 
+> **Recién instalado, el proxy no deja pasar a nadie, y es a propósito.**
+> Squid arranca negando todo salvo `localhost`; el panel lo sustituye enseguida
+> por la configuración definitiva, que exige usuario y contraseña. Hasta que
+> crees el primer usuario del proxy no navegará nadie. Vale para los dos modos
+> de despliegue: una instalación recién hecha no puede quedar abierta a la red
+> mientras su dueño ni siquiera ha entrado al panel.
+
 1. **Abre el panel** → http://localhost:3000
 2. **Inicia sesión** con `admin` y la contraseña generada (ver arriba)
 3. **Cambia la contraseña** cuando el panel te lo pida
@@ -521,6 +567,9 @@ squid-manager/
 ---
 
 ## 📚 Documentación
+
+- [Instalación nativa, sin Docker](docs/instalacion-nativa.md)
+- [Idiomas del panel, de la API y del proxy](docs/idiomas.md)
 
 | Documento | Descripción |
 |-----------|-------------|

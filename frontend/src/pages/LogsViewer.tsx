@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import { useState, useEffect, useCallback } from 'react'
 import { IconChevronLeft, IconChevronRight, IconDownload } from '../components/Icons'
 import { api, getToken } from '../api/client'
@@ -110,7 +111,7 @@ export default function LogsViewer() {
         URL.revokeObjectURL(u)
         showToast(`Logs exportados (${exportFormat.toUpperCase()})`, 'success')
       })
-      .catch(() => showToast('Error exportando logs', 'error'))
+      .catch(() => showToast(traducir("Error exportando logs"), 'error'))
   }
 
   const handleResetFilters = () => {
@@ -120,19 +121,15 @@ export default function LogsViewer() {
   return (
     <div className="p-6 md:p-7">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: '#0A2C48' }}>Logs de Squid</h1>
+        <h1 className="text-2xl font-bold" style={{ color: '#0A2C48' }}>{traducir("Logs de Squid")}</h1>
         <div className="flex items-center gap-4">
           {autoRefresh && (
             <span className="flex items-center gap-1 text-xs text-ok">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-              EN VIVO
-            </span>
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>{traducir("EN VIVO")}</span>
           )}
           <label className="flex items-center gap-2 text-sm text-ink-2 cursor-pointer">
             <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)}
-              className="w-4 h-4 rounded" style={{ accentColor: '#0B497C' }} />
-            Auto-actualizar (5s)
-          </label>
+              className="w-4 h-4 rounded" style={{ accentColor: '#0B497C' }} />{traducir("Auto-actualizar (5s)")}</label>
           {/* Tres formatos para audiencias distintas: CSV para abrir en una
               hoja de cálculo, NDJSON para ingesta en un SIEM/ELK/Splunk (un
               objeto por línea, el estándar para eso), y el log nativo de
@@ -143,17 +140,16 @@ export default function LogsViewer() {
               value={exportFormat}
               onChange={e => setExportFormat(e.target.value as typeof exportFormat)}
               className="text-sm px-2.5 py-2 border-0 bg-white text-ink-2 focus:outline-none"
-              title="Formato de exportación"
+              title={traducir("Formato de exportación")}
             >
               <option value="csv">CSV</option>
-              <option value="ndjson">NDJSON (SIEM / ELK / Splunk)</option>
-              <option value="raw">Log nativo de Squid (.log)</option>
+              <option value="ndjson">{traducir("NDJSON (SIEM / ELK / Splunk)")}</option>
+              <option value="raw">{traducir("Log nativo de Squid (.log)")}</option>
             </select>
             <button onClick={handleExport}
               className="px-4 py-2 text-white text-sm font-medium inline-flex items-center gap-1.5 h-full"
               style={{ backgroundColor: '#0B497C' }}>
-              <IconDownload className="w-4 h-4" /> Exportar
-            </button>
+              <IconDownload className="w-4 h-4" />{traducir("Exportar")}</button>
           </div>
         </div>
       </div>
@@ -162,39 +158,35 @@ export default function LogsViewer() {
       <div className="card p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
-            <label className="block text-xs font-medium text-ink-3 mb-1">Usuario</label>
+            <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Usuario")}</label>
             <select value={fUser} onChange={e => { setFUser(e.target.value); setOffset(0) }}
               className="input text-sm">
-              <option value="">Todos</option>
+              <option value="">{traducir("Todos")}</option>
               {stats?.users.map(u => <option key={u} value={u}>{u}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-3 mb-1">Estado HTTP</label>
+            <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Estado HTTP")}</label>
             <select value={fStatus} onChange={e => { setFStatus(e.target.value); setOffset(0) }}
               className="input text-sm">
-              <option value="">Todos</option>
+              <option value="">{traducir("Todos")}</option>
               {stats?.statuses.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-3 mb-1">Dominio</label>
-            <input type="text" value={fDomain} placeholder="ej: youtube.com"
+            <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Dominio")}</label>
+            <input type="text" value={fDomain} placeholder={traducir("ej: youtube.com")}
               onChange={e => { setFDomain(e.target.value); setOffset(0) }}
               className="input text-sm" />
           </div>
           <div className="flex items-end">
             <label className="flex items-center gap-2 text-sm text-ink-2 cursor-pointer">
               <input type="checkbox" checked={fDenied} onChange={e => { setFDenied(e.target.checked); setOffset(0) }}
-                className="w-4 h-4 rounded" style={{ accentColor: '#dc2626' }} />
-              Solo bloqueados
-            </label>
+                className="w-4 h-4 rounded" style={{ accentColor: '#dc2626' }} />{traducir("Solo bloqueados")}</label>
           </div>
           <div className="flex items-end">
             <button onClick={handleResetFilters}
-              className="input text-sm text-ink-2 hover:bg-brand-50">
-              Limpiar filtros
-            </button>
+              className="input text-sm text-ink-2 hover:bg-brand-50">{traducir("Limpiar filtros")}</button>
           </div>
         </div>
       </div>
@@ -209,11 +201,11 @@ export default function LogsViewer() {
       {stats && (
         <div className="flex gap-4 mb-6 text-sm">
           <div className="bg-white rounded-lg border border-line-soft px-4 py-2">
-            <span className="text-ink-3">Últimas líneas analizadas: </span>
+            <span className="text-ink-3">{traducir("Últimas líneas analizadas:")}</span>
             <span className="font-bold text-ink">{stats.total_entries}</span>
           </div>
           <div className="bg-white rounded-lg border border-line-soft px-4 py-2">
-            <span className="text-ink-3">Coinciden con el filtro: </span>
+            <span className="text-ink-3">{traducir("Coinciden con el filtro:")}</span>
             <span className="font-bold text-ink">{total}</span>
           </div>
         </div>
@@ -225,14 +217,14 @@ export default function LogsViewer() {
           <table className="table-panel">
             <thead className="bg-brand-50 border-b border-line-soft sticky top-0">
               <tr>
-                <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">Hora</th>
+                <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Hora")}</th>
                 <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">IP</th>
-                <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">Usuario</th>
-                <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">Método</th>
-                <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">Dominio</th>
-                <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">Estado</th>
-                <th className="text-right px-4 py-2 text-xs font-medium text-ink-3 uppercase">Bytes</th>
-                <th className="text-right px-4 py-2 text-xs font-medium text-ink-3 uppercase">Tiempo</th>
+                <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Usuario")}</th>
+                <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Método")}</th>
+                <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Dominio")}</th>
+                <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Estado")}</th>
+                <th className="text-right px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Bytes")}</th>
+                <th className="text-right px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Tiempo")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -251,7 +243,7 @@ export default function LogsViewer() {
                 </tr>
               ))}
               {entries.length === 0 && (
-                <tr><td colSpan={8} className="px-6 py-8 text-center text-ink-3">Sin resultados con estos filtros</td></tr>
+                <tr><td colSpan={8} className="px-6 py-8 text-center text-ink-3">{traducir("Sin resultados con estos filtros")}</td></tr>
               )}
             </tbody>
           </table>
@@ -263,7 +255,7 @@ export default function LogsViewer() {
         <span className="text-ink-3">Mostrando {offset + 1}–{Math.min(offset + limit, total)} de {total}</span>
         <div className="flex gap-2">
           <button onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}
-            className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5"><IconChevronLeft className="w-3.5 h-3.5" />Anterior</button>
+            className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5"><IconChevronLeft className="w-3.5 h-3.5" />{traducir("Anterior")}</button>
           <button onClick={() => setOffset(offset + limit)} disabled={offset + limit >= total}
             className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5">Siguiente<IconChevronRight className="w-3.5 h-3.5" /></button>
         </div>

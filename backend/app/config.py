@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     SQUID_CONFIG_PATH: str = "/etc/squid/squid.conf"
     SQUID_CONTAINER_NAME: str = "squidmgr-proxy"
 
+    # Como esta desplegado Squid: "docker" (contenedor, por defecto) o
+    # "native" (instalado en el sistema y gobernado por systemd). Por defecto
+    # docker para que las instalaciones que ya existen no cambien de
+    # comportamiento al actualizar.
+    DEPLOY_MODE: str = "docker"
+
+    # Nombre de la unidad de systemd, solo en modo nativo.
+    NATIVE_SQUID_SERVICE: str = "squid"
+
     # App
     APP_NAME: str = "SquidManager API"
     APP_VERSION: str = "0.6.0"
@@ -58,6 +67,12 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+if settings.DEPLOY_MODE.strip().lower() not in {"docker", "native"}:
+    logger.warning(
+        f"DEPLOY_MODE='{settings.DEPLOY_MODE}' no se reconoce; se usara 'docker'. "
+        f"Valores validos: docker, native."
+    )
 
 if settings.secret_key_is_insecure:
     if settings.DEBUG:

@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
 import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconDashboard, IconGauge, IconLink } from '../components/Icons'
 import { api, canWrite } from '../api/client'
@@ -157,7 +158,7 @@ function niceCeilBytes(value: number): number {
  */
 function Sparkline({ values, color }: { values: number[]; color: string }) {
   if (values.length < 2) {
-    return <div className="h-9 flex items-end text-[11px] text-ink-3">Recogiendo datos…</div>
+    return <div className="h-9 flex items-end text-[11px] text-ink-3">{traducir("Recogiendo datos…")}</div>
   }
 
   const max = Math.max(...values)
@@ -262,7 +263,7 @@ export default function Dashboard() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [autoRefresh])
 
-  if (loading || !data) return <div className="p-8 text-center text-ink-3">Cargando métricas...</div>
+  if (loading || !data) return <div className="p-8 text-center text-ink-3">{traducir("Cargando métricas...")}</div>
 
   const t = data.traffic
   const s = data.system
@@ -322,13 +323,11 @@ export default function Dashboard() {
     <div className="p-6 md:p-7">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: '#0A2C48' }}>Dashboard</h1>
+        <h1 className="text-2xl font-bold" style={{ color: '#0A2C48' }}>{traducir("Dashboard")}</h1>
         <div className="flex items-center gap-4">
           {autoRefresh && (
             <span className="flex items-center gap-1 text-xs text-ok">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-              EN VIVO
-            </span>
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>{traducir("EN VIVO")}</span>
           )}
           <label className="flex items-center gap-2 text-sm text-ink-2 cursor-pointer">
             <input
@@ -337,9 +336,7 @@ export default function Dashboard() {
               onChange={e => setAutoRefresh(e.target.checked)}
               className="w-4 h-4 rounded"
               style={{ accentColor: '#0B497C' }}
-            />
-            Auto-actualizar (5s)
-          </label>
+            />{traducir("Auto-actualizar (5s)")}</label>
         </div>
       </div>
 
@@ -354,11 +351,8 @@ export default function Dashboard() {
             <IconAlert />
           </span>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold" style={{ color: 'var(--warn)' }}>Hay cambios sin aplicar</p>
-            <p className="text-xs text-ink-2">
-              Algo se modificó (ACLs, reglas, grupos o configuración) y todavía no se aplicó a Squid:
-              lo que ves en este dashboard puede no coincidir con lo que el proxy está usando ahora mismo.
-            </p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--warn)' }}>{traducir("Hay cambios sin aplicar")}</p>
+            <p className="text-xs text-ink-2">{traducir("Algo se modificó (ACLs, reglas, grupos o configuración) y todavía no se aplicó a Squid: lo que ves en este dashboard puede no coincidir con lo que el proxy está usando ahora mismo.")}</p>
           </div>
           {canWrite() && (
             <button
@@ -377,7 +371,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <div className="card p-5 border border-line-soft">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm text-ink-3">Tráfico actual</h3>
+            <h3 className="text-sm text-ink-3">{traducir("Tráfico actual")}</h3>
             <span className="stat-icon"><IconDashboard /></span>
           </div>
           <p className="text-2xl font-bold tabular" style={{ color: '#0B497C' }}>{formatRate(t.total_bytes_per_second)}</p>
@@ -390,7 +384,7 @@ export default function Dashboard() {
 
         <div className="card p-5 border border-line-soft">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm text-ink-3">Peticiones (60s)</h3>
+            <h3 className="text-sm text-ink-3">{traducir("Peticiones (60s)")}</h3>
             <span className="stat-icon"><IconGauge /></span>
           </div>
           <p className="text-2xl font-bold tabular" style={{ color: '#2E93BC' }}>{formatNumber(t.total_requests_60s)}</p>
@@ -402,7 +396,7 @@ export default function Dashboard() {
 
         <div className="card p-5 border border-line-soft">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm text-ink-3">Conexiones activas</h3>
+            <h3 className="text-sm text-ink-3">{traducir("Conexiones activas")}</h3>
             <span className="stat-icon"><IconLink /></span>
           </div>
           <p className="text-2xl font-bold tabular" style={{ color: '#0A2C48' }}>{t.active_ips.length}</p>
@@ -422,7 +416,7 @@ export default function Dashboard() {
             de la RAM del proxy, que ya se muestra en la tarjeta Sistema. */}
         <div className="card p-5 border border-line-soft">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm text-ink-3">Aciertos de caché (60s)</h3>
+            <h3 className="text-sm text-ink-3">{traducir("Aciertos de caché (60s)")}</h3>
             <span className="stat-icon"><IconBolt /></span>
           </div>
           {/* Igual que el resto de las tarjetas: sin datos se muestra como 0,
@@ -444,7 +438,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div className="lg:col-span-2 card p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-medium text-ink">Tráfico de red en tiempo real</h3>
+            <h3 className="font-medium text-ink">{traducir("Tráfico de red en tiempo real")}</h3>
             <span className="text-xs text-ink-3 tabular">
               Promedio: bajada {formatRate(t.rx_avg_60s)} · subida {formatRate(t.tx_avg_60s)}
             </span>
@@ -470,9 +464,7 @@ export default function Dashboard() {
               </div>
 
               {timeline.length < 2 ? (
-                <div className="absolute inset-0 grid place-items-center text-sm text-ink-3">
-                  Recogiendo datos…
-                </div>
+                <div className="absolute inset-0 grid place-items-center text-sm text-ink-3">{traducir("Recogiendo datos…")}</div>
               ) : (
                 <>
                   <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100"
@@ -525,19 +517,15 @@ export default function Dashboard() {
           {/* Eje temporal: el rango sale de las marcas reales de las muestras. */}
           <div className="flex justify-between text-xs text-ink-3 mt-2 pl-[72px]">
             <span>{span > 90 ? `Hace ${Math.round(span / 60)} min` : `Hace ${Math.round(span)} s`}</span>
-            <span>Ahora</span>
+            <span>{traducir("Ahora")}</span>
           </div>
 
           {/* Leyenda */}
           <div className="flex gap-4 mt-3 text-xs items-center">
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#0B497C' }}></span>
-              Bajada
-            </span>
+              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#0B497C' }}></span>{traducir("Bajada")}</span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#48B3D0' }}></span>
-              Subida
-            </span>
+              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#48B3D0' }}></span>{traducir("Subida")}</span>
             <span className="text-ink-3 ml-auto tabular">
               {timeline.length} puntos · {Math.round(span)}s de histórico
             </span>
@@ -546,7 +534,7 @@ export default function Dashboard() {
 
         {/* Sistema */}
         <div className="card p-6">
-          <h3 className="font-medium text-ink mb-5">Sistema</h3>
+          <h3 className="font-medium text-ink mb-5">{traducir("Sistema")}</h3>
           <div className="grid grid-cols-3 gap-2">
             <Gauge
               value={s.cpu.percent}
@@ -591,25 +579,25 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <div className="card p-6">
           <div className="flex items-baseline justify-between mb-1">
-            <h3 className="font-medium text-ink">Top usuarios</h3>
+            <h3 className="font-medium text-ink">{traducir("Top usuarios")}</h3>
             {/* El criterio de orden era ambiguo: se mostraban bytes y peticiones
                 sin decir cuál mandaba. Ahora se elige y se ve cuál está activo. */}
             <div className="flex text-xs rounded-md overflow-hidden border border-line">
               <button
                 onClick={() => setUserSort('bytes')}
                 className={`px-2 py-0.5 transition ${userSort === 'bytes' ? 'bg-brand-700 text-white' : 'text-ink-3 hover:bg-brand-50'}`}
-              >Datos</button>
+              >{traducir("Datos")}</button>
               <button
                 onClick={() => setUserSort('requests')}
                 className={`px-2 py-0.5 transition ${userSort === 'requests' ? 'bg-brand-700 text-white' : 'text-ink-3 hover:bg-brand-50'}`}
-              >Peticiones</button>
+              >{traducir("Peticiones")}</button>
             </div>
           </div>
           <p className="text-[11px] text-ink-3 mb-4">
             Ordenado por {userSort === 'bytes' ? 'datos transferidos' : 'número de peticiones'} · últimas 1.000 peticiones
           </p>
           {sortedUsers.length === 0 ? (
-            <p className="text-sm text-ink-3">Sin datos</p>
+            <p className="text-sm text-ink-3">{traducir("Sin datos")}</p>
           ) : (
             <div className="space-y-3">
               {sortedUsers.map((u, i) => {
@@ -643,10 +631,10 @@ export default function Dashboard() {
         </div>
 
         <div className="card p-6">
-          <h3 className="font-medium text-ink mb-1">Top sitios visitados</h3>
-          <p className="text-[11px] text-ink-3 mb-4">Por número de peticiones · últimas 1.000</p>
+          <h3 className="font-medium text-ink mb-1">{traducir("Top sitios visitados")}</h3>
+          <p className="text-[11px] text-ink-3 mb-4">{traducir("Por número de peticiones · últimas 1.000")}</p>
           {data.top_domains.length === 0 ? (
-            <p className="text-sm text-ink-3">Sin datos</p>
+            <p className="text-sm text-ink-3">{traducir("Sin datos")}</p>
           ) : (
             <div className="space-y-2">
               {data.top_domains.map((d, i) => (
@@ -663,10 +651,10 @@ export default function Dashboard() {
         </div>
 
         <div className="card p-6">
-          <h3 className="font-medium text-ink mb-1">Top sitios bloqueados</h3>
-          <p className="text-[11px] text-ink-3 mb-4">Por número de bloqueos · últimas 1.000</p>
+          <h3 className="font-medium text-ink mb-1">{traducir("Top sitios bloqueados")}</h3>
+          <p className="text-[11px] text-ink-3 mb-4">{traducir("Por número de bloqueos · últimas 1.000")}</p>
           {data.top_blocked.length === 0 ? (
-            <p className="text-sm text-ink-3">Sin bloqueos</p>
+            <p className="text-sm text-ink-3">{traducir("Sin bloqueos")}</p>
           ) : (
             <div className="space-y-2">
               {data.top_blocked.map((d, i) => (
@@ -693,10 +681,10 @@ export default function Dashboard() {
             eso cada fila lleva una insignia con el estado REAL de la cuenta,
             cruzado contra Usuarios, para no dejar la duda. */}
         <div className="card p-6">
-          <h3 className="font-medium text-ink mb-1">Usuarios con más peticiones denegadas</h3>
-          <p className="text-[11px] text-ink-3 mb-4">Últimas 1.000 · no implica que la cuenta esté deshabilitada</p>
+          <h3 className="font-medium text-ink mb-1">{traducir("Usuarios con más peticiones denegadas")}</h3>
+          <p className="text-[11px] text-ink-3 mb-4">{traducir("Últimas 1.000 · no implica que la cuenta esté deshabilitada")}</p>
           {data.top_blocked_users.users.length === 0 ? (
-            <p className="text-sm text-ink-3">Sin peticiones denegadas</p>
+            <p className="text-sm text-ink-3">{traducir("Sin peticiones denegadas")}</p>
           ) : (
             <div className="space-y-2">
               {data.top_blocked_users.users.map((u, i) => (
@@ -706,9 +694,7 @@ export default function Dashboard() {
                     <span className="font-medium truncate">{u.user}</span>
                     {u.account_status === 'disabled' && (
                       <span className="pill-danger px-1.5 py-0.5 text-[10px] font-semibold rounded-full flex-none"
-                            title="La cuenta está deshabilitada en Usuarios: por eso no navega, no solo por estos intentos">
-                        cuenta deshabilitada
-                      </span>
+                            title={traducir("La cuenta está deshabilitada en Usuarios: por eso no navega, no solo por estos intentos")}>{traducir("cuenta deshabilitada")}</span>
                     )}
                   </div>
                   <span className="text-xs text-ink-3 ml-2 tabular flex-none">{u.blocked_requests}x</span>
@@ -732,17 +718,17 @@ export default function Dashboard() {
 
       {/* Últimas conexiones */}
       <div className="card overflow-hidden">
-        <h3 className="font-medium text-ink p-6 pb-4">Últimas conexiones</h3>
+        <h3 className="font-medium text-ink p-6 pb-4">{traducir("Últimas conexiones")}</h3>
         <div className="overflow-x-auto">
           <table className="table-panel">
             <thead className="bg-brand-50 border-y border-line-soft">
               <tr>
-                <th className="text-left px-6 py-2 text-xs font-medium text-ink-3 uppercase">Hora</th>
+                <th className="text-left px-6 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Hora")}</th>
                 <th className="text-left px-6 py-2 text-xs font-medium text-ink-3 uppercase">IP</th>
-                <th className="text-left px-6 py-2 text-xs font-medium text-ink-3 uppercase">Usuario</th>
-                <th className="text-left px-6 py-2 text-xs font-medium text-ink-3 uppercase">Dominio</th>
-                <th className="text-left px-6 py-2 text-xs font-medium text-ink-3 uppercase">Estado</th>
-                <th className="text-right px-6 py-2 text-xs font-medium text-ink-3 uppercase">Bytes</th>
+                <th className="text-left px-6 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Usuario")}</th>
+                <th className="text-left px-6 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Dominio")}</th>
+                <th className="text-left px-6 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Estado")}</th>
+                <th className="text-right px-6 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Bytes")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -761,7 +747,7 @@ export default function Dashboard() {
                 </tr>
               ))}
               {data.connections.length === 0 && (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-ink-3">Sin conexiones recientes</td></tr>
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-ink-3">{traducir("Sin conexiones recientes")}</td></tr>
               )}
             </tbody>
           </table>

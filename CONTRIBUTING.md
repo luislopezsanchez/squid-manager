@@ -166,3 +166,25 @@ Abre un [Issue](https://github.com/luislopezsanchez/squid-manager/issues) con la
 ## 📄 Licencia
 
 Al contribuir, aceptas que tus cambios se publiquen bajo la licencia Apache-2.0.
+
+---
+
+## Documentación traducida
+
+El README y las dos guías de instalación existen también en inglés
+(`.en.md`) y portugués (`.pt.md`). El resto de la documentación está solo en
+español, a propósito: mantener 25.000 palabras por triplicado cuesta más de lo
+que aporta, y una traducción desactualizada es peor que no tenerla.
+
+**El español es la fuente de verdad.** Si cambias uno de esos cinco documentos:
+
+1. Cambia primero la versión en español.
+2. Lleva el cambio a `.en.md` y `.pt.md` en el mismo commit.
+
+Si no puedes traducirlo en ese momento, dilo en el commit para que se vea que
+las copias han quedado atrás. Cada fichero traducido lleva arriba una nota que
+avisa al lector de que el español manda si discrepan, precisamente para que un
+desfase sea molesto pero no peligroso.
+
+Los idiomas del producto —el panel y los mensajes de la API— son otra cosa y
+están en [docs/idiomas.md](docs/idiomas.md).

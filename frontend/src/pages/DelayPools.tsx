@@ -1,3 +1,4 @@
+import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
@@ -16,48 +17,48 @@ interface DelayPool {
 // Definir qué niveles tiene cada clase
 const CLASS_LEVELS: Record<number, { label: string; levels: { key: string; label: string; desc: string }[] }> = {
   1: {
-    label: 'Clase 1: Límite global',
+    label: traducir("Clase 1: Límite global"),
     levels: [
-      { key: 'global', label: 'Límite global', desc: 'Ancho de banda total compartido por todos los usuarios' },
+      { key: 'global', label: traducir("Límite global"), desc: 'Ancho de banda total compartido por todos los usuarios' },
     ],
   },
   2: {
-    label: 'Clase 2: Límite individual',
+    label: traducir("Clase 2: Límite individual"),
     levels: [
-      { key: 'global', label: 'Límite global', desc: 'Ancho de banda total para todos combinados' },
-      { key: 'individual', label: 'Límite por usuario', desc: 'Ancho de banda máximo por cada usuario' },
+      { key: 'global', label: traducir("Límite global"), desc: 'Ancho de banda total para todos combinados' },
+      { key: 'individual', label: traducir("Límite por usuario"), desc: 'Ancho de banda máximo por cada usuario' },
     ],
   },
   3: {
-    label: 'Clase 3: Límite por red',
+    label: traducir("Clase 3: Límite por red"),
     levels: [
-      { key: 'global', label: 'Límite global', desc: 'Ancho de banda total para todos' },
-      { key: 'network', label: 'Límite por red', desc: 'Ancho de banda por subred /24' },
-      { key: 'individual', label: 'Límite por usuario', desc: 'Ancho de banda por usuario individual' },
+      { key: 'global', label: traducir("Límite global"), desc: 'Ancho de banda total para todos' },
+      { key: 'network', label: traducir("Límite por red"), desc: 'Ancho de banda por subred /24' },
+      { key: 'individual', label: traducir("Límite por usuario"), desc: 'Ancho de banda por usuario individual' },
     ],
   },
   4: {
-    label: 'Clase 4: Límite por grupo',
+    label: traducir("Clase 4: Límite por grupo"),
     levels: [
-      { key: 'global', label: 'Límite global', desc: 'Ancho de banda total' },
-      { key: 'group', label: 'Límite por grupo', desc: 'Ancho de banda por grupo (requiere ACL tag)' },
+      { key: 'global', label: traducir("Límite global"), desc: 'Ancho de banda total' },
+      { key: 'group', label: traducir("Límite por grupo"), desc: 'Ancho de banda por grupo (requiere ACL tag)' },
     ],
   },
   5: {
-    label: 'Clase 5: Límite avanzado',
+    label: traducir("Clase 5: Límite avanzado"),
     levels: [
-      { key: 'global', label: 'Límite global', desc: 'Ancho de banda total' },
-      { key: 'network', label: 'Límite por red', desc: 'Ancho de banda por subred' },
-      { key: 'individual', label: 'Límite por usuario', desc: 'Ancho de banda por usuario' },
-      { key: 'tag', label: 'Límite por tag', desc: 'Ancho de banda por tag de ACL' },
+      { key: 'global', label: traducir("Límite global"), desc: 'Ancho de banda total' },
+      { key: 'network', label: traducir("Límite por red"), desc: 'Ancho de banda por subred' },
+      { key: 'individual', label: traducir("Límite por usuario"), desc: 'Ancho de banda por usuario' },
+      { key: 'tag', label: traducir("Límite por tag"), desc: 'Ancho de banda por tag de ACL' },
     ],
   },
 }
 
 const UNITS = [
-  { value: 1, label: 'bytes/s' },
-  { value: 1024, label: 'KB/s' },
-  { value: 1048576, label: 'MB/s' },
+  { value: 1, label: traducir("bytes/s") },
+  { value: 1024, label: traducir("KB/s") },
+  { value: 1048576, label: traducir("MB/s") },
 ]
 
 // Convierte un valor humano (numero + unidad) a bytes para Squid
@@ -124,7 +125,7 @@ export default function DelayPools() {
   const { showToast, ToastContainer } = useToast()
 
   const loadPools = () => {
-    api.listDelayPools().then(setPools).catch(e => showToast('Error al cargar delay pools', 'error')).finally(() => setLoading(false))
+    api.listDelayPools().then(setPools).catch(e => showToast(traducir("Error al cargar delay pools"), 'error')).finally(() => setLoading(false))
   }
 
   useEffect(() => {
@@ -169,10 +170,10 @@ export default function DelayPools() {
       const data = { ...form, acl_name: form.acl_name || null, parameters }
       if (editingId) {
         await api.updateDelayPool(editingId, data)
-        showToast('Delay pool actualizado correctamente')
+        showToast(traducir("Delay pool actualizado correctamente"))
       } else {
         await api.createDelayPool(data)
-        showToast('Delay pool creado correctamente')
+        showToast(traducir("Delay pool creado correctamente"))
       }
       setForm({ pool_class: 2, acl_name: '', description: '', enabled: true })
       setSpeeds({})
@@ -199,11 +200,11 @@ export default function DelayPools() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar este delay pool?')) return
+    if (!confirm(traducir("¿Eliminar este delay pool?"))) return
     try {
       await api.deleteDelayPool(id)
       loadPools()
-      showToast('Delay pool eliminado correctamente')
+      showToast(traducir("Delay pool eliminado correctamente"))
     } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
   }
 
@@ -227,8 +228,8 @@ export default function DelayPools() {
       <ToastContainer />
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="page-title">Delay Pools</h1>
-          <p className="page-sub">Control de ancho de banda por usuario, red o grupo</p>
+          <h1 className="page-title">{traducir("Delay Pools")}</h1>
+          <p className="page-sub">{traducir("Control de ancho de banda por usuario, red o grupo")}</p>
         </div>
         <button
           onClick={() => {
@@ -245,12 +246,10 @@ export default function DelayPools() {
 
       {/* Info */}
       <div className="bg-blue-50 rounded-xl p-4 mb-6 border border-blue-100">
-        <h3 className="text-sm font-medium text-blue-900 mb-1">¿Cómo funciona?</h3>
+        <h3 className="text-sm font-medium text-blue-900 mb-1">{traducir("¿Cómo funciona?")}</h3>
         <p className="text-xs text-blue-700">
-          Cada nivel tiene dos valores: <strong>Restauración</strong> (velocidad a la que se recupera el ancho de banda)
-          y <strong>Límite</strong> (velocidad máxima permitida). Selecciona la unidad (KB/s, MB/s) y el sistema
-          convierte automáticamente al formato que Squid necesita.
-        </p>
+          Cada nivel tiene dos valores: <strong>{traducir("Restauración")}</strong> (velocidad a la que se recupera el ancho de banda)
+          y <strong>{traducir("Límite")}</strong>{traducir("(velocidad máxima permitida). Selecciona la unidad (KB/s, MB/s) y el sistema convierte automáticamente al formato que Squid necesita.")}</p>
       </div>
 
       {showForm && (
@@ -259,7 +258,7 @@ export default function DelayPools() {
 
           {/* Selector de clase */}
           <div className="mb-6">
-            <label className="field-label block mb-1.5">Tipo de limitación</label>
+            <label className="field-label block mb-1.5">{traducir("Tipo de limitación")}</label>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {Object.values(CLASS_LEVELS).map(c => (
                 <button
@@ -280,7 +279,7 @@ export default function DelayPools() {
 
           {/* Campos de velocidad por nivel */}
           <div className="space-y-4 mb-6">
-            <h4 className="text-sm font-medium text-ink-2">Configurar velocidades</h4>
+            <h4 className="text-sm font-medium text-ink-2">{traducir("Configurar velocidades")}</h4>
             {currentClass?.levels.map((level, idx) => {
               const s = speeds[level.key] || { restore: 64, limit: 64, restoreUnit: 1024, limitUnit: 1024 }
               return (
@@ -293,7 +292,7 @@ export default function DelayPools() {
                   <div className="grid grid-cols-2 gap-4">
                     {/* Restauración */}
                     <div>
-                      <label className="block text-xs font-medium text-ink-2 mb-1">Velocidad de restauración</label>
+                      <label className="block text-xs font-medium text-ink-2 mb-1">{traducir("Velocidad de restauración")}</label>
                       <div className="flex gap-2">
                         <input
                           type="number"
@@ -311,11 +310,11 @@ export default function DelayPools() {
                           {UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                         </select>
                       </div>
-                      <p className="text-xs text-ink-3 mt-1">A qué velocidad se recupera el bucket</p>
+                      <p className="text-xs text-ink-3 mt-1">{traducir("A qué velocidad se recupera el bucket")}</p>
                     </div>
                     {/* Límite */}
                     <div>
-                      <label className="block text-xs font-medium text-ink-2 mb-1">Límite máximo</label>
+                      <label className="block text-xs font-medium text-ink-2 mb-1">{traducir("Límite máximo")}</label>
                       <div className="flex gap-2">
                         <input
                           type="number"
@@ -333,7 +332,7 @@ export default function DelayPools() {
                           {UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                         </select>
                       </div>
-                      <p className="text-xs text-ink-3 mt-1">Velocidad máxima permitida</p>
+                      <p className="text-xs text-ink-3 mt-1">{traducir("Velocidad máxima permitida")}</p>
                     </div>
                   </div>
                 </div>
@@ -343,24 +342,24 @@ export default function DelayPools() {
 
           {/* Vista previa del formato Squid */}
           <div className="bg-slate-900 rounded-lg p-3 mb-4">
-            <p className="text-xs text-slate-400 mb-1">Formato Squid generado:</p>
+            <p className="text-xs text-slate-400 mb-1">{traducir("Formato Squid generado:")}</p>
             <p className="text-green-400 font-mono text-sm">delay_parameters {editingId || 'N'} {buildParameters(form.pool_class, speeds)}</p>
           </div>
 
           {/* ACL y descripción */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="field-label block mb-1.5">ACL asociada (opcional)</label>
+              <label className="field-label block mb-1.5">{traducir("ACL asociada (opcional)")}</label>
               <select value={form.acl_name} onChange={e => setForm({ ...form, acl_name: e.target.value })}
                 className="input">
-                <option value="">Sin ACL (aplica a todos)</option>
+                <option value="">{traducir("Sin ACL (aplica a todos)")}</option>
                 {acls.map((a: any) => <option key={a.id} value={a.name}>{a.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="field-label block mb-1.5">Descripción (opcional)</label>
+              <label className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
               <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-                placeholder="ej: Limitar a 64KB/s para red local" className="input" />
+                placeholder={traducir("ej: Limitar a 64KB/s para red local")} className="input" />
             </div>
           </div>
 
@@ -372,7 +371,7 @@ export default function DelayPools() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-ink-3">Cargando...</div>
+        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
       ) : (
         <div className="space-y-3">
           {pools.map(pool => (
@@ -404,16 +403,14 @@ export default function DelayPools() {
                   <p className="text-xs text-ink-3 font-mono mt-1">Squid: {pool.parameters}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => handleEdit(pool)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">Editar</button>
-                  <button onClick={() => handleDelete(pool.id)} className="text-danger hover:text-danger text-sm font-medium">Eliminar</button>
+                  <button onClick={() => handleEdit(pool)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">{traducir("Editar")}</button>
+                  <button onClick={() => handleDelete(pool.id)} className="text-danger hover:text-danger text-sm font-medium">{traducir("Eliminar")}</button>
                 </div>
               </div>
             </div>
           ))}
           {pools.length === 0 && (
-            <div className="card p-8 text-center text-ink-3">
-              No hay delay pools configurados. Crea uno para controlar el ancho de banda.
-            </div>
+            <div className="card p-8 text-center text-ink-3">{traducir("No hay delay pools configurados. Crea uno para controlar el ancho de banda.")}</div>
           )}
         </div>
       )}

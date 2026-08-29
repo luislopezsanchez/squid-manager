@@ -1,3 +1,4 @@
+import { idiomaActual } from '../i18n'
 const API_BASE = '/api'
 
 export function getToken(): string | null {
@@ -54,6 +55,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    // El backend traduce sus mensajes de error con esta cabecera. Se manda el
+    // idioma ELEGIDO en el panel, no el del navegador: son cosas distintas, y
+    // sin esto la aplicacion contestaria en espanol en cuanto algo fallara.
+    'Accept-Language': idiomaActual(),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers as Record<string, string> || {}),
   }
@@ -91,7 +96,10 @@ export const api = {
     formData.append('password', password)
     return fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept-Language': idiomaActual(),
+      },
       body: formData,
     }).then(async r => {
       if (!r.ok) {
@@ -174,11 +182,19 @@ export const api = {
   listAudit: (limit = 100, offset = 0) => request<any>(`/audit/?limit=${limit}&offset=${offset}`),
   auditStats: () => request<any>('/audit/stats'),
 
-  // Metrics
-  getDashboard: () => request<any>('/metrics/dashboard'),
-  getTraffic: (seconds = 60) => request<any>(`/metrics/traffic?seconds=${seconds}`),
-  getTimeline: (seconds = 60, interval = 5) => request<any>(`/metrics/timeline?seconds=${seconds}&interval=${interval}`),
-  getConnections: (limit = 20) => request<any>(`/metrics/connections?limit=${limit}`),
+  // Métricas.
+  //
+  // Se piden por /panel y NO por /metrics, que es el mismo endpoint con otro
+  // nombre. Los bloqueadores de anuncios y los filtros de privacidad cortan
+  // por defecto cualquier URL que contenga «metrics» porque la asocian a
+  // telemetría: la petición no llega a salir del navegador, en el servidor no
+  // queda ni rastro, y el dashboard se queda cargando para siempre sin que
+  // nada explique por qué. Quien administra un proxy suele llevar bloqueador,
+  // así que no era un caso raro.
+  getDashboard: () => request<any>('/panel/dashboard'),
+  getTraffic: (seconds = 60) => request<any>(`/panel/traffic?seconds=${seconds}`),
+  getTimeline: (seconds = 60, interval = 5) => request<any>(`/panel/timeline?seconds=${seconds}&interval=${interval}`),
+  getConnections: (limit = 20) => request<any>(`/panel/connections?limit=${limit}`),
 
   // Admins
   listAdmins: () => request<any>('/admins/'),

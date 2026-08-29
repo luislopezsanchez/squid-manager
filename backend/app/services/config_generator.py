@@ -19,11 +19,9 @@ from app.services.dns_service import parsear_lista
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
-# Puerto en el que Squid escucha DENTRO del contenedor. Es una constante a
-# propósito: el puerto que el administrador elige en el panel es el que Docker
-# publica hacia fuera y se mapea contra este. Así el puerto solo se guarda en
-# un sitio (el .env, que alimenta el mapeo) en lugar de dos.
-INTERNAL_SQUID_PORT = "3128"
+# Se reexporta desde el runtime, que es donde vive ahora: en que puerto escucha
+# Squid es una cuestion del despliegue, no del generador de configuracion.
+from app.services.runtime.base import INTERNAL_SQUID_PORT  # noqa: E402,F401
 
 # Tipos de ACL de dominio: son los que necesitan una regla paralela por SNI
 # para que la política también se aplique al tráfico HTTPS.
@@ -137,6 +135,16 @@ def generate_squid_config(db: Session) -> str:
         and (getattr(parent_proxy, "ca_cert", None) or "").strip()
     )
 
+    # En que puerto escribe la directiva `http_port` depende del despliegue: en
+    # contenedor es un puerto interno fijo contra el que Docker mapea el que
+    # elige el panel; en instalacion nativa no hay mapeo y Squid escucha
+    # directamente donde diga el panel.
+    from app.services.runtime import get_runtime
+
+    runtime = get_runtime()
+    puerto_deseado = str(settings.get("http_port") or INTERNAL_SQUID_PORT).strip()
+    puerto_escucha = runtime.listen_port(puerto_deseado)
+
     config = template.render(
         acls=acls,
         rules=rendered_rules,
@@ -147,7 +155,8 @@ def generate_squid_config(db: Session) -> str:
         ldap=ldap,
         groups=groups,
         ssl_exclude=ssl_exclude,
-        internal_port=INTERNAL_SQUID_PORT,
+        internal_port=puerto_escucha,
+        modo_despliegue=runtime.name,
         dns_nameservers=dns_nameservers,
         trusted_sources=trusted_sources,
         ssl_bump_enabled=ssl_bump_enabled,

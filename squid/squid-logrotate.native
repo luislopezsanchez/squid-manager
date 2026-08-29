@@ -1,0 +1,33 @@
+# Rotacion de los logs de Squid en una instalacion del sistema.
+#
+# Es la version para systemd del fichero `squid-logrotate` que usa la imagen
+# Docker. Cambia una sola cosa —a donde va el aviso de error— pero el motivo
+# de fondo es el mismo, y conviene no perderlo de vista.
+/var/log/squid/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    nocreate
+    sharedscripts
+    postrotate
+        # `nocreate` es deliberado: logrotate renombra el fichero y no crea uno
+        # nuevo, porque de recrearlo se encarga Squid al reabrir. Si esto no se
+        # ejecuta, Squid se queda escribiendo en el fichero ya renombrado y
+        # /var/log/squid/access.log deja de existir. El panel se queda entonces
+        # a cero —tarjetas, graficas, registros y estadisticas salen todas de
+        # ahi— mientras la navegacion sigue funcionando con normalidad, asi que
+        # nada delata el fallo.
+        #
+        # La ruta es absoluta a proposito: cron ejecuta logrotate con un PATH
+        # minimo (/usr/bin:/bin) y el binario esta en /usr/sbin, de modo que
+        # invocarlo por su nombre falla con «squid: not found».
+        if [ -e /run/squid.pid ] || [ -e /var/run/squid.pid ]; then
+            /usr/sbin/squid -k rotate || \
+                logger -t squid-logrotate -p daemon.err \
+                    "no se pudo reabrir el access.log de Squid; el panel se quedara sin datos"
+        fi
+    endscript
+}
