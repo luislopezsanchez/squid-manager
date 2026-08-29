@@ -125,6 +125,32 @@ Para más detalles, ver [docs/architecture.md](docs/architecture.md).
 
 ## 🚀 Instalación
 
+SquidManager se puede desplegar **con Docker** (lo habitual) o **sin Docker**,
+con todo corriendo como servicios del sistema. Se elige uno de los dos: en una
+misma máquina no conviven.
+
+### Sin Docker (instalación nativa)
+
+Para redes donde la política interna no permite Docker, o para un equipo que ya
+hace de proxy y donde una capa de contenedores sobra:
+
+```bash
+wget https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install-nativo.sh
+less install-nativo.sh          # revisa qué va a hacer en tu servidor
+chmod +x install-nativo.sh
+sudo ./install-nativo.sh
+```
+
+Instala `squid-openssl` (no `squid`: ese es la variante GnuTLS y no soporta SSL
+bump), PostgreSQL, el panel bajo systemd y nginx. No compila nada. El panel
+corre con su propio usuario y un sudoers de tres órdenes, bastante menos de lo
+que concede el socket de Docker.
+
+Los detalles y las diferencias de comportamiento están en
+[docs/instalacion-nativa.md](docs/instalacion-nativa.md).
+
+### Con Docker
+
 Hay dos formas de instalar. Hacen lo mismo; la diferencia es quién rellena la
 configuración.
 
@@ -521,6 +547,8 @@ squid-manager/
 ---
 
 ## 📚 Documentación
+
+- [Instalación nativa, sin Docker](docs/instalacion-nativa.md)
 
 | Documento | Descripción |
 |-----------|-------------|
