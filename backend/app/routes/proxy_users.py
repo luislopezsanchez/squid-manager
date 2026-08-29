@@ -56,9 +56,18 @@ def _generate_htpasswd_hash(username: str, password: str) -> str:
             capture_output=True, text=True, timeout=15,
         )
     except FileNotFoundError:
+        # El remedio depende del despliegue, y decir el equivocado hace perder
+        # el tiempo: en una instalación nativa no hay ninguna imagen que
+        # reconstruir, hay que instalar el paquete que trae htpasswd.
+        from app.services.runtime import get_runtime
+
+        if get_runtime().name == "native":
+            remedio = "Instala el paquete apache2-utils: sudo apt install apache2-utils"
+        else:
+            remedio = "Reconstruye la imagen del backend."
         raise HTTPException(
             500,
-            detail="No se encontró el comando htpasswd en el backend. Reconstruye la imagen.",
+            detail=f"No se encontró el comando htpasswd en el backend. {remedio}",
         )
     except subprocess.TimeoutExpired:
         raise HTTPException(500, detail="htpasswd tardó demasiado en responder.")

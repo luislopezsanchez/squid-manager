@@ -75,6 +75,8 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
             "systemctl was not found: Squid cannot be restarted",
         "No se encontró el comando htpasswd en el backend. Reconstruye la imagen.":
             "The htpasswd command was not found in the backend. Rebuild the image.",
+        "No se encontró el comando htpasswd en el backend. Instala el paquete apache2-utils: sudo apt install apache2-utils":
+            "The htpasswd command was not found in the backend. Install the apache2-utils package: sudo apt install apache2-utils",
         "No se encontró http_port en la BD": "http_port was not found in the database",
         "Nombre de usuario inválido": "Invalid username",
         "Notificaciones por Telegram deshabilitadas": "Telegram notifications are disabled",
@@ -157,6 +159,8 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
             "systemctl não encontrado: não é possível reiniciar o Squid",
         "No se encontró el comando htpasswd en el backend. Reconstruye la imagen.":
             "O comando htpasswd não foi encontrado no backend. Reconstrua a imagem.",
+        "No se encontró el comando htpasswd en el backend. Instala el paquete apache2-utils: sudo apt install apache2-utils":
+            "O comando htpasswd não foi encontrado no backend. Instale o pacote apache2-utils: sudo apt install apache2-utils",
         "No se encontró http_port en la BD": "http_port não foi encontrado no banco de dados",
         "Nombre de usuario inválido": "Nome de usuário inválido",
         "Notificaciones por Telegram deshabilitadas":

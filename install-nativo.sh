@@ -80,6 +80,10 @@ PAQUETES=(
     python3 python3-venv python3-pip python3-bcrypt python3-ldap3
     nginx
     nodejs npm
+    # apache2-utils trae htpasswd, que es con lo que el panel genera el hash de
+    # cada usuario del proxy. Sin el, crear un usuario falla y el mensaje ni
+    # siquiera tiene sentido en esta instalacion ("reconstruye la imagen").
+    apache2-utils
     openssl ca-certificates logrotate cron git curl
 )
 info "Paquetes: ${PAQUETES[*]}"
@@ -92,6 +96,15 @@ OPCIONES="$($SQUID_BIN -v 2>&1 || true)"
 echo "$OPCIONES" | grep -q -- "--with-openssl" || fail "El Squid instalado no tiene --with-openssl. Instala squid-openssl."
 [ -x "$CERTGEN" ] || fail "Falta $CERTGEN: el paquete de Squid no trae el generador de certificados."
 ok "Squid $($SQUID_BIN -v 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1) con SSL bump"
+
+# Binarios que el backend ejecuta en tiempo de ejecucion. Se comprueban aqui a
+# proposito: si falta alguno, es mejor que la instalacion se pare ahora que
+# descubrirlo el dia que alguien intente crear un usuario y reciba un error que
+# no dice nada util.
+for BIN in htpasswd openssl; do
+    command -v "$BIN" >/dev/null 2>&1 || fail "Falta el comando '$BIN', que el panel necesita en marcha."
+done
+ok "Herramientas del panel disponibles (htpasswd, openssl)"
 
 NODE_MAJOR="$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1 || echo 0)"
 if [ "${NODE_MAJOR:-0}" -lt 18 ]; then
