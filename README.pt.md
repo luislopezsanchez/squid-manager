@@ -3,7 +3,8 @@
 **[Español](README.md) · [English](README.en.md) · Português**
 
 <p align="center">
-  <strong>Painel web de gerenciamento para Squid Proxy, com Docker, FastAPI, React e SSL Bump</strong>
+  <strong>Painel web de gerenciamento para Squid Proxy, com FastAPI, React e SSL Bump</strong><br>
+  Implanta-se <strong>com Docker</strong> ou <strong>sem Docker</strong>
 </p>
 
 <p align="center">
@@ -18,6 +19,18 @@
 > **A versão em espanhol é a fonte de verdade.** Se esta tradução e o
 > [README.md](README.md) discordarem, o espanhol é o correto.
 
+> ### 🌍 Idiomas da documentação
+>
+> | | Español | English | Português |
+> |---|---|---|---|
+> | **README** | [README.md](README.md) | [README.en.md](README.en.md) | este |
+> | **Instalar com Docker** | [ver](docs/installation.md) | [view](docs/installation.en.md) | [ver](docs/installation.pt.md) |
+> | **Instalar sem Docker** | [ver](docs/instalacion-nativa.md) | [view](docs/instalacion-nativa.en.md) | [ver](docs/instalacion-nativa.pt.md) |
+>
+> O resto da documentação está só em espanhol. O **painel e as mensagens da
+> API** falam os três idiomas: escolhe-se no seletor da barra superior — veja
+> [docs/idiomas.md](docs/idiomas.md).
+
 ---
 
 ## 📋 Índice
@@ -27,6 +40,8 @@
 - [Arquitetura](#-arquitetura)
 - [Requisitos](#-requisitos)
 - [Instalação](#-instalação)
+  - [Modo A — com Docker](#modo-a--com-docker)
+  - [Modo B — sem Docker (nativa)](#modo-b--sem-docker-instalação-nativa)
 - [Atualizar](#-atualizar)
 - [Configuração](#-configuração)
 - [Primeiros passos](#-primeiros-passos)
@@ -150,42 +165,37 @@ Os requisitos dependem do modo de implantação.
 
 ## 🚀 Instalação
 
-O SquidManager pode ser implantado **com Docker** (o habitual) ou **sem
-Docker**, com tudo rodando como serviços do sistema. Escolhe-se um dos dois: na
-mesma máquina eles não convivem.
+**A primeira coisa é escolher o modo de implantação.** São dois, e são
+excludentes: numa mesma máquina usa-se um **ou** o outro, nunca os dois.
 
-### Sem Docker (instalação nativa)
+| | **Modo A — com Docker** | **Modo B — sem Docker (nativo)** |
+|---|---|---|
+| O que sobe | 4 contêineres | Serviços do sistema, com systemd |
+| O que exige | Docker 20.10+ e Compose v2+ | Ubuntu 22.04 / 24.04 ou Debian 12, x86_64 |
+| Squid | Compilado ao construir a imagem | Pacote `squid-openssl`; **não compila nada** |
+| Quanto demora | 15-30 min na primeira vez, porque compila o Squid | 3-5 min |
+| Que privilégios o painel recebe | O socket do Docker, que equivale a root na máquina | Um usuário próprio e três comandos de `sudo` |
+| Precisa clonar o repositório | Sim | Não: basta baixar um script |
+| Escolha se | Você quer o isolamento dos contêineres e Docker não é problema | A política interna não permite Docker, ou o equipamento já faz de proxy e mais uma camada sobra |
 
-Para redes onde a política interna não permite Docker, ou para um equipamento
-que já faz de proxy e onde uma camada de contêineres é uma peça a mais:
+Os dois guias completos, passo a passo, estão em
+[docs/installation.pt.md](docs/installation.pt.md) (Docker) e em
+[docs/instalacion-nativa.pt.md](docs/instalacion-nativa.pt.md) (nativa).
 
-```bash
-wget https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install-nativo.sh
-less install-nativo.sh          # leia o que ele vai fazer no seu servidor
-chmod +x install-nativo.sh
-sudo ./install-nativo.sh
-```
+---
 
-Instala `squid-openssl` (não `squid`: esse é a variante GnuTLS e não suporta SSL
-bump), PostgreSQL, o painel sob systemd e nginx. Não compila nada. O painel roda
-com seu próprio usuário e um sudoers de três comandos — bem menos do que o
-socket do Docker concede.
+### Modo A — com Docker
 
-Os detalhes e as diferenças de comportamento estão em
-[docs/instalacion-nativa.pt.md](docs/instalacion-nativa.pt.md).
-
-### Com Docker
-
-Há duas formas de instalar. Fazem a mesma coisa; a diferença é quem preenche a
+Há dois caminhos. Fazem a mesma coisa; a diferença é quem preenche a
 configuração.
 
-| | Opção A: `install.sh` | Opção B: manual |
+| | A1: com `install.sh` | A2: manual |
 |---|---|---|
 | Onde instala | Onde você clonou | Onde você quiser |
 | `DB_PASS` e `SECRET_KEY` | São geradas sozinhas | Você as define |
 | `PROJECT_DIR` | É preenchida sozinha | **Você precisa ajustá-la** |
 
-### Opção A — com o instalador
+#### A1 — com o instalador
 
 Gera as chaves, deixa o `.env` pronto e sobe os contêineres.
 
@@ -196,55 +206,55 @@ sudo ./install.sh
 ```
 
 **Instala no diretório onde você clonou**, não num caminho fixo. Se você
-executar o script solto, fora de um clone, ele usa `/opt/squid-manager`. E você
-pode impor o caminho que quiser:
+executar o script solto, fora de um clone, ele usa `/opt/squid-manager`. Você
+também pode impor o caminho:
 
 ```bash
 sudo INSTALL_DIR=/srv/squid ./install.sh
 ```
 
 Se já havia uma instalação nesse caminho, ele a atualiza preservando a
-configuração; se você tiver alterações locais não confirmadas, faz cópia e para
-em vez de sobrescrevê-las.
+configuração; se encontrar alterações locais não confirmadas, faz uma cópia e
+para, em vez de sobrescrevê-las.
 
-> Não canalize o script direto para o `bash` a partir da internet: baixe, leia e
-> execute, que é o que os comandos acima fazem.
+> Não canalize o script direto para o `bash` a partir da internet: baixe, leia
+> e execute, que é o que os comandos acima fazem.
 
-#### Se o servidor sai para a internet por um proxy
+##### Se o servidor sai para a internet por um proxy
 
-O `install.sh` assume saída direta. Quando a rede obriga a passar por um proxy
-corporativo, há **três** camadas que precisam ser configuradas separadamente —
-o host, o daemon do Docker e os builds — e configurar apenas uma deixa a
-instalação pela metade, normalmente com um `Could not resolve` no meio de um
-`apt-get`. Disso cuida outro script:
+O `install.sh` supõe que há saída direta. Quando a rede obriga a passar por um
+proxy corporativo, são **três** camadas que precisam ser configuradas
+separadamente — o host, o daemon do Docker e os builds — e configurar só uma
+deixa a instalação pela metade, normalmente com um `Could not resolve` no meio
+de um `apt-get`. Disso cuida um segundo script:
 
 ```bash
 cp proxy.conf.example proxy.conf
 ```
 
-Coloque seus dados no `proxy.conf` (servidor, porta e, se necessário, usuário e
-senha; caracteres especiais não precisam de escape) e execute:
+Coloque os seus dados em `proxy.conf` (servidor, porta e, se necessário,
+usuário e senha; caracteres especiais não precisam de escape) e execute:
 
 ```bash
 sudo ./install-tras-proxy.sh
 ```
 
-Ele configura as três camadas, verifica que cada uma alcança a internet e só
-então executa o `install.sh`. As credenciais ficam no `proxy.conf`, que está no
+Ele configura as três camadas, confere que cada uma alcança a internet e só
+então roda o `install.sh`. As credenciais ficam em `proxy.conf`, que está no
 `.gitignore`: nenhum arquivo do repositório é editado, porque uma alteração
 local não confirmada faria o instalador abortar.
 
-Isso é só para **instalar**. Para que o Squid saia à internet pelo proxy
-corporativo depois de instalado, configure no painel em **Proxy pai** — veja
+Isso é só para **instalar**. Para o Squid sair à internet através do proxy
+corporativo depois de instalado, configure pelo painel em **Proxy pai** — veja
 [docs/proxy-padre.md](docs/proxy-padre.md).
 
-O procedimento manual equivalente, o que cada passo toca e o que fazer se o
+O procedimento manual equivalente, o que cada passo mexe e o que fazer se o
 proxy inspeciona TLS, está em
 [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md).
 
-### Opção B — manual
+#### A2 — manual
 
-Escolha esta se quiser o projeto em outro caminho ou preferir controlar cada
+Escolha este se quiser o projeto em outro caminho ou preferir controlar cada
 passo.
 
 ```bash
@@ -252,7 +262,7 @@ passo.
 git clone https://github.com/luislopezsanchez/squid-manager.git
 cd squid-manager
 
-# 2. Copiar a configuração
+# 2. Copiar a configuração de exemplo
 cp .env.example .env
 
 # 3. Editar o .env (veja abaixo o que é obrigatório)
@@ -261,14 +271,14 @@ nano .env
 # 4. Subir o sistema inteiro
 docker compose up -d
 
-# 5. Aguardar a compilação do Squid (na primeira vez: ~10-15 minutos)
-#    Acompanhar o progresso:
+# 5. Aguardar o Squid compilar (na primeira vez: ~10-15 minutos)
+#    Ver o progresso:
 docker compose logs -f squid
 
 # 6. Quando aparecer "Accepting HTTP Socket connections", está pronto
 ```
 
-**Três valores precisam ser preenchidos no `.env`, sem exceção:**
+**Três valores precisam ser ajustados no `.env`, sem exceção:**
 
 ```env
 DB_PASS=            # obrigatório: openssl rand -hex 16
@@ -276,17 +286,127 @@ SECRET_KEY=         # obrigatório: openssl rand -hex 32
 PROJECT_DIR=        # o caminho ABSOLUTO onde você acabou de clonar o projeto
 ```
 
-> **`PROJECT_DIR` é o que costuma ser esquecido.** Vem com
-> `/opt/squid-manager` como exemplo. Se você clonou em outro lugar e não o
-> altera, o sistema sobe e funciona normalmente, mas **mudar a porta do proxy
-> pelo painel deixa de atualizar o `.env`**, e a porta volta ao valor anterior
-> no próximo `docker compose up -d`. Confira com `pwd` e coloque esse caminho
-> exato. (Com a Opção A você não precisa se preocupar: o instalador preenche.)
+> **`PROJECT_DIR` é o que se esquece.** Vem com `/opt/squid-manager` como
+> exemplo. Se você clonou em outro lugar e não o altera, o sistema sobe e
+> funciona normalmente, mas **mudar a porta do proxy pelo painel deixa de
+> atualizar o `.env`**, e a porta volta ao valor anterior no próximo
+> `docker compose up -d`. Confira com `pwd` e use esse caminho exato.
+> (Com o A1 você não precisa se preocupar: o instalador preenche.)
 
-### Depois de instalar, com qualquer uma das duas
+#### Acesso e primeiro login (Docker)
 
-**Abra a porta do proxy no firewall do servidor.** Nem o instalador nem o painel
-fazem isso:
+| Serviço | URL |
+|----------|-----|
+| **Painel web** | http://IP_DO_SERVIDOR:3000 |
+| **Proxy Squid** | IP_DO_SERVIDOR:3128 |
+
+Não há senha padrão. O usuário `admin` é criado com uma **senha aleatória** que
+aparece **uma única vez** no log do backend:
+
+```bash
+docker compose logs backend | grep -A3 "Administrador inicial"
+```
+
+Será pedido que você a troque antes de poder usar o painel. Se preferir
+defini-la você mesmo, informe `ADMIN_INITIAL_PASSWORD` no `.env` antes do
+primeiro arranque.
+
+> A API do backend (porta 8000) não é publicada no host: o painel fala com ela
+> pela rede interna do Docker. A documentação interativa (`/docs`) só está
+> disponível se você subir com `DEBUG=true` no `.env`.
+
+---
+
+### Modo B — sem Docker (instalação nativa)
+
+Squid, painel, PostgreSQL e nginx rodando como serviços do sistema. **Não é
+preciso clonar o repositório, nem editar nenhum `.env`, nem compilar nada**: o
+instalador cuida de tudo.
+
+Sobre um Ubuntu 22.04 / 24.04 ou Debian 12 recém-instalado, com acesso root:
+
+```bash
+# 1. Baixar o instalador
+wget https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install-nativo.sh
+
+# 2. Ler antes de executar como root (sempre, venha de onde vier)
+less install-nativo.sh
+
+# 3. Dar permissão de execução
+chmod +x install-nativo.sh
+
+# 4. Executar
+sudo ./install-nativo.sh
+```
+
+Demora de três a cinco minutos. Ao terminar, imprime a URL do painel, o usuário
+e a senha inicial.
+
+**Se você quiser outras portas**, informe-as como variáveis de ambiente (repare
+no `-E`, que é o que faz o `sudo` preservá-las):
+
+```bash
+WEB_PORT=8080 PROXY_PORT=3130 sudo -E ./install-nativo.sh
+```
+
+| Variável | Padrão | O que é |
+|---|---|---|
+| `WEB_PORT` | `3000` | Porta do painel |
+| `PROXY_PORT` | `3128` | Porta do proxy |
+| `API_PORT` | `8000` | Porta interna da API (só escuta em localhost) |
+| `INSTALL_DIR` | `/opt/squid-manager` | Onde o código fica |
+| `APP_USER` | `squidmgr` | Usuário com que o painel roda |
+
+#### O que o instalador faz, em ordem
+
+1. Confere que o sistema é compatível.
+2. Instala os pacotes: `squid-openssl`, PostgreSQL, nginx, Node, Python e
+   `apache2-utils`. **`squid-openssl`, não `squid`**: o pacote puro é a variante
+   GnuTLS, sem SSL bump e sem gerador de certificados.
+3. Cria o usuário `squidmgr`, com `proxy` como grupo primário.
+4. Clona o código em `/opt/squid-manager`.
+5. Cria o banco de dados PostgreSQL.
+6. Gera a CA para o SSL Bump e instala o helper de autenticação.
+7. Escreve um sudoers com **três comandos literais**, sem curingas.
+8. Prepara o ambiente Python, o `.env` e a unidade do systemd.
+9. Compila o painel web e configura o nginx.
+10. Sobe os serviços e confere que respondem.
+
+#### Acesso e primeiro login (nativo)
+
+O instalador termina imprimindo exatamente isto:
+
+```
+  Panel:    http://IP_DO_SERVIDOR:3000
+  Proxy:    IP_DO_SERVIDOR:3128
+  Usuario:  admin
+  Clave:    <senha gerada ao acaso>
+```
+
+Essa senha **não é mostrada de novo**, e o painel vai pedir que você a troque no
+primeiro acesso. Se você a perder antes de entrar, ela está no log:
+
+```bash
+journalctl -u squidmanager | grep -A3 "Administrador inicial"
+```
+
+Para operar o serviço depois:
+
+```bash
+systemctl status squid squidmanager nginx    # estado
+journalctl -u squidmanager -f                # registros do painel
+```
+
+As diferenças de comportamento em relação ao Docker — onde a porta vive, como o
+tráfego é medido, que estado o painel mostra — estão em
+[docs/instalacion-nativa.pt.md](docs/instalacion-nativa.pt.md).
+
+---
+
+### Depois de instalar, em qualquer dos dois modos
+
+**1. Abra a porta do proxy no firewall do servidor.** Nem o instalador nem o
+painel fazem isso:
 
 ```bash
 sudo ufw allow 3128/tcp
@@ -295,30 +415,10 @@ sudo ufw allow 3128/tcp
 Sem essa regra o Squid funciona mas os clientes não chegam, e o sintoma é uma
 conexão que fica pendurada sem nenhuma mensagem de erro.
 
-### Acesso
-| Serviço | URL |
-|----------|-----|
-| **Painel web** | http://localhost:3000 |
-| **Proxy Squid** | localhost:3128 |
-
-> A API do backend (porta 8000) não é publicada no host: o painel fala com ela
-> pela rede interna do Docker. A documentação interativa (`/docs`) só está
-> disponível se você subir com `DEBUG=true` no `.env`.
-
-### Primeiro acesso
-Não há senha padrão. O usuário `admin` é criado com uma **senha aleatória** que
-aparece **uma única vez** no log do backend:
-
-```bash
-docker compose logs backend | grep -A3 "Administrador inicial"
-```
-
-Será pedido que você a troque antes de poder usar o painel. Se preferir defini-la
-você mesmo, informe `ADMIN_INITIAL_PASSWORD` no `.env` antes da primeira
-inicialização.
-
-Para um passo a passo detalhado da instalação, veja
-[docs/installation.pt.md](docs/installation.pt.md).
+**2. Crie o primeiro usuário do proxy**, em *Usuários → Novo usuário*. Até lá
+ninguém navega: o proxy exige credenciais desde o primeiro minuto e ainda não há
+nenhuma. É de propósito, e está explicado acima em
+[Primeiros passos](#-primeiros-passos).
 
 ---
 

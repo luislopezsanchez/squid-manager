@@ -124,6 +124,18 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
   `DEPLOY_MODE`, así que pasaba o fallaba según el entorno donde se ejecutara.
   Ahora fija el modo, y se añade la prueba contraria para el modo nativo.
 
+### Documentación
+
+- **El README no dejaba claro que hubiera dos modos de instalación.** La
+  sección de instalación empieza ahora eligiendo modo, con una tabla que
+  compara los dos, y cada camino es autocontenido: sus propios pasos, su propia
+  URL de acceso y su propio primer inicio de sesión. Antes el apartado «Primer
+  acceso» daba solo la orden de Docker (`docker compose logs backend`), que en
+  una instalación nativa no existe. El subtítulo del proyecto y la descripción
+  también daban a entender que Docker era obligatorio.
+- Los tres README llevan un recuadro con la documentación disponible en
+  español, inglés y portugués.
+
 ### Pruebas
 
 - `frontend/package.json` declara `engines.node >= 18.18`. Ubuntu 24.04 trae

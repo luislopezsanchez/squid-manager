@@ -3,7 +3,8 @@
 **[Español](README.md) · English · [Português](README.pt.md)**
 
 <p align="center">
-  <strong>Web management panel for Squid Proxy, with Docker, FastAPI, React and SSL Bump</strong>
+  <strong>Web management panel for Squid Proxy, with FastAPI, React and SSL Bump</strong><br>
+  Deploys <strong>with Docker</strong> or <strong>without Docker</strong>
 </p>
 
 <p align="center">
@@ -18,6 +19,18 @@
 > **The Spanish version is the source of truth.** If this translation and
 > [README.md](README.md) ever disagree, the Spanish one is right.
 
+> ### 🌍 Documentation languages
+>
+> | | Español | English | Português |
+> |---|---|---|---|
+> | **README** | [README.md](README.md) | this one | [README.pt.md](README.pt.md) |
+> | **Install with Docker** | [ver](docs/installation.md) | [view](docs/installation.en.md) | [ver](docs/installation.pt.md) |
+> | **Install without Docker** | [ver](docs/instalacion-nativa.md) | [view](docs/instalacion-nativa.en.md) | [ver](docs/instalacion-nativa.pt.md) |
+>
+> The rest of the documentation is Spanish only. The **panel and the API
+> messages** do speak all three languages: pick one in the top-bar selector —
+> see [docs/idiomas.md](docs/idiomas.md).
+
 ---
 
 ## 📋 Table of contents
@@ -27,6 +40,8 @@
 - [Architecture](#-architecture)
 - [Requirements](#-requirements)
 - [Installation](#-installation)
+  - [Mode A — with Docker](#mode-a--with-docker)
+  - [Mode B — without Docker (native)](#mode-b--without-docker-native-installation)
 - [Upgrading](#-upgrading)
 - [Configuration](#-configuration)
 - [Getting started](#-getting-started)
@@ -149,42 +164,37 @@ Requirements depend on the deployment mode.
 
 ## 🚀 Installation
 
-SquidManager can be deployed **with Docker** (the usual way) or **without
-Docker**, with everything running as system services. Pick one: they do not
-coexist on the same machine.
+**Start by choosing a deployment mode.** There are two, and they are mutually
+exclusive: on a given machine you use one **or** the other, never both.
 
-### Without Docker (native installation)
+| | **Mode A — with Docker** | **Mode B — without Docker (native)** |
+|---|---|---|
+| What it brings up | 4 containers | System services, under systemd |
+| What it requires | Docker 20.10+ and Compose v2+ | Ubuntu 22.04 / 24.04 or Debian 12, x86_64 |
+| Squid | Compiled while building the image | `squid-openssl` package; **compiles nothing** |
+| How long it takes | 15-30 min the first time, because it compiles Squid | 3-5 min |
+| What privileges the panel gets | The Docker socket, which is equivalent to root on the machine | Its own user and three `sudo` commands |
+| Do you clone the repo | Yes | No: downloading one script is enough |
+| Choose it if | You want container isolation and Docker is not a problem | Internal policy does not allow Docker, or the machine already acts as a proxy and one more layer is one too many |
 
-For networks where internal policy does not allow Docker, or for a machine that
-already acts as a proxy and where a container layer is one moving part too many:
+The two full step-by-step guides are
+[docs/installation.en.md](docs/installation.en.md) (Docker) and
+[docs/instalacion-nativa.en.md](docs/instalacion-nativa.en.md) (native).
 
-```bash
-wget https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install-nativo.sh
-less install-nativo.sh          # read what it is going to do to your server
-chmod +x install-nativo.sh
-sudo ./install-nativo.sh
-```
+---
 
-It installs `squid-openssl` (not `squid`: that one is the GnuTLS flavour and
-does not support SSL bump), PostgreSQL, the panel under systemd, and nginx. It
-compiles nothing. The panel runs under its own user with a three-command
-sudoers file — considerably less than what the Docker socket grants.
+### Mode A — with Docker
 
-Details and behavioural differences in
-[docs/instalacion-nativa.en.md](docs/instalacion-nativa.en.md).
+There are two paths. They do the same thing; the difference is who fills in the
+configuration.
 
-### With Docker
-
-There are two ways to install. They do the same thing; the difference is who
-fills in the configuration.
-
-| | Option A: `install.sh` | Option B: manual |
+| | A1: with `install.sh` | A2: manual |
 |---|---|---|
 | Where it installs | Wherever you cloned it | Wherever you want |
 | `DB_PASS` and `SECRET_KEY` | Generated for you | You define them |
 | `PROJECT_DIR` | Filled in for you | **You must set it** |
 
-### Option A — with the installer
+#### A1 — with the installer
 
 Generates the keys, prepares the `.env` and brings the containers up.
 
@@ -209,7 +219,7 @@ stops rather than overwriting them.
 > Do not pipe the script straight into `bash` from the internet: download it,
 > read it and run it, which is what the commands above do.
 
-#### If the server reaches the internet through a proxy
+##### If the server reaches the internet through a proxy
 
 `install.sh` assumes direct internet access. When the network forces everything
 through a corporate proxy, **three** separate layers need configuring — the
@@ -241,7 +251,7 @@ The equivalent manual procedure, what each step touches, and what to do if the
 proxy inspects TLS, is in
 [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md).
 
-### Option B — manual
+#### A2 — manual
 
 Choose this if you want the project somewhere else or prefer to control each
 step.
@@ -251,7 +261,7 @@ step.
 git clone https://github.com/luislopezsanchez/squid-manager.git
 cd squid-manager
 
-# 2. Copy the configuration
+# 2. Copy the example configuration
 cp .env.example .env
 
 # 3. Edit the .env (see below what is mandatory)
@@ -280,31 +290,15 @@ PROJECT_DIR=        # the ABSOLUTE path where you just cloned the project
 > change it, the system starts and works normally, but **changing the proxy
 > port from the panel stops updating the `.env`**, and the port reverts on the
 > next `docker compose up -d`. Check with `pwd` and use that exact path.
-> (With Option A you do not need to worry: the installer fills it in.)
+> (With A1 you do not need to worry: the installer fills it in.)
 
-### After installing, either way
+#### Access and first login (Docker)
 
-**Open the proxy port in the server firewall.** Neither the installer nor the
-panel does it:
-
-```bash
-sudo ufw allow 3128/tcp
-```
-
-Without that rule Squid works but clients cannot reach it, and the symptom is a
-connection that hangs with no error message at all.
-
-### Access
 | Service | URL |
 |----------|-----|
-| **Web panel** | http://localhost:3000 |
-| **Squid proxy** | localhost:3128 |
+| **Web panel** | http://SERVER_IP:3000 |
+| **Squid proxy** | SERVER_IP:3128 |
 
-> The backend API (port 8000) is not published to the host: the panel talks to
-> it over Docker's internal network. The interactive documentation (`/docs`) is
-> only available if you start with `DEBUG=true` in the `.env`.
-
-### First login
 There is no default password. The `admin` user is created with a **random
 password** that appears **only once** in the backend log:
 
@@ -316,8 +310,114 @@ You will be asked to change it before you can use the panel. If you would
 rather set it yourself, define `ADMIN_INITIAL_PASSWORD` in the `.env` before the
 first start.
 
-For a detailed installation walkthrough, see
-[docs/installation.en.md](docs/installation.en.md).
+> The backend API (port 8000) is not published to the host: the panel talks to
+> it over Docker's internal network. The interactive documentation (`/docs`) is
+> only available if you start with `DEBUG=true` in the `.env`.
+
+---
+
+### Mode B — without Docker (native installation)
+
+Squid, the panel, PostgreSQL and nginx running as system services. **You do not
+clone the repository, you do not edit any `.env`, and nothing gets compiled**:
+the installer takes care of everything.
+
+On a freshly installed Ubuntu 22.04 / 24.04 or Debian 12, with root access:
+
+```bash
+# 1. Download the installer
+wget https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install-nativo.sh
+
+# 2. Read it before running it as root (always, wherever it came from)
+less install-nativo.sh
+
+# 3. Make it executable
+chmod +x install-nativo.sh
+
+# 4. Run it
+sudo ./install-nativo.sh
+```
+
+It takes three to five minutes. When it finishes it prints the panel URL, the
+username and the initial password.
+
+**If you want different ports**, pass them as environment variables (note the
+`-E`, which is what makes `sudo` keep them):
+
+```bash
+WEB_PORT=8080 PROXY_PORT=3130 sudo -E ./install-nativo.sh
+```
+
+| Variable | Default | What it is |
+|---|---|---|
+| `WEB_PORT` | `3000` | Panel port |
+| `PROXY_PORT` | `3128` | Proxy port |
+| `API_PORT` | `8000` | Internal API port (listens on localhost only) |
+| `INSTALL_DIR` | `/opt/squid-manager` | Where the code lives |
+| `APP_USER` | `squidmgr` | User the panel runs as |
+
+#### What the installer does, in order
+
+1. Checks that the system is supported.
+2. Installs the packages: `squid-openssl`, PostgreSQL, nginx, Node, Python and
+   `apache2-utils`. **`squid-openssl`, not `squid`**: the plain package is the
+   GnuTLS flavour, with no SSL bump and no certificate generator.
+3. Creates the `squidmgr` user, with `proxy` as its primary group.
+4. Clones the code into `/opt/squid-manager`.
+5. Creates the PostgreSQL database.
+6. Generates the CA for SSL Bump and installs the authentication helper.
+7. Writes a sudoers file with **three literal commands**, no wildcards.
+8. Prepares the Python environment, the `.env` and the systemd unit.
+9. Builds the web panel and configures nginx.
+10. Starts the services and checks that they respond.
+
+#### Access and first login (native)
+
+The installer finishes by printing exactly this:
+
+```
+  Panel:    http://SERVER_IP:3000
+  Proxy:    SERVER_IP:3128
+  Usuario:  admin
+  Clave:    <randomly generated password>
+```
+
+That password **is not shown again**, and the panel will ask you to change it on
+first access. If you lose it before logging in, it is in the log:
+
+```bash
+journalctl -u squidmanager | grep -A3 "Administrador inicial"
+```
+
+To operate the service afterwards:
+
+```bash
+systemctl status squid squidmanager nginx    # status
+journalctl -u squidmanager -f                # panel logs
+```
+
+The behavioural differences from Docker — where the port lives, how traffic is
+measured, what status the panel shows — are in
+[docs/instalacion-nativa.en.md](docs/instalacion-nativa.en.md).
+
+---
+
+### After installing, in either mode
+
+**1. Open the proxy port in the server firewall.** Neither the installer nor
+the panel does it:
+
+```bash
+sudo ufw allow 3128/tcp
+```
+
+Without that rule Squid works but clients cannot reach it, and the symptom is a
+connection that hangs with no error message at all.
+
+**2. Create the first proxy user**, under *Users → New user*. Until then nobody
+browses: the proxy requires credentials from minute one and there are none yet.
+That is on purpose, and it is explained above in
+[Getting started](#-getting-started).
 
 ---
 
