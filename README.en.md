@@ -399,6 +399,13 @@ For every option, see [docs/configuration.md](docs/configuration.md).
 
 After installing:
 
+> **Freshly installed, the proxy lets nobody through, and that is on purpose.**
+> Squid starts up denying everything except `localhost`; the panel replaces that
+> right away with the definitive configuration, which requires a username and
+> password. Until you create the first proxy user, nobody browses. This holds
+> for both deployment modes: a brand-new installation must not sit open to the
+> network while its owner has not even logged into the panel.
+
 1. **Open the panel** → http://localhost:3000
 2. **Log in** with `admin` and the generated password (see above)
 3. **Change the password** when the panel asks you to

@@ -400,6 +400,13 @@ Para ver todas as opções, veja [docs/configuration.md](docs/configuration.md).
 
 Depois da instalação:
 
+> **Recém-instalado, o proxy não deixa ninguém passar, e é de propósito.**
+> O Squid sobe negando tudo exceto `localhost`; o painel substitui isso logo em
+> seguida pela configuração definitiva, que exige usuário e senha. Até você
+> criar o primeiro usuário do proxy, ninguém navega. Vale para os dois modos de
+> implantação: uma instalação recém-feita não pode ficar aberta à rede enquanto
+> o dono nem sequer entrou no painel.
+
 1. **Abra o painel** → http://localhost:3000
 2. **Faça login** com `admin` e a senha gerada (veja acima)
 3. **Troque a senha** quando o painel pedir
