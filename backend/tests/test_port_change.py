@@ -108,19 +108,48 @@ def test_falla_si_el_proyecto_no_esta_montado(monkeypatch):
     assert "PROJECT_DIR" in mensaje
 
 
-def test_el_puerto_de_la_bd_no_llega_al_squid_conf():
-    """La prueba que define este diseño.
+def _config_con_puerto(modo: str, monkeypatch, puerto: str = "9999") -> str:
+    """Genera un squid.conf fijando el modo de despliegue.
+
+    Fijarlo es imprescindible: el puerto que acaba en la directiva `http_port`
+    depende del modo, y sin esto la prueba pasaba o fallaba segun la variable
+    DEPLOY_MODE que tuviera el entorno donde se ejecutase.
+    """
+    from app.config import settings as ajustes
+    from app.services.runtime import reset_runtime
+    from app.services.config_generator import generate_squid_config
+    from test_config_generator import FakeDB, FakeSetting
+
+    monkeypatch.setattr(ajustes, "DEPLOY_MODE", modo)
+    reset_runtime()
+    try:
+        db = FakeDB(settings=[FakeSetting("http_port", puerto, "network")])
+        return generate_squid_config(db)
+    finally:
+        reset_runtime()
+
+
+def test_en_docker_el_puerto_de_la_bd_no_llega_al_squid_conf(monkeypatch):
+    """La prueba que define este diseño en modo contenedor.
 
     El puerto elegido en el panel es el que Docker publica, no el que Squid
     escucha. Si este test falla, el puerto ha vuelto a vivir en dos sitios y la
     avería original puede repetirse: Docker publicando un puerto donde Squid no
     escucha, sin que nada lo avise.
     """
-    from test_config_generator import FakeDB, FakeSetting
-    from app.services.config_generator import generate_squid_config
-
-    db = FakeDB(settings=[FakeSetting("http_port", "9999", "network")])
-    config = generate_squid_config(db)
+    config = _config_con_puerto("docker", monkeypatch)
 
     assert f"http_port {INTERNAL_SQUID_PORT}" in config
     assert "http_port 9999" not in config
+
+
+def test_en_nativo_el_puerto_de_la_bd_SI_llega_al_squid_conf(monkeypatch):
+    """Y la contraria, que es igual de importante.
+
+    En una instalación del sistema no hay mapeo que traduzca nada: si Squid
+    escuchara en el puerto interno fijo, el proxy quedaría sordo en el puerto
+    que el administrador eligió.
+    """
+    config = _config_con_puerto("native", monkeypatch)
+
+    assert "http_port 9999" in config
