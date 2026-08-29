@@ -2,6 +2,11 @@
 
 Esta guía te llevará paso a paso desde un servidor vacío hasta tener SquidManager funcionando.
 
+> **Esta guía es la del despliegue con Docker.** Si no quieres Docker en esa
+> máquina, hay un segundo modo en el que todo corre como servicios del sistema:
+> [instalacion-nativa.md](instalacion-nativa.md). Se elige uno de los dos; en
+> una misma máquina no conviven.
+
 ---
 
 ## Requisitos previos

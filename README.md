@@ -70,7 +70,11 @@ El sistema está pensado para ser **escalable y modular**: la base de datos es l
 - **Dashboard** — Tráfico en tiempo real, top usuarios y dominios, estado del sistema
 - **Backup y migración** — Exporta toda la configuración a JSON (incluidos grupos y usuarios LDAP) o importa un `squid.conf` tradicional
 - **Notificaciones** — Avisos por email o Telegram cuando se aplican cambios o se detecta actividad sospechosa
-- **Todo en Docker** — Un solo comando levanta todo
+
+### Despliegue e idiomas
+- **Dos modos de despliegue** — Con Docker (un solo comando levanta todo) o **sin Docker**, con Squid, el panel y PostgreSQL como servicios del sistema. Se elige con `DEPLOY_MODE` y el resto del producto es idéntico — ver [docs/instalacion-nativa.md](docs/instalacion-nativa.md)
+- **Sin root** — En modo nativo el panel corre con su propio usuario y un sudoers de tres órdenes, bastante menos de lo que concede el socket de Docker
+- **Panel en tres idiomas** — Español, inglés y portugués, seleccionable desde el propio panel. Los mensajes de error de la API también se traducen, y las páginas de error que ven los usuarios del proxy siguen su propio idioma — ver [docs/idiomas.md](docs/idiomas.md)
 
 ---
 
@@ -106,17 +110,24 @@ Para más detalles, ver [docs/architecture.md](docs/architecture.md).
 
 ## ✅ Requisitos
 
-### Sistema operativo
-- Linux (Ubuntu 24.04 recomendado)
-- También funciona en cualquier sistema con Docker
+Los requisitos dependen del modo de despliegue.
 
-### Software
+### Con Docker
+
+- **Sistema:** Linux (Ubuntu 24.04 recomendado), o cualquier sistema con Docker
 - **Docker** 20.10+ ([instalación](https://docs.docker.com/engine/install/))
 - **Docker Compose** v2+ ([instalación](https://docs.docker.com/compose/install/))
 - **Git** (para clonar el repo)
 
+### Sin Docker (instalación nativa)
+
+- **Sistema:** Ubuntu 22.04 / 24.04 o Debian 12, x86_64 — **no** vale cualquier
+  Linux, porque hace falta el paquete `squid-openssl`
+- **Acceso root** y salida a internet para descargar paquetes
+- Nada más: el instalador pone Squid, PostgreSQL, nginx, Node y Python
+
 ### Hardware mínimo
-- **CPU:** 2 núcleos (4 recomendado para compilación de Squid)
+- **CPU:** 2 núcleos (4 recomendado; con Docker se compila Squid al construir la imagen)
 - **RAM:** 2 GB (4 GB recomendado)
 - **Disco:** 5 GB libres
 - **Red:** Puerto 3128 accesible para los clientes del proxy
@@ -549,6 +560,7 @@ squid-manager/
 ## 📚 Documentación
 
 - [Instalación nativa, sin Docker](docs/instalacion-nativa.md)
+- [Idiomas del panel, de la API y del proxy](docs/idiomas.md)
 
 | Documento | Descripción |
 |-----------|-------------|

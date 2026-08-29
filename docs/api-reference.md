@@ -2,6 +2,34 @@
 
 La API tiene 14 routers y 72 endpoints.
 
+## Idioma de las respuestas
+
+Los mensajes de error se devuelven en **español, inglés o portugués** según la
+cabecera `Accept-Language` de la petición. Sin cabecera, o con un idioma que no
+se soporte, responde en español.
+
+```bash
+curl -H "Accept-Language: en" ...   # {"detail":"Rule not found"}
+curl -H "Accept-Language: pt" ...   # {"detail":"Regra não encontrada"}
+```
+
+Se admite la lista completa que manda un navegador
+(`en-US,en;q=0.9,es;q=0.8`): se usa la primera coincidencia. Detalles en
+[idiomas.md](idiomas.md).
+
+## Las métricas se sirven en dos rutas
+
+`/api/metrics/*` y `/api/panel/*` son **el mismo conjunto de endpoints**. El
+panel web usa `/api/panel`, y no es un capricho: los bloqueadores de anuncios y
+los filtros de privacidad (uBlock, AdGuard, los escudos de Brave) cortan por
+defecto cualquier URL que contenga «metrics» porque la asocian a telemetría. La
+petición no llega a salir del navegador, así que en el servidor no queda ni
+rastro y el dashboard se queda cargando para siempre sin nada que lo explique.
+
+Si consumes la API desde un script o desde otro sistema, `/api/metrics` te sirve
+igual: ahí no hay extensiones de navegador de por medio. Si la consumes **desde
+un navegador**, usa `/api/panel`.
+
 **La documentación interactiva (Swagger/OpenAPI) no se alcanza desde fuera del
 servidor.** El puerto 8000 no se publica al host, así que
 `http://TU_SERVIDOR:8000/docs` no responde; en una máquina con otros servicios
@@ -701,6 +729,10 @@ Manda un mensaje de prueba con los datos del cuerpo de la peticion, sin necesida
 ---
 
 ## Métricas
+
+> Todos los endpoints de esta sección existen tambien bajo `/api/panel/`,
+> que es la ruta que usa el panel web porque los bloqueadores de anuncios
+> cortan las URL que contienen «metrics». Ver la nota del principio.
 
 ### Dashboard completo
 ```http

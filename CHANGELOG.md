@@ -5,6 +5,102 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.14.0] - 2026-08-29
+
+### Añadido
+
+- **Despliegue sin Docker.** SquidManager puede instalarse con Squid, el panel,
+  PostgreSQL y nginx corriendo como servicios del sistema, mediante
+  `install-nativo.sh`. Para redes donde la política interna no permite Docker, o
+  para un equipo que ya hace de proxy y donde una capa de contenedores sobra. El
+  modo se elige con `DEPLOY_MODE` y **por defecto sigue siendo `docker`**: una
+  instalación existente no cambia de comportamiento al actualizar. Guía completa
+  en [docs/instalacion-nativa.md](docs/instalacion-nativa.md).
+- **Adaptador de runtime.** El panel necesitaba seis cosas del proceso de Squid
+  —recargarlo, reiniciarlo, validar una configuración, saber si está vivo, leer
+  sus contadores y hacer efectivo un cambio de puerto— y las pedía hablando
+  directamente con el daemon de Docker. Ahora viven detrás de una interfaz con
+  dos implementaciones, y el resto del código no sabe dónde corre Squid.
+- **El instalador nativo usa `squid-openssl`, no `squid`.** El paquete a secas
+  es la variante GnuTLS: sin SSL bump y sin generador de certificados. Con
+  `squid-openssl` (6.14, más nueva que la que se compila en la imagen) no hace
+  falta compilar nada, y las actualizaciones de seguridad llegan por `apt`.
+- **El panel corre sin root en modo nativo**, con usuario propio y un sudoers de
+  tres órdenes literales, sin comodines. Es bastante menos de lo que concede
+  montar el socket de Docker, que es lo que exige el otro modo.
+- **Panel en español, inglés y portugués**, seleccionable desde el menú lateral.
+  La clave de cada texto es el propio texto en español, al estilo de gettext:
+  así lo que falte por traducir sale en español y no como un identificador
+  interno. 453 cadenas del panel, 409 traducidas a los dos idiomas; las 44
+  restantes son comandos, directivas de Squid y ejemplos de configuración, que
+  son iguales en los tres idiomas.
+- **Los mensajes de la API también se traducen**, guiándose por
+  `Accept-Language`. Traducir solo el panel dejaba una aplicación que estaba en
+  inglés hasta que algo fallaba y entonces contestaba en español, justo en el
+  momento de más fricción. Se resuelve en un único manejador de excepciones y no
+  en los 60 sitios donde se lanzan los mensajes.
+- **Las páginas de error del proxy en 203 idiomas** en modo nativo, vía
+  `squid-langpack`. Son las que ve el usuario final, y Squid ya elegía el idioma
+  por el `Accept-Language` de cada navegador. Detalles en
+  [docs/idiomas.md](docs/idiomas.md).
+- **Las métricas se sirven también bajo `/api/panel`.** Ver más abajo.
+
+### Cambiado
+
+- **En modo nativo el puerto vive en el `squid.conf`.** No hay mapeo que
+  traducir, así que Squid escucha directamente donde diga el panel y cambiar de
+  puerto es reescribir el fichero y reiniciar el servicio: las ~250 líneas que
+  recreaban el contenedor no hacen falta ahí.
+- Los ficheros con secretos que el panel escribe para Squid pasan de modo 600
+  con `chown` a **640 con grupo `proxy`**. El conjunto de quien puede leerlos es
+  el mismo —root, el panel y Squid—, pero así funciona también cuando el panel
+  no es root y no puede hacer `chown`.
+- El uid del usuario `proxy` **se resuelve del sistema** en lugar de darlo por
+  supuesto en 13. Es lo habitual, pero si el usuario no existe cuando se instala
+  el paquete de Squid se crea con el primer id libre.
+- Varios mensajes de error **dependen ahora del modo de despliegue**: mandaban a
+  reconstruir la imagen o a reiniciar el contenedor, cosas que en una
+  instalación nativa no existen.
+- El texto del certificado CA en el panel deja de dar por hecho que el
+  despliegue es Docker.
+
+### Corregido
+
+- **El dashboard se quedaba en «Cargando métricas…» para siempre.** La petición
+  salía del código pero nunca llegaba al servidor: cero líneas en el log de
+  nginx mientras el endpoint respondía en 5 ms. Lo bloqueaba el propio
+  navegador, porque la URL `/api/metrics/dashboard` contiene «metrics», una
+  palabra que uBlock, AdGuard y los escudos de Brave cortan por defecto al
+  asociarla a telemetría. Como la petición no llega a salir, en el servidor no
+  queda ni rastro, y el `.catch(console.error)` del dashboard se tragaba el
+  error: no había nada que explicara el fallo.
+
+  Quien administra un proxy es justo quien suele llevar bloqueador, así que era
+  un fallo del producto esperando a ocurrirle a cualquiera. Las métricas se
+  sirven ahora también bajo `/api/panel`, que es la ruta que usa el panel web;
+  `/api/metrics` se conserva intacta para quien consuma la API desde fuera, que
+  no es un navegador con extensiones.
+- **Crear usuarios fallaba en la instalación nativa.** El backend genera el hash
+  de cada usuario del proxy invocando `htpasswd`, que viene en `apache2-utils`,
+  y el instalador nativo no lo incluía. La instalación terminaba diciendo que
+  todo había ido bien y el fallo aparecía mucho después, al crear el primer
+  usuario. El instalador ahora **comprueba los binarios que el backend ejecuta**
+  y se detiene si falta alguno, en lugar de dar por buena una instalación
+  incompleta.
+- La prueba del cambio de puerto afirmaba el comportamiento de Docker sin fijar
+  `DEPLOY_MODE`, así que pasaba o fallaba según el entorno donde se ejecutara.
+  Ahora fija el modo, y se añade la prueba contraria para el modo nativo.
+
+### Pruebas
+
+De 127 a **162**, y pasan en los dos modos de despliegue. Las nuevas cubren la
+elección del runtime, el puerto que acaba en el `squid.conf` en cada modo, el
+contrato de formato de las métricas entre ambos, la traducción de los mensajes,
+que el panel no pida rutas que un bloqueador pueda cortar, y que el instalador
+nativo traiga todos los binarios que el código invoca.
+
+---
+
 ## [0.13.0] - 2026-08-25
 
 ### Añadido

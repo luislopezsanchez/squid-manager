@@ -1,12 +1,36 @@
 # Actualizar SquidManager
 
-Una actualización trae el código nuevo, reconstruye las imágenes y aplica las
-migraciones de base de datos que hagan falta. **No toca tu configuración**:
-usuarios, reglas, puertos, certificados y ajustes se conservan.
+Una actualización trae el código nuevo y aplica las migraciones de base de datos
+que hagan falta. **No toca tu configuración**: usuarios, reglas, puertos,
+certificados y ajustes se conservan.
+
+El procedimiento depende de cómo esté desplegado. Si no lo sabes, míralo en el
+`.env`: `DEPLOY_MODE=native` o `DEPLOY_MODE=docker` (o su ausencia, que
+significa Docker).
 
 ---
 
-## Actualizar
+## Instalación nativa (sin Docker)
+
+```bash
+cd /opt/squid-manager
+sudo git pull
+sudo backend/.venv/bin/pip install -q -r backend/requirements.txt
+cd frontend && sudo npm install --silent && sudo npm run build
+sudo systemctl restart squidmanager
+```
+
+**El `npm run build` no es opcional**, y es el equivalente exacto del `--build`
+de Docker: nginx sirve los ficheros ya compilados de `frontend/dist`, así que
+sin recompilar el panel sigue ejecutando la versión anterior aunque el `git
+pull` haya ido bien.
+
+Squid solo hay que reiniciarlo si la actualización cambia su configuración, y de
+eso se encarga el propio panel al aplicar cambios.
+
+---
+
+## Instalación con Docker
 
 Desde el directorio de la instalación:
 

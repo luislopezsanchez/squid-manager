@@ -20,9 +20,24 @@ Todas las configuraciones se manejan mediante el archivo `.env` y el panel web.
 | `CORS_ORIGINS` | *(vacío)* | Orígenes permitidos por CORS, separados por comas. Vacío si accedes al panel por su propia URL |
 | `TRUSTED_PROXY_HOSTS` | `frontend` | Hosts cuya cabecera `X-Forwarded-For` se acepta para el límite de intentos de login |
 | `DEBUG` | `false` | En `true` expone `/docs` y `/openapi.json` sin autenticación — solo para desarrollo |
+| `DEPLOY_MODE` | `docker` | Cómo está desplegado Squid: `docker` (contenedor) o `native` (systemd). Lo escribe `install-nativo.sh`; en un despliegue con Docker no hay que tocarlo |
+| `NATIVE_SQUID_SERVICE` | `squid` | Nombre de la unidad de systemd, solo en modo nativo |
 | `WEB_PORT` | `3000` | Puerto del panel publicado al host |
 | `SQUID_PORT` | `3128` | Puerto que Squid escucha dentro del contenedor |
 | `PROXY_PORT` | `3128` | Puerto publicado al host (normalmente igual a `SQUID_PORT`) |
+
+### El modo de despliegue
+
+`DEPLOY_MODE` decide cómo gobierna el panel al proceso de Squid: por el socket
+de Docker o por systemd. **Por defecto es `docker`**, de modo que una
+instalación existente no cambia de comportamiento al actualizar.
+
+No es un ajuste que se cambie sobre la marcha: describe cómo está instalado el
+sistema. Ponerlo en `native` en una máquina donde Squid corre en un contenedor
+—o al revés— hace que el panel no encuentre a Squid. Lo escribe el instalador
+correspondiente y no suele tocarse a mano.
+
+Con un valor que no se reconozca, el backend avisa en el log y usa `docker`.
 
 ### Generar valores seguros
 

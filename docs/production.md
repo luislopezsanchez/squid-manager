@@ -2,6 +2,12 @@
 
 Esta guía cubre los aspectos necesarios para desplegar SquidManager en un entorno de producción real.
 
+> **Los ejemplos de esta guía son del despliegue con Docker.** Casi todo vale
+> igual para la instalación nativa —TLS por delante del panel, copias de
+> seguridad, límites de intentos, monitorización—; lo que cambia son las órdenes
+> de operación (`systemctl` en lugar de `docker compose`) y que ahí el panel no
+> necesita el socket de Docker. Ver [instalacion-nativa.md](instalacion-nativa.md).
+
 ---
 
 ## Despliegue rápido
