@@ -473,9 +473,12 @@ for _ in $(seq 1 30); do
 done
 
 for s in postgresql squid squidmanager nginx; do
-    # Margen para el reinicio que acaba de provocar la configuracion definitiva.
+    # Margen amplio a proposito: aplicar la configuracion definitiva reinicia
+    # Squid, y pararlo tarda lo que diga shutdown_lifetime (30 s por defecto),
+    # asi que un reinicio completo son treinta y pico segundos en los que el
+    # servicio no esta activo sin que pase nada malo.
     ACTIVO=0
-    for _ in $(seq 1 15); do
+    for _ in $(seq 1 60); do
         if systemctl is-active --quiet "$s"; then
             ACTIVO=1
             break
