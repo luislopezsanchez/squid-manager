@@ -64,7 +64,40 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 - El texto del certificado CA en el panel deja de dar por hecho que el
   despliegue es Docker.
 
+### Seguridad
+
+- **El proxy ya no queda abierto a la red local recién instalado.** El
+  `squid.conf` de arranque que escribían el instalador nativo y el entrypoint de
+  Docker permitía `10.0.0.0/8`, `172.16.0.0/12` y `192.168.0.0/16` **sin una sola
+  línea `auth_param`**. Comprobado en una instalación limpia: HTTP 200 a través
+  del proxy sin credenciales, y también con un usuario inexistente. La
+  configuración que sí autentica solo se escribía cuando alguien entraba al panel
+  y pulsaba «Aplicar cambios», y nada en la instalación decía que hubiera que
+  hacerlo: quien instalaba y se iba dejaba un proxy abierto sin saberlo.
+
+  Ahora los dos arranques niegan todo salvo `localhost`, y el backend aplica él
+  solo la configuración definitiva en cuanto levanta, reintentando en segundo
+  plano (en Docker la primera vez Squid tarda, porque compila desde fuente). El
+  instalador espera a que aparezca `auth_param` y avisa si no llega. Pruebas
+  nuevas impiden que un fichero de arranque vuelva a permitir la LAN.
+
 ### Corregido
+
+- **El instalador nativo moría en el paso 4 sin DNS.** Al terminar el `apt`,
+  `needrestart` reinicia `systemd-resolved`, y el `git clone` que va justo
+  después fallaba con «Could not resolve host: github.com», dejando la máquina a
+  medias. Pasó a la primera en una instalación limpia sobre Ubuntu 24.04. Ahora
+  `needrestart` queda suspendido durante la instalación y el clon se reintenta
+  cinco veces.
+- **`PROXY_PORT` desaparece del `.env` en modo nativo.** Lo lee únicamente
+  `docker-compose.yml`, para publicar el puerto del contenedor; en una
+  instalación del sistema el puerto vive en el `squid.conf` y nadie consultaba
+  esa variable. Quedaba con el valor de la instalación en cuanto se cambiaba el
+  puerto desde el panel: una segunda copia que solo podía mentir.
+- **La comprobación final del instalador daba un falso aviso.** Al aplicarse
+  sola la configuración definitiva —que lleva SSL Bump y exige reinicio— Squid
+  pasa unos segundos arrancando, y el instalador lo veía ahí y anunciaba que no
+  estaba activo.
 
 - **El dashboard se quedaba en «Cargando métricas…» para siempre.** La petición
   salía del código pero nunca llegaba al servidor: cero líneas en el log de
@@ -92,6 +125,10 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
   Ahora fija el modo, y se añade la prueba contraria para el modo nativo.
 
 ### Pruebas
+
+- `frontend/package.json` declara `engines.node >= 18.18`. Ubuntu 24.04 trae
+  Node 18.19 y nada fijaba la versión: el día que Vite subiera a una que
+  exigiera Node 20, las instalaciones nativas romperían sin motivo aparente.
 
 De 127 a **162**, y pasan en los dos modos de despliegue. Las nuevas cubren la
 elección del runtime, el puerto que acaba en el `squid.conf` en cada modo, el

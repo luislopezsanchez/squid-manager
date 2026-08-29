@@ -344,7 +344,10 @@ TRUSTED_PROXY_HOSTS=localhost
 DEBUG=false
 SQUID_CONFIG_PATH=/etc/squid/squid.conf
 WEB_PORT=${WEB_PORT}
-PROXY_PORT=${PROXY_PORT}
+# PROXY_PORT no se escribe a proposito: en modo nativo el puerto vive solo
+# en el squid.conf, y aqui solo lo lee docker-compose. Tenerlo aqui era una
+# segunda copia que nadie actualizaba y que mentia en cuanto se cambiaba el
+# puerto desde el panel.
 EOF
 chown root:"$(id -gn "$APP_USER")" "$INSTALL_DIR/.env"
 chmod 640 "$INSTALL_DIR/.env"
@@ -452,14 +455,48 @@ systemctl reload-or-restart nginx
 sleep 5
 
 FALLOS=0
+
+# Primero se espera a que el backend sustituya el arranque provisional por la
+# configuracion definitiva. Importa el orden: esa configuracion lleva SSL Bump,
+# asi que se aplica REINICIANDO Squid, y comprobar los servicios antes pillaba
+# a Squid a medio arrancar y avisaba de que estaba caido sin estarlo.
+#
+# El arranque provisional solo permite localhost. Si se quedara ahi, el proxy no
+# serviria a nadie y el sintoma —"no navego"— no apuntaria a ninguna parte.
+AUTENTICA=0
+for _ in $(seq 1 30); do
+    if grep -q "^auth_param" /etc/squid/squid.conf 2>/dev/null; then
+        AUTENTICA=1
+        break
+    fi
+    sleep 3
+done
+
 for s in postgresql squid squidmanager nginx; do
-    if systemctl is-active --quiet "$s"; then
+    # Margen para el reinicio que acaba de provocar la configuracion definitiva.
+    ACTIVO=0
+    for _ in $(seq 1 15); do
+        if systemctl is-active --quiet "$s"; then
+            ACTIVO=1
+            break
+        fi
+        sleep 2
+    done
+    if [ "$ACTIVO" = "1" ]; then
         ok "$s: activo"
     else
         warn "$s: NO activo"
         FALLOS=$((FALLOS + 1))
     fi
 done
+
+if [ "$AUTENTICA" = "1" ]; then
+    ok "Proxy con autenticacion activa"
+else
+    warn "El proxy sigue con la configuracion de arranque (solo localhost)."
+    warn "Entra al panel y pulsa «Aplicar cambios» para activarlo."
+    FALLOS=$((FALLOS + 1))
+fi
 
 # Se comprueban las dos capas por separado: si solo respondiera una, el
 # sintoma en el navegador seria el mismo (un panel en blanco) y la causa muy
@@ -475,26 +512,6 @@ if curl -fsS -m 10 -o /dev/null "http://127.0.0.1:${WEB_PORT}/"; then
     ok "El panel responde en el puerto ${WEB_PORT}"
 else
     warn "El panel no responde; revisa: nginx -t && journalctl -u nginx -n 50"
-    FALLOS=$((FALLOS + 1))
-fi
-
-# El arranque provisional solo permite localhost, y el backend lo sustituye por
-# la configuracion real (con autenticacion) nada mas arrancar. Se comprueba: si
-# se quedara el provisional, el proxy no serviria a nadie y el sintoma —"no
-# navego"— no apuntaria a ninguna parte.
-AUTENTICA=0
-for _ in $(seq 1 20); do
-    if grep -q "^auth_param" /etc/squid/squid.conf 2>/dev/null; then
-        AUTENTICA=1
-        break
-    fi
-    sleep 3
-done
-if [ "$AUTENTICA" = "1" ]; then
-    ok "Proxy con autenticacion activa"
-else
-    warn "El proxy sigue con la configuracion de arranque (solo localhost)."
-    warn "Entra al panel y pulsa «Aplicar cambios» para activarlo."
     FALLOS=$((FALLOS + 1))
 fi
 

@@ -153,3 +153,42 @@ def test_en_nativo_el_puerto_de_la_bd_SI_llega_al_squid_conf(monkeypatch):
     config = _config_con_puerto("native", monkeypatch)
 
     assert "http_port 9999" in config
+
+
+def test_el_env_nativo_no_declara_PROXY_PORT():
+    """En una instalación nativa esa variable solo puede mentir.
+
+    PROXY_PORT lo lee únicamente docker-compose.yml, para publicar el puerto del
+    contenedor. En modo nativo el puerto vive en el squid.conf y nada consulta
+    el .env, así que dejarlo escrito creaba una segunda copia que nadie
+    actualizaba: se cambiaba el puerto desde el panel y el fichero seguía
+    anunciando el de la instalación.
+
+    Y el intento de mantenerla al día era peor que la enfermedad: obligaba al
+    panel a reescribir el fichero que guarda la contraseña de la base de datos
+    y la clave de firma de los JWT, solo para que un valor que nadie lee dejara
+    de mentir.
+    """
+    from pathlib import Path
+
+    raiz = None
+    for base in Path(__file__).resolve().parents:
+        if (base / "install-nativo.sh").is_file():
+            raiz = base
+            break
+    if raiz is None:
+        pytest.skip("no está el instalador en este árbol")
+
+    texto = (raiz / "install-nativo.sh").read_text(encoding="utf-8")
+    inicio = texto.index('cat > "$INSTALL_DIR/.env"')
+    fin = texto.index("EOF", inicio)
+    bloque = texto[inicio:fin]
+
+    asignaciones = [
+        l for l in bloque.splitlines()
+        if l.strip().startswith("PROXY_PORT=")
+    ]
+    assert not asignaciones, (
+        "el .env nativo vuelve a declarar PROXY_PORT: "
+        f"{asignaciones}. En modo nativo nadie lo lee y se queda desfasado."
+    )

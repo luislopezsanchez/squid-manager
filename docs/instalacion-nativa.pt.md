@@ -50,6 +50,29 @@ WEB_PORT=8080 PROXY_PORT=3130 sudo -E ./install-nativo.sh
 | `APP_USER` | `squidmgr` | Usuário com que o painel roda |
 | `BRANCH` | `main` | Branch do repositório a implantar |
 
+## Recém-instalado, o proxy não deixa ninguém passar
+
+É de propósito, e convém saber antes de testar.
+
+Entre o Squid subir e existir uma configuração de verdade passam alguns
+segundos. A configuração desse intervalo **nega tudo exceto `localhost`**: se
+permitisse a rede local, qualquer um da faixa privada poderia usar o proxy sem
+credenciais durante esse tempo — e por todo o tempo que levasse até alguém
+entrar no painel.
+
+O painel substitui esse arranque pela configuração definitiva, com
+autenticação, assim que o backend sobe. O instalador confere isso antes de
+terminar e avisa se não tiver acontecido.
+
+Consequência prática: **numa instalação nova ninguém navega**, porque ainda não
+há nenhum usuário do proxy. Crie o primeiro no painel, em *Usuários → Novo
+usuário*, e a partir daí o proxy pede usuário e senha.
+
+```bash
+# sem credenciais: 407, que é o correto
+curl -x http://IP_DO_SERVIDOR:3128 -o /dev/null -w "%{http_code}\n" http://example.com
+```
+
 ## O que instala, e por que assim
 
 ### `squid-openssl`, não `squid`

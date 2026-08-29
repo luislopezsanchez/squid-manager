@@ -231,6 +231,21 @@ curl -o /dev/null -w "%{http_code}" http://localhost:3000/
 
 ---
 
+## Freshly installed, the proxy lets nobody through
+
+Same as in native mode, and for the same reason.
+
+The `squid.conf` the container writes on startup **denies everything except
+`localhost`**. The backend replaces it with the definitive, authenticated
+configuration as soon as it starts; the first time it may take a while, because
+the image compiles Squid from source, so it retries in the background.
+
+Until you create the first proxy user, nobody browses. That is the intent: a
+brand-new installation must not sit open to the network while its owner has not
+even logged into the panel yet.
+
+---
+
 ## Post-installation configuration
 
 ### Changing the admin password
