@@ -68,7 +68,7 @@ export default function CertificadoCA() {
         <div className="flex items-center gap-3">
           <span className={`inline-flex h-3 w-3 rounded-full ${caInfo?.available ? 'bg-green-500' : 'bg-red-500'}`} />
           <span className="font-medium text-ink">
-            {caInfo?.available ? 'Certificado CA disponible' : 'Certificado CA no disponible'}
+            {caInfo?.available ? traducir('Certificado CA disponible') : traducir('Certificado CA no disponible')}
           </span>
         </div>
       </div>

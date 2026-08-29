@@ -110,13 +110,13 @@ export default function AccessRules() {
           onClick={() => { setShowForm(!showForm); setEditingId(null); setForm({ action: 'allow', acl_names: '', order: rules.length, description: '', enabled: true }) }}
           className="btn btn-primary"
         >
-          {showForm ? 'Cancelar' : '+ Nueva Regla'}
+          {showForm ? traducir('Cancelar') : traducir('+ Nueva Regla')}
         </button>
       </div>
 
       {showForm && (
         <form onSubmit={handleSave} className="card p-6 mb-6">
-          <h3 className="font-medium text-ink mb-4">{editingId ? 'Editar Regla' : 'Nueva Regla de Acceso'}</h3>
+          <h3 className="font-medium text-ink mb-4">{editingId ? traducir('Editar Regla') : traducir('Nueva Regla de Acceso')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="field-label block mb-1.5">{traducir("Acción")}</label>
@@ -165,7 +165,7 @@ export default function AccessRules() {
           </div>
           {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
           <button type="submit" className="mt-4 btn btn-primary">
-            {editingId ? 'Guardar Cambios' : 'Crear Regla'}
+            {editingId ? traducir('Guardar Cambios') : traducir('Crear Regla')}
           </button>
         </form>
       )}

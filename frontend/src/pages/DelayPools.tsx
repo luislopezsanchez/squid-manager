@@ -240,7 +240,7 @@ export default function DelayPools() {
           }}
           className="btn btn-primary"
         >
-          {showForm ? 'Cancelar' : '+ Nuevo Delay Pool'}
+          {showForm ? traducir('Cancelar') : traducir('+ Nuevo Delay Pool')}
         </button>
       </div>
 
@@ -254,26 +254,38 @@ export default function DelayPools() {
 
       {showForm && (
         <form onSubmit={handleSave} className="card p-6 mb-6">
-          <h3 className="font-medium text-ink mb-4">{editingId ? 'Editar Delay Pool' : 'Nuevo Delay Pool'}</h3>
+          <h3 className="font-medium text-ink mb-4">{editingId ? traducir('Editar Delay Pool') : traducir('Nuevo Delay Pool')}</h3>
 
           {/* Selector de clase */}
           <div className="mb-6">
             <label className="field-label block mb-1.5">{traducir("Tipo de limitación")}</label>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Object.values(CLASS_LEVELS).map(c => (
-                <button
-                  key={c.label}
-                  type="button"
-                  onClick={() => setForm({ ...form, pool_class: Object.keys(CLASS_LEVELS).find(k => CLASS_LEVELS[Number(k)].label === c.label) ? Number(Object.keys(CLASS_LEVELS).find(k => CLASS_LEVELS[Number(k)].label === c.label)) : form.pool_class })}
-                  className={`text-left p-3 rounded-lg border-2 transition ${
-                    form.pool_class === Object.keys(CLASS_LEVELS).find(k => CLASS_LEVELS[Number(k)].label === c.label)
-                      ? 'border-primary-500 bg-primary-50' : 'border-line hover:border-line'
-                  }`}
-                >
-                  <p className="font-medium text-sm text-ink">{c.label}</p>
-                  <p className="text-xs text-ink-3 mt-1">{c.levels.length} nivel(es) de limitación</p>
-                </button>
-              ))}
+              {/* Se recorre con entries() para tener la clase a mano. Antes se
+                  recorrían los valores y se recuperaba la clase buscándola de
+                  vuelta por su etiqueta, tres veces por botón. Eso fallaba de
+                  dos maneras: `Object.keys` devuelve cadenas, así que la
+                  comparación con `pool_class` —que es un número— era siempre
+                  falsa y la clase elegida nunca se resaltaba; y la búsqueda por
+                  etiqueta se apoyaba en un texto que ahora está traducido. */}
+              {Object.entries(CLASS_LEVELS).map(([clave, c]) => {
+                const clase = Number(clave)
+                return (
+                  <button
+                    key={clave}
+                    type="button"
+                    onClick={() => setForm({ ...form, pool_class: clase })}
+                    className={`text-left p-3 rounded-lg border-2 transition ${
+                      form.pool_class === clase
+                        ? 'border-primary-500 bg-primary-50' : 'border-line hover:border-line'
+                    }`}
+                  >
+                    <p className="font-medium text-sm text-ink">{c.label}</p>
+                    <p className="text-xs text-ink-3 mt-1">
+                      {traducir("{n} nivel(es) de limitación", { n: c.levels.length })}
+                    </p>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -365,7 +377,7 @@ export default function DelayPools() {
 
           {error && <div className="mb-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
           <button type="submit" className="btn btn-primary">
-            {editingId ? 'Guardar Cambios' : 'Crear Delay Pool'}
+            {editingId ? traducir('Guardar Cambios') : traducir('Crear Delay Pool')}
           </button>
         </form>
       )}

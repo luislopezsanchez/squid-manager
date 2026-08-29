@@ -57,7 +57,7 @@ export default function SyslogConfig() {
         <div className="flex items-center gap-3">
           <span className={`inline-flex h-3 w-3 rounded-full ${config.enabled ? 'bg-ok' : 'bg-ink-3'}`} />
           <span className="font-medium text-ink">
-            {config.enabled ? 'Reenvío activado' : 'Reenvío desactivado'}
+            {config.enabled ? traducir('Reenvío activado') : traducir('Reenvío desactivado')}
           </span>
           <label className="ml-auto flex items-center gap-2 cursor-pointer">
             <input
@@ -116,14 +116,14 @@ export default function SyslogConfig() {
 
         <div className="flex gap-3 mt-4">
           <button onClick={handleSave} disabled={saving} className="btn btn-primary disabled:opacity-50">
-            {saving ? 'Guardando...' : 'Guardar Configuración'}
+            {saving ? traducir('Guardando...') : traducir('Guardar Configuración')}
           </button>
           <button
             onClick={handleTest}
             disabled={testing || !config.host}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
           >
-            {testing ? 'Enviando...' : 'Enviar mensaje de prueba'}
+            {testing ? traducir('Enviando...') : traducir('Enviar mensaje de prueba')}
           </button>
         </div>
         <p className="text-xs text-ink-3 mt-2">{traducir("\"Enviar mensaje de prueba\" manda un mensaje ahora mismo con los datos de este formulario, sin necesidad de guardar antes — así se puede probar un destino nuevo sin activarlo todavía.")}</p>

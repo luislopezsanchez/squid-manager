@@ -173,7 +173,7 @@ export default function Notifications() {
                 <label className="block text-xs font-medium text-ink-3 mb-1">
                   Contraseña SMTP {config.smtp_password_set && <span className="text-ok">{traducir("(guardada)")}</span>}
                 </label>
-                <input type="password" value={smtpPassword} placeholder={config.smtp_password_set ? '••••••••' : 'Nueva contraseña'}
+                <input type="password" value={smtpPassword} placeholder={config.smtp_password_set ? '••••••••' : traducir('Nueva contraseña')}
                   onChange={e => setSmtpPassword(e.target.value)}
                   className="input text-sm" />
               </div>
@@ -193,7 +193,7 @@ export default function Notifications() {
             <div className="flex items-center gap-3">
               <button onClick={testEmail} disabled={testingEmail}
                 className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#48B3D0' }}>
-                {testingEmail ? 'Enviando…' : 'Enviar correo de prueba'}
+                {testingEmail ? traducir('Enviando…') : traducir('Enviar correo de prueba')}
               </button>
               <span className="text-xs text-ink-3">{traducir("Prueba con los datos actuales del formulario (no hace falta guardar antes)")}</span>
             </div>
@@ -218,7 +218,7 @@ export default function Notifications() {
               <label className="block text-xs font-medium text-ink-3 mb-1">
                 Bot Token {config.telegram_bot_token_set && <span className="text-ok">{traducir("(guardado)")}</span>}
               </label>
-              <input type="password" value={telegramToken} placeholder={config.telegram_bot_token_set ? '••••••••' : 'Nuevo token'}
+              <input type="password" value={telegramToken} placeholder={config.telegram_bot_token_set ? '••••••••' : traducir('Nuevo token')}
                 onChange={e => setTelegramToken(e.target.value)}
                 className="input text-sm" />
             </div>
@@ -234,7 +234,7 @@ export default function Notifications() {
             </p>
             <button onClick={testTelegram} disabled={testingTelegram}
               className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#48B3D0' }}>
-              {testingTelegram ? 'Enviando…' : 'Enviar mensaje de prueba'}
+              {testingTelegram ? traducir('Enviando…') : traducir('Enviar mensaje de prueba')}
             </button>
           </div>
         )}
@@ -268,7 +268,7 @@ export default function Notifications() {
       {/* Guardar */}
       <button onClick={save} disabled={saving}
         className="px-6 py-3 text-white rounded-lg font-medium disabled:opacity-50" style={{ backgroundColor: '#0B497C' }}>
-        {saving ? 'Guardando…' : 'Guardar configuración'}
+        {saving ? traducir('Guardando…') : traducir('Guardar configuración')}
       </button>
 
       <ToastContainer />

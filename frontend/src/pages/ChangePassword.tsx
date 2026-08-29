@@ -57,11 +57,10 @@ export default function ChangePassword() {
 
   return (
     <AuthShell
-      titulo={forced ? 'Elige tu contraseña' : 'Cambiar contraseña'}
+      titulo={forced ? traducir('Elige tu contraseña') : traducir('Cambiar contraseña')}
       subtitulo={
         forced
-          ? 'Es tu primer acceso. Define una contraseña que solo conozcas tú.'
-          : 'Al cambiarla se cerrarán las sesiones abiertas en otros navegadores.'
+          ? traducir('Es tu primer acceso. Define una contraseña que solo conozcas tú.') : traducir('Al cambiarla se cerrarán las sesiones abiertas en otros navegadores.')
       }
     >
       <form onSubmit={handleSubmit}>

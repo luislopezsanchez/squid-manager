@@ -84,7 +84,7 @@ export default function Groups() {
           onClick={() => setShowForm(!showForm)}
           className="btn btn-primary"
         >
-          {showForm ? 'Cancelar' : '+ Nuevo Grupo'}
+          {showForm ? traducir('Cancelar') : traducir('+ Nuevo Grupo')}
         </button>
       </div>
 

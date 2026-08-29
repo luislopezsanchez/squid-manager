@@ -96,13 +96,13 @@ export default function ACLs() {
           onClick={() => { setShowForm(!showForm); setEditingId(null); setForm({ name: '', type: 'dstdomain', value: '', description: '', enabled: true }) }}
           className="btn btn-primary"
         >
-          {showForm ? 'Cancelar' : '+ Nueva ACL'}
+          {showForm ? traducir('Cancelar') : traducir('+ Nueva ACL')}
         </button>
       </div>
 
       {showForm && (
         <form onSubmit={handleSave} className="card p-6 mb-6">
-          <h3 className="font-medium text-ink mb-4">{editingId ? 'Editar ACL' : 'Nueva ACL'}</h3>
+          <h3 className="font-medium text-ink mb-4">{editingId ? traducir('Editar ACL') : traducir('Nueva ACL')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="field-label block mb-1.5">{traducir("Nombre")}</label>
@@ -131,7 +131,7 @@ export default function ACLs() {
           {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
           <div className="mt-4 flex gap-3">
             <button type="submit" className="btn btn-primary">
-              {editingId ? 'Guardar Cambios' : 'Crear ACL'}
+              {editingId ? traducir('Guardar Cambios') : traducir('Crear ACL')}
             </button>
           </div>
         </form>

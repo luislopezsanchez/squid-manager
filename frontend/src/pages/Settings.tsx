@@ -109,7 +109,7 @@ export default function Settings() {
                         className="btn btn-ghost btn-sm"
                         title={traducir("Consulta a esos servidores para ver si responden, sin guardar nada")}
                       >
-                        {testingDns ? 'Probando...' : 'Probar'}
+                        {testingDns ? traducir('Probando...') : traducir('Probar')}
                       </button>
                     )}
                     <button
@@ -117,7 +117,7 @@ export default function Settings() {
                       disabled={saving === key}
                       className="btn btn-primary btn-sm"
                     >
-                      {saving === key ? '...' : 'Guardar'}
+                      {saving === key ? '...' : traducir('Guardar')}
                     </button>
                   </div>
 

@@ -148,7 +148,7 @@ export default function Admins() {
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold mb-4">{editing ? 'Editar Admin' : 'Nuevo Admin'}</h2>
+            <h2 className="text-xl font-bold mb-4">{editing ? traducir('Editar Admin') : traducir('Nuevo Admin')}</h2>
             <div className="space-y-4">
               <div>
                 <label className="field-label block mb-1.5">{traducir("Usuario")}</label>

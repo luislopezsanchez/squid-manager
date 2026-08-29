@@ -259,7 +259,7 @@ export default function ParentProxy() {
 
       <div className="flex items-center gap-3">
         <button onClick={guardar} disabled={saving} className="btn btn-primary btn-sm">
-          {saving ? 'Guardando...' : 'Guardar'}
+          {saving ? traducir('Guardando...') : traducir('Guardar')}
         </button>
         <button
           onClick={probar}
@@ -267,7 +267,7 @@ export default function ParentProxy() {
           className="btn btn-ghost btn-sm"
           title={traducir("Pregunta al proxy padre sin guardar nada")}
         >
-          {testing ? 'Probando...' : 'Probar conexión'}
+          {testing ? traducir('Probando...') : traducir('Probar conexión')}
         </button>
       </div>
 

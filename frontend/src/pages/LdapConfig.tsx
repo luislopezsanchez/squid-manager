@@ -103,7 +103,7 @@ export default function LdapConfig() {
         <div className="flex items-center gap-3">
           <span className={`inline-flex h-3 w-3 rounded-full ${config.enabled ? 'bg-ok' : 'bg-ink-3'}`} />
           <span className="font-medium text-ink">
-            {config.enabled ? 'LDAP activado' : 'LDAP desactivado'}
+            {config.enabled ? traducir('LDAP activado') : traducir('LDAP desactivado')}
           </span>
           <label className="ml-auto flex items-center gap-2 cursor-pointer">
             <input
@@ -157,7 +157,7 @@ export default function LdapConfig() {
             <label className="field-label block mb-1.5">{traducir("Contraseña Bind")}</label>
             <input type="password" value={config.bind_password === '***' ? '' : config.bind_password}
               onChange={e => setConfig({ ...config, bind_password: e.target.value })}
-              placeholder={config.bind_password === '***' ? '•••••••• (guardada)' : 'Contraseña'}
+              placeholder={config.bind_password === '***' ? traducir('•••••••• (guardada)') : traducir('Contraseña')}
               className="input" />
           </div>
           <div>
@@ -183,7 +183,7 @@ export default function LdapConfig() {
           disabled={saving}
           className="mt-4 btn btn-primary disabled:opacity-50"
         >
-          {saving ? 'Guardando...' : 'Guardar Configuración'}
+          {saving ? traducir('Guardando...') : traducir('Guardar Configuración')}
         </button>
       </div>
 
@@ -208,7 +208,7 @@ export default function LdapConfig() {
           disabled={testing || !testUser.username || !testUser.password}
           className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
         >
-          {testing ? 'Probando...' : 'Probar Conexión'}
+          {testing ? traducir('Probando...') : traducir('Probar Conexión')}
         </button>
 
         {/* Resultados del test */}
@@ -249,7 +249,7 @@ export default function LdapConfig() {
             disabled={syncing || !config.enabled}
             className="btn btn-primary disabled:opacity-50"
           >
-            {syncing ? 'Sincronizando…' : 'Sincronizar con AD'}
+            {syncing ? traducir('Sincronizando…') : traducir('Sincronizar con AD')}
           </button>
         </div>
 

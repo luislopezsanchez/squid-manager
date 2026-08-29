@@ -151,7 +151,7 @@ function PasswordModal({ username, onClose, onSetPassword, onGenerate }: {
             <div className="space-y-3">
               <button onClick={handleGenerate} disabled={busy}
                 className="w-full btn btn-primary disabled:opacity-50">
-                {busy ? 'Generando…' : 'Generar automática'}
+                {busy ? traducir('Generando…') : traducir('Generar automática')}
               </button>
               <button onClick={() => setMode('manual')} disabled={busy}
                 className="w-full px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">{traducir("Establecer una propia")}</button>
@@ -172,7 +172,7 @@ function PasswordModal({ username, onClose, onSetPassword, onGenerate }: {
               <button type="button" onClick={() => setMode('choose')}
                 className="flex-1 px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">{traducir("Atrás")}</button>
               <button type="submit" disabled={busy} className="flex-1 btn btn-primary disabled:opacity-50">
-                {busy ? 'Guardando…' : 'Guardar'}
+                {busy ? traducir('Guardando…') : traducir('Guardar')}
               </button>
             </div>
           </form>
@@ -297,7 +297,7 @@ export default function ProxyUsers() {
     try {
       const result = u.source === 'local' ? await api.toggleUser(u.id) : await api.toggleLdapUser(u.id)
       loadUsers()
-      showToast(`Usuario "${result.username}" ${result.enabled ? 'activado' : 'desactivado'}`)
+      showToast(`Usuario "${result.username}" ${result.enabled ? traducir('activado') : traducir('desactivado')}`)
     } catch (e: any) {
       showToast(`Error: ${e.message}`, 'error')
     } finally {
@@ -338,7 +338,7 @@ export default function ProxyUsers() {
             onClick={() => setShowForm(!showForm)}
             className="btn btn-primary"
           >
-            {showForm ? 'Cancelar' : '+ Nuevo Usuario Local'}
+            {showForm ? traducir('Cancelar') : traducir('+ Nuevo Usuario Local')}
           </button>
         </div>
       </div>
@@ -457,7 +457,7 @@ export default function ProxyUsers() {
                     <button onClick={() => handleToggle(u)}
                       disabled={isPending(u)}
                       className="text-primary-600 hover:text-primary-800 text-sm font-medium disabled:opacity-50 disabled:cursor-wait"
-                      title={u.enabled ? 'Bloquea su acceso a internet hasta que lo habilites' : 'Permite que navegue a través del proxy'}>
+                      title={u.enabled ? traducir('Bloquea su acceso a internet hasta que lo habilites') : traducir('Permite que navegue a través del proxy')}>
                       {isPending(u) ? 'Aplicando…' : (u.enabled ? 'Bloquear acceso' : 'Habilitar acceso')}
                     </button>
                     {u.source === 'local' && (
@@ -480,8 +480,7 @@ export default function ProxyUsers() {
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-ink-3">
                     {allUsers.length === 0
-                      ? 'No hay usuarios. Crea el primero o sincroniza LDAP.'
-                      : 'Ningún usuario coincide con el filtro.'}
+                      ? traducir('No hay usuarios. Crea el primero o sincroniza LDAP.') : traducir('Ningún usuario coincide con el filtro.')}
                   </td>
                 </tr>
               )}
