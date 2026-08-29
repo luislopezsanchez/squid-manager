@@ -77,7 +77,7 @@ def test_en_nativo_no_hay_segunda_copia_del_puerto_que_sincronizar():
 # ---------------------------------------------------------------------------
 def test_detecta_los_puertos_en_escucha(tmp_path):
     # Formato real de /proc/net/tcp: 0A es LISTEN, 01 es ESTABLISHED.
-    # 0x0C38 = 3128, 0x1F90 = 8000, 0x0050 = 80.
+    # 0x0C38 = 3128, 0x1F90 = 8080, 0x0050 = 80.
     proc_tcp = tmp_path / "tcp"
     proc_tcp.write_text(
         "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt\n"
@@ -89,7 +89,7 @@ def test_detecta_los_puertos_en_escucha(tmp_path):
     puertos = NativeRuntime._listening_ports((str(proc_tcp),))
 
     assert 3128 in puertos
-    assert 8000 in puertos
+    assert 8080 in puertos
     # Una conexion establecida no es alguien escuchando.
     assert 80 not in puertos
 
