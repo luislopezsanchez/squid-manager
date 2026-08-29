@@ -27,7 +27,9 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "Administrador no encontrado": "Administrator not found",
         "Archivo JSON inválido": "Invalid JSON file",
         "Certificado CA no encontrado. Reinicia el contenedor Squid.":
-            "CA certificate not found. Restart Squid.",
+            "CA certificate not found. Restart the Squid container.",
+        "Certificado CA no encontrado. Vuelve a ejecutar install-nativo.sh para regenerarla.":
+            "CA certificate not found. Run install-nativo.sh again to regenerate it.",
         "Certificado válido": "Valid certificate",
         "Contraseña actual incorrecta": "Current password is incorrect",
         "Delay pool no encontrado": "Delay pool not found",
@@ -111,7 +113,9 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "Administrador no encontrado": "Administrador não encontrado",
         "Archivo JSON inválido": "Arquivo JSON inválido",
         "Certificado CA no encontrado. Reinicia el contenedor Squid.":
-            "Certificado CA não encontrado. Reinicie o Squid.",
+            "Certificado CA não encontrado. Reinicie o contêiner do Squid.",
+        "Certificado CA no encontrado. Vuelve a ejecutar install-nativo.sh para regenerarla.":
+            "Certificado CA não encontrado. Execute install-nativo.sh novamente para regenerá-lo.",
         "Certificado válido": "Certificado válido",
         "Contraseña actual incorrecta": "Senha atual incorreta",
         "Delay pool no encontrado": "Delay pool não encontrado",

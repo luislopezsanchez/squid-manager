@@ -186,7 +186,16 @@ async def download_ca_cert(_: Admin = Depends(get_current_admin)):
             headers={"Content-Disposition": "attachment; filename=squidmanager-ca.crt"},
         )
     except FileNotFoundError:
-        raise HTTPException(404, detail="Certificado CA no encontrado. Reinicia el contenedor Squid.")
+        # Quien genera la CA es distinto en cada despliegue: el arranque del
+        # contenedor en uno, el instalador en el otro. Decir el remedio
+        # equivocado manda a dar vueltas.
+        from app.services.runtime import get_runtime
+
+        if get_runtime().name == "native":
+            remedio = "Vuelve a ejecutar install-nativo.sh para regenerarla."
+        else:
+            remedio = "Reinicia el contenedor Squid."
+        raise HTTPException(404, detail=f"Certificado CA no encontrado. {remedio}")
 
 
 @router.get("/ca-deploy/install-cert.bat")
