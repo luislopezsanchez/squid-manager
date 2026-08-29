@@ -1,5 +1,7 @@
 # Guía de Instalación — SquidManager
 
+**Español · [English](installation.en.md) · [Português](installation.pt.md)**
+
 Esta guía te llevará paso a paso desde un servidor vacío hasta tener SquidManager funcionando.
 
 > **Esta guía es la del despliegue con Docker.** Si no quieres Docker en esa

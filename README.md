@@ -1,5 +1,7 @@
 # SquidManager
 
+**Español · [English](README.en.md) · [Português](README.pt.md)**
+
 <p align="center">
   <strong>Panel web de gestión para Squid Proxy con Docker, FastAPI, React y SSL Bump</strong>
 </p>

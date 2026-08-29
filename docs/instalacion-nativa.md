@@ -1,5 +1,7 @@
 # Instalación nativa (sin Docker)
 
+**Español · [English](instalacion-nativa.en.md) · [Português](instalacion-nativa.pt.md)**
+
 SquidManager puede desplegarse sin Docker, con Squid, el panel, PostgreSQL y
 nginx corriendo como servicios del sistema. Es la alternativa al despliegue con
 contenedores, no un complemento: en una misma máquina se usa uno **o** el otro.
@@ -141,6 +143,11 @@ sudo backend/.venv/bin/pip install -q -r backend/requirements.txt
 cd frontend && sudo npm install --silent && sudo npm run build
 sudo systemctl restart squidmanager
 ```
+
+**El `npm run build` no es opcional**, y es el equivalente exacto del `--build`
+de Docker: nginx sirve los ficheros ya compilados de `frontend/dist`, así que
+sin recompilar el panel sigue ejecutando la versión anterior aunque el `git
+pull` haya ido bien.
 
 El panel aplica las migraciones de base de datos al arrancar, así que no hay
 paso aparte para eso.
