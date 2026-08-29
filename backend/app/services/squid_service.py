@@ -27,10 +27,23 @@ PASSWD_PATH = Path("/etc/squid/squid_passwd")
 LDAP_CONF_PATH = Path("/etc/squid/ldap_helper.conf")
 LDAP_ALLOWLIST_PATH = Path("/etc/squid/ldap_allowlist")
 
-# uid/gid del usuario 'proxy'. Coincide en la imagen del proyecto y en el
-# paquete squid-openssl de Debian/Ubuntu, asi que sirve para los dos modos.
+# uid/gid del usuario 'proxy'. En la imagen del proyecto y en una Debian recien
+# instalada son 13:13, pero no se pueden dar por sentados: si el usuario no
+# existia al instalar el paquete de Squid, se crea con el primer id libre. Se
+# resuelven del sistema y los valores de abajo son solo el ultimo recurso.
 PROXY_UID = 13
 PROXY_GID = 13
+
+
+def _proxy_ids() -> tuple[int, int]:
+    """uid/gid reales del usuario con el que corre Squid."""
+    try:
+        import pwd
+
+        entrada = pwd.getpwnam("proxy")
+        return entrada.pw_uid, entrada.pw_gid
+    except Exception:
+        return PROXY_UID, PROXY_GID
 
 
 def _write_private(path: Path, content: str) -> None:
@@ -65,8 +78,9 @@ def _write_private(path: Path, content: str) -> None:
     # Solo root puede reasignar propietario. Intentarlo sin serlo falla siempre
     # y llenaría el log de avisos en cada aplicación de la configuración.
     if getattr(os, "geteuid", lambda: 1)() == 0:
+        uid, gid = _proxy_ids()
         try:
-            os.chown(path, PROXY_UID, PROXY_GID)
+            os.chown(path, uid, gid)
         except (PermissionError, OSError) as e:
             logger.warning(f"No se pudo cambiar el propietario de {path}: {e}")
 

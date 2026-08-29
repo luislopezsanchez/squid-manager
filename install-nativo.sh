@@ -207,7 +207,20 @@ chmod 2770 /etc/squid
 
 # Configuracion minima para que Squid arranque; el panel escribira la de
 # verdad en el primer «Aplicar cambios».
-if [ ! -s /etc/squid/squid.conf ] || grep -q "SquidManager - Configuracion inicial" /etc/squid/squid.conf 2>/dev/null; then
+# El paquete instala su propio squid.conf de ejemplo, de casi 10.000 lineas.
+# Hay que reconocerlo y sustituirlo: si se conserva, Squid arranca con la
+# politica de fabrica (deja pasar a localhost sin autenticar) y el panel parece
+# instalado cuando en realidad no gobierna nada.
+es_config_de_fabrica() {
+    [ -f /etc/squid/squid.conf ] || return 0
+    [ -s /etc/squid/squid.conf ] || return 0
+    grep -q "SquidManager" /etc/squid/squid.conf 2>/dev/null && return 1
+    head -3 /etc/squid/squid.conf 2>/dev/null | grep -qi "WELCOME TO SQUID" && return 0
+    [ -f /etc/squid/squid.conf.default ] && cmp -s /etc/squid/squid.conf /etc/squid/squid.conf.default && return 0
+    return 1
+}
+
+if es_config_de_fabrica; then
     cat > /etc/squid/squid.conf <<EOF
 # SquidManager - Configuracion inicial temporal
 http_port ${PROXY_PORT}
@@ -237,7 +250,10 @@ EOF
 else
     ok "Se conserva el squid.conf existente"
 fi
-chown root:proxy /etc/squid/squid.conf; chmod 640 /etc/squid/squid.conf
+# El propietario es el panel, que reescribe este fichero cada vez que se
+# aplican cambios; Squid lo lee por grupo. Con propietario root y 640 el panel
+# podia leerlo pero no escribirlo, y «Aplicar cambios» fallaba con un 500.
+chown "$APP_USER":proxy /etc/squid/squid.conf; chmod 640 /etc/squid/squid.conf
 
 chown -R proxy:proxy /var/log/squid /var/spool/squid
 [ -d /var/spool/squid/00 ] || $SQUID_BIN -z --foreground >/dev/null 2>&1 || true
