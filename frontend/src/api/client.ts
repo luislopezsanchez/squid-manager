@@ -182,11 +182,19 @@ export const api = {
   listAudit: (limit = 100, offset = 0) => request<any>(`/audit/?limit=${limit}&offset=${offset}`),
   auditStats: () => request<any>('/audit/stats'),
 
-  // Metrics
-  getDashboard: () => request<any>('/metrics/dashboard'),
-  getTraffic: (seconds = 60) => request<any>(`/metrics/traffic?seconds=${seconds}`),
-  getTimeline: (seconds = 60, interval = 5) => request<any>(`/metrics/timeline?seconds=${seconds}&interval=${interval}`),
-  getConnections: (limit = 20) => request<any>(`/metrics/connections?limit=${limit}`),
+  // Métricas.
+  //
+  // Se piden por /panel y NO por /metrics, que es el mismo endpoint con otro
+  // nombre. Los bloqueadores de anuncios y los filtros de privacidad cortan
+  // por defecto cualquier URL que contenga «metrics» porque la asocian a
+  // telemetría: la petición no llega a salir del navegador, en el servidor no
+  // queda ni rastro, y el dashboard se queda cargando para siempre sin que
+  // nada explique por qué. Quien administra un proxy suele llevar bloqueador,
+  // así que no era un caso raro.
+  getDashboard: () => request<any>('/panel/dashboard'),
+  getTraffic: (seconds = 60) => request<any>(`/panel/traffic?seconds=${seconds}`),
+  getTimeline: (seconds = 60, interval = 5) => request<any>(`/panel/timeline?seconds=${seconds}&interval=${interval}`),
+  getConnections: (limit = 20) => request<any>(`/panel/connections?limit=${limit}`),
 
   // Admins
   listAdmins: () => request<any>('/admins/'),

@@ -252,6 +252,19 @@ app.include_router(ldap.router, prefix="/api/ldap", tags=["LDAP"])
 app.include_router(delay_pools.router, prefix="/api/delay-pools", tags=["Delay Pools"])
 app.include_router(audit.router, prefix="/api/audit", tags=["Auditoría"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["Métricas"])
+
+# Las métricas se sirven además bajo /api/panel, y el panel web usa ESA ruta.
+#
+# No es un capricho: los bloqueadores de anuncios y los filtros de privacidad
+# (uBlock, AdGuard, los escudos de Brave) cortan por defecto cualquier URL que
+# contenga «metrics», porque la asocian a telemetría. La petición ni siquiera
+# sale del navegador, así que en el servidor no queda ni rastro: el dashboard
+# se quedaba cargando para siempre y no había nada que mirar.
+#
+# Justo la gente que administra un proxy es la que suele llevar bloqueador, así
+# que esto no era un caso raro. Se conserva /api/metrics para quien ya consuma
+# la API desde fuera.
+app.include_router(metrics.router, prefix="/api/panel", tags=["Métricas"])
 app.include_router(admins.router, prefix="/api/admins", tags=["Administradores"])
 app.include_router(backup.router, prefix="/api/backup", tags=["Backup/Restore/Import"])
 app.include_router(logs.router, prefix="/api/logs", tags=["Logs"])
