@@ -184,12 +184,84 @@ def seed_data():
         db.close()
 
 
+def _es_configuracion_provisional(ruta: Path) -> bool:
+    """¿El squid.conf sigue siendo el que escribe el instalador/entrypoint?
+
+    Ambos ponen «Configuración inicial temporal» en la primera línea (el
+    instalador nativo sin tilde), así que basta con mirarla. Si el fichero no
+    existe todavía, también hay que generar el definitivo.
+    """
+    if not ruta.exists():
+        return True
+    try:
+        with ruta.open("r", errors="replace") as f:
+            primera = f.readline()
+    except OSError as e:
+        logger.warning(f"No se pudo leer {ruta}: {e}")
+        return False
+    return "inicial temporal" in primera
+
+
+def _aplicar_configuracion_definitiva():
+    """Escribe la configuración real de Squid si aún rige la provisional.
+
+    El arranque provisional niega todo salvo localhost a propósito, para no
+    dejar un proxy abierto a la LAN mientras nadie ha entrado al panel. El
+    precio es que el proxy no sirve a nadie hasta que se aplica la definitiva,
+    y hasta ahora eso había que hacerlo a mano sin que nada lo dijera.
+
+    Se reintenta en segundo plano porque en modo Docker el contenedor de Squid
+    puede tardar mucho en estar listo la primera vez (compila desde fuente), y
+    la validación de la configuración se ejecuta dentro de él.
+    """
+    import threading
+    import time
+
+    ruta = Path(settings.SQUID_CONFIG_PATH)
+    if not _es_configuracion_provisional(ruta):
+        return
+
+    def tarea():
+        from app.services.squid_service import apply_squid_config
+
+        for intento in range(1, 41):  # ~20 min de margen
+            try:
+                db = SessionLocal()
+                try:
+                    resultado = apply_squid_config(db)
+                finally:
+                    db.close()
+                if resultado.get("status") == "ok":
+                    logger.info(
+                        "Configuración definitiva de Squid aplicada automáticamente "
+                        f"en el arranque (intento {intento}). El proxy ya exige "
+                        "autenticación."
+                    )
+                    return
+                motivo = resultado.get("message", "sin detalle")
+            except Exception as e:  # noqa: BLE001 - nunca debe tumbar el arranque
+                motivo = str(e)
+            if intento == 1:
+                logger.info(f"Squid aún no está listo para aplicar la configuración: {motivo}")
+            time.sleep(30)
+
+        logger.warning(
+            "No se pudo aplicar la configuración definitiva de Squid. El proxy "
+            "sigue con el arranque provisional, que solo permite localhost: "
+            "entra al panel y pulsa «Aplicar cambios»."
+        )
+
+    threading.Thread(target=tarea, name="config-inicial", daemon=True).start()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Iniciando SquidManager Backend...")
     run_migrations()
     seed_data()
     logger.info("Base de datos inicializada")
+
+    _aplicar_configuracion_definitiva()
 
     from app.services.syslog_service import start_syslog_forwarder
     start_syslog_forwarder()

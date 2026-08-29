@@ -187,10 +187,39 @@ class NativeRuntime(ProxyRuntime):
         # Sin mapeo de por medio: Squid escucha donde diga el panel.
         return desired_port
 
+    def _env_file(self):
+        """Ruta del .env del despliegue, si se puede determinar.
+
+        PROJECT_DIR solo lo define el modo Docker; en nativo el .env vive en la
+        raiz del checkout, cuatro niveles por encima de este fichero.
+        """
+        from pathlib import Path as _Path
+
+        candidatos = []
+        crudo = os.environ.get("PROJECT_DIR", "").strip()
+        if crudo:
+            candidatos.append(_Path(crudo))
+        candidatos.append(_Path(__file__).resolve().parents[4])
+        for base in candidatos:
+            fichero = base / ".env"
+            if fichero.is_file():
+                return fichero
+        return None
+
     def sync_port_state(self, port: str) -> tuple[bool, str]:
-        # El puerto solo vive en el squid.conf, que se acaba de escribir: no
-        # hay una segunda copia que pueda quedar desincronizada.
-        return True, "el puerto vive solo en el squid.conf"
+        """Refleja el puerto en el .env.
+
+        Squid escucha en el puerto que dice el squid.conf, asi que el .env no
+        manda aqui; pero si se queda con el valor de la instalacion, quien lo
+        lea creera que el proxy sigue en el puerto viejo. Que no sea la fuente
+        de verdad no es motivo para dejarlo mintiendo.
+        """
+        from app.services.runtime.env_file import escribir_puerto
+
+        fichero = self._env_file()
+        if fichero is None:
+            return True, "no hay .env que sincronizar"
+        return escribir_puerto(fichero, port)
 
     def reconfigure(self) -> tuple[bool, str]:
         if not self.squid:

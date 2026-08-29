@@ -70,6 +70,12 @@ fi
 paso "2. Instalando paquetes"
 
 export DEBIAN_FRONTEND=noninteractive
+# needrestart reinicia systemd-resolved en cuanto termina el apt, y el clon
+# del paso 4 se queda sin DNS ("Could not resolve host: github.com").
+# Suspenderlo aqui no deja nada a medias: los servicios que instalamos se
+# arrancan explicitamente en el paso 10.
+export NEEDRESTART_MODE=a
+export NEEDRESTART_SUSPEND=1
 apt-get update -qq
 
 # squid-openssl, NO squid: el paquete 'squid' a secas es la variante GnuTLS,
@@ -145,8 +151,20 @@ if [ -d "$INSTALL_DIR/.git" ]; then
     git -C "$INSTALL_DIR" reset --hard --quiet "origin/$BRANCH"
 else
     mkdir -p "$(dirname "$INSTALL_DIR")"
-    git clone --quiet --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR" \
-        || fail "No se pudo clonar $REPO_URL (rama $BRANCH)."
+    # Aunque needrestart este suspendido, la resolucion puede tardar un
+    # instante en estar lista tras instalar paquetes de red. Se reintenta
+    # antes de rendirse: fallar aqui deja la maquina a medias.
+    CLONADO=0
+    for INTENTO in 1 2 3 4 5; do
+        if git clone --quiet --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR" 2>/dev/null; then
+            CLONADO=1
+            break
+        fi
+        rm -rf "$INSTALL_DIR"
+        info "Clon fallido (intento $INTENTO/5); reintentando en 5 s..."
+        sleep 5
+    done
+    [ "$CLONADO" = "1" ] || fail "No se pudo clonar $REPO_URL (rama $BRANCH) tras 5 intentos."
 fi
 ok "Codigo en $INSTALL_DIR ($(git -C "$INSTALL_DIR" rev-parse --short HEAD))"
 
@@ -237,16 +255,16 @@ if es_config_de_fabrica; then
     cat > /etc/squid/squid.conf <<EOF
 # SquidManager - Configuracion inicial temporal
 http_port ${PROXY_PORT}
-acl localnet src 10.0.0.0/8
-acl localnet src 172.16.0.0/12
-acl localnet src 192.168.0.0/16
+# Este arranque NIEGA todo salvo localhost, a proposito. Es la configuracion
+# que rige entre que Squid arranca y que el panel escribe la definitiva con
+# autenticacion. Permitir aqui la LAN dejaba un proxy ABIERTO a 10/8,
+# 172.16/12 y 192.168/16 hasta que alguien pulsara "aplicar" en el panel.
 acl SSL_ports port 443
 acl Safe_ports port 80
 acl Safe_ports port 443
 acl CONNECT method CONNECT
 http_access deny !Safe_ports
 http_access deny CONNECT !SSL_ports
-http_access allow localnet
 http_access allow localhost
 http_access deny all
 cache_mem 128 MB
@@ -460,6 +478,26 @@ else
     FALLOS=$((FALLOS + 1))
 fi
 
+# El arranque provisional solo permite localhost, y el backend lo sustituye por
+# la configuracion real (con autenticacion) nada mas arrancar. Se comprueba: si
+# se quedara el provisional, el proxy no serviria a nadie y el sintoma —"no
+# navego"— no apuntaria a ninguna parte.
+AUTENTICA=0
+for _ in $(seq 1 20); do
+    if grep -q "^auth_param" /etc/squid/squid.conf 2>/dev/null; then
+        AUTENTICA=1
+        break
+    fi
+    sleep 3
+done
+if [ "$AUTENTICA" = "1" ]; then
+    ok "Proxy con autenticacion activa"
+else
+    warn "El proxy sigue con la configuracion de arranque (solo localhost)."
+    warn "Entra al panel y pulsa «Aplicar cambios» para activarlo."
+    FALLOS=$((FALLOS + 1))
+fi
+
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 
 echo
@@ -477,6 +515,11 @@ echo "  Usuario:  admin"
 echo "  Clave:    ${ADMIN_INITIAL_PASSWORD}"
 echo
 echo "  Se te pedira cambiarla en el primer acceso."
+echo
+echo "  El proxy EXIGE usuario y contrasena, y todavia no hay ninguno:"
+echo "  hasta que crees el primero en el panel (Usuarios > Nuevo usuario)"
+echo "  no navegara nadie. Es a proposito: recien instalado no queda"
+echo "  abierto a la red."
 echo
 echo "  Servicios:  systemctl status squid squidmanager nginx"
 echo "  Registros:  journalctl -u squidmanager -f"
