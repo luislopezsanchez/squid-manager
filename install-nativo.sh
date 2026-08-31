@@ -151,20 +151,27 @@ if [ -d "$INSTALL_DIR/.git" ]; then
     git -C "$INSTALL_DIR" reset --hard --quiet "origin/$BRANCH"
 else
     mkdir -p "$(dirname "$INSTALL_DIR")"
-    # Aunque needrestart este suspendido, la resolucion puede tardar un
-    # instante en estar lista tras instalar paquetes de red. Se reintenta
-    # antes de rendirse: fallar aqui deja la maquina a medias.
-    CLONADO=0
-    for INTENTO in 1 2 3 4 5; do
-        if git clone --quiet --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR" 2>/dev/null; then
-            CLONADO=1
+    # Esperar a que el DNS resuelva de verdad, no una cantidad fija de
+    # segundos: el reinicio de systemd-resolved que dispara needrestart tras
+    # el apt-get de mas arriba puede tardar mas de lo que un margen fijo
+    # cubre, y eso era lo que hacia fallar el clon con el DNS ya recuperado
+    # unos segundos despues (justo lo que se ve al volver a clonar a mano
+    # inmediatamente despues de que el instalador se rinda).
+    HOST_REPO="$(echo "$REPO_URL" | sed -E 's#^[a-z]+://([^/]+)/.*#\1#')"
+    DNS_LISTO=0
+    for _ in $(seq 1 30); do
+        if getent hosts "$HOST_REPO" >/dev/null 2>&1; then
+            DNS_LISTO=1
             break
         fi
-        rm -rf "$INSTALL_DIR"
-        info "Clon fallido (intento $INTENTO/5); reintentando en 5 s..."
-        sleep 5
+        sleep 2
     done
-    [ "$CLONADO" = "1" ] || fail "No se pudo clonar $REPO_URL (rama $BRANCH) tras 5 intentos."
+    [ "$DNS_LISTO" = "1" ] || warn "El DNS no resolvio $HOST_REPO en 60 s; se intenta clonar de todos modos."
+
+    if ! git clone --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"; then
+        rm -rf "$INSTALL_DIR"
+        fail "No se pudo clonar $REPO_URL (rama $BRANCH). Revisa el error de git de arriba: si es de DNS, prueba 'getent hosts $HOST_REPO' a mano."
+    fi
 fi
 ok "Codigo en $INSTALL_DIR ($(git -C "$INSTALL_DIR" rev-parse --short HEAD))"
 
