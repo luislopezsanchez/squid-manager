@@ -192,7 +192,20 @@ else
 fi
 
 if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
-    sudo -u postgres createdb -O "$DB_USER" "$DB_NAME"
+    # UTF8 explicito, no heredado de template1: sin esto la base sale con la
+    # codificacion que initdb eligio segun el locale del sistema en el momento
+    # de instalar postgresql, y en un servidor sin locale UTF-8 generado eso
+    # es SQL_ASCII. Con SQL_ASCII, psycopg3 devuelve bytes en vez de str en
+    # ciertas consultas, y SQLAlchemy revienta al detectar la version del
+    # servidor ("cannot use a string pattern on a bytes-like object"): el
+    # backend queda en crash-loop desde el primer arranque.
+    #
+    # template0 es obligatorio para fijar la codificacion: template1 ya trae
+    # grabada la del cluster y no se puede pisar. El collate/ctype en C es a
+    # proposito: UTF8 + C es una combinacion valida y evita depender de que el
+    # servidor tenga generado un locale UTF-8, que es justo lo que falta
+    # cuando aparece este error.
+    sudo -u postgres createdb -O "$DB_USER" -E UTF8 -T template0 --lc-collate=C --lc-ctype=C "$DB_NAME"
 fi
 sudo -u postgres psql -qc "ALTER DATABASE \"$DB_NAME\" OWNER TO \"$DB_USER\";" >/dev/null
 ok "Base de datos $DB_NAME lista (usuario $DB_USER)"
