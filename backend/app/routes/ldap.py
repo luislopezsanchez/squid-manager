@@ -19,6 +19,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _escapar_filtro_ldap(valor: str) -> str:
+    """Escapa un valor para insertarlo en un filtro LDAP (RFC 4515).
+
+    Sin esto, un nombre de usuario con paréntesis o asterisco altera la
+    estructura del filtro de búsqueda. Misma lógica que squid/auth_helper.py:
+    si se cambia aquí, hay que cambiarla también allí.
+    """
+    return (
+        valor.replace("\\", "\\5c").replace("*", "\\2a")
+        .replace("(", "\\28").replace(")", "\\29").replace("\x00", "\\00")
+    )
+
+
 class LdapConfigUpdate(BaseModel):
     server_url: str
     bind_dn: str
@@ -158,7 +171,8 @@ async def test_ldap_connection(
                     "detail": "Conexión y bind con la cuenta de servicio exitosos"})
 
     # 3. Buscar el usuario con el filtro configurado
-    search_filter = data.user_filter.replace("%s", data.username) if "%s" in data.user_filter else data.user_filter
+    safe_username = _escapar_filtro_ldap(data.username)
+    search_filter = data.user_filter.replace("%s", safe_username) if "%s" in data.user_filter else data.user_filter
     try:
         conn.search(search_base=data.search_base, search_filter=search_filter,
                     search_scope=SUBTREE, attributes=["cn", "mail", "sAMAccountName", "uid", "userPrincipalName"])
