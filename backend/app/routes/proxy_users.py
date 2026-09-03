@@ -150,9 +150,12 @@ async def create_proxy_user(
         action="create", entity="proxy_user", entity_id=user.id,
         new_value=user.username,
     ))
+    # Se escribe el htpasswd ANTES de comprometer el commit: si la escritura
+    # falla (disco lleno, permisos), la excepción aborta la petición y la
+    # sesión se descarta sin persistir un usuario que Squid nunca vería.
+    _sync_passwd(db)
     db.commit()
 
-    _sync_passwd(db)
     user.active = True
 
     if background_tasks:
@@ -194,9 +197,9 @@ async def update_proxy_user(
         action="update", entity="proxy_user", entity_id=user.id,
         new_value=user.username,
     ))
+    _sync_passwd(db)
     db.commit()
 
-    _sync_passwd(db)
     # Squid guarda las credenciales validadas en caché (credentialsttl): sin
     # purgarlas, quitarle el acceso a alguien no surte efecto hasta dos horas.
     if revoke:
@@ -234,9 +237,9 @@ async def delete_proxy_user(
     # heredaba su pertenencia.
     removed = db.query(UserGroupMember).filter(UserGroupMember.username == username).delete()
     db.delete(user)
+    _sync_passwd(db)
     db.commit()
 
-    _sync_passwd(db)
     purge_credentials()
     if removed:
         mark_dirty()
@@ -265,9 +268,9 @@ async def toggle_proxy_user(
         action="toggle", entity="proxy_user", entity_id=user.id,
         new_value=str(user.enabled),
     ))
+    _sync_passwd(db)
     db.commit()
 
-    _sync_passwd(db)
     if not user.enabled:
         purge_credentials()
 
@@ -327,9 +330,9 @@ async def reset_password(
         action="reset_password", entity="proxy_user", entity_id=user.id,
         new_value=user.username,
     ))
+    _sync_passwd(db)
     db.commit()
 
-    _sync_passwd(db)
     purge_credentials()
 
     return {
