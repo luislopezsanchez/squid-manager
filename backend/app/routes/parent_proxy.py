@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.services.parent_proxy_service import (
     validar_destino,
     validar_certificado,
 )
+from app.services.squid_names import validate_value
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,19 @@ async def update_config(
     valido, mensaje = validar_certificado(data.ca_cert)
     if not valido:
         return {"status": "error", "message": mensaje}
+
+    # host, username y password acaban tal cual en la directiva cache_peer del
+    # squid.conf (incluida la parte login=usuario:contraseña): sin esto, un
+    # salto de línea en cualquiera de los tres inserta una directiva arbitraria.
+    try:
+        if data.host and data.host.strip():
+            validate_value(data.host, field="host del proxy padre")
+        if data.username and data.username.strip():
+            validate_value(data.username, field="usuario del proxy padre")
+        if data.password and data.password != MARCADOR:
+            validate_value(data.password, field="contraseña del proxy padre")
+    except HTTPException as e:
+        return {"status": "error", "message": e.detail}
 
     config = _obtener_o_crear(db)
     config.enabled = data.enabled
