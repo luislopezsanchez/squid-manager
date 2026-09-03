@@ -8,6 +8,7 @@ mantener los ficheros de usuarios y de LDAP.
 
 import logging
 import os
+import threading
 from pathlib import Path
 
 from app.config import settings
@@ -266,7 +267,20 @@ def restart_squid() -> tuple[bool, str]:
         return False, f"Error: {e}"
 
 
+# El hilo de arranque (main.py) y el endpoint POST /apply pueden llamar a esto
+# al mismo tiempo, y ambos escriben sobre el mismo fichero .conf.candidate: sin
+# este lock, una ejecución puede pisar el candidate de la otra a mitad de
+# escritura, o las dos validar sobre un mismo intermedio inconsistente.
+_apply_lock = threading.Lock()
+
+
 def apply_squid_config(db, force_reconfigure: bool = False) -> dict:
+    """Aplica la configuración de Squid, serializado: una ejecución a la vez."""
+    with _apply_lock:
+        return _apply_squid_config(db, force_reconfigure=force_reconfigure)
+
+
+def _apply_squid_config(db, force_reconfigure: bool = False) -> dict:
     """Genera y aplica la configuración de Squid de extremo a extremo.
 
     Flujo:
