@@ -10,6 +10,7 @@ from app.models.delay_pool import DelayPool
 from app.models.audit_log import AuditLog
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_state import mark_dirty
+from app.services.squid_names import validate_value
 
 router = APIRouter()
 
@@ -58,10 +59,16 @@ async def create_delay_pool(
     current_admin: Admin = Depends(require_writer),
 ):
     """Crea un nuevo delay pool."""
+    # parameters y acl_name acaban tal cual en delay_parameters/delay_access:
+    # sin esto, un salto de línea en cualquiera de los dos inserta una
+    # directiva arbitraria en el squid.conf generado.
+    parameters = validate_value(data.parameters, field="parámetros del delay pool")
+    acl_name = validate_value(data.acl_name, field="ACL del delay pool") if data.acl_name else None
+
     pool = DelayPool(
         pool_class=data.pool_class,
-        parameters=data.parameters,
-        acl_name=data.acl_name,
+        parameters=parameters,
+        acl_name=acl_name,
         description=data.description,
         enabled=data.enabled,
     )
@@ -89,7 +96,13 @@ async def update_delay_pool(
     if not pool:
         raise HTTPException(404, detail="Delay pool no encontrado")
 
-    for field, value in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True)
+    if "parameters" in updates and updates["parameters"] is not None:
+        updates["parameters"] = validate_value(updates["parameters"], field="parámetros del delay pool")
+    if "acl_name" in updates and updates["acl_name"]:
+        updates["acl_name"] = validate_value(updates["acl_name"], field="ACL del delay pool")
+
+    for field, value in updates.items():
         setattr(pool, field, value)
     db.add(AuditLog(
         admin_id=current_admin.id, admin_username=current_admin.username,
