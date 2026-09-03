@@ -23,6 +23,10 @@ from app.models.audit_log import AuditLog
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_generator import generate_squid_config
 from app.services.config_state import mark_dirty
+from app.services.squid_names import (
+    validate_name, validate_acl_type, validate_value, validate_acl_names,
+    known_acl_names,
+)
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -163,7 +167,13 @@ async def restore_backup(
         "warnings": [],
     }
 
+    # Igual que en PUT /settings: estas tres claves ya se sanean por líneas más
+    # abajo en el generador, el resto se interpola tal cual en squid.conf y sin
+    # esta validación un backup manipulado inserta directivas arbitrarias.
+    NO_ESCALARES = ("dns_nameservers", "trusted_sources", "ssl_bump_exclude")
     for s in backup.get("squid_settings", []):
+        if s.get("key") not in NO_ESCALARES:
+            s["value"] = validate_value(s.get("value", ""), field=f"valor de «{s.get('key')}»")
         existing = db.query(SquidSetting).filter(SquidSetting.key == s["key"]).first()
         if existing:
             existing.value = s["value"]
@@ -172,6 +182,9 @@ async def restore_backup(
         results["settings"] += 1
 
     for a in backup.get("acls", []):
+        a["name"] = validate_name(a["name"], "ACL")
+        a["type"] = validate_acl_type(a["type"])
+        a["value"] = validate_value(a["value"])
         existing = db.query(Acl).filter(Acl.name == a["name"]).first()
         if existing:
             existing.type = a["type"]
@@ -185,6 +198,7 @@ async def restore_backup(
     # Grupos y miembros: se restauran ANTES que las reglas, porque las reglas
     # los referencian por nombre.
     for g in backup.get("user_groups", []):
+        g["name"] = validate_name(g["name"], "grupo")
         group = db.query(UserGroup).filter(UserGroup.name == g["name"]).first()
         if not group:
             group = UserGroup(name=g["name"], description=g.get("description"))
@@ -198,8 +212,14 @@ async def restore_backup(
         results["groups"] += 1
 
     if backup.get("access_rules"):
+        # Se recalcula después de restaurar ACLs y grupos: son quienes definen
+        # qué nombres son válidos en una regla.
+        nombres_validos = known_acl_names(db)
         db.query(AccessRule).delete()
         for r in backup["access_rules"]:
+            if r["action"] not in ("allow", "deny"):
+                raise HTTPException(400, detail=f"Acción de regla inválida: '{r['action']}'")
+            r["acl_names"] = validate_acl_names(r["acl_names"], nombres_validos)
             db.add(AccessRule(
                 action=r["action"], acl_names=r["acl_names"],
                 order=r["order"], description=r.get("description"),
@@ -248,6 +268,9 @@ async def restore_backup(
     if backup.get("delay_pools"):
         db.query(DelayPool).delete()
         for dp in backup["delay_pools"]:
+            dp["parameters"] = validate_value(dp["parameters"], field="parámetros del delay pool")
+            if dp.get("acl_name"):
+                dp["acl_name"] = validate_value(dp["acl_name"], field="ACL del delay pool")
             db.add(DelayPool(**dp))
         results["delay_pools"] = len(backup["delay_pools"])
 
