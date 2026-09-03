@@ -31,8 +31,13 @@ RUN apt-get update && apt-get install -y \
 # Instalar librerías Python para el helper de autenticación (local bcrypt + LDAP)
 RUN pip3 install --no-cache-dir --break-system-packages bcrypt==4.2.1 ldap3==2.9.1
 
-# Descargar y compilar Squid 6.12 con soporte SSL Bump (OpenSSL)
-RUN wget -q "http://www.squid-cache.org/Versions/v6/squid-6.12.tar.gz" -O /tmp/squid.tar.gz \
+# Descargar y compilar Squid 6.12 con soporte SSL Bump (OpenSSL).
+# Por HTTPS y con el checksum fijado a mano: sin esto, alguien en posición de
+# MITM en la red de build puede sustituir el tarball por uno con código propio,
+# que terminaría compilado dentro del binario del proxy.
+ENV SQUID_SHA256=20d6c79214f75b5f889952ed79e1ab8b8c3f909b079671d77bb558a6f0b28625
+RUN wget -q "https://www.squid-cache.org/Versions/v6/squid-6.12.tar.gz" -O /tmp/squid.tar.gz \
+    && echo "${SQUID_SHA256}  /tmp/squid.tar.gz" | sha256sum -c - \
     && ls -la /tmp/squid.tar.gz \
     && cd /tmp && tar xzf squid.tar.gz \
     && cd squid-6.12 \
