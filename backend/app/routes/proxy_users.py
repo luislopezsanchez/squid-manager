@@ -197,6 +197,11 @@ async def update_proxy_user(
         action="update", entity="proxy_user", entity_id=user.id,
         new_value=user.username,
     ))
+    # La sesión tiene autoflush=False: sin este flush explícito, la consulta
+    # de active_proxy_users() dentro de _sync_passwd ve todavía el enabled/
+    # expires_at VIEJO (el que sigue comprometido en la BD), y un usuario
+    # recién deshabilitado se queda en el htpasswd hasta el siguiente cambio.
+    db.flush()
     _sync_passwd(db)
     db.commit()
 
@@ -237,6 +242,9 @@ async def delete_proxy_user(
     # heredaba su pertenencia.
     removed = db.query(UserGroupMember).filter(UserGroupMember.username == username).delete()
     db.delete(user)
+    # Mismo motivo que en update_proxy_user: sin flush, active_proxy_users()
+    # todavia ve al usuario borrado como presente.
+    db.flush()
     _sync_passwd(db)
     db.commit()
 
@@ -268,6 +276,10 @@ async def toggle_proxy_user(
         action="toggle", entity="proxy_user", entity_id=user.id,
         new_value=str(user.enabled),
     ))
+    # Mismo motivo que en update_proxy_user: sin flush, active_proxy_users()
+    # todavia ve el enabled VIEJO y el usuario recien deshabilitado se queda
+    # en el htpasswd.
+    db.flush()
     _sync_passwd(db)
     db.commit()
 
