@@ -143,6 +143,14 @@ Los requisitos dependen del modo de despliegue.
 - **Acceso root** y salida a internet para descargar paquetes
 - Nada más: el instalador pone Squid, PostgreSQL, nginx, Node y Python
 
+> ⚠️ **Ubuntu 26.04 todavía no está soportado.** Trae Python 3.14 por defecto,
+> y `psycopg[binary]` y `pydantic-core` no tienen aún binarios compilados para
+> esa versión (`pydantic-core` ni siquiera compila desde código fuente: su
+> toolchain de Rust —PyO3 0.22— no soporta Python 3.14). El paso 8 del
+> instalador falla con `ERROR: Could not find a version that satisfies the
+> requirement psycopg-binary==3.2.3`. Usa Ubuntu 24.04 o Debian 12 hasta que
+> el ecosistema Python se ponga al día.
+
 ### Hardware mínimo
 - **CPU:** 2 núcleos (4 recomendado; con Docker se compila Squid al construir la imagen)
 - **RAM:** 2 GB (4 GB recomendado)
@@ -308,7 +316,9 @@ Squid, el panel, PostgreSQL y nginx corriendo como servicios del sistema. **No
 hay que clonar el repositorio, ni editar ningún `.env`, ni compilar nada**: el
 instalador se encarga de todo.
 
-Sobre un Ubuntu 22.04 / 24.04 o Debian 12 recién instalado, con acceso root:
+Sobre un Ubuntu 22.04 / 24.04 o Debian 12 recién instalado, con acceso root
+(Ubuntu 26.04 **no** funciona todavía — ver el aviso en
+[Requisitos](#-requisitos)):
 
 ```bash
 # 1. Descargar el instalador

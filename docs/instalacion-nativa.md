@@ -20,6 +20,14 @@ Para quién tiene sentido:
 - Acceso root.
 - Salida a internet para descargar paquetes y clonar el repositorio.
 
+> ⚠️ **Ubuntu 26.04 todavía no está soportado.** Trae Python 3.14 por
+> defecto, y `psycopg[binary]` y `pydantic-core` no tienen binarios
+> compilados para esa versión (`pydantic-core` ni siquiera compila desde
+> código fuente: su toolchain de Rust —PyO3 0.22— no soporta Python 3.14
+> en absoluto). El paso 8 del instalador falla con `ERROR: Could not find
+> a version that satisfies the requirement psycopg-binary==3.2.3`. Usa
+> Ubuntu 24.04 o Debian 12 hasta que el ecosistema Python se ponga al día.
+
 ## Instalación
 
 ```bash
