@@ -33,6 +33,15 @@ http_port {{ internal_port }} ssl-bump \
 # orden, y una ACL de usuario (proxy_auth) no se puede declarar mientras no
 # exista un esquema de autenticación. Poniéndolo después, cualquier regla de
 # interceptación por usuario aborta el arranque con «Invalid ACL».
+{% if kerberos and kerberos.enabled and kerberos_keytab_presente %}
+# Negotiate (Kerberos/SPNEGO) va ANTES que basic: los navegadores que lo
+# soportan y están en el dominio lo intentan primero y entran sin que se les
+# pida nada; el resto (móviles, Linux fuera del dominio, invitados) cae solo
+# al basic de abajo. No sustituye a basic, coexiste con él.
+auth_param negotiate program /usr/lib/squid/negotiate_kerberos_auth -k /etc/squid/HTTP.keytab -s HTTP/{{ kerberos.proxy_fqdn }}@{{ kerberos.realm }}
+auth_param negotiate children 10
+auth_param negotiate keep_alive on
+{% endif %}
 auth_param basic program /usr/lib/squid/squidmanager_auth_helper
 auth_param basic children {{ settings.get('auth_children', '5') }}
 auth_param basic realm {{ settings.get('auth_realm', 'SquidManager Proxy') }}

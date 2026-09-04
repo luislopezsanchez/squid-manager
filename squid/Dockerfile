@@ -52,6 +52,7 @@ RUN wget -q "https://www.squid-cache.org/Versions/v6/squid-6.12.tar.gz" -O /tmp/
         --enable-ssl-crtd \
         --enable-auth-basic=NCSA,LDAP,DB,getpwnam,fake \
         --enable-auth-digest=file,LDAP \
+        --enable-auth-negotiate=kerberos \
         --enable-delay-pools \
         --enable-icap-client \
         --enable-follow-x-forwarded-for \

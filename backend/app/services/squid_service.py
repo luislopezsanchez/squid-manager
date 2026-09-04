@@ -401,6 +401,14 @@ def _apply_squid_config(db, force_reconfigure: bool = False) -> dict:
 
     escribir_ca_padre(padre)
 
+    # Keytab de Kerberos: tiene que estar en el volumen antes de que Squid lea
+    # la configuración que declara el bloque de autenticación Negotiate.
+    from app.models.kerberos_config import KerberosConfig
+    from app.services.kerberos_service import escribir_keytab
+
+    kerberos = db.query(KerberosConfig).first()
+    escribir_keytab(kerberos)
+
     ldap_config = db.query(LdapConfig).first()
     allowed_ldap = [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()]  # noqa: E712
     write_ldap_aux_files(ldap_config, allowed_ldap)

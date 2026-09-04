@@ -13,6 +13,7 @@ from app.models.ldap_user import LdapUser
 from app.models.user_group import UserGroup, UserGroupMember
 from app.models.syslog_config import SyslogConfig
 from app.models.parent_proxy import ParentProxy
+from app.models.kerberos_config import KerberosConfig
 
 __all__ = [
     "Admin",
@@ -29,4 +30,5 @@ __all__ = [
     "UserGroupMember",
     "SyslogConfig",
     "ParentProxy",
+    "KerberosConfig",
 ]

@@ -135,6 +135,14 @@ def generate_squid_config(db: Session) -> str:
         and (getattr(parent_proxy, "ca_cert", None) or "").strip()
     )
 
+    # Negotiate (Kerberos) solo se declara si hay keytab subido: sin él,
+    # apuntar al fichero inexistente tumbaría el helper en el primer intento
+    # de autenticación en vez de simplemente no ofrecer el esquema.
+    from app.models.kerberos_config import KerberosConfig
+
+    kerberos = db.query(KerberosConfig).first()
+    kerberos_keytab_presente = bool(kerberos and getattr(kerberos, "keytab_data", None))
+
     # En que puerto escribe la directiva `http_port` depende del despliegue: en
     # contenedor es un puerto interno fijo contra el que Docker mapea el que
     # elige el panel; en instalacion nativa no hay mapeo y Squid escucha
@@ -164,5 +172,7 @@ def generate_squid_config(db: Session) -> str:
         parent_proxy=parent_proxy,
         direct_domains=direct_domains,
         parent_ca=parent_ca,
+        kerberos=kerberos,
+        kerberos_keytab_presente=kerberos_keytab_presente,
     )
     return config
