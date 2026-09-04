@@ -167,13 +167,28 @@ async def restore_backup(
         "warnings": [],
     }
 
-    # Igual que en PUT /settings: estas tres claves ya se sanean por líneas más
-    # abajo en el generador, el resto se interpola tal cual en squid.conf y sin
-    # esta validación un backup manipulado inserta directivas arbitrarias.
-    NO_ESCALARES = ("dns_nameservers", "trusted_sources", "ssl_bump_exclude")
+    # Mismas reglas que en PUT /settings, y por el mismo motivo: sin esto, un
+    # backup manipulado inserta una directiva arbitraria en squid.conf (para el
+    # resto de claves) o fija trusted_sources/dns_nameservers a algo peligroso
+    # (por ejemplo 0.0.0.0/0, que eximiria de autenticarse a cualquiera) sin
+    # pasar por sus validadores semanticos. ssl_bump_exclude no necesita
+    # validacion propia: config_generator ya la trocea por lineas antes de
+    # usarla y un dominio de mas ahi no compromete nada.
+    from app.services.dns_service import parsear_lista as parsear_dns, validar_servidores
+    from app.services.origenes_service import parsear_lista as parsear_origenes, validar_origenes
+
     for s in backup.get("squid_settings", []):
-        if s.get("key") not in NO_ESCALARES:
-            s["value"] = validate_value(s.get("value", ""), field=f"valor de «{s.get('key')}»")
+        key = s.get("key")
+        if key == "dns_nameservers":
+            valido, mensaje = validar_servidores(parsear_dns(s.get("value")))
+            if not valido:
+                raise HTTPException(400, detail=mensaje)
+        elif key == "trusted_sources":
+            valido, mensaje = validar_origenes(parsear_origenes(s.get("value")))
+            if not valido:
+                raise HTTPException(400, detail=mensaje)
+        elif key != "ssl_bump_exclude":
+            s["value"] = validate_value(s.get("value", ""), field=f"valor de «{key}»")
         existing = db.query(SquidSetting).filter(SquidSetting.key == s["key"]).first()
         if existing:
             existing.value = s["value"]
