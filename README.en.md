@@ -282,7 +282,7 @@ docker compose up -d
 #    Watch the progress:
 docker compose logs -f squid
 
-# 6. When you see "Accepting HTTP Socket connections", it is ready
+# 6. When you see "Accepting SSL bumped HTTP Socket connections", it is ready
 ```
 
 **Three values in the `.env` must be set, no exceptions:**
@@ -683,7 +683,7 @@ In Spanish:
 docker compose logs squid
 ```
 The first time, Squid is compiled from source (~10-15 minutes). Wait for
-"Accepting HTTP Socket connections".
+"Accepting SSL bumped HTTP Socket connections".
 
 ### The proxy does not block HTTPS sites
 You need SSL Bump. See [docs/ssl-bump.md](docs/ssl-bump.md).

@@ -194,7 +194,7 @@ docker compose logs -f squid
 
 When you see this message, it is ready:
 ```
-Accepting HTTP Socket connections at conn3 local=[::]:3128
+Accepting SSL bumped HTTP Socket connections at conn3 local=[::]:3128
 listening port: 3128
 ```
 
