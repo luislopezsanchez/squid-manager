@@ -9,6 +9,7 @@ import ACLs from './pages/ACLs'
 import AccessRules from './pages/AccessRules'
 import Settings from './pages/Settings'
 import LdapConfig from './pages/LdapConfig'
+import Kerberos from './pages/Kerberos'
 import DelayPools from './pages/DelayPools'
 import AuditLog from './pages/AuditLog'
 import CertificadoCA from './pages/CertificadoCA'
@@ -52,6 +53,7 @@ function App() {
           <Route path="rules" element={<AccessRules />} />
           <Route path="delay-pools" element={<DelayPools />} />
           <Route path="ldap" element={<LdapConfig />} />
+          <Route path="kerberos" element={<Kerberos />} />
           <Route path="settings" element={<Settings />} />
           <Route path="certificate" element={<CertificadoCA />} />
           <Route path="audit" element={<AuditLog />} />

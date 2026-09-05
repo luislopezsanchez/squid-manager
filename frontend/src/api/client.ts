@@ -54,7 +54,10 @@ function extraerMensajeError(detail: unknown, fallback: string): string {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    // Con FormData (subida de archivos) NO se fija Content-Type: el navegador
+    // necesita poner el suyo con el boundary del multipart. Si lo forzamos a
+    // application/json aquí, el backend no puede parsear el archivo.
+    ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     // El backend traduce sus mensajes de error con esta cabecera. Se manda el
     // idioma ELEGIDO en el panel, no el del navegador: son cosas distintas, y
     // sin esto la aplicacion contestaria en espanol en cuanto algo fallara.
@@ -155,6 +158,16 @@ export const api = {
   getLdapConfig: () => request<any>('/ldap/config'),
   updateLdapConfig: (data: any) => request<any>('/ldap/config', { method: 'PUT', body: JSON.stringify(data) }),
   testLdap: (data: any) => request<any>('/ldap/test', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Kerberos / Negotiate (SSO transparente contra un AD)
+  getKerberosConfig: () => request<any>('/kerberos/config'),
+  updateKerberosConfig: (data: any) => request<any>('/kerberos/config', { method: 'PUT', body: JSON.stringify(data) }),
+  uploadKeytab: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request<any>('/kerberos/keytab', { method: 'POST', body: formData })
+  },
+  deleteKeytab: () => request<any>('/kerberos/keytab', { method: 'DELETE' }),
 
   // Syslog externo (opcional, apagado por defecto)
   getSyslogConfig: () => request<any>('/syslog/config'),

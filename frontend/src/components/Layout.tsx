@@ -86,6 +86,7 @@ export default function Layout() {
       titulo: traducir("Sistema"),
       items: [
         { to: '/ldap', label: 'LDAP', Icon: IconLink },
+        { to: '/kerberos', label: 'Kerberos', Icon: IconKey },
         { to: '/certificate', label: traducir("Certificado"), Icon: IconLock },
         { to: '/settings', label: traducir("Configuración"), Icon: IconSettings },
         { to: '/notifications', label: traducir("Notificaciones"), Icon: IconBell },
