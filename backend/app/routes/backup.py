@@ -169,13 +169,15 @@ async def restore_backup(
 
     # Mismas reglas que en PUT /settings, y por el mismo motivo: sin esto, un
     # backup manipulado inserta una directiva arbitraria en squid.conf (para el
-    # resto de claves) o fija trusted_sources/dns_nameservers a algo peligroso
-    # (por ejemplo 0.0.0.0/0, que eximiria de autenticarse a cualquiera) sin
-    # pasar por sus validadores semanticos. ssl_bump_exclude no necesita
-    # validacion propia: config_generator ya la trocea por lineas antes de
-    # usarla y un dominio de mas ahi no compromete nada.
+    # resto de claves) o fija trusted_sources/dns_nameservers/auth_exempt_domains
+    # a algo peligroso (por ejemplo 0.0.0.0/0 o "*", que eximiria de
+    # autenticarse a cualquiera) sin pasar por sus validadores semanticos.
+    # ssl_bump_exclude no necesita validacion propia: config_generator ya la
+    # trocea por lineas antes de usarla y un dominio de mas ahi no compromete
+    # nada (solo decide si SE descifra o no, no si se exige autenticacion).
     from app.services.dns_service import parsear_lista as parsear_dns, validar_servidores
     from app.services.origenes_service import parsear_lista as parsear_origenes, validar_origenes
+    from app.services.auth_exempt_service import parsear_lista as parsear_exentos, validar_dominios
 
     for s in backup.get("squid_settings", []):
         key = s.get("key")
@@ -185,6 +187,10 @@ async def restore_backup(
                 raise HTTPException(400, detail=mensaje)
         elif key == "trusted_sources":
             valido, mensaje = validar_origenes(parsear_origenes(s.get("value")))
+            if not valido:
+                raise HTTPException(400, detail=mensaje)
+        elif key == "auth_exempt_domains":
+            valido, mensaje = validar_dominios(parsear_exentos(s.get("value")))
             if not valido:
                 raise HTTPException(400, detail=mensaje)
         elif key != "ssl_bump_exclude":
@@ -374,7 +380,7 @@ SETTING_PATTERNS = {
 INTERNAL_ACLS = {
     "all", "localhost", "to_localhost", "SSL_ports", "Safe_ports", "CONNECT",
     "localnet", "authenticated", "step1", "step2", "step3", "manager",
-    "ssl_exclude",
+    "ssl_exclude", "exentos_auth_dominio",
 }
 
 

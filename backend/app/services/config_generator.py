@@ -111,6 +111,14 @@ def generate_squid_config(db: Session) -> str:
 
     trusted_sources = parsear_origenes(settings.get("trusted_sources"))
 
+    # Dominios de destino exentos de autenticación, sin importar el origen.
+    # A diferencia de trusted_sources (por IP), esto sirve para un destino que
+    # no sabe presentar credenciales de proxy (Windows Update, telemetría de
+    # Office, un SaaS sin proxy-auth) sin tener que eximir a todo un origen.
+    from app.services.auth_exempt_service import parsear_lista as parsear_exentos
+
+    auth_exempt_domains = parsear_exentos(settings.get("auth_exempt_domains"))
+
     # Interceptación de HTTPS. Activada salvo que se diga lo contrario, que es
     # como se ha comportado siempre. Se apaga cuando la salida va por otro
     # proxy que ya intercepta: encadenar dos interceptaciones rompe HTTPS.
@@ -167,6 +175,7 @@ def generate_squid_config(db: Session) -> str:
         modo_despliegue=runtime.name,
         dns_nameservers=dns_nameservers,
         trusted_sources=trusted_sources,
+        auth_exempt_domains=auth_exempt_domains,
         ssl_bump_enabled=ssl_bump_enabled,
         groups_sin_bump=groups_sin_bump,
         parent_proxy=parent_proxy,

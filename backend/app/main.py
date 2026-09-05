@@ -173,6 +173,15 @@ def seed_data():
                 "", "security",
                 "Dominios que NO se descifran (uno por línea o separados por espacios)",
             ),
+            # Pensado para destinos que no manejan autenticación de proxy
+            # (Windows Update, telemetría de Office, un SaaS sin proxy-auth):
+            # a diferencia de trusted_sources (por IP de origen), esto exime
+            # por el DOMINIO DE DESTINO, sin importar quién lo pida.
+            "auth_exempt_domains": (
+                "", "security",
+                "Dominios que no requieren autenticación, sin importar el origen "
+                "(uno por línea o separados por espacios)",
+            ),
         }
         for key, (value, category, description) in defaults.items():
             if not db.query(SquidSetting).filter(SquidSetting.key == key).first():

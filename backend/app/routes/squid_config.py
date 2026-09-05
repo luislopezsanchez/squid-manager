@@ -69,12 +69,22 @@ async def update_setting(
         if not valido:
             raise HTTPException(400, detail=mensaje)
 
+    # Igual que trusted_sources pero por dominio de destino: exime de
+    # autenticarse sin importar quién pida ese dominio.
+    if data.key == "auth_exempt_domains":
+        from app.services.auth_exempt_service import parsear_lista, validar_dominios
+
+        valido, mensaje = validar_dominios(parsear_lista(data.value))
+        if not valido:
+            raise HTTPException(400, detail=mensaje)
+
     # El resto de valores se interpolan tal cual en squid.conf (visible_hostname,
     # cache_dir, refresh_pattern, auth_realm, access_log, etc.): sin esto, un
     # salto de línea en el valor inserta una directiva arbitraria en el fichero.
-    # dns_nameservers, trusted_sources y ssl_bump_exclude quedan fuera porque ya
-    # tienen su propio parseo por líneas más arriba o en el generador.
-    if data.key not in ("dns_nameservers", "trusted_sources", "ssl_bump_exclude"):
+    # dns_nameservers, trusted_sources, auth_exempt_domains y ssl_bump_exclude
+    # quedan fuera porque ya tienen su propio parseo por líneas más arriba o en
+    # el generador.
+    if data.key not in ("dns_nameservers", "trusted_sources", "auth_exempt_domains", "ssl_bump_exclude"):
         from app.services.squid_names import validate_value
 
         data.value = validate_value(data.value, field=f"valor de «{data.key}»")

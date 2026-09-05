@@ -20,7 +20,7 @@ NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 RESERVED_NAMES = {
     "all", "localhost", "to_localhost", "localnet", "manager",
     "SSL_ports", "Safe_ports", "CONNECT", "authenticated",
-    "step1", "step2", "step3", "ssl_exclude",
+    "step1", "step2", "step3", "ssl_exclude", "exentos_auth_dominio",
 }
 
 # Tipos de ACL admitidos. Cualquier otro se rechaza en lugar de escribirse.

@@ -162,6 +162,17 @@ acl origenes_confianza src {{ trusted_sources|join(' ') }}
 http_access allow origenes_confianza
 
 {% endif %}
+{% if auth_exempt_domains %}
+# Destinos que no piden credenciales sin importar quién los pida (a diferencia
+# de origenes_confianza, que exime por IP de ORIGEN). Pensado para destinos
+# que no saben presentar credenciales de proxy: Windows Update, telemetría de
+# Office, un SaaS sin proxy-auth. Va antes de exigir autenticación por el
+# mismo motivo que origenes_confianza: después de la línea de abajo, ya sería
+# tarde para eximir a nadie.
+acl exentos_auth_dominio dstdomain {{ auth_exempt_domains|join(' ') }}
+http_access allow exentos_auth_dominio
+
+{% endif %}
 # Pedir credenciales una sola vez, antes de evaluar las reglas del panel.
 # A partir de aquí todas las peticiones llegan ya autenticadas, así que un
 # "deny <grupo>" devuelve 403 y no un 407 en bucle. Esto permite respetar el
