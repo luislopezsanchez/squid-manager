@@ -8,7 +8,9 @@ y el dashboard consulta cada pocos segundos.
 
 import io
 import re
+import time
 import logging
+import threading
 from pathlib import Path
 from datetime import datetime
 
@@ -20,6 +22,32 @@ ACCESS_LOG_PATH = "/var/log/squid/access.log"
 # recorrer un fichero de 500 MB buscando algo que quizá no está.
 MAX_SCAN_LINES = 50_000
 _CHUNK = 256 * 1024
+
+# El visor de logs del panel pide get_logs()+get_log_stats() cada 5s (con los
+# mismos filtros mientras el admin no toque nada), y cada llamada escanea
+# hasta MAX_SCAN_LINES desde disco: medido en vivo, ~300ms por llamada con un
+# access.log de 300.000 líneas. Sin caché, eso son ~600ms de CPU cada 5s solo
+# por tener la pestaña abierta -y se multiplica por cada admin que la tenga
+# abierta a la vez, aunque miren exactamente lo mismo. Un TTL corto (por
+# debajo del intervalo de polling) colapsa esas llamadas repetidas e
+# idénticas en una sola lectura real, sin cambiar ningún valor devuelto: un
+# cambio de filtro (u otra clave) sigue siendo un cache-miss inmediato.
+_CACHE_TTL = 3.0
+_cache: dict[tuple, tuple[float, object]] = {}
+_cache_lock = threading.Lock()
+
+
+def _cached(key: tuple, calcular):
+    """Devuelve el resultado de `calcular()` cacheado por `_CACHE_TTL` s."""
+    now = time.time()
+    with _cache_lock:
+        entry = _cache.get(key)
+        if entry is not None and now - entry[0] < _CACHE_TTL:
+            return entry[1]
+    resultado = calcular()
+    with _cache_lock:
+        _cache[key] = (now, resultado)
+    return resultado
 
 LINE_PATTERN = re.compile(
     r'^(\d+\.\d+)\s+'           # timestamp
@@ -159,7 +187,20 @@ def get_logs(
     denied_only: bool = False,
     max_scan: int = MAX_SCAN_LINES,
 ) -> dict:
-    """Obtiene logs filtrados con paginación (los más recientes primero)."""
+    """Obtiene logs filtrados con paginación (los más recientes primero).
+
+    Cacheado unos segundos: el visor de logs pide esto mismo, con los mismos
+    filtros, cada 5s mientras el admin no cambie nada (ver `_CACHE_TTL`).
+    """
+    key = ("get_logs", limit, offset, user, status, domain, ip, denied_only, max_scan)
+    return _cached(key, lambda: _get_logs_sin_cache(
+        limit, offset, user, status, domain, ip, denied_only, max_scan,
+    ))
+
+
+def _get_logs_sin_cache(
+    limit: int, offset: int, user, status, domain, ip, denied_only, max_scan,
+) -> dict:
     page = []
     matched = 0
     scanned = 0
@@ -186,7 +227,14 @@ def get_logs(
 
 
 def get_log_stats(max_scan: int = MAX_SCAN_LINES) -> dict:
-    """Estadísticas del access.log para los filtros rápidos."""
+    """Estadísticas del access.log para los filtros rápidos.
+
+    Cacheado unos segundos, mismo motivo que `get_logs` (ver `_CACHE_TTL`).
+    """
+    return _cached(("get_log_stats", max_scan), lambda: _get_log_stats_sin_cache(max_scan))
+
+
+def _get_log_stats_sin_cache(max_scan: int) -> dict:
     users = set()
     domains = set()
     statuses = set()

@@ -6,6 +6,7 @@ import json
 from typing import Literal
 from app.utils import utcnow
 from fastapi import APIRouter, Depends, Query
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -29,7 +30,13 @@ async def access_logs(
     _: Admin = Depends(get_current_admin),
 ):
     """Listar logs de acceso con filtros y paginación."""
-    return get_logs(
+    # get_logs escanea el access.log desde disco (hasta 50.000 líneas si el
+    # filtro no encuentra nada antes): al threadpool, para no congelar el
+    # panel para todos los admins durante ese escaneo (cacheado unos segundos
+    # en log_service, pero el primer polling tras cambiar un filtro sí paga
+    # el costo real).
+    return await run_in_threadpool(
+        get_logs,
         limit=limit, offset=offset, user=user,
         status=status, domain=domain, ip=ip, denied_only=denied,
     )
@@ -38,7 +45,7 @@ async def access_logs(
 @router.get("/stats")
 async def log_stats(_: Admin = Depends(get_current_admin)):
     """Estadísticas para los filtros del logs viewer."""
-    return get_log_stats()
+    return await run_in_threadpool(get_log_stats)
 
 
 @router.get("/security-alerts")
@@ -56,7 +63,7 @@ async def security_alerts(
     from collections import Counter
 
     # Solo se recorre la ventana pedida, no el histórico completo.
-    entries = get_recent_entries(minutes * 60)
+    entries = await run_in_threadpool(get_recent_entries, minutes * 60)
 
     auth_failures = Counter()
     for e in entries:
@@ -99,7 +106,9 @@ async def export_logs(
       herramientas ya hechas para el formato nativo de Squid (módulo Squid de
       Splunk/ELK, AWStats, SARG), que no saben interpretar CSV ni JSON.
     """
-    result = get_logs(limit=50000, offset=0, user=user, status=status, domain=domain, ip=ip, denied_only=denied)
+    result = await run_in_threadpool(
+        get_logs, limit=50000, offset=0, user=user, status=status, domain=domain, ip=ip, denied_only=denied,
+    )
     entries = result["entries"]
     stamp = utcnow().strftime("%Y%m%d-%H%M%S")
 
