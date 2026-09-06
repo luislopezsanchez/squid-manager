@@ -1,7 +1,8 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import RequiereAplicar from '../components/RequiereAplicar'
 
 interface Config {
   enabled: boolean
@@ -98,6 +99,7 @@ export default function ParentProxy() {
       if (r.status === 'error') {
         showToast(r.message, 'error')
       } else {
+        notificarCambioPendiente()
         showToast(traducir("Configuración guardada. Aplica los cambios para que surta efecto."))
       }
     } catch (e: any) {
@@ -271,7 +273,8 @@ export default function ParentProxy() {
         </button>
       </div>
 
-      <p className="text-xs text-ink-3 mt-4">{traducir("Al pulsar «Aplicar cambios» se comprueba que el proxy padre responde. Si no lo hace, el cambio se rechaza en lugar de dejar a todos sin navegación.")}</p>
+      <div className="mt-4"><RequiereAplicar /></div>
+      <p className="text-xs text-ink-3 mt-2">{traducir("Al pulsar «Aplicar cambios» se comprueba que el proxy padre responde. Si no lo hace, el cambio se rechaza en lugar de dejar a todos sin navegación.")}</p>
     </div>
   )
 }

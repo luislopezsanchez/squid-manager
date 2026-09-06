@@ -26,7 +26,13 @@ export default function Layout() {
   useEffect(() => {
     checkPending()
     const interval = setInterval(checkPending, 5000)
-    return () => clearInterval(interval)
+    // Refresco inmediato cuando una pantalla guarda un cambio que requiere
+    // Aplicar, en vez de esperar hasta 5s a que llegue el próximo sondeo.
+    window.addEventListener('squidmanager:cambio-pendiente', checkPending)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('squidmanager:cambio-pendiente', checkPending)
+    }
   }, [])
 
   const handleLogout = () => {

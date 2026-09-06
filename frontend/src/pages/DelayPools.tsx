@@ -1,7 +1,8 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import RequiereAplicar from '../components/RequiereAplicar'
 
 interface DelayPool {
   id: number
@@ -175,6 +176,7 @@ export default function DelayPools() {
         await api.createDelayPool(data)
         showToast(traducir("Delay pool creado correctamente"))
       }
+      notificarCambioPendiente()
       setForm({ pool_class: 2, acl_name: '', description: '', enabled: true })
       setSpeeds({})
       setEditingId(null)
@@ -203,6 +205,7 @@ export default function DelayPools() {
     if (!confirm(traducir("¿Eliminar este delay pool?"))) return
     try {
       await api.deleteDelayPool(id)
+      notificarCambioPendiente()
       loadPools()
       showToast(traducir("Delay pool eliminado correctamente"))
     } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
@@ -376,9 +379,12 @@ export default function DelayPools() {
           </div>
 
           {error && <div className="mb-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
-          <button type="submit" className="btn btn-primary">
-            {editingId ? traducir('Guardar Cambios') : traducir('Crear Delay Pool')}
-          </button>
+          <div className="flex items-center gap-3">
+            <button type="submit" className="btn btn-primary">
+              {editingId ? traducir('Guardar Cambios') : traducir('Crear Delay Pool')}
+            </button>
+            <RequiereAplicar />
+          </div>
         </form>
       )}
 

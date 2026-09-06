@@ -79,6 +79,13 @@ async def update_setting(
         if not valido:
             raise HTTPException(400, detail=mensaje)
 
+    # true/false explícito: sin esto un typo ("flase", "verdadero") pasaba la
+    # sanitización genérica y el generador lo interpretaba como "true" (activa
+    # la interceptación de HTTPS) por defecto silenciosamente — justo lo
+    # contrario de lo que alguien escribiendo "false" a mano querría.
+    if data.key == "ssl_bump_enabled" and data.value.strip().lower() not in ("true", "false"):
+        raise HTTPException(400, detail='El valor de «ssl_bump_enabled» debe ser "true" o "false".')
+
     # El resto de valores se interpolan tal cual en squid.conf (visible_hostname,
     # cache_dir, refresh_pattern, auth_realm, access_log, etc.): sin esto, un
     # salto de línea en el valor inserta una directiva arbitraria en el fichero.

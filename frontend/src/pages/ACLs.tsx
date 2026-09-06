@@ -1,7 +1,8 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import RequiereAplicar from '../components/RequiereAplicar'
 
 interface Acl {
   id: number
@@ -57,6 +58,7 @@ export default function ACLs() {
         await api.createAcl(form)
         showToast(`ACL "${form.name}" creada correctamente`)
       }
+      notificarCambioPendiente()
       setForm({ name: '', type: 'dstdomain', value: '', description: '', enabled: true })
       setEditingId(null)
       setShowForm(false)
@@ -77,6 +79,7 @@ export default function ACLs() {
     if (!confirm(traducir("¿Eliminar esta ACL?"))) return
     try {
       await api.deleteAcl(id)
+      notificarCambioPendiente()
       loadAcls()
       showToast(traducir("ACL eliminada correctamente"))
     } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
@@ -129,10 +132,11 @@ export default function ACLs() {
               placeholder={traducir("ej: Bloquear acceso a redes sociales")} className="input" />
           </div>
           {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
-          <div className="mt-4 flex gap-3">
+          <div className="mt-4 flex items-center gap-3">
             <button type="submit" className="btn btn-primary">
               {editingId ? traducir('Guardar Cambios') : traducir('Crear ACL')}
             </button>
+            <RequiereAplicar />
           </div>
         </form>
       )}

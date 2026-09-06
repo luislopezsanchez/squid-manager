@@ -1,6 +1,6 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 
 interface Setting {
@@ -16,6 +16,19 @@ const CATEGORIES = [
   { key: 'logging', label: traducir("Registros") },
   { key: 'general', label: traducir("General") },
 ]
+
+// Ajustes cuyo valor solo puede ser uno de un conjunto fijo y conocido: un
+// <select> evita el typo silencioso que un <input> de texto libre no detecta
+// (p. ej. "flase" en ssl_bump_enabled, que el generador interpreta como
+// "true" por defecto y activa la interceptación de HTTPS sin que nadie lo
+// pidiera). Se declara aparte, keyed por el nombre del ajuste, para poder
+// sumar otros campos de valores conocidos sin tocar el resto del componente.
+const ENUM_SETTINGS: Record<string, { value: string; label: string }[]> = {
+  ssl_bump_enabled: [
+    { value: 'true', label: traducir('Sí — interceptar HTTPS para filtrar por dominio') },
+    { value: 'false', label: traducir('No — solo tunelizar (splice), sin filtrar dentro de HTTPS') },
+  ],
+}
 
 export default function Settings() {
   const [settings, setSettings] = useState<Record<string, Setting>>({})
@@ -52,6 +65,7 @@ export default function Settings() {
     try {
       const setting = settings[key]
       await api.updateSetting(key, setting.value, setting.category, setting.description || '')
+      notificarCambioPendiente()
       showToast(`Configuración "${key}" guardada correctamente`)
     } catch (e: any) {
       setError(e.message)
@@ -71,7 +85,13 @@ export default function Settings() {
     <div className="p-6 md:p-7">
       <ToastContainer />
       <h1 className="page-title mb-2">{traducir("Configuración de Squid")}</h1>
-      <p className="text-sm text-ink-3 mb-6">{traducir("Parámetros generales del proxy. Los cambios se guardan en la BD.")}</p>
+      <p className="text-sm text-ink-3 mb-6">
+        {traducir("Parámetros generales del proxy.")}{' '}
+        <span className="font-medium text-ink-2">
+          {traducir("Guardar aquí no los aplica todavía")}
+        </span>
+        {': '}{traducir("cada ajuste se guarda en la BD, pero Squid no lo usa hasta pulsar «Aplicar cambios» arriba.")}
+      </p>
 
       {error && <div className="mb-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
 
@@ -91,16 +111,28 @@ export default function Settings() {
                       {setting.description && <p className="text-xs text-ink-3 mt-0.5">{setting.description}</p>}
                     </div>
                     <div className="flex-1">
-                      <input
-                        type="text"
-                        value={setting.value}
-                        onChange={e => {
-                          updateValue(key, e.target.value)
-                          if (key === 'dns_nameservers') setDnsResult(null)
-                        }}
-                        placeholder={key === 'dns_nameservers' ? '172.27.0.1 1.1.1.1' : undefined}
-                        className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                      />
+                      {ENUM_SETTINGS[key] ? (
+                        <select
+                          value={setting.value}
+                          onChange={e => updateValue(key, e.target.value)}
+                          className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
+                        >
+                          {ENUM_SETTINGS[key].map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={setting.value}
+                          onChange={e => {
+                            updateValue(key, e.target.value)
+                            if (key === 'dns_nameservers') setDnsResult(null)
+                          }}
+                          placeholder={key === 'dns_nameservers' ? '172.27.0.1 1.1.1.1' : undefined}
+                          className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                        />
+                      )}
                     </div>
                     {key === 'dns_nameservers' && (
                       <button

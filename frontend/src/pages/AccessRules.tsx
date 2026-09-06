@@ -1,8 +1,9 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { IconChevronDown, IconChevronUp, IconUsers } from '../components/Icons'
-import { api } from '../api/client'
+import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import RequiereAplicar from '../components/RequiereAplicar'
 
 interface AccessRule {
   id: number
@@ -53,6 +54,7 @@ export default function AccessRules() {
         await api.createAccessRule(form)
         showToast(`Regla "${form.action} ${form.acl_names}" creada correctamente`)
       }
+      notificarCambioPendiente()
       setForm({ action: 'allow', acl_names: '', order: rules.length, description: '', enabled: true })
       setEditingId(null)
       setShowForm(false)
@@ -73,6 +75,7 @@ export default function AccessRules() {
     if (!confirm(traducir("¿Eliminar esta regla?"))) return
     try {
       await api.deleteAccessRule(id)
+      notificarCambioPendiente()
       loadRules()
       showToast(traducir("Regla eliminada correctamente"))
     } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
@@ -87,6 +90,7 @@ export default function AccessRules() {
     const ruleIds = newRules.map(r => r.id)
     try {
       await api.reorderRules(ruleIds)
+      notificarCambioPendiente()
       showToast(traducir("Orden de reglas actualizado"))
     } catch (e: any) {
       showToast(`Error al reordenar: ${e.message}`, 'error')
@@ -164,9 +168,12 @@ export default function AccessRules() {
               placeholder={traducir("ej: Permitir acceso a red local autenticada")} className="input" />
           </div>
           {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
-          <button type="submit" className="mt-4 btn btn-primary">
-            {editingId ? traducir('Guardar Cambios') : traducir('Crear Regla')}
-          </button>
+          <div className="mt-4 flex items-center gap-3">
+            <button type="submit" className="btn btn-primary">
+              {editingId ? traducir('Guardar Cambios') : traducir('Crear Regla')}
+            </button>
+            <RequiereAplicar />
+          </div>
         </form>
       )}
 

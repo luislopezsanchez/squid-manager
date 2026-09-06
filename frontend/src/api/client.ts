@@ -29,6 +29,17 @@ export function isSuperadmin(): boolean {
   return getRole() === 'superadmin'
 }
 
+// Layout sondea /squid/pending cada 5s para pintar "Aplicar cambios" en rojo.
+// Sin esto, guardar un ajuste y mirar el botón antes de que pase ese sondeo
+// hace parecer que el guardado no marcó nada pendiente. Cualquier pantalla
+// que guarda un cambio que sí requiere Aplicar (ACLs, reglas, delay pools,
+// ajustes generales, proxy padre, Kerberos) llama a esto justo después de
+// guardar con éxito, y Layout refresca el indicador al instante en vez de
+// esperar el próximo sondeo.
+export function notificarCambioPendiente() {
+  window.dispatchEvent(new Event('squidmanager:cambio-pendiente'))
+}
+
 /**
  * Convierte el `detail` de un error de FastAPI en un mensaje legible.
  *
