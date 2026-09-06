@@ -175,6 +175,17 @@ else
 fi
 ok "Codigo en $INSTALL_DIR ($(git -C "$INSTALL_DIR" rev-parse --short HEAD))"
 
+# El repo lo clona root, pero el backend corre como $APP_USER: git rechaza
+# cualquier operacion sobre un repositorio cuyo dueño no coincide con quien
+# lo consulta ("dubious ownership"), salvo que se declare una excepcion
+# explicita. Sin esto, el panel (que ejecuta 'git rev-parse' para mostrar el
+# commit desplegado en /health) lo veria siempre como "desconocido", aunque
+# el .git este ahi. Se usa --system (no --global) porque $APP_USER no tiene
+# permiso de escritura en su propio $HOME (que es $INSTALL_DIR, propiedad de
+# root) para crear un .gitconfig ahi; --system la deja en /etc/gitconfig,
+# que este script ya puede escribir por correr como root.
+git config --system --add safe.directory "$INSTALL_DIR"
+
 # ============================================
 # 5. Base de datos
 # ============================================

@@ -25,6 +25,13 @@ PROVEEDORES = {
     "systemctl": None,   # parte del sistema, no se instala
     "squid": "squid-openssl",
     "docker": None,      # solo en modo Docker, y lo aporta el anfitrión
+    # Usado para exponer el hash de commit desplegado en /health. En
+    # instalación nativa el repo clonado ya lo necesita para existir, y
+    # install-nativo.sh lo instala explícitamente (línea con
+    # "openssl ca-certificates logrotate cron git curl"). En Docker el
+    # contexto de build no incluye .git, así que ahí no hace falta: el
+    # llamado falla en silencio y /health informa "desconocido".
+    "git": "git",
 }
 
 
