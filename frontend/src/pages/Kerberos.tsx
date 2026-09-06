@@ -1,7 +1,8 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
-import { api } from '../api/client'
+import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import RequiereAplicar from '../components/RequiereAplicar'
 
 export default function Kerberos() {
   const [config, setConfig] = useState<any>(null)
@@ -26,6 +27,7 @@ export default function Kerberos() {
         realm: config.realm,
         proxy_fqdn: config.proxy_fqdn,
       })
+      notificarCambioPendiente()
       showToast(traducir("Configuración de Kerberos guardada correctamente"), 'success')
       cargar()
     } catch (e: any) {
@@ -41,6 +43,7 @@ export default function Kerberos() {
     setUploading(true)
     try {
       const result = await api.uploadKeytab(file)
+      notificarCambioPendiente()
       showToast(result.message || traducir("Keytab subido correctamente"), 'success')
       cargar()
     } catch (err: any) {
@@ -55,6 +58,7 @@ export default function Kerberos() {
     setDeleting(true)
     try {
       await api.deleteKeytab()
+      notificarCambioPendiente()
       showToast(traducir("Keytab eliminado"), 'success')
       cargar()
     } catch (e: any) {
@@ -101,23 +105,31 @@ export default function Kerberos() {
           <div>
             <label className="field-label block mb-1.5">{traducir("Realm")}</label>
             <input type="text" value={config.realm} onChange={e => setConfig({ ...config, realm: e.target.value })}
-              placeholder="EMPRESA.COM" className="input font-mono text-sm" />
+              disabled={!config.enabled}
+              placeholder="EMPRESA.COM" className="input font-mono text-sm disabled:opacity-50 disabled:bg-brand-50" />
             <p className="text-xs text-ink-3 mt-1">{traducir("El dominio Kerberos, normalmente el dominio de Active Directory en mayúsculas.")}</p>
           </div>
           <div>
             <label className="field-label block mb-1.5">{traducir("FQDN del proxy")}</label>
             <input type="text" value={config.proxy_fqdn} onChange={e => setConfig({ ...config, proxy_fqdn: e.target.value })}
-              placeholder="proxy.empresa.com" className="input font-mono text-sm" />
+              disabled={!config.enabled}
+              placeholder="proxy.empresa.com" className="input font-mono text-sm disabled:opacity-50 disabled:bg-brand-50" />
             <p className="text-xs text-ink-3 mt-1">{traducir("Debe resolver por DNS a este proxy y coincidir con el SPN del keytab (HTTP/fqdn).")}</p>
           </div>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="mt-4 btn btn-primary disabled:opacity-50"
-        >
-          {saving ? traducir('Guardando...') : traducir('Guardar Configuración')}
-        </button>
+        {!config.enabled && (
+          <p className="text-xs text-ink-3 mt-3">{traducir("Activa «Habilitar Kerberos» arriba para editar estos campos.")}</p>
+        )}
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="btn btn-primary disabled:opacity-50"
+          >
+            {saving ? traducir('Guardando...') : traducir('Guardar Configuración')}
+          </button>
+          <RequiereAplicar />
+        </div>
       </div>
 
       {/* Keytab */}
