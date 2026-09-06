@@ -5,6 +5,23 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.21.0] - 2026-09-06
+
+### Corregido
+
+- **`docs/actualizacion.md`**: aclarado que `git pull` no reinstala archivos
+  que `install-nativo.sh` coloca fuera del repo clonado (logrotate,
+  cron.monthly, drop-ins de systemd) — con el comando exacto para ponerse
+  al día tras 0.20.0.
+- **Cada botón "Guardar" de Configuración** lleva ahora el mismo asterisco
+  que ya usan ACLs, Reglas, Delay Pools, Kerberos y Grupos, en vez de
+  depender solo del aviso general de la cabecera de la página.
+- **La versión del login estaba escrita a mano** y se había desincronizado
+  (mostraba "v0.6" con el proyecto en 0.20). Ahora se lee de `/health`, la
+  misma fuente de verdad que ya usa el resto del proyecto.
+
+---
+
 ## [0.20.0] - 2026-09-06
 
 ### Añadido
