@@ -241,7 +241,18 @@ make logs-squid
 docker compose logs -f backend
 ```
 
-Los logs de Squid (`access.log`, `cache.log`) rotan a diario dentro del contenedor con `logrotate`, con 7 días de retención.
+Los logs de Squid (`access.log`, `cache.log`) rotan a diario con `logrotate`, con 30 días de retención (31 en total, contando el que Squid sigue escribiendo hoy). Los rotados quedan en `/var/log/squid/archive/`, separados del que Squid está escribiendo activamente, nombrados por fecha (`access.log-20260906.gz`) en vez de por número de turno — más fácil de ubicar el de un día concreto para una auditoría, y ese directorio es lo que conviene incluir en un backup o export externo si hace falta conservar el historial más allá de esos 30 días. La retención es fija (no configurable desde el panel); para cambiarla, editar `rotate 30` en `/etc/logrotate.d/squid` en cada servidor.
+
+**Consolidación mensual, aparte de la rotación diaria.** El día 1 de cada mes,
+`/etc/cron.monthly/squidmanager-log-archive` junta los diarios ya archivados
+del mes que acaba de cerrar en un único archivo (`archive/monthly/access-
+202608.log.gz`, `cache-202608.log.gz`) y borra los diarios sueltos que
+consolidó. Es puro almacenamiento en frío: no toca el archivo activo que lee
+el panel ni la rotación diaria en absoluto, así que no tiene ningún efecto
+sobre el rendimiento — solo deja el historial más largo ordenado en un
+archivo por mes en vez de 30 archivos diarios sueltos.
+
+Para retención de meses, lo recomendado sigue siendo reenviar los logs a un sistema externo (**Syslog externo** en el panel) en vez de acumularlos localmente: un log que solo vive en el propio proxy es más frágil como evidencia de auditoría, y nada los indexa para buscar en ellos más allá de grep. La consolidación mensual es un respaldo local razonable, no un reemplazo de eso.
 
 ---
 

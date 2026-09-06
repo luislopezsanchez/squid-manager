@@ -1,12 +1,24 @@
 /var/log/squid/*.log {
     daily
-    rotate 7
+    rotate 30
     compress
     delaycompress
     missingok
     notifempty
     nocreate
     sharedscripts
+    # Nombra los rotados por fecha (access.log-20260906.gz) en vez de por
+    # número de turno (access.log.3.gz): para una auditoría, "el log del 6
+    # de septiembre" es una búsqueda directa por nombre de archivo en vez de
+    # tener que calcular a qué número de rotación corresponde esa fecha.
+    dateext
+    dateformat -%Y%m%d
+    # Los archivos rotados quedan en su propio directorio, separados de lo
+    # que Squid está escribiendo activamente: más fácil de incluir/excluir
+    # de un backup o export aparte, y no hay riesgo de que un `ls` rápido en
+    # /var/log/squid confunda el archivo vivo con uno viejo.
+    olddir /var/log/squid/archive
+    createolddir 0750 proxy proxy
     postrotate
         # `nocreate` es deliberado: logrotate renombra el fichero y no crea uno
         # nuevo, porque de recrearlo se encarga Squid al reabrir. Si esto no se
