@@ -5,6 +5,42 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.18.0] - 2026-09-06
+
+### Corregido
+
+- **El script de setup para el Active Directory (Kerberos) no funcionaba en
+  la práctica**, encontrado y corregido en una serie de pruebas reales
+  contra un AD de laboratorio, no en revisión de código:
+  - Windows bloquea por defecto cualquier `.ps1` sin firma digital. Se
+    entrega ahora como `.zip` con un lanzador `Ejecutar.cmd` junto al
+    script (que sigue ahí para revisar antes de correrlo).
+  - `-mapuser` en formato UPN (`usuario@dominio`) fallaba con
+    `DsCrackNames returned 0x5` porque una cuenta recién creada no tiene un
+    `UserPrincipalName` real asignado. Cambiado a formato NetBIOS
+    (`DOMINIO\usuario`).
+  - El nombre de cuenta sugerido por defecto (`proxy`, tomado del FQDN) era
+    demasiado genérico y chocaba con cuentas de otro origen. Cambiado a uno
+    distintivo (`svc-squidmanager`).
+  - El script pedía "la contraseña actual" de una cuenta existente, un
+    concepto que no aplica: `ktpass` resetea la contraseña que se le pasa,
+    no necesita la anterior. Corregido para pedir siempre una contraseña
+    nueva, con confirmación explícita.
+  - Una contraseña simple fallaba la política de complejidad del dominio
+    recién dentro de `New-ADUser`, dejando además la cuenta creada a
+    medias y deshabilitada. Ahora se valida antes, y una cuenta reutilizada
+    se resetea y habilita explícitamente.
+  - El aviso de `ktpass` sobre el SPN no siempre es benigno pese a lo que
+    dice el propio mensaje: en una prueba real dejó el SPN sin registrar.
+    Se registra ahora explícitamente, con un error claro si ya está en otra
+    cuenta.
+
+  Validado con una corrida completa desde cero en un AD de prueba limpio:
+  cuenta creada, SPN mapeado sin warnings, keytab con los 5 tipos de
+  cifrado, `setspn -L` confirma el SPN registrado.
+
+---
+
 ## [0.17.0] - 2026-09-06
 
 ### Añadido
