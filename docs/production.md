@@ -168,7 +168,12 @@ Los logs de Squid tienen retención (7 días, ver más abajo); `audit_log` —qu
 
 ```bash
 # Añadir a crontab: purgar mensualmente lo anterior a 12 meses (valor por defecto)
-0 3 1 * * cd /opt/squid-manager/backend && .venv/bin/python -m scripts.purge_audit_log >> /var/log/squidmanager-purge.log 2>&1
+#
+# Instalación nativa: DATABASE_URL no tiene valor por defecto (a propósito,
+# ver "DATABASE_URL sin default" más abajo). Systemd se lo inyecta al backend
+# vía EnvironmentFile=, pero cron no — hay que cargar el .env a mano antes de
+# llamar al script, si no falla con "Field required: DATABASE_URL".
+0 3 1 * * cd /opt/squid-manager && set -a && . ./.env && set +a && cd backend && .venv/bin/python -m scripts.purge_audit_log >> /var/log/squidmanager-purge.log 2>&1
 ```
 
 En Docker, la misma tarea corre dentro del contenedor del backend:

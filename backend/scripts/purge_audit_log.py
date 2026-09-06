@@ -10,6 +10,13 @@ Uso:
     python -m scripts.purge_audit_log [meses]
 
 Si no se pasa `meses`, usa RETENCION_MESES_POR_DEFECTO (12).
+
+En instalación nativa, DATABASE_URL no tiene valor por defecto: systemd
+se lo inyecta al backend vía EnvironmentFile=, pero invocar este script
+a mano (o desde cron) NO lo hereda automáticamente. Hay que cargar
+/opt/squid-manager/.env antes de llamarlo (ver docs/production.md, que
+trae el cron ya armado con esto). En Docker no hace falta: `docker exec`
+hereda las variables de entorno del propio contenedor.
 """
 
 import logging
