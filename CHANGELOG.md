@@ -5,6 +5,134 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.15.0] - 2026-09-06
+
+Auditoría integral de seguridad, correctitud y rendimiento sobre la rama
+`fix/auditoria-seguridad-agosto`, más una funcionalidad nueva (Kerberos) y
+una segunda ronda de correcciones a partir de dos auditorías externas
+independientes. Todo verificado en vivo contra el servidor nativo de
+pruebas, no solo revisado sobre el código.
+
+### Añadido
+
+- **Autenticación Kerberos/Negotiate (SPNEGO) contra Active Directory**, con
+  interfaz de configuración propia en el panel: activar/desactivar, realm,
+  FQDN del proxy y subida/reemplazo/borrado del keytab. Guía completa en
+  [docs/kerberos.md](docs/kerberos.md), incluido el hallazgo de que
+  `ktpass` necesita `-crypto All` o el keytab generado en Windows no sirve.
+- **Eximir de autenticación por dominio de destino.** Antes la única forma de
+  dejar pasar tráfico sin credenciales (por ejemplo, telemetría de Windows
+  Update o de un antivirus) era desactivar la autenticación para todo el
+  proxy. Ahora se declara una lista de dominios de destino que no la exigen;
+  se rechaza explícitamente un comodín que eximiría un TLD entero (`.com`,
+  no solo `foo.com`).
+- **Retención del registro de auditoría (`audit_log`).** Quién cambió qué
+  ajuste y cuándo no tenía límite y crecía sin parar. Se purga por fuera del
+  panel, igual que el backup, con un script (`scripts/purge_audit_log.py`)
+  documentado para cron en ambos modos de despliegue — ver
+  [docs/production.md](docs/production.md).
+- **Integración continua** (`.github/workflows/ci.yml`): la suite de tests
+  del backend corre en cada push sobre Python 3.11 y 3.12, más auditoría de
+  dependencias del backend (`pip-audit`, informativa) y del frontend
+  (`npm audit`, bloqueante desde severidad alta). Antes la única red de
+  seguridad era que alguien se acordara de correr `pytest` a mano.
+- `/health` devuelve también el hash corto del commit desplegado
+  (`{"status", "version", "commit"}`), útil para confirmar qué código corre
+  de verdad en un servidor tras un despliegue.
+
+### Corregido — rendimiento (origen: reportes de usuarios de que el panel «se nota lento»)
+
+- **Aplicar cambios de Squid bloqueaba el panel entero para todos los
+  usuarios**, hasta 33 segundos medidos en vivo: `apply_squid_config` es
+  síncrona y se llamaba directamente desde una ruta `async`, así que
+  congelaba el único event loop de FastAPI mientras corría — cualquier otra
+  petición, de cualquier otro usuario, esperaba en la cola. Con el fix
+  (`run_in_threadpool`) la misma prueba concurrente baja a 19 ms. El mismo
+  patrón se corrigió en la ruta de altas/bajas de usuarios de grupo.
+- **El listado y las estadísticas de logs re-escaneaban el fichero entero en
+  cada petición**, y el panel de Logs sondea cada 5 segundos: caché con TTL
+  de 3 segundos (mismo patrón ya usado en `metrics_service.py`) para no
+  repetir el trabajo dentro de una misma ventana de refresco. De paso,
+  también se movieron esos endpoints a threadpool.
+
+### Corregido — seguridad y correctitud
+
+- **`psycopg[binary]==3.2.3` fue retirado de PyPI**: cualquier instalación
+  nueva fallaba en `pip install`, aunque los entornos ya instalados antes lo
+  siguieran usando sin avisar. Subido a 3.2.13 (verificado con una
+  instalación limpia).
+- `python-jose`, `jinja2` y `python-multipart` actualizados a la versión más
+  reciente de la misma librería (sin cambiar de dependencia). `pip-audit`
+  bajó de 26 CVEs en 6 paquetes a 17 en 4 — los que quedan corresponden a
+  `fastapi`/`starlette` y a la migración de `python-jose` a otra librería,
+  ambos pospuestos deliberadamente a una decisión aparte por el alcance del
+  cambio.
+- **`DATABASE_URL` ya no tiene un valor por defecto con pinta de contraseña
+  real.** Si falta, el backend no arranca y lo dice claro, en vez de
+  arrancar silenciosamente contra una URL de ejemplo.
+- Restaurar un backup rechazaba backups válidos que traían ACLs y reglas
+  nuevas sin ningún grupo (faltaba un `db.flush()` antes de la consulta que
+  los necesitaba ya guardados) y trataba valores vacíos legítimos como
+  error de validación.
+- `PUT` de un delay pool con `parameters: null` devolvía un 500 sin manejar
+  en lugar de un 400 explicativo.
+- El escape del filtro LDAP vivía duplicado en dos ficheros; ahora es una
+  única función, con una prueba que detecta si alguna copia se
+  desincroniza.
+- El `flush` previo a `_sync_passwd()` estaba repetido en tres sitios que
+  llaman a la función y faltaba en uno (`reset_password`) — la misma clase
+  de bug que ya había causado una regresión anterior. Se movió el `flush`
+  dentro de la propia función.
+
+### Corregido — hardening del propio despliegue nativo
+
+- **`git rev-parse` fallaba al invocarse como el usuario de servicio** (no
+  root) por la protección de «dubious ownership» de git — `/health` mostraba
+  `"commit": "desconocido"` en vez del hash real. El instalador nativo ahora
+  marca el repositorio como seguro para ese usuario
+  (`git config --system --add safe.directory`).
+- **El script de purga de `audit_log` fallaba invocado a mano o desde
+  cron** (`Field required: DATABASE_URL`): systemd inyecta las variables de
+  entorno solo al proceso que arranca con `EnvironmentFile=`, no a lo que se
+  ejecuta aparte. Documentado el cron con `.env` cargado a mano antes de
+  llamar al script.
+- `install-nativo.sh` no tenía el bit de ejecución en el repositorio.
+
+### Documentación
+
+- Corregido «27 tipos de ACL» → **29** en README y `docs/configuration.md`:
+  la tabla no incluía `srcdom_regex`, que sí existe en el código.
+  Reformulada la frase «escalable y modular» para reflejar que el diseño es
+  de un único proceso por instancia — ver la sección nueva en
+  [docs/production.md](docs/production.md) sobre por qué no se le añaden
+  `--workers`.
+- Corregido el mismo mensaje de log desactualizado en README y en la guía
+  de instalación (en, pt): Squid ya no anuncia «Accepting HTTP Socket
+  connections» sino la versión con SSL bump.
+
+### Infraestructura del repositorio
+
+- `.gitattributes` (`eol=lf`) para que un `commit` hecho desde Windows deje
+  de introducir CRLF en scripts pensados para Linux — causa raíz de un
+  problema que venía repitiéndose.
+- Portabilidad de la suite de tests a Windows para desarrollo local: se
+  corrige un bug real de paso (`iter_lines_reverse` no recortaba `\r`) y se
+  marcan como `skip`/`skipif` los dos casos que dependen de un sistema de
+  ficheros o de un módulo exclusivos de Unix (`chmod` POSIX, `import
+  syslog`). 223 tests pasan en Linux, 210 pasan + 2 se omiten en Windows —
+  la diferencia son justo esos dos casos.
+
+### Pendiente, deliberadamente fuera de esta release
+
+- Migrar de `python-jose` a otra librería de JWT (`PyJWT`/`authlib`): solo
+  se actualizó de versión, no de librería — es un cambio de mayor alcance
+  que requiere su propia decisión.
+- Endurecer el acceso al socket de Docker (`docker-socket-proxy` o
+  namespace aislado) — ya documentado como riesgo aceptado en
+  [docs/production.md](docs/production.md#6-docker-socket).
+
+---
+
 ## [0.14.0] - 2026-08-29
 
 ### Añadido
