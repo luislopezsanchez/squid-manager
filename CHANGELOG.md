@@ -5,6 +5,37 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.20.0] - 2026-09-06
+
+### Añadido
+
+- **Aviso de "requiere Aplicar cambios" también en Usuarios, Grupos y
+  Backup/Restore.** Se había cubierto ACLs, reglas, delay pools, proxy
+  padre, Kerberos y ajustes generales; faltaban borrar un usuario del
+  proxy (si estaba en un grupo), crear/borrar un grupo, y restaurar un
+  backup o importar un `squid.conf`.
+- **Rotación de logs mejorada**: los archivos rotados ahora se nombran por
+  fecha (`access.log-20260906.gz`) en vez de por número de turno, viven en
+  su propio directorio (`/var/log/squid/archive/`) separados del que Squid
+  escribe activamente, y la retención local sube de 7 a 30 días.
+- **Consolidación mensual de logs archivados**, aparte de la rotación
+  diaria: el día 1 de cada mes junta los diarios ya archivados del mes
+  anterior en un único archivo por tipo, para almacenamiento en frío. No
+  afecta en nada al archivo activo que lee el panel ni a su rendimiento.
+
+### Documentación
+
+- `docs/actualizacion.md` y el `## Actualizar` del README (los 3 idiomas)
+  solo mostraban comandos de Docker en varias secciones pese a cubrir
+  también el modo nativo arriba — completado con el equivalente nativo en
+  cada caso.
+- `docs/configuration.md`: dos errores reales de LDAP diagnosticados
+  contra un Active Directory real — `cd=` en vez de `dc=` en el Bind DN, y
+  el contenedor `CN=Users` faltante cuando la cuenta no está en una OU
+  propia (síntoma: "Sincronizar con AD" no trae a nadie, sin error).
+
+---
+
 ## [0.19.0] - 2026-09-06
 
 ### Añadido
