@@ -20,7 +20,14 @@ class Settings(BaseSettings):
     """Settings cargados desde variables de entorno."""
 
     # Database
-    DATABASE_URL: str = "postgresql+psycopg://squid:squidpass123@db:5432/squidmanager"
+    #
+    # Sin valor por defecto a propósito: los dos despliegues soportados
+    # (docker-compose.yml y install-nativo.sh) siempre la fijan con
+    # credenciales generadas, así que un valor de ejemplo aquí no protege a
+    # nadie y solo invita a que alguien lo copie a un .env real. Si falta, el
+    # arranque debe fallar con un error claro, no conectarse en silencio a
+    # algo que no existe.
+    DATABASE_URL: str
 
     # Security
     SECRET_KEY: str = "change-me-in-production"
