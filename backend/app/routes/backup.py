@@ -181,6 +181,10 @@ async def restore_backup(
 
     for s in backup.get("squid_settings", []):
         key = s.get("key")
+        # Normalizado ANTES de las ramas de abajo: si el backup no traia la
+        # clave "value" en absoluto, sin esto el acceso a s["value"] mas abajo
+        # (aqui o en el SquidSetting(**s) del else) reventaria con KeyError.
+        s["value"] = s.get("value") or ""
         if key == "dns_nameservers":
             valido, mensaje = validar_servidores(parsear_dns(s.get("value")))
             if not valido:
@@ -193,8 +197,13 @@ async def restore_backup(
             valido, mensaje = validar_dominios(parsear_exentos(s.get("value")))
             if not valido:
                 raise HTTPException(400, detail=mensaje)
-        elif key != "ssl_bump_exclude":
-            s["value"] = validate_value(s.get("value", ""), field=f"valor de «{key}»")
+        elif key != "ssl_bump_exclude" and s["value"]:
+            # Solo se valida un valor NO vacio: uno vacio no puede inyectar
+            # nada en squid.conf (no hay contenido que interpretar), asi que
+            # rechazarlo aqui solo servia para abortar la restauracion entera
+            # de un backup viejo o legitimo que alguna vez guardo un ajuste
+            # en blanco, antes de que esta validacion existiera en el PUT.
+            s["value"] = validate_value(s["value"], field=f"valor de «{key}»")
         existing = db.query(SquidSetting).filter(SquidSetting.key == s["key"]).first()
         if existing:
             existing.value = s["value"]
@@ -215,6 +224,13 @@ async def restore_backup(
         else:
             db.add(Acl(**a))
         results["acls"] += 1
+
+    # Sin este flush, una ACL nueva (recien anadida arriba con db.add(), sin
+    # id ni fila en la BD todavia porque SessionLocal usa autoflush=False)
+    # es invisible para la consulta fresca de known_acl_names() de mas abajo:
+    # un backup legitimo con ACLs y reglas nuevas pero SIN grupos (el unico
+    # otro sitio que hace flush) se rechazaba entero con "ACL que no existe".
+    db.flush()
 
     # Grupos y miembros: se restauran ANTES que las reglas, porque las reglas
     # los referencian por nombre.
