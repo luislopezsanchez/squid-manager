@@ -1,7 +1,8 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
-import { api } from '../api/client'
+import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import RequiereAplicar from '../components/RequiereAplicar'
 
 interface Group {
   id: number
@@ -37,6 +38,7 @@ export default function Groups() {
     e.preventDefault()
     try {
       await api.createGroup({ name: newGroup.name, description: newGroup.description, no_bump: newGroup.no_bump })
+      notificarCambioPendiente()
       setNewGroup({ name: '', description: '', no_bump: false })
       setShowForm(false)
       loadGroups()
@@ -48,6 +50,7 @@ export default function Groups() {
     if (!confirm(`¿Eliminar el grupo "${name}"?`)) return
     try {
       await api.deleteGroup(id)
+      notificarCambioPendiente()
       loadGroups()
       showToast(`Grupo "${name}" eliminado`)
     } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
@@ -137,7 +140,10 @@ export default function Groups() {
             </div>
           </label>
 
-          <button type="submit" className="mt-4 btn btn-primary">{traducir("Crear Grupo")}</button>
+          <div className="mt-4 flex items-center gap-3">
+            <button type="submit" className="btn btn-primary">{traducir("Crear Grupo")}</button>
+            <RequiereAplicar />
+          </div>
         </form>
       )}
 

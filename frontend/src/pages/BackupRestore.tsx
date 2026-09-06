@@ -1,8 +1,9 @@
 import { traducir } from '../i18n'
 import { useState, useRef } from 'react'
 import { IconDownload, IconFile } from '../components/Icons'
-import { api, getToken } from '../api/client'
+import { api, getToken, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import RequiereAplicar from '../components/RequiereAplicar'
 
 export default function BackupRestore() {
   const { showToast, ToastContainer } = useToast()
@@ -48,6 +49,7 @@ export default function BackupRestore() {
     setRestoreBusy(true)
     try {
       const result = await api.restoreBackup(file)
+      notificarCambioPendiente()
       showToast(`Backup restaurado: ${result.details.acls} ACLs, ${result.details.rules} reglas, ${result.details.users} usuarios`, 'success')
     } catch (err: any) {
       showToast(err.message, 'error')
@@ -63,6 +65,7 @@ export default function BackupRestore() {
     setImportBusy(true)
     try {
       const result = await api.importSquidConf(file)
+      notificarCambioPendiente()
       showToast(`Importado: ${result.details.acls} ACLs, ${result.details.rules} reglas, ${result.details.settings} settings`, 'success')
       if (result.details.warnings?.length > 0) {
         setTimeout(() => showToast(result.details.warnings[0], 'warning'), 3000)
@@ -87,12 +90,13 @@ export default function BackupRestore() {
           <button onClick={handleExport}
             className="px-4 py-2 text-white rounded-lg font-medium text-sm inline-flex items-center gap-1.5" style={{ backgroundColor: '#0B497C' }}>
             <IconDownload className="w-4 h-4" />{traducir("Descargar backup (JSON)")}</button>
-          <div>
+          <div className="flex items-center gap-3">
             <input ref={restoreRef} type="file" accept=".json" onChange={handleRestore} className="hidden" id="restore-input" />
             <button onClick={() => restoreRef.current?.click()} disabled={restoreBusy}
               className="px-4 py-2 border border-line rounded-lg font-medium text-sm hover:bg-brand-50 disabled:opacity-50">
               {restoreBusy ? 'Restaurando…' : 'Restaurar backup'}
             </button>
+            <RequiereAplicar />
           </div>
         </div>
       </div>
@@ -130,12 +134,13 @@ export default function BackupRestore() {
             <li>{traducir("Configuraciones muy complejas pueden no importarse perfectamente — revisa antes de aplicar")}</li>
           </ul>
         </div>
-        <div>
+        <div className="flex items-center gap-3">
           <input ref={importRef} type="file" accept=".conf,text/plain" onChange={handleImport} className="hidden" id="import-input" />
           <button onClick={() => importRef.current?.click()} disabled={importBusy}
             className="px-4 py-2 text-white rounded-lg font-medium text-sm disabled:opacity-50" style={{ backgroundColor: '#0B497C' }}>
             {importBusy ? 'Importando…' : 'Subir squid.conf'}
           </button>
+          <RequiereAplicar />
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { api } from '../api/client'
+import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 
 interface LocalUser {
@@ -312,6 +312,11 @@ export default function ProxyUsers() {
     showToast(traducir("Eliminando… puede tardar unos segundos (reinicia Squid)"), 'info')
     try {
       await api.deleteUser(u.id)
+      // Borrar un usuario que estaba en un grupo quita su membresía de las
+      // ACLs del squid.conf -eso sí requiere Aplicar cambios-, pero uno sin
+      // grupo no. Se notifica siempre: más barato que un GET de más al
+      // topbar que dejar pasar el caso en que sí hacía falta.
+      notificarCambioPendiente()
       loadUsers()
       showToast(traducir("Usuario eliminado correctamente"))
     } catch (e: any) {
