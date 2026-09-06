@@ -92,6 +92,10 @@ def test_es_idempotente(proyecto):
     assert "ya estaba" in mensaje.lower()
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="chmod no aplica bits de permiso POSIX en NTFS; el destino real es Linux",
+)
 def test_conserva_los_permisos(proyecto):
     """El .env lleva secretos: no puede acabar siendo legible por todos."""
     env = proyecto / ".env"

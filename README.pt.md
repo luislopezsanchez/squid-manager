@@ -61,16 +61,19 @@ Permite que administradores de rede configurem e administrem um proxy Squid a
 partir de uma interface web amigável, sem precisar editar arquivos de
 configuração à mão.
 
-O sistema foi pensado para ser **escalável e modular**: o banco de dados é a
-fonte de verdade, o arquivo `squid.conf` é gerado dinamicamente a partir do
-painel, e tudo roda em contêineres Docker ou como serviços do sistema.
+O sistema foi pensado para gerenciar **um nó Squid** de forma modular: o banco
+de dados é a fonte de verdade, o arquivo `squid.conf` é gerado dinamicamente a
+partir do painel, e tudo roda em contêineres Docker ou como serviços do
+sistema. O backend foi projetado para rodar em um único processo (veja
+[docs/production.md](docs/production.md)); para mais de um nó Squid, implanta-se
+uma instância do SquidManager por nó.
 
 ---
 
 ## ✨ Recursos
 
 ### Gerenciamento do proxy
-- **ACLs visuais** — Crie listas de controle de acesso por domínio, IP, horário, regex, porta, método HTTP e mais (27 tipos suportados)
+- **ACLs visuais** — Crie listas de controle de acesso por domínio, IP, horário, regex, porta, método HTTP e mais (29 tipos suportados)
 - **Regras de acesso** — Ordene regras `http_access` com botões de subir/descer
 - **Grupos de usuários** — Agrupe usuários locais ou LDAP e aplique políticas de acesso ao grupo inteiro de uma vez
 - **Delay Pools** — Controle de largura de banda por usuário com interface visual (sem precisar entender o formato `64000/64000 64000/32000`)

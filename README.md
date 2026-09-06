@@ -56,14 +56,14 @@
 
 **SquidManager** es una plataforma completa de gestión de Squid Proxy que permite a los administradores de red configurar y administrar un proxy Squid desde una interfaz web amigable, sin necesidad de editar archivos de configuración manualmente.
 
-El sistema está pensado para ser **escalable y modular**: la base de datos es la fuente de verdad, el archivo `squid.conf` se genera dinámicamente desde la web, y todo funciona en contenedores Docker **o como servicios del sistema**, según el modo de despliegue que elijas.
+El sistema está pensado para gestionar **un nodo Squid** de forma modular: la base de datos es la fuente de verdad, el archivo `squid.conf` se genera dinámicamente desde la web, y todo funciona en contenedores Docker **o como servicios del sistema**, según el modo de despliegue que elijas. El backend está diseñado para correr en un único proceso (ver [docs/production.md](docs/production.md)); para más de un nodo Squid, se despliega una instancia de SquidManager por nodo.
 
 ---
 
 ## ✨ Características
 
 ### Gestión de proxy
-- **ACLs visuales** — Crea listas de control de acceso por dominio, IP, horario, regex, puerto, método HTTP y más (27 tipos soportados)
+- **ACLs visuales** — Crea listas de control de acceso por dominio, IP, horario, regex, puerto, método HTTP y más (29 tipos soportados)
 - **Reglas de acceso** — Ordena reglas `http_access` con botones de subir/bajar
 - **Grupos de usuarios** — Agrupa usuarios locales o LDAP y aplica políticas de acceso a todo el grupo de una vez
 - **Delay Pools** — Control de ancho de banda por usuario con interfaz visual (sin necesidad de entender el formato `64000/64000 64000/32000`)

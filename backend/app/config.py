@@ -54,7 +54,12 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "SquidManager API"
-    APP_VERSION: str = "0.6.0"
+    # Única fuente de verdad: CHANGELOG.md. Antes esta constante se quedaba
+    # atrás (llegó a marcar 0.6.0 mientras el CHANGELOG iba por 0.14.0) porque
+    # nada la sincronizaba con las otras dos versiones que declara el
+    # proyecto (aquí y en frontend/package.json). Al subir la versión, las
+    # tres deben moverse juntas y etiquetarse en git — ver docs/actualizacion.md.
+    APP_VERSION: str = "0.14.0"
     DEBUG: bool = False
 
     @property

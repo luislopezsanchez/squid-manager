@@ -86,13 +86,14 @@ Antes de aplicarse, la configuración generada se **valida** ejecutando `squid -
 
 ## Configuración de ACLs
 
-### Tipos de ACL soportados (27 tipos)
+### Tipos de ACL soportados (29 tipos)
 
 | Tipo | Descripción | Ejemplo | ¿Funciona con HTTPS? |
 |------|-------------|---------|---------------------|
 | `dstdomain` | Dominio de destino | `.facebook.com` | ✅ (SNI) |
 | `dstdom_regex` | Regex de dominio de destino | `social` | ✅ (SNI) |
 | `srcdomain` | Dominio del cliente (DNS inverso) | `.miempresa.com` | ✅ |
+| `srcdom_regex` | Regex de dominio del cliente (DNS inverso) | `^laptop-` | ✅ |
 | `src` | IP de origen | `192.168.1.0/24` | ✅ |
 | `dst` | IP de destino | `10.0.0.0/8` | ✅ |
 | `url_regex` | Regex de URL completa | `\.mp4$` | ✅ (con bump) |
@@ -121,7 +122,7 @@ Antes de aplicarse, la configuración generada se **valida** ejecutando `squid -
 
 > Las ACLs `ssl::server_name` y `ssl::server_name_regex` las genera SquidManager automáticamente para las de tipo `dstdomain`/`dstdom_regex` (prefijo `sni_`); no suele hacer falta crearlas a mano. `at_step` la usa la plantilla internamente para las fases de SSL Bump.
 
-Los nombres, tipos y valores se validan antes de guardarse: solo se admiten los 27 tipos de esta lista, los nombres no pueden coincidir con los que usa la plantilla internamente (`all`, `localnet`, `authenticated`, etc.) y los valores no pueden contener saltos de línea.
+Los nombres, tipos y valores se validan antes de guardarse: solo se admiten los 29 tipos de esta lista, los nombres no pueden coincidir con los que usa la plantilla internamente (`all`, `localnet`, `authenticated`, etc.) y los valores no pueden contener saltos de línea.
 
 ### Días de la semana (para ACL time)
 - `S` = Domingo

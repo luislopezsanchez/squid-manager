@@ -3,6 +3,7 @@
 import logging
 import secrets
 import string
+import subprocess
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -26,6 +27,31 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+
+def _commit_actual() -> str:
+    """Hash corto del commit desplegado, para identificar una instancia real.
+
+    APP_VERSION identifica una versión publicada, no un despliegue concreto:
+    dos servidores en la misma versión pueden llevar commits distintos si uno
+    quedó a mitad de actualizar. En instalación nativa el repo clonado sí
+    tiene `.git`; en Docker el contexto de build es solo `backend/` (sin
+    `.git`), así que ahí no hay forma de saberlo desde dentro del contenedor
+    y se informa como "desconocido" en vez de fallar o mentir.
+    """
+    try:
+        resultado = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=BACKEND_DIR.parent, capture_output=True, text=True, timeout=3,
+        )
+        if resultado.returncode == 0:
+            return resultado.stdout.strip()
+    except Exception:
+        pass
+    return "desconocido"
+
+
+COMMIT_ACTUAL = _commit_actual()
 
 
 def _explicar_fallo_de_conexion(error: Exception) -> None:
@@ -366,4 +392,4 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": settings.APP_VERSION, "commit": COMMIT_ACTUAL}

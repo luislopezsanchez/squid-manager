@@ -1,0 +1,19 @@
+# El destino de despliegue es Linux (Docker y systemd). Sin esto, un
+# colaborador con `core.autocrlf=true` en Windows puede meter CRLF en el
+# índice, y un script con CRLF falla en Linux con
+# "bad interpreter: /bin/bash^M" al primer intento de ejecutarlo.
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.j2 text eol=lf
+*.conf text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Binarios: nunca tocar los saltos de línea.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary

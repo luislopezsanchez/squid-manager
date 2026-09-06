@@ -92,13 +92,17 @@ def iter_lines_reverse(path: str, max_lines: int = MAX_SCAN_LINES):
                 for raw in reversed(lines):
                     if not raw.strip():
                         continue
-                    yield raw.decode("utf-8", errors="replace")
+                    # Squid escribe LF; un \r final solo aparece si el fichero
+                    # se generó o se tocó en Windows (CRLF). Descartarlo aquí
+                    # hace que el parser sea indiferente a la plataforma en
+                    # vez de dejar un '\r' colgando al final de cada línea.
+                    yield raw.rstrip(b"\r").decode("utf-8", errors="replace")
                     produced += 1
                     if produced >= max_lines:
                         return
 
             if remainder.strip() and produced < max_lines:
-                yield remainder.decode("utf-8", errors="replace")
+                yield remainder.rstrip(b"\r").decode("utf-8", errors="replace")
     except Exception as e:
         logger.error(f"Error leyendo access.log: {e}")
 

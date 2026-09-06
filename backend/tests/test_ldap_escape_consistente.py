@@ -18,6 +18,19 @@ from pathlib import Path
 
 import pytest
 
+# squid/auth_helper.py hace `import syslog` a nivel de módulo, exclusivo de
+# Unix: cargarlo por ruta (más abajo) revienta la RECOLECCIÓN entera de la
+# suite en Windows, no solo este test — sin `--continue-on-collection-errors`
+# ni un solo test corre. El destino real del proyecto es Linux, donde este
+# test se ejecuta con normalidad; en Windows se omite todo el módulo antes de
+# intentar la carga.
+if sys.platform == "win32":
+    pytest.skip(
+        "squid/auth_helper.py importa el módulo syslog (exclusivo de Unix); "
+        "el destino real de despliegue es Linux",
+        allow_module_level=True,
+    )
+
 from app.routes.ldap import _escapar_filtro_ldap as escapar_panel
 
 _AUTH_HELPER_PATH = Path(__file__).parent.parent.parent / "squid" / "auth_helper.py"
@@ -27,9 +40,12 @@ def _cargar_escapar_helper():
     """Importa squid/auth_helper.py por ruta (no es parte del paquete `app`)."""
     spec = importlib.util.spec_from_file_location("_auth_helper_bajo_prueba", _AUTH_HELPER_PATH)
     modulo = importlib.util.module_from_spec(spec)
-    # syslog.syslog() se llama solo dentro de log_error(), nunca al importar
-    # ni al escapar un filtro: no hace falta mockear nada para cargar el
-    # módulo ni para llamar a _escapar_filtro_ldap.
+    # El propio `import syslog` de auth_helper.py SÍ se ejecuta aquí, al
+    # cargar el módulo (por eso el guard de plataforma vive arriba, antes de
+    # llegar a este punto). Lo que no se ejecuta es syslog.syslog(): esa
+    # llamada vive solo dentro de log_error(), nunca al importar ni al
+    # escapar un filtro, así que no hace falta mockear nada más para llamar
+    # a _escapar_filtro_ldap una vez que el módulo ya cargó.
     spec.loader.exec_module(modulo)
     return modulo._escapar_filtro_ldap
 

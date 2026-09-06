@@ -125,6 +125,20 @@ El backend monta `/var/run/docker.sock` para controlar Squid. Esto da al backend
 - Usar un proxy Docker Socket restringido (ej: `docker-socket-proxy`)
 - O ejecutar el backend en un namespace aislado
 
+### 7. El backend está pensado para un único proceso — no añadir `--workers`
+
+El indicador de "cambios pendientes" (`config_state.py`) y el contador del rate limiter (`middleware/__init__.py`) viven en variables **globales del proceso**, no en la base de datos ni en Redis. Los instaladores arrancan uvicorn sin `--workers` a propósito:
+
+```
+ExecStart=... uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT} --proxy-headers
+```
+
+Si se añade `--workers 2` (o más) para "escalarlo":
+- Un admin puede ver "no hay cambios pendientes" mientras otro worker sí los tiene.
+- El límite de intentos de login se multiplica por el número de workers (cada uno lleva su propia cuenta).
+
+Si algún día hace falta más de un worker, ambos estados tendrían que mudarse a la base de datos o a Redis primero — no es un ajuste de configuración, es un cambio de diseño. Para más de un nodo Squid, la unidad de escala es **una instancia completa de SquidManager por nodo**, no más workers dentro de una misma instancia.
+
 ---
 
 ## Backups

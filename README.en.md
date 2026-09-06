@@ -60,16 +60,19 @@
 administrators configure and run a Squid proxy from a friendly web interface,
 without editing configuration files by hand.
 
-The system is designed to be **scalable and modular**: the database is the
-source of truth, `squid.conf` is generated dynamically from the web panel, and
-everything runs either in Docker containers or as system services.
+The system is designed to manage **one Squid node** in a modular way: the
+database is the source of truth, `squid.conf` is generated dynamically from
+the web panel, and everything runs either in Docker containers or as system
+services. The backend is designed to run as a single process (see
+[docs/production.md](docs/production.md)); managing more than one Squid node
+means deploying one SquidManager instance per node.
 
 ---
 
 ## ✨ Features
 
 ### Proxy management
-- **Visual ACLs** — Build access control lists by domain, IP, schedule, regex, port, HTTP method and more (27 supported types)
+- **Visual ACLs** — Build access control lists by domain, IP, schedule, regex, port, HTTP method and more (29 supported types)
 - **Access rules** — Order `http_access` rules with move up/down buttons
 - **User groups** — Group local or LDAP users and apply access policies to the whole group at once
 - **Delay Pools** — Per-user bandwidth control with a visual interface (no need to understand the `64000/64000 64000/32000` format)
