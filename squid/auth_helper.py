@@ -31,6 +31,26 @@ ALLOWLIST_FILE = "/etc/squid/ldap_allowlist"
 LDAP_CONF_FILE = "/etc/squid/ldap_helper.conf"
 
 
+def _escapar_filtro_ldap(valor: str) -> str:
+    """Escapa un valor para insertarlo en un filtro LDAP (RFC 4515).
+
+    Sin esto, un nombre de usuario con paréntesis o asterisco altera la
+    estructura del filtro de búsqueda. Misma lógica que
+    backend/app/routes/ldap.py:_escapar_filtro_ldap (que valida la conexión
+    LDAP desde el panel) — este es el helper que autentica de verdad cada
+    login del proxy, así que es el que más importa mantener correcto. Un
+    test (backend/tests/test_ldap_escape_consistente.py) compara ambas
+    copias byte a byte contra el mismo juego de casos para detectar
+    cualquier divergencia si una se corrige sin la otra: este script corre
+    en el runtime de Squid, fuera del paquete del backend, así que no puede
+    importar directamente la copia del panel.
+    """
+    return (
+        valor.replace("\\", "\\5c").replace("*", "\\2a")
+        .replace("(", "\\28").replace(")", "\\29").replace("\x00", "\\00")
+    )
+
+
 def log_error(message):
     """Deja constancia del fallo sin escribir en stdout, que es el canal de Squid."""
     try:
@@ -140,10 +160,7 @@ def check_ldap(username, password):
 
     try:
         # Escapar el usuario para que no altere la estructura del filtro LDAP.
-        safe_username = (
-            username.replace("\\", "\\5c").replace("*", "\\2a")
-            .replace("(", "\\28").replace(")", "\\29").replace("\x00", "\\00")
-        )
+        safe_username = _escapar_filtro_ldap(username)
         search_filter = (
             user_filter.replace("%s", safe_username) if "%s" in user_filter else user_filter
         )

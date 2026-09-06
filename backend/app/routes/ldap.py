@@ -23,8 +23,13 @@ def _escapar_filtro_ldap(valor: str) -> str:
     """Escapa un valor para insertarlo en un filtro LDAP (RFC 4515).
 
     Sin esto, un nombre de usuario con paréntesis o asterisco altera la
-    estructura del filtro de búsqueda. Misma lógica que squid/auth_helper.py:
-    si se cambia aquí, hay que cambiarla también allí.
+    estructura del filtro de búsqueda. Misma lógica que
+    squid/auth_helper.py:_escapar_filtro_ldap (el que autentica de verdad
+    cada login del proxy) — no se pueden compartir en un único import porque
+    ese script corre en el runtime de Squid, fuera del paquete del backend.
+    Si se cambia aquí, hay que cambiarla también allí: un test
+    (backend/tests/test_ldap_escape_consistente.py) compara ambas copias
+    para detectar si alguna vez se desincronizan.
     """
     return (
         valor.replace("\\", "\\5c").replace("*", "\\2a")
