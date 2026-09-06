@@ -79,6 +79,13 @@ RUN set -e;     if [ -d /usr/share/squid/errors/es ]; then         for variant i
 # Rotación diaria de los logs de Squid
 COPY squid-logrotate /etc/logrotate.d/squid
 
+# Consolidación mensual de los logs ya archivados (almacenamiento en frío,
+# aparte de la rotación diaria de arriba: no toca el archivo activo que lee
+# el panel). En /etc/cron.monthly porque run-parts ya ejecuta todo lo que hay
+# ahí una vez al mes, sin declarar una entrada de cron propia.
+COPY consolidate-monthly-logs.sh /etc/cron.monthly/squidmanager-log-archive
+RUN chmod +x /etc/cron.monthly/squidmanager-log-archive
+
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

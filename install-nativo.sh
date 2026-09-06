@@ -347,6 +347,14 @@ fi
 install -o root -g root -m 644 "$INSTALL_DIR/squid/squid-logrotate.native" /etc/logrotate.d/squid
 ok "Rotacion diaria de logs configurada"
 
+# Consolidacion mensual de los logs ya archivados (almacenamiento en frio,
+# aparte de la rotacion diaria de arriba: no toca el archivo activo que lee
+# el panel). Va a /etc/cron.monthly porque run-parts ya ejecuta todo lo que
+# hay ahi una vez al mes, sin tener que declarar una entrada de cron propia.
+install -o root -g root -m 755 "$INSTALL_DIR/squid/consolidate-monthly-logs.sh" \
+    /etc/cron.monthly/squidmanager-log-archive
+ok "Consolidacion mensual de logs archivados configurada"
+
 # ============================================
 # 7. Permisos del panel sobre Squid
 # ============================================
