@@ -153,7 +153,9 @@ Los requisitos dependen del modo de despliegue.
 
 ### Hardware mínimo
 - **CPU:** 2 núcleos (4 recomendado; con Docker se compila Squid al construir la imagen)
-- **RAM:** 2 GB (4 GB recomendado)
+- **RAM:** 2 GB (4 GB recomendado). Con 1 GB probado funciona, pero **hace
+  falta swap ≥ 1 GB**: el build del frontend (`npm run build`) puede agotar
+  la RAM y morir con OOM en una máquina sin swap.
 - **Disco:** 5 GB libres
 - **Red:** Puerto 3128 accesible para los clientes del proxy
 
@@ -379,11 +381,20 @@ El instalador termina imprimiendo exactamente esto:
 ```
 
 Esa contraseña **no se vuelve a mostrar**, y el panel te pedirá cambiarla en el
-primer acceso. Si la pierdes antes de entrar, está en el log:
+primer acceso. Si la pierdes antes de entrar, dónde recuperarla depende de
+cómo se generó:
 
-```bash
-journalctl -u squidmanager | grep -A3 "Administrador inicial"
-```
+- **Generada al azar** (no definiste `ADMIN_INITIAL_PASSWORD`): quedó en el
+  log, una sola vez:
+  ```bash
+  journalctl -u squidmanager | grep -A3 "Administrador inicial"
+  ```
+- **Definida por vos en el `.env`** (`ADMIN_INITIAL_PASSWORD=...`): el log
+  **no** la vuelve a mostrar, a propósito — solo dice que se usó esa
+  variable, no el valor. Está en el propio fichero:
+  ```bash
+  sudo grep ADMIN_INITIAL_PASSWORD /opt/squid-manager/.env
+  ```
 
 Para operar el servicio después:
 
@@ -405,10 +416,15 @@ instalador ni el panel:
 
 ```bash
 sudo ufw allow 3128/tcp
+sudo ufw enable   # si ufw todavía está inactivo (por defecto lo está en Ubuntu recién instalado)
 ```
 
-Sin esa regla Squid funciona pero los clientes no llegan, y el síntoma es una
-conexión que se queda colgada sin ningún mensaje de error.
+`ufw status` te dice si ya estaba activo. Con `ufw` inactivo la regla queda
+cargada pero sin efecto: no bloquea nada, así que en ese caso los clientes
+llegan igual y no hace falta el `allow` — pero si en algún momento activas el
+firewall sin haber corrido este paso antes, ahí sí Squid funciona y los
+clientes no llegan, con una conexión que se queda colgada sin ningún mensaje
+de error.
 
 **2. Crea el primer usuario del proxy**, en *Usuarios → Nuevo usuario*. Hasta
 entonces no navegará nadie: el proxy exige credenciales desde el minuto uno y

@@ -168,7 +168,9 @@ Os requisitos dependem do modo de implantação.
 
 ### Hardware mínimo
 - **CPU:** 2 núcleos (4 recomendado; com Docker o Squid é compilado ao construir a imagem)
-- **RAM:** 2 GB (4 GB recomendado)
+- **RAM:** 2 GB (4 GB recomendado). Funciona com 1 GB em testes, mas
+  **é preciso swap ≥ 1 GB**: o build do frontend (`npm run build`) pode
+  esgotar a RAM e ser morto por OOM numa máquina sem swap.
 - **Disco:** 5 GB livres
 - **Rede:** porta 3128 acessível aos clientes do proxy
 
@@ -397,11 +399,20 @@ O instalador termina imprimindo exatamente isto:
 ```
 
 Essa senha **não é mostrada de novo**, e o painel vai pedir que você a troque no
-primeiro acesso. Se você a perder antes de entrar, ela está no log:
+primeiro acesso. Se você a perder antes de entrar, onde encontrá-la depende de
+como foi gerada:
 
-```bash
-journalctl -u squidmanager | grep -A3 "Administrador inicial"
-```
+- **Gerada ao acaso** (você não definiu `ADMIN_INITIAL_PASSWORD`): ficou
+  registrada no log, uma única vez:
+  ```bash
+  journalctl -u squidmanager | grep -A3 "Administrador inicial"
+  ```
+- **Definida por você no `.env`** (`ADMIN_INITIAL_PASSWORD=...`): o log
+  propositalmente **não** mostra o valor de novo — só diz que essa variável
+  foi usada. Está no próprio arquivo:
+  ```bash
+  sudo grep ADMIN_INITIAL_PASSWORD /opt/squid-manager/.env
+  ```
 
 Para operar o serviço depois:
 
@@ -423,9 +434,13 @@ painel fazem isso:
 
 ```bash
 sudo ufw allow 3128/tcp
+sudo ufw enable   # se o ufw ainda estiver inativo (padrão num Ubuntu recém-instalado)
 ```
 
-Sem essa regra o Squid funciona mas os clientes não chegam, e o sintoma é uma
+`ufw status` diz se já estava ativo. Com o `ufw` inativo a regra fica
+carregada mas sem efeito — os clientes chegam do mesmo jeito, então o `allow`
+ainda não é necessário — mas se você ativar o firewall depois sem ter rodado
+este passo antes, aí sim o Squid funciona e os clientes não chegam, com uma
 conexão que fica pendurada sem nenhuma mensagem de erro.
 
 **2. Crie o primeiro usuário do proxy**, em *Usuários → Novo usuário*. Até lá

@@ -167,7 +167,9 @@ Requirements depend on the deployment mode.
 
 ### Minimum hardware
 - **CPU:** 2 cores (4 recommended; with Docker, Squid is compiled while building the image)
-- **RAM:** 2 GB (4 GB recommended)
+- **RAM:** 2 GB (4 GB recommended). It works with 1 GB in testing, but
+  **swap ≥ 1 GB is required**: the frontend build (`npm run build`) can
+  exhaust RAM and get OOM-killed on a machine with no swap.
 - **Disk:** 5 GB free
 - **Network:** port 3128 reachable by the proxy clients
 
@@ -396,11 +398,20 @@ The installer finishes by printing exactly this:
 ```
 
 That password **is not shown again**, and the panel will ask you to change it on
-first access. If you lose it before logging in, it is in the log:
+first access. If you lose it before logging in, where to find it depends on
+how it was generated:
 
-```bash
-journalctl -u squidmanager | grep -A3 "Administrador inicial"
-```
+- **Randomly generated** (you did not set `ADMIN_INITIAL_PASSWORD`): it was
+  logged once:
+  ```bash
+  journalctl -u squidmanager | grep -A3 "Administrador inicial"
+  ```
+- **Set by you in `.env`** (`ADMIN_INITIAL_PASSWORD=...`): the log
+  deliberately does **not** show it again — only that the variable was
+  used, not its value. It's in the file itself:
+  ```bash
+  sudo grep ADMIN_INITIAL_PASSWORD /opt/squid-manager/.env
+  ```
 
 To operate the service afterwards:
 
@@ -422,10 +433,14 @@ the panel does it:
 
 ```bash
 sudo ufw allow 3128/tcp
+sudo ufw enable   # if ufw is still inactive (the default on a fresh Ubuntu install)
 ```
 
-Without that rule Squid works but clients cannot reach it, and the symptom is a
-connection that hangs with no error message at all.
+`ufw status` tells you if it was already active. With `ufw` inactive the rule
+loads but has no effect — clients reach the proxy either way, so the `allow`
+isn't strictly needed yet — but if you enable the firewall later without
+having run this step first, that's when Squid works but clients cannot reach
+it, with a connection that hangs with no error message at all.
 
 **2. Create the first proxy user**, under *Users → New user*. Until then nobody
 browses: the proxy requires credentials from minute one and there are none yet.
