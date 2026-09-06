@@ -8,6 +8,7 @@ el nombre del grupo como si fuera una ACL.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -70,15 +71,19 @@ def _to_response(group: UserGroup, members: list[str]) -> GroupResponse:
     )
 
 
-def _apply_after_member_change(db: Session) -> dict:
+async def _apply_after_member_change(db: Session) -> dict:
     """Aplica la config de Squid tras añadir/quitar un miembro de grupo.
 
     Los cambios de miembros se aplican de inmediato para que la política surta
     efecto sin pulsar «Aplicar Cambios». Si la configuración resultante no es
     válida, se marca «pendiente» y se informa del error en lugar de dejarlo
     pasar en silencio.
+
+    Se delega al threadpool: apply_squid_config es sincrono y bloqueante, y
+    llamarlo directo desde una ruta async congelaria el event loop -y con el,
+    todo el panel- para todos los admins mientras dura el apply.
     """
-    result = apply_squid_config(db, force_reconfigure=True)
+    result = await run_in_threadpool(apply_squid_config, db, force_reconfigure=True)
     if result["status"] == "error":
         mark_dirty()
     return result
@@ -213,7 +218,7 @@ async def add_member(
         new_value=f"{group.name}: +{username}",
     ))
     db.commit()
-    _apply_after_member_change(db)
+    await _apply_after_member_change(db)
 
     return _to_response(group, _members(db, group_id))
 
@@ -239,7 +244,7 @@ async def remove_member(
         old_value=f"{group.name}: -{username}",
     ))
     db.commit()
-    _apply_after_member_change(db)
+    await _apply_after_member_change(db)
     # Salir de un grupo puede quitar permisos: sin purgar, las credenciales ya
     # validadas siguen sirviendo con la política anterior.
     purge_credentials()

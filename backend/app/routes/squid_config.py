@@ -7,6 +7,7 @@ from pathlib import Path
 
 import docker as docker_sdk
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -116,8 +117,15 @@ async def apply_config(
     Si el http_port de la BD no coincide con el puerto que Docker publica,
     sincroniza el .env y recrea el contenedor con `docker compose up -d squid`,
     de modo que el mapeo de puertos sobreviva a cualquier recreación posterior.
+
+    apply_squid_config es sincrono y bloqueante (subprocess, red, disco): se
+    delega al threadpool de Starlette para no congelar el unico hilo del
+    event loop. Sin esto, mientras un apply tarda (probado en vivo: hasta 33s
+    con sondeos de DNS/proxy padre incluidos) TODO el panel queda sin
+    respuesta para TODOS los administradores conectados, no solo para quien
+    lo pidio.
     """
-    result = apply_squid_config(db)
+    result = await run_in_threadpool(apply_squid_config, db)
 
     # Esta respuesta no es una excepcion, asi que no pasa por el manejador que
     # traduce los errores: hay que traducir su mensaje aqui.
