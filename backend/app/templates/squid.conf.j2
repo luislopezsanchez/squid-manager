@@ -33,7 +33,7 @@ http_port {{ internal_port }} ssl-bump \
 # orden, y una ACL de usuario (proxy_auth) no se puede declarar mientras no
 # exista un esquema de autenticación. Poniéndolo después, cualquier regla de
 # interceptación por usuario aborta el arranque con «Invalid ACL».
-{% if kerberos and kerberos.enabled and kerberos_keytab_presente %}
+{% if kerberos_esta_activo %}
 # Negotiate (Kerberos/SPNEGO) va ANTES que basic: los navegadores que lo
 # soportan y están en el dominio lo intentan primero y entran sin que se les
 # pida nada; el resto (móviles, Linux fuera del dominio, invitados) cae solo

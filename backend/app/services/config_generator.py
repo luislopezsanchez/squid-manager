@@ -28,8 +28,14 @@ from app.services.runtime.base import INTERNAL_SQUID_PORT  # noqa: E402,F401
 DOMAIN_ACL_TYPES = ("dstdomain", "dstdom_regex")
 
 
-def generate_squid_config(db: Session) -> str:
-    """Genera el contenido del squid.conf desde la base de datos."""
+def generate_squid_config(db: Session, kerberos=None) -> str:
+    """Genera el contenido del squid.conf desde la base de datos.
+
+    `kerberos`: fila de KerberosConfig ya cargada, para que quien esté
+    aplicando toda la configuración (que también necesita esta fila para
+    escribir el keytab) no pague dos consultas por el mismo registro único.
+    Si no se pasa, se consulta aquí (compatible con los tests existentes).
+    """
 
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), trim_blocks=True)
     template = env.get_template("squid.conf.j2")
@@ -143,13 +149,17 @@ def generate_squid_config(db: Session) -> str:
         and (getattr(parent_proxy, "ca_cert", None) or "").strip()
     )
 
-    # Negotiate (Kerberos) solo se declara si hay keytab subido: sin él,
-    # apuntar al fichero inexistente tumbaría el helper en el primer intento
-    # de autenticación en vez de simplemente no ofrecer el esquema.
-    from app.models.kerberos_config import KerberosConfig
+    # Negotiate (Kerberos) solo se declara si esta activo (enabled + keytab
+    # subido) segun la unica fuente de verdad de kerberos_activo(): sin esto,
+    # apuntar al fichero inexistente tumbaria el helper en el primer intento
+    # de autenticacion en vez de simplemente no ofrecer el esquema.
+    from app.services.kerberos_service import kerberos_activo
 
-    kerberos = db.query(KerberosConfig).first()
-    kerberos_keytab_presente = bool(kerberos and getattr(kerberos, "keytab_data", None))
+    if kerberos is None:
+        from app.models.kerberos_config import KerberosConfig
+
+        kerberos = db.query(KerberosConfig).first()
+    kerberos_esta_activo = kerberos_activo(kerberos)
 
     # En que puerto escribe la directiva `http_port` depende del despliegue: en
     # contenedor es un puerto interno fijo contra el que Docker mapea el que
@@ -182,6 +192,6 @@ def generate_squid_config(db: Session) -> str:
         direct_domains=direct_domains,
         parent_ca=parent_ca,
         kerberos=kerberos,
-        kerberos_keytab_presente=kerberos_keytab_presente,
+        kerberos_esta_activo=kerberos_esta_activo,
     )
     return config

@@ -304,8 +304,13 @@ def _apply_squid_config(db, force_reconfigure: bool = False) -> dict:
     from app.services.config_state import mark_clean, mark_dirty
     from app.models.ldap_config import LdapConfig
     from app.models.ldap_user import LdapUser
+    from app.models.kerberos_config import KerberosConfig
 
-    config_text = generate_squid_config(db)
+    # Se consulta una sola vez: generate_squid_config y escribir_keytab (mas
+    # abajo) necesitan la misma fila unica, y antes cada una la volvia a
+    # pedir por su cuenta.
+    kerberos = db.query(KerberosConfig).first()
+    config_text = generate_squid_config(db, kerberos=kerberos)
     preview = config_text[:500] + ("..." if len(config_text) > 500 else "")
 
     # 1. Validar ANTES de escribir nada.
@@ -403,10 +408,9 @@ def _apply_squid_config(db, force_reconfigure: bool = False) -> dict:
 
     # Keytab de Kerberos: tiene que estar en el volumen antes de que Squid lea
     # la configuración que declara el bloque de autenticación Negotiate.
-    from app.models.kerberos_config import KerberosConfig
+    # `kerberos` ya se cargó arriba, antes de generar el config.
     from app.services.kerberos_service import escribir_keytab
 
-    kerberos = db.query(KerberosConfig).first()
     escribir_keytab(kerberos)
 
     ldap_config = db.query(LdapConfig).first()
