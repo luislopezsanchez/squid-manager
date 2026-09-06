@@ -37,6 +37,19 @@ identidad se toma del ticket Kerberos de la sesión de Windows ya iniciada.
 
 ## Paso a paso en el Active Directory
 
+> 💡 **Atajo:** con el Realm y el FQDN del proxy ya guardados en el panel
+> (Sistema → Kerberos), el botón **«Descargar script de configuración
+> (Windows Server)»** genera un `.ps1` con esos dos valores ya completados —
+> crea la cuenta de servicio si no existe y corre `ktpass -crypto All` por
+> vos. Evita el error más común de copiar los pasos de abajo a mano: editar
+> el realm o el FQDN en un paso y olvidarse de cambiarlo en el siguiente. El
+> script no incluye ninguna contraseña: la pide por consola al correr y no
+> la guarda en ningún lado. Sigue haciendo falta correrlo en el AD con
+> permisos de administrador de dominio, y revisarlo antes como cualquier
+> script con ese nivel de acceso — lo de abajo es exactamente lo que hace,
+> explicado paso a paso, para quien prefiera correrlo a mano o entender qué
+> hizo el script.
+
 ### 1. Crear la cuenta de servicio ANTES de generar el keytab
 
 `ktpass` **no crea la cuenta**, solo mapea un SPN a una cuenta que ya debe existir. Si se

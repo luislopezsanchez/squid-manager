@@ -1,6 +1,6 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
-import { api, notificarCambioPendiente } from '../api/client'
+import { api, notificarCambioPendiente, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
 import RequiereAplicar from '../components/RequiereAplicar'
 
@@ -10,6 +10,7 @@ export default function Kerberos() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [downloadingScript, setDownloadingScript] = useState(false)
   const keytabRef = useRef<HTMLInputElement>(null)
   const { showToast, ToastContainer } = useToast()
 
@@ -65,6 +66,33 @@ export default function Kerberos() {
       showToast(`Error: ${e.message}`, 'error')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleDownloadScript = async () => {
+    setDownloadingScript(true)
+    try {
+      const res = await fetch(api.kerberosAdSetupScriptUrl(), {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.detail || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'kerberos-ad-setup.ps1'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      showToast(traducir("Script descargado. Revisalo antes de correrlo: se ejecuta con permisos de administrador de dominio."), 'success')
+    } catch (e: any) {
+      showToast(`Error: ${e.message}`, 'error')
+    } finally {
+      setDownloadingScript(false)
     }
   }
 
@@ -130,6 +158,28 @@ export default function Kerberos() {
           </button>
           <RequiereAplicar />
         </div>
+      </div>
+
+      {/* Script para el Active Directory */}
+      <div className="card p-6 mb-6">
+        <h2 className="font-medium text-ink mb-1">{traducir("Preparar el Active Directory")}</h2>
+        <p className="text-sm text-ink-3 mb-4">
+          {traducir("Script de PowerShell para correr en el Active Directory: crea la cuenta de servicio (si no existe) y genera el keytab con ktpass -crypto All, con el Realm y el FQDN de abajo ya completados — evita el error más común del setup manual, que es copiar el script de la documentación y olvidarse de cambiar esos dos valores por los propios.")}
+        </p>
+        <button
+          onClick={handleDownloadScript}
+          disabled={downloadingScript || !config.realm || !config.proxy_fqdn}
+          className="btn btn-primary disabled:opacity-50"
+          title={!config.realm || !config.proxy_fqdn ? traducir("Completa y guarda Realm y FQDN del proxy primero") : undefined}
+        >
+          {downloadingScript ? traducir('Generando…') : traducir('Descargar script de configuración (Windows Server)')}
+        </button>
+        {(!config.realm || !config.proxy_fqdn) && (
+          <p className="text-xs text-ink-3 mt-2">{traducir("Completa y guarda Realm y FQDN del proxy arriba para poder generarlo.")}</p>
+        )}
+        <p className="text-xs text-ink-3 mt-2">
+          {traducir("Revisalo antes de correrlo, como cualquier script que corre con permisos de administrador de dominio. No incluye ninguna contraseña: la pide por consola al ejecutarse y no la guarda en ningún lado. Requiere el módulo ActiveDirectory (RSAT) y ktpass en la máquina donde se corra.")}
+        </p>
       </div>
 
       {/* Keytab */}

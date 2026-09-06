@@ -1,0 +1,133 @@
+<#
+.SYNOPSIS
+    Prepara el Active Directory para Kerberos/Negotiate con este SquidManager.
+
+    Generado por SquidManager con el Realm y el FQDN del proxy YA cargados
+    ({{ realm }} / {{ proxy_fqdn }}), tomados de Sistema -> Kerberos en el
+    momento de la descarga. Si cambias esos valores en el panel, descarga el
+    script de nuevo antes de usarlo: uno viejo apunta a un FQDN o Realm que
+    ya no es el vigente, y el keytab resultante no serviria.
+
+    Qué hace:
+      1. Crea (si no existe) la cuenta de servicio del proxy en el AD.
+      2. Genera el keytab con ktpass, con -crypto All (ver nota abajo).
+      3. Lo deja en el escritorio, listo para subir a SquidManager.
+
+    Qué NO hace, a propósito:
+      - No toca SquidManager ni sube nada por vos: la contraseña de la
+        cuenta de servicio y el keytab resultante no deben salir de tu AD
+        hacia el proxy por ningún canal automático. Subís el archivo a mano
+        en Sistema -> Kerberos -> Subir keytab.
+      - No guarda la contraseña de la cuenta en ningún lado: se pide con
+        Read-Host -AsSecureString y solo vive en memoria mientras corre este
+        script.
+
+    Correr como Administrador de dominio, en un controlador de dominio o en
+    una máquina con el módulo ActiveDirectory (RSAT) y ktpass disponibles
+    (ambos vienen con las Herramientas de administración de dominio de
+    Windows Server, o con RSAT en un cliente).
+
+.NOTES
+    Generado por SquidManager el {{ generado_en }}.
+#>
+
+[CmdletBinding()]
+param(
+    # Nombre de la cuenta de servicio en el AD. Por defecto, el primer
+    # segmento del FQDN del proxy (p. ej. "proxy" para proxy.empresa.com):
+    # cambialo si en tu AD hay convenciones propias (svc-, cuentas con
+    # prefijo de área, etc.).
+    [string]$NombreCuenta = "{{ nombre_cuenta_sugerido }}",
+
+    # Ruta de salida del keytab.
+    [string]$RutaKeytab = "$env:USERPROFILE\Desktop\HTTP.keytab"
+)
+
+$ErrorActionPreference = "Stop"
+
+# Los valores de abajo vienen fijados por SquidManager en el momento de
+# generar este script: son los mismos que ya están guardados en el panel
+# (Sistema -> Kerberos), y el keytab tiene que corresponder exactamente a
+# ellos o la autenticación falla con el SPN sin encontrar.
+$Realm      = "{{ realm }}"
+$ProxyFqdn  = "{{ proxy_fqdn }}"
+$Spn        = "HTTP/$ProxyFqdn"
+$UserUpn    = "$NombreCuenta@$((Get-ADDomain).DNSRoot)"
+
+Write-Host "=== Configuracion de Kerberos para SquidManager ===" -ForegroundColor Cyan
+Write-Host "Realm:            $Realm"
+Write-Host "FQDN del proxy:   $ProxyFqdn"
+Write-Host "SPN:              $Spn"
+Write-Host "Cuenta de servicio: $NombreCuenta"
+Write-Host ""
+
+# ---------------------------------------------------------------------
+# 1. Cuenta de servicio. ktpass no la crea -solo mapea un SPN a una cuenta
+#    que ya debe existir-: invertir el orden da "DsCrackNames returned 0x2".
+# ---------------------------------------------------------------------
+Import-Module ActiveDirectory -ErrorAction Stop
+
+$cuentaExistente = Get-ADUser -Filter "SamAccountName -eq '$NombreCuenta'" -ErrorAction SilentlyContinue
+
+if (-not $cuentaExistente) {
+    Write-Host "La cuenta '$NombreCuenta' no existe todavia. Creandola..." -ForegroundColor Yellow
+    $securePass = Read-Host -Prompt "Contraseña para la nueva cuenta de servicio '$NombreCuenta'" -AsSecureString
+    New-ADUser -Name $NombreCuenta -SamAccountName $NombreCuenta `
+        -AccountPassword $securePass -Enabled $true -PasswordNeverExpires $true
+    Write-Host "Cuenta '$NombreCuenta' creada." -ForegroundColor Green
+} else {
+    Write-Host "La cuenta '$NombreCuenta' ya existe, se reutiliza." -ForegroundColor Yellow
+    Write-Host "Hace falta su contraseña actual para que ktpass regenere el keytab (no la cambia)."
+    $securePass = Read-Host -Prompt "Contraseña actual de '$NombreCuenta'" -AsSecureString
+}
+
+# ktpass pide la contraseña en texto plano por su propio parámetro -pass;
+# no hay forma de pasarle un SecureString directamente.
+$BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass)
+$PassPlano = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
+
+# ---------------------------------------------------------------------
+# 2. Generar el keytab.
+#
+#    -crypto All, no un solo tipo de cifrado: ktpass NO rellena
+#    msDS-SupportedEncryptionTypes en la cuenta, así que el tipo real que
+#    use el KDC al emitir el ticket es impredecible de antemano. Con un
+#    único tipo (p. ej. AES256-SHA1) la autenticación falla con
+#    "gss_accept_sec_context() failed: ... Service key not available".
+#    Con -crypto All el keytab cubre DES-CBC-CRC, DES-CBC-MD5, RC4-HMAC,
+#    AES128 y AES256: cualquiera que elija el KDC, está cubierto.
+# ---------------------------------------------------------------------
+Write-Host ""
+Write-Host "Generando keytab en $RutaKeytab ..." -ForegroundColor Cyan
+
+$ktpassArgs = @(
+    "-princ", "$Spn@$Realm",
+    "-mapuser", $UserUpn,
+    "-pass", $PassPlano,
+    "-crypto", "All",
+    "-ptype", "KRB5_NT_PRINCIPAL",
+    "-out", $RutaKeytab
+)
+& ktpass @ktpassArgs
+
+# Se limpia de memoria en cuanto ktpass terminó de usarla.
+$PassPlano = $null
+[System.GC]::Collect()
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ktpass devolvió un error (código $LASTEXITCODE). Revisa el mensaje de arriba." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ""
+Write-Host "=== Listo ===" -ForegroundColor Green
+Write-Host "Keytab generado en: $RutaKeytab"
+Write-Host ""
+Write-Host "Paso siguiente, en SquidManager (Sistema -> Kerberos):"
+Write-Host "  1. Verifica que Realm y FQDN coincidan con los de arriba (ya deberían, este script los trae de ahí)."
+Write-Host "  2. Subí el archivo '$RutaKeytab' con el botón 'Subir keytab'."
+Write-Host "  3. Marcá 'Habilitar' y pulsá 'Guardar Configuración'."
+Write-Host "  4. Pulsá 'Aplicar cambios' en la barra superior."
+Write-Host ""
+Write-Host "Para validar sin un cliente Windows con GUI, ver docs/kerberos.md (seccion 'Validar sin un cliente Windows con GUI')."

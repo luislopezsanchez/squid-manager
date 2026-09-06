@@ -179,6 +179,7 @@ export const api = {
     return request<any>('/kerberos/keytab', { method: 'POST', body: formData })
   },
   deleteKeytab: () => request<any>('/kerberos/keytab', { method: 'DELETE' }),
+  kerberosAdSetupScriptUrl: () => `${API_BASE}/kerberos/ad-setup-script`,
 
   // Syslog externo (opcional, apagado por defecto)
   getSyslogConfig: () => request<any>('/syslog/config'),

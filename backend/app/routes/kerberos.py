@@ -1,8 +1,11 @@
 """Rutas de configuración de Kerberos (autenticación Negotiate contra AD)."""
 
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import PlainTextResponse
+from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -17,6 +20,8 @@ from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
 # Un keytab real pesa unos pocos KB (una entrada por combinación de principal
 # y tipo de cifrado). Este tope solo evita que alguien suba un archivo enorme
@@ -90,6 +95,52 @@ async def update_config(
 
     logger.info("Kerberos %s", "activado" if config.enabled else "desactivado")
     return {"status": "ok"}
+
+
+@router.get("/ad-setup-script")
+async def get_ad_setup_script(
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    """Genera un .ps1 para preparar el Active Directory, con Realm y FQDN ya
+    completados con lo que hay guardado en el panel. Evita el error más común
+    del setup manual: copiar el script de la documentación y olvidarse de
+    cambiar esos dos valores por los propios.
+
+    No incluye ninguna contraseña ni credencial: la cuenta de servicio y el
+    keytab se generan en el propio AD al correr el script, y este endpoint no
+    sabe ni pregunta nada sobre ellos.
+    """
+    config = _obtener_o_crear(db)
+    if not config.realm or not config.proxy_fqdn:
+        raise HTTPException(
+            400,
+            detail="Completa y guarda Realm y FQDN del proxy antes de generar el script.",
+        )
+
+    # Primer segmento del FQDN como nombre de cuenta sugerido (proxy.empresa.com
+    # -> "proxy"): un punto de partida razonable, editable con -NombreCuenta al
+    # correr el script si el AD del cliente tiene su propia convención.
+    nombre_sugerido = config.proxy_fqdn.split(".")[0] or "proxy-squidmanager"
+
+    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
+    template = env.get_template("kerberos_ad_setup.ps1.j2")
+    contenido = template.render(
+        realm=config.realm,
+        proxy_fqdn=config.proxy_fqdn,
+        nombre_cuenta_sugerido=nombre_sugerido,
+        generado_en=utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+    )
+    # Con BOM: PowerShell 5.1 (el que trae Windows Server por defecto) asume
+    # la codepage ANSI/OEM del sistema al leer un .ps1 sin BOM, y las tildes
+    # y la ñ de los comentarios y los Write-Host salen mal en la consola. No
+    # afecta la ejecución -son cadenas literales y comentarios-, pero un
+    # script pensado para un admin de Windows no debería salir así.
+    return PlainTextResponse(
+        contenido.encode("utf-8-sig"),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": 'attachment; filename="kerberos-ad-setup.ps1"'},
+    )
 
 
 @router.post("/keytab")
