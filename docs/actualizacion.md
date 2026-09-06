@@ -47,6 +47,33 @@ Sin esto, Squid no ve la variable de entorno que le dice dónde está el
 autenticación Negotiate falla siempre con `Bad encryption type` pese a un
 keytab correcto. Detalle completo en [kerberos.md](kerberos.md).
 
+### Archivos que el instalador coloca una sola vez
+
+`git pull` trae el código nuevo al repositorio clonado, pero **no vuelve a
+copiar** los archivos que `install-nativo.sh` deja fuera de `/opt/squid-manager`
+la primera vez —la configuración de `logrotate`, el script de `cron.monthly`,
+el drop-in de systemd de Kerberos de arriba—. Si una versión nueva cambia
+alguno de esos archivos, hace falta reinstalarlo a mano después del `git pull`.
+Este caso solo existe en modo nativo: en Docker, `--build` reconstruye la
+imagen entera con lo que el `Dockerfile` copia, así que no hay un paso
+equivalente que se pueda pasar por alto.
+
+Ejemplo concreto, desde 0.20.0 (rotación de logs por fecha, retención a 30
+días, consolidación mensual):
+
+```bash
+cd /opt/squid-manager
+sudo install -o root -g root -m 644 squid/squid-logrotate.native /etc/logrotate.d/squid
+sudo install -o root -g root -m 755 squid/consolidate-monthly-logs.sh /etc/cron.monthly/squidmanager-log-archive
+```
+
+No hace falta reiniciar nada después de esto: `logrotate` y `cron.monthly` los
+ejecuta el sistema por su cuenta cuando corresponde, no un servicio de
+SquidManager. Si el `CHANGELOG.md` de una versión menciona un cambio a algo que
+vive fuera del propio código de la app (una unidad de systemd, un cron, un
+archivo en `/etc`), asumí que necesita este mismo tipo de paso manual y
+revisá qué instala `install-nativo.sh` para ese archivo en concreto.
+
 ---
 
 ## Instalación con Docker
