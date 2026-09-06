@@ -5,6 +5,31 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.19.0] - 2026-09-06
+
+### Añadido
+
+- **Kerberos/Negotiate validado de punta a punta contra un Active Directory
+  real**, no solo la generación del keytab: un cliente Windows del dominio
+  navegando por el proxy sin que el navegador pidiera usuario ni contraseña,
+  confirmado en `access.log` con la identidad real del usuario. Dos huecos
+  encontrados y resueltos sin ningún paso manual por consola:
+  - El keytab que genera `ktpass -crypto All` incluye tipos de cifrado DES
+    que MIT Kerberos 1.18+ (Ubuntu 24.04, Debian 12) ya no soporta,
+    rompiendo la autenticación con `Bad encryption type`. Se quitan
+    automáticamente al instalar el keytab.
+  - Sin `/etc/krb5.conf`, la librería Kerberos del sistema rechaza por
+    defecto RC4-HMAC, el tipo más común en un AD real. Se genera
+    automáticamente (`/etc/squid/krb5.conf`) al aplicar cambios, con
+    descubrimiento del KDC por DNS en vez de pedirlo a mano en el panel.
+  - Instalación nueva: el instalador nativo configura solo la variable de
+    entorno que Squid necesita para encontrar ese archivo; modo Docker la
+    trae en la imagen. Una instalación nativa existente necesita un paso
+    único documentado en
+    [docs/instalacion-nativa.md](docs/instalacion-nativa.md).
+
+---
+
 ## [0.18.0] - 2026-09-06
 
 ### Corregido
