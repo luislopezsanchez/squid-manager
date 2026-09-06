@@ -39,6 +39,27 @@ def test_una_entrada_mala_invalida_la_lista():
     assert not ok
 
 
+@pytest.mark.parametrize("tld", [".com", ".org", ".net", ".local"])
+def test_rechaza_comodin_de_tld_completo(tld):
+    """'.com' exime a cualquier destino de ese TLD, no solo a un dominio."""
+    ok, mensaje = validar_dominios([tld])
+    assert not ok
+    assert "nivel superior" in mensaje
+
+
+def test_acepta_dominio_real_de_dos_niveles_con_punto():
+    """'.miempresa.com' SI es un dominio concreto (con subdominios), no un TLD."""
+    ok, _ = validar_dominios([".miempresa.com"])
+    assert ok
+
+
+def test_acepta_tld_sin_punto_inicial():
+    """'com' a secas (sin punto) solo casaria un host llamado literalmente
+    'com', no todo el TLD -no es el mismo peligro que '.com'."""
+    ok, _ = validar_dominios(["com"])
+    assert ok
+
+
 # --- Generación del squid.conf ---------------------------------------------
 
 def test_sin_dominios_exentos_no_aparece_la_acl():
