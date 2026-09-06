@@ -1,10 +1,12 @@
 """Rutas de configuración de Kerberos (autenticación Negotiate contra AD)."""
 
+import io
 import logging
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import Response
 from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -97,15 +99,41 @@ async def update_config(
     return {"status": "ok"}
 
 
+# Windows Server bloquea por defecto cualquier .ps1 sin firma digital, se
+# haya descargado o copiado por USB ("no se puede cargar el archivo... no
+# esta firmado digitalmente"): la primera versión de este endpoint solo
+# entregaba el .ps1 y el usuario se topó justo con eso. Un .cmd no tiene esa
+# restricción -PowerShell solo la aplica a sus propios .ps1-, así que se
+# entrega como lanzador junto al script, dentro de un .zip. No cambia la
+# política de ejecución del sistema: el -ExecutionPolicy Bypass de abajo
+# aplica solo a este proceso de powershell.exe, una vez.
+_LAUNCHER_CMD = """@echo off
+REM Lanzador de kerberos-ad-setup.ps1 -- generado por SquidManager.
+REM
+REM Windows bloquea por defecto cualquier .ps1 sin firma digital (mensaje
+REM "no esta firmado digitalmente"), venga de donde venga. Este .cmd no
+REM cambia la politica de ejecucion del sistema: el -ExecutionPolicy Bypass
+REM de abajo aplica solo a esta ejecucion de powershell.exe, una vez.
+REM
+REM Revisa el contenido de kerberos-ad-setup.ps1 antes de correr esto, igual
+REM que revisarias cualquier script que va a correr con permisos de
+REM administrador de dominio.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0kerberos-ad-setup.ps1" %*
+pause
+"""
+
+
 @router.get("/ad-setup-script")
 async def get_ad_setup_script(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """Genera un .ps1 para preparar el Active Directory, con Realm y FQDN ya
-    completados con lo que hay guardado en el panel. Evita el error más común
-    del setup manual: copiar el script de la documentación y olvidarse de
-    cambiar esos dos valores por los propios.
+    """Genera un .zip con el script para preparar el Active Directory y un
+    lanzador .cmd, con Realm y FQDN ya completados con lo que hay guardado en
+    el panel. Evita dos problemas reales, no hipotéticos: copiar el script de
+    la documentación y olvidarse de cambiar el realm/FQDN de ejemplo, y el
+    bloqueo por defecto de Windows a cualquier .ps1 sin firma digital (ver
+    `_LAUNCHER_CMD` arriba).
 
     No incluye ninguna contraseña ni credencial: la cuenta de servicio y el
     keytab se generan en el propio AD al correr el script, y este endpoint no
@@ -118,28 +146,43 @@ async def get_ad_setup_script(
             detail="Completa y guarda Realm y FQDN del proxy antes de generar el script.",
         )
 
-    # Primer segmento del FQDN como nombre de cuenta sugerido (proxy.empresa.com
-    # -> "proxy"): un punto de partida razonable, editable con -NombreCuenta al
-    # correr el script si el AD del cliente tiene su propia convención.
-    nombre_sugerido = config.proxy_fqdn.split(".")[0] or "proxy-squidmanager"
+    # Un nombre fijo y distintivo, no el primer segmento del FQDN
+    # (proxy.empresa.com -> "proxy"): un nombre tan genérico como "proxy"
+    # choca fácil con algo que ya exista en el AD por otro motivo -visto en
+    # una prueba real: "ya existe" al crear, pero ktpass no podía resolverlo
+    # después, señal de que ese "proxy" no era la cuenta de servicio que el
+    # script esperaba-. Editable con -NombreCuenta al correr el script si el
+    # AD del cliente tiene su propia convención (SamAccountName admite hasta
+    # 20 caracteres: "svc-squidmanager" deja margen).
+    nombre_sugerido = "svc-squidmanager"
 
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
     template = env.get_template("kerberos_ad_setup.ps1.j2")
-    contenido = template.render(
+    contenido_ps1 = template.render(
         realm=config.realm,
         proxy_fqdn=config.proxy_fqdn,
         nombre_cuenta_sugerido=nombre_sugerido,
         generado_en=utcnow().strftime("%Y-%m-%d %H:%M UTC"),
     )
-    # Con BOM: PowerShell 5.1 (el que trae Windows Server por defecto) asume
-    # la codepage ANSI/OEM del sistema al leer un .ps1 sin BOM, y las tildes
-    # y la ñ de los comentarios y los Write-Host salen mal en la consola. No
-    # afecta la ejecución -son cadenas literales y comentarios-, pero un
-    # script pensado para un admin de Windows no debería salir así.
-    return PlainTextResponse(
-        contenido.encode("utf-8-sig"),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": 'attachment; filename="kerberos-ad-setup.ps1"'},
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Con BOM: PowerShell 5.1 (el que trae Windows Server por defecto)
+        # asume la codepage ANSI/OEM del sistema al leer un .ps1 sin BOM, y
+        # las tildes/ñ de los comentarios y los Write-Host salen mal en la
+        # consola. No afecta la ejecución -son cadenas literales y
+        # comentarios-, pero un script para un admin de Windows no debería
+        # salir así.
+        zf.writestr("kerberos-ad-setup.ps1", contenido_ps1.encode("utf-8-sig"))
+        # Sin acentos a propósito: un .cmd interpreta su propio texto con la
+        # codepage OEM de la consola, no UTF-8, y una tilde mal traducida
+        # ahí sí puede romper una línea de REM en algunas code pages.
+        zf.writestr("Ejecutar.cmd", _LAUNCHER_CMD.encode("ascii"))
+
+    return Response(
+        buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="kerberos-ad-setup.zip"'},
     )
 
 

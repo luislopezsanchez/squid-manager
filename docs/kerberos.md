@@ -39,7 +39,7 @@ identidad se toma del ticket Kerberos de la sesión de Windows ya iniciada.
 
 > 💡 **Atajo:** con el Realm y el FQDN del proxy ya guardados en el panel
 > (Sistema → Kerberos), el botón **«Descargar script de configuración
-> (Windows Server)»** genera un `.ps1` con esos dos valores ya completados —
+> (Windows Server)»** genera un `.zip` con esos dos valores ya completados —
 > crea la cuenta de servicio si no existe y corre `ktpass -crypto All` por
 > vos. Evita el error más común de copiar los pasos de abajo a mano: editar
 > el realm o el FQDN en un paso y olvidarse de cambiarlo en el siguiente. El
@@ -49,6 +49,19 @@ identidad se toma del ticket Kerberos de la sesión de Windows ya iniciada.
 > script con ese nivel de acceso — lo de abajo es exactamente lo que hace,
 > explicado paso a paso, para quien prefiera correrlo a mano o entender qué
 > hizo el script.
+>
+> El zip trae dos archivos: `kerberos-ad-setup.ps1` (el script en sí, para
+> revisar) y `Ejecutar.cmd`. **Corré `Ejecutar.cmd`, no el `.ps1`
+> directamente** — Windows bloquea por defecto cualquier `.ps1` sin firma
+> digital (`... no está firmado digitalmente. No se puede ejecutar este
+> script en el sistema actual.`), venga de donde venga. El `.cmd` es un
+> lanzador de una línea que llama a `powershell.exe -ExecutionPolicy Bypass
+> -File kerberos-ad-setup.ps1`: el `Bypass` aplica solo a esa ejecución
+> puntual, no cambia la política del sistema. Si preferís correr el `.ps1`
+> a mano igual, el mismo comando sirve desde una consola de PowerShell:
+> ```powershell
+> powershell -ExecutionPolicy Bypass -File .\kerberos-ad-setup.ps1
+> ```
 
 ### 1. Crear la cuenta de servicio ANTES de generar el keytab
 
@@ -65,10 +78,18 @@ New-ADUser -Name "proxy-squidmanager" -SamAccountName "proxy-squidmanager" `
 
 ```powershell
 ktpass -princ HTTP/proxy.empresa.com@EMPRESA.COM `
-  -mapuser proxy-squidmanager@empresa.com `
+  -mapuser EMPRESA\proxy-squidmanager `
   -pass "UnaContraseñaFuerte" `
   -crypto All -ptype KRB5_NT_PRINCIPAL -out C:\HTTP.keytab
 ```
+
+> ⚠️ **`-mapuser` en formato `DOMINIO\usuario`, no `usuario@dominio`.** Con el
+> formato UPN (`usuario@dominio`), `ktpass` falla con `DsCrackNames returned
+> 0x5` / `failed getting target domain for specified user` salvo que la
+> cuenta tenga un `UserPrincipalName` real con ese valor exacto — y
+> `New-ADUser` no lo asigna solo, así que una cuenta recién creada no lo
+> tiene. El formato NetBIOS (`DOMINIO\usuario`) se resuelve por
+> `SamAccountName`, que sí existe siempre. Visto en una prueba real.
 
 > ⚠️ **Hallazgo importante, no usar un solo tipo de cifrado.** Con `-crypto
 > AES256-SHA1` (un único tipo) la autenticación fallaba con `gss_accept_sec_context()
@@ -129,9 +150,11 @@ configurados para SPNEGO) antes de darlo por cerrado en producción.
 | Síntoma | Causa probable |
 |---|---|
 | `DsCrackNames returned 0x2` al correr `ktpass` | La cuenta de servicio no existe todavía — crearla primero con `New-ADUser`. |
+| `DsCrackNames returned 0x5` / `failed getting target domain for specified user` | `-mapuser` en formato `usuario@dominio` (UPN) sin que la cuenta tenga ese `UserPrincipalName` asignado. Usar `DOMINIO\usuario` (NetBIOS) en su lugar. |
 | `gss_accept_sec_context() failed: ... Service key not available` | El keytab se generó con un solo tipo de cifrado y no coincide con el que eligió el KDC. Regenerar con `-crypto All`. |
 | El navegador sigue pidiendo usuario/contraseña | Revisar que el FQDN del proxy resuelva por DNS, que el SPN del keytab sea `HTTP/<ese mismo FQDN>`, y que el navegador tenga ese dominio en su lista de sitios de confianza para SPNEGO (en Chrome/Edge: política `AuthServerAllowlist`). |
 | Diferencia de reloj | Sincronizar NTP entre el proxy y el AD; más de ~5 minutos de diferencia invalida los tickets. |
+| `ktpass` avisa `Failed to set property 'servicePrincipalName' ... 0x13` y `setspn -L <cuenta>` no muestra el SPN | El aviso de `ktpass` no siempre es benigno pese a lo que dice el propio mensaje. Registrar el SPN a mano: `setspn -A HTTP/<fqdn del proxy> <cuenta>`, y confirmar con `setspn -L <cuenta>`. El keytab ya generado sigue siendo válido — el SPN es un atributo aparte de la cuenta, no hace falta generar el keytab de nuevo. |
 
 ---
 

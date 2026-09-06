@@ -52,7 +52,14 @@ $ErrorActionPreference = "Stop"
 $Realm      = "{{ realm }}"
 $ProxyFqdn  = "{{ proxy_fqdn }}"
 $Spn        = "HTTP/$ProxyFqdn"
-$UserUpn    = "$NombreCuenta@$((Get-ADDomain).DNSRoot)"
+
+# DOMINIO\usuario, no usuario@dominio: -mapuser en formato UPN falla con
+# "DsCrackNames returned 0x5" / "failed getting target domain for specified
+# user" salvo que la cuenta tenga un UserPrincipalName real con ese valor -y
+# New-ADUser no lo asigna solo-. Visto en una prueba real. El formato NetBIOS
+# no depende de ese atributo: se resuelve por SamAccountName, que sí existe
+# siempre.
+$UserMapTarget = "$((Get-ADDomain).NetBIOSName)\$NombreCuenta"
 
 Write-Host "=== Configuracion de Kerberos para SquidManager ===" -ForegroundColor Cyan
 Write-Host "Realm:            $Realm"
@@ -64,21 +71,119 @@ Write-Host ""
 # ---------------------------------------------------------------------
 # 1. Cuenta de servicio. ktpass no la crea -solo mapea un SPN a una cuenta
 #    que ya debe existir-: invertir el orden da "DsCrackNames returned 0x2".
+#
+#    No alcanza con comprobar antes si existe y decidir en base a eso: en
+#    un dominio con más de un controlador, Get-ADUser y New-ADUser pueden
+#    ir a parar a DCs distintos, y una consulta que no la encuentra no
+#    significa que New-ADUser vaya a poder crearla (visto en una prueba
+#    real: Get-ADUser no la encontró, y New-ADUser respondió "la cuenta
+#    especificada ya existe"). Por eso se intenta crear directamente y se
+#    recupera del error puntual de "ya existe" en vez de abortar, en lugar
+#    de fiarse de una comprobación previa que puede estar desactualizada.
+#
+#    Da igual si la cuenta es nueva o ya existía: ktpass corre con permisos
+#    de administrador de dominio y ESTABLECE la contraseña que se le pasa
+#    con -pass, no necesita ni comprueba la que tenía antes. Por eso el
+#    único dato que hace falta siempre es una contraseña NUEVA para dejar en
+#    la cuenta -nunca "la actual"-, y por eso reutilizar una cuenta que ya
+#    existía significa resetearle la contraseña a la que se ingrese acá.
 # ---------------------------------------------------------------------
 Import-Module ActiveDirectory -ErrorAction Stop
 
-$cuentaExistente = Get-ADUser -Filter "SamAccountName -eq '$NombreCuenta'" -ErrorAction SilentlyContinue
+function Test-CuentaExistente {
+    param([string]$Nombre)
+    try {
+        Get-ADUser -Identity $Nombre -ErrorAction Stop | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
 
-if (-not $cuentaExistente) {
-    Write-Host "La cuenta '$NombreCuenta' no existe todavia. Creandola..." -ForegroundColor Yellow
-    $securePass = Read-Host -Prompt "Contraseña para la nueva cuenta de servicio '$NombreCuenta'" -AsSecureString
-    New-ADUser -Name $NombreCuenta -SamAccountName $NombreCuenta `
-        -AccountPassword $securePass -Enabled $true -PasswordNeverExpires $true
-    Write-Host "Cuenta '$NombreCuenta' creada." -ForegroundColor Green
+function Test-ComplejidadPassword {
+    # Política de complejidad por defecto de Windows: 8+ caracteres y al
+    # menos 3 de estos 4 tipos. El dominio puede exigir más (o distinto);
+    # esto solo evita el caso más común -una contraseña corta y simple- sin
+    # llegar a New-ADUser/ktpass, en vez de descubrirlo recién ahí con un
+    # ADPasswordComplexityException.
+    param([string]$Password)
+    if ($Password.Length -lt 8) { return $false }
+    $tipos = 0
+    if ($Password -cmatch '[A-Z]') { $tipos++ }
+    if ($Password -cmatch '[a-z]') { $tipos++ }
+    if ($Password -match '[0-9]') { $tipos++ }
+    if ($Password -match '[^a-zA-Z0-9]') { $tipos++ }
+    return $tipos -ge 3
+}
+
+function Pedir-PasswordValida {
+    param([string]$Prompt)
+    while ($true) {
+        $secure = Read-Host -Prompt $Prompt -AsSecureString
+        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+        $plano = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        $valida = Test-ComplejidadPassword $plano
+        $plano = $null
+        if ($valida) { return $secure }
+        Write-Host "Esa contraseña no cumple la política de complejidad habitual de Windows: 8+ caracteres, con mayúsculas, minúsculas, números y símbolos (al menos 3 de esos 4 tipos). Probá de nuevo." -ForegroundColor Red
+    }
+}
+
+function Resolver-PasswordParaCuentaExistente {
+    param([string]$Nombre)
+    Write-Host ""
+    Write-Host "La cuenta '$Nombre' ya existe en este Active Directory." -ForegroundColor Yellow
+    Write-Host "ktpass va a RESETEAR su contraseña como parte de generar el keytab: no hace"
+    Write-Host "falta saber la actual, y la que tenga hoy deja de servir. Si esta cuenta NO es"
+    Write-Host "la que el proxy debería usar, cancelá (Ctrl+C) y volvé a correr el script con"
+    Write-Host "un nombre distinto, por ejemplo:"
+    Write-Host "  .\Ejecutar.cmd -NombreCuenta svc-squidmanager-proxy" -ForegroundColor Cyan
+    Write-Host ""
+    $respuesta = Read-Host -Prompt "¿Continuar y resetear la contraseña de '$Nombre'? (s/n)"
+    if ($respuesta -notmatch '^[sSyY]') {
+        Write-Host "Cancelado." -ForegroundColor Yellow
+        exit 1
+    }
+    return Pedir-PasswordValida "Nueva contraseña para '$Nombre'"
+}
+
+function Resetear-CuentaExistente {
+    # No alcanza con pedirle una contraseña nueva y confiar en que ktpass la
+    # deje bien puesta: una cuenta que quedó a medio crear -por ejemplo, de
+    # un intento anterior donde New-ADUser creó el objeto pero falló al
+    # asignarle contraseña por no cumplir la complejidad del dominio, visto
+    # en una prueba real- puede haber quedado deshabilitada. Se resetea la
+    # contraseña y se habilita acá mismo, con cmdlets de AD, en vez de
+    # asumir que ktpass se encarga de todo eso.
+    param([string]$Nombre)
+    $securePass = Resolver-PasswordParaCuentaExistente $Nombre
+    try {
+        Set-ADAccountPassword -Identity $Nombre -NewPassword $securePass -Reset -ErrorAction Stop
+        Set-ADUser -Identity $Nombre -Enabled $true -PasswordNeverExpires $true -ErrorAction Stop
+        Write-Host "Contraseña reseteada y cuenta habilitada." -ForegroundColor Green
+    } catch {
+        Write-Host "No se pudo resetear la contraseña o habilitar la cuenta: $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
+    }
+    return $securePass
+}
+
+if (Test-CuentaExistente $NombreCuenta) {
+    $securePass = Resetear-CuentaExistente $NombreCuenta
 } else {
-    Write-Host "La cuenta '$NombreCuenta' ya existe, se reutiliza." -ForegroundColor Yellow
-    Write-Host "Hace falta su contraseña actual para que ktpass regenere el keytab (no la cambia)."
-    $securePass = Read-Host -Prompt "Contraseña actual de '$NombreCuenta'" -AsSecureString
+    Write-Host "La cuenta '$NombreCuenta' no existe todavia. Creandola..." -ForegroundColor Yellow
+    $securePass = Pedir-PasswordValida "Contraseña para la nueva cuenta de servicio '$NombreCuenta'"
+    try {
+        New-ADUser -Name $NombreCuenta -SamAccountName $NombreCuenta `
+            -AccountPassword $securePass -Enabled $true -PasswordNeverExpires $true -ErrorAction Stop
+        Write-Host "Cuenta '$NombreCuenta' creada." -ForegroundColor Green
+    } catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
+        # Exactamente el caso de arriba: existe de verdad, la comprobación
+        # previa no la vio (Get-ADUser y New-ADUser resolviendo contra DCs
+        # distintos, por ejemplo -o la misma cuenta a medio crear de arriba-).
+        $securePass = Resetear-CuentaExistente $NombreCuenta
+    }
 }
 
 # ktpass pide la contraseña en texto plano por su propio parámetro -pass;
@@ -86,6 +191,35 @@ if (-not $cuentaExistente) {
 $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass)
 $PassPlano = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
+
+# ---------------------------------------------------------------------
+# 1b. Registrar el SPN con un cmdlet de AD, sin depender de que ktpass lo
+#     haga bien. Visto en una prueba real: ktpass terminó con "Key created"
+#     x5 y un keytab en apariencia válido, pero avisó
+#     "Failed to set property 'servicePrincipalName' ... 0x13" y esa vez SÍ
+#     era motivo de preocupación -"setspn -L" no mostró el SPN-. Sin el SPN
+#     puesto en la cuenta, el KDC no puede emitir el ticket aunque el
+#     keytab tenga las claves correctas: la autenticación falla en el
+#     primer intento real, con un error que no apunta aquí.
+# ---------------------------------------------------------------------
+$cuentaAD = Get-ADUser -Identity $NombreCuenta -Properties ServicePrincipalNames
+if ($cuentaAD.ServicePrincipalNames -contains $Spn) {
+    Write-Host "El SPN '$Spn' ya estaba registrado en la cuenta." -ForegroundColor Green
+} else {
+    try {
+        Set-ADUser -Identity $NombreCuenta -ServicePrincipalNames @{Add = $Spn } -ErrorAction Stop
+        Write-Host "SPN '$Spn' registrado en la cuenta." -ForegroundColor Green
+    } catch {
+        # Motivo más probable: el SPN ya está en OTRA cuenta (un leftover de
+        # una prueba anterior, por ejemplo) — Kerberos exige que cada SPN
+        # sea único en todo el bosque. Frenar acá con un mensaje claro es
+        # mejor que dejar que ktpass avise y siga como si nada.
+        Write-Host "No se pudo registrar el SPN '$Spn': $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Buscá si ya está asignado a otra cuenta con:" -ForegroundColor Yellow
+        Write-Host "  setspn -Q $Spn" -ForegroundColor Cyan
+        exit 1
+    }
+}
 
 # ---------------------------------------------------------------------
 # 2. Generar el keytab.
@@ -103,7 +237,7 @@ Write-Host "Generando keytab en $RutaKeytab ..." -ForegroundColor Cyan
 
 $ktpassArgs = @(
     "-princ", "$Spn@$Realm",
-    "-mapuser", $UserUpn,
+    "-mapuser", $UserMapTarget,
     "-pass", $PassPlano,
     "-crypto", "All",
     "-ptype", "KRB5_NT_PRINCIPAL",

@@ -83,7 +83,7 @@ export default function Kerberos() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'kerberos-ad-setup.ps1'
+      a.download = 'kerberos-ad-setup.zip'
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -172,13 +172,13 @@ export default function Kerberos() {
           className="btn btn-primary disabled:opacity-50"
           title={!config.realm || !config.proxy_fqdn ? traducir("Completa y guarda Realm y FQDN del proxy primero") : undefined}
         >
-          {downloadingScript ? traducir('Generando…') : traducir('Descargar script de configuración (Windows Server)')}
+          {downloadingScript ? traducir('Generando…') : traducir('Descargar script de configuración (Windows Server) (.zip)')}
         </button>
         {(!config.realm || !config.proxy_fqdn) && (
           <p className="text-xs text-ink-3 mt-2">{traducir("Completa y guarda Realm y FQDN del proxy arriba para poder generarlo.")}</p>
         )}
         <p className="text-xs text-ink-3 mt-2">
-          {traducir("Revisalo antes de correrlo, como cualquier script que corre con permisos de administrador de dominio. No incluye ninguna contraseña: la pide por consola al ejecutarse y no la guarda en ningún lado. Requiere el módulo ActiveDirectory (RSAT) y ktpass en la máquina donde se corra.")}
+          {traducir("Trae dos archivos: kerberos-ad-setup.ps1 (revisalo antes de correrlo, como cualquier script que corre con permisos de administrador de dominio) y Ejecutar.cmd, un lanzador para el primero. Windows bloquea por defecto cualquier .ps1 sin firma digital, y el .cmd evita ese error sin tocar la política de ejecución del sistema — hacé doble clic en Ejecutar.cmd, no en el .ps1 directamente. No incluye ninguna contraseña: la pide por consola al ejecutarse y no la guarda en ningún lado. Requiere el módulo ActiveDirectory (RSAT) y ktpass en la máquina donde se corra.")}
         </p>
       </div>
 
