@@ -1,5 +1,5 @@
 import { traducir } from '../i18n'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { api, setToken } from '../api/client'
 import AuthShell from '../components/AuthShell'
 import { IconSpinner, IconAlert } from '../components/Icons'
@@ -9,6 +9,14 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [version, setVersion] = useState('')
+
+  // "SquidManager vX.Y" quedaba escrito a mano y se desincronizaba con cada
+  // release -llegó a mostrar v0.6 estando ya en v0.20-. /health devuelve la
+  // versión real que corre en este servidor en concreto.
+  useEffect(() => {
+    api.health().then(h => h.version && setVersion(h.version)).catch(() => {})
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,7 +46,7 @@ export default function Login() {
     <AuthShell
       titulo="SquidManager"
       subtitulo="Panel de gestión del proxy"
-      pie="SquidManager v0.6"
+      pie={version ? `SquidManager v${version}` : 'SquidManager'}
     >
       <form onSubmit={handleSubmit}>
         <div className="field">

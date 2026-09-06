@@ -103,6 +103,12 @@ export const api = {
   // Función genérica para requests GET con query params
   request: <T = any>(path: string) => request<T>(path),
 
+  // Fuera de /api a propósito, igual que en el backend: es lo que consulta
+  // un balanceador o un monitor, y en la pantalla de login (sin token
+  // todavía) sirve para mostrar la versión real que corre, no una que quedó
+  // escrita a mano y se desincroniza con cada release.
+  health: () => fetch('/health').then(r => r.json()),
+
   // Auth
   login: (username: string, password: string) => {
     const formData = new URLSearchParams()

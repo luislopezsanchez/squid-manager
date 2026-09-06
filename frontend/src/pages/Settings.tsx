@@ -148,8 +148,9 @@ export default function Settings() {
                       onClick={() => handleSave(key)}
                       disabled={saving === key}
                       className="btn btn-primary btn-sm"
+                      title={traducir("Se guarda ya mismo; Squid no lo usa hasta pulsar «Aplicar cambios» arriba")}
                     >
-                      {saving === key ? '...' : traducir('Guardar')}
+                      {saving === key ? '...' : <>{traducir('Guardar')} <span className="text-amber-300 font-bold" aria-hidden="true">*</span></>}
                     </button>
                   </div>
 
