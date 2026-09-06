@@ -261,6 +261,24 @@ install -o root -g root -m 755 "$INSTALL_DIR/squid/auth_helper.py" \
     /usr/lib/squid/squidmanager_auth_helper
 ok "Helper de autenticacion instalado"
 
+# Kerberos/Negotiate: el helper negotiate_kerberos_auth usa libkrb5, que sin
+# un /etc/krb5.conf usa valores por defecto que en Ubuntu 24.04 (MIT Kerberos
+# 1.20) rechazan RC4-HMAC -el tipo de cifrado mas comun en un AD real- con
+# "Bad encryption type", y ademas elimino el soporte de DES del todo. El panel
+# escribe /etc/squid/krb5.conf (junto al resto de su configuracion, en el
+# volumen/directorio que ya gobierna) cuando se activa Kerberos; esta variable
+# le dice al proceso de Squid donde leerlo, sin tocar el /etc/krb5.conf del
+# sistema por si algo mas en la maquina lo usa. Comprobado en vivo contra un
+# AD real: sin esto, la autenticacion Negotiate fallaba siempre pidiendo
+# usuario y contrasena pese a un keytab correcto.
+mkdir -p /etc/systemd/system/squid.service.d
+cat > /etc/systemd/system/squid.service.d/squidmanager-kerberos.conf <<'EOF'
+[Service]
+Environment=KRB5_CONFIG=/etc/squid/krb5.conf
+EOF
+systemctl daemon-reload
+ok "Variable KRB5_CONFIG configurada para Squid (Kerberos/Negotiate)"
+
 # /etc/squid pertenece al grupo proxy y el panel escribe ahi. El bit setgid
 # hace que todo lo que se cree dentro herede el grupo, que es lo que permite a
 # Squid leer los ficheros que escribe el panel sin necesidad de chown.

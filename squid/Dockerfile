@@ -100,6 +100,17 @@ RUN mkdir -p /var/spool/squid /var/log/squid /etc/squid/ssl_cert /var/lib/ssl_cr
 RUN chown -R proxy:proxy /var/spool/squid /var/log/squid /etc/squid/ssl_cert /var/lib/ssl_crtd 2>/dev/null || true
 RUN chmod 755 /var/lib/ssl_crtd
 
+# Kerberos/Negotiate: libkrb5 busca /etc/krb5.conf por defecto (KRB5_CONFIG
+# lo redirige), independiente de --sysconfdir de Squid. Sin un krb5.conf con
+# permitted_enctypes que incluya RC4-HMAC, Ubuntu 24.04 (MIT Kerberos 1.20)
+# rechaza el tipo de cifrado mas comun en un AD real con "Bad encryption
+# type" y la autenticacion Negotiate falla siempre. El panel escribe
+# /etc/squid/krb5.conf -en el volumen que ya comparte con este contenedor-
+# cuando se activa Kerberos; esta variable le dice al proceso de Squid donde
+# leerlo, sin tocar el /etc/krb5.conf real del contenedor. Comprobado en vivo
+# contra un AD real.
+ENV KRB5_CONFIG=/etc/squid/krb5.conf
+
 EXPOSE 3128
 
 ENTRYPOINT ["/entrypoint.sh"]

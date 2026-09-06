@@ -21,6 +21,20 @@ identidad se toma del ticket Kerberos de la sesión de Windows ya iniciada.
   Directory, fuera de este panel — SquidManager solo lo recibe, lo valida (cabecera de
   keytab v5) y lo instala en `/etc/squid/HTTP.keytab` (permisos `640`) al aplicar
   cambios.
+- **El keytab que sube ktpass no se instala tal cual.** Windows genera el keytab con
+  `-crypto All`, que incluye tipos de cifrado DES clásicos (des-cbc-crc, des-cbc-md5)
+  además de los modernos (AES, RC4). MIT Kerberos 1.18+ (Ubuntu 24.04, Debian 12)
+  eliminó el soporte de DES del todo, y un keytab que aún los trae puede romper la
+  aceptación del contexto Kerberos —`gss_accept_sec_context() failed: ... Bad
+  encryption type`— antes de llegar siquiera a las entradas válidas. Confirmado en vivo
+  contra un AD real. SquidManager quita esas dos entradas automáticamente al instalar
+  el keytab; no hace falta limpiarlo a mano.
+- **También genera `/etc/squid/krb5.conf`** al aplicar cambios, con el realm que se
+  configuró en el panel. Sin este archivo, la librería Kerberos del sistema usa sus
+  valores por defecto, que en distribuciones recientes rechazan RC4-HMAC —el tipo de
+  cifrado más común en un AD real que no está forzado a solo-AES— con el mismo error de
+  arriba. También confirmado en vivo: mismo keytab, sin ningún otro cambio, la
+  autenticación pasó de fallar siempre a funcionar en cuanto existió este archivo.
 
 ---
 
@@ -155,12 +169,23 @@ configurados para SPNEGO) antes de darlo por cerrado en producción.
 | El navegador sigue pidiendo usuario/contraseña | Revisar que el FQDN del proxy resuelva por DNS, que el SPN del keytab sea `HTTP/<ese mismo FQDN>`, y que el navegador tenga ese dominio en su lista de sitios de confianza para SPNEGO (en Chrome/Edge: política `AuthServerAllowlist`). |
 | Diferencia de reloj | Sincronizar NTP entre el proxy y el AD; más de ~5 minutos de diferencia invalida los tickets. |
 | `ktpass` avisa `Failed to set property 'servicePrincipalName' ... 0x13` y `setspn -L <cuenta>` no muestra el SPN | El aviso de `ktpass` no siempre es benigno pese a lo que dice el propio mensaje. Registrar el SPN a mano: `setspn -A HTTP/<fqdn del proxy> <cuenta>`, y confirmar con `setspn -L <cuenta>`. El keytab ya generado sigue siendo válido — el SPN es un atributo aparte de la cuenta, no hace falta generar el keytab de nuevo. |
+| `Se encontró un SPN duplicado; anulando la operación` al correr `setspn -A` | Otra cuenta ya tiene ese mismo SPN — un Kerberos solo permite una a la vez en todo el bosque. `setspn -A` ya te muestra cuál (`CN=... , CN=Users, DC=...`); o usás esa cuenta (con `-NombreCuenta` en el script), o le quitás el SPN con `setspn -D HTTP/<fqdn> <cuenta vieja>` antes de asignarlo a la nueva. |
+| `gss_accept_sec_context() failed: ... Bad encryption type` con un keytab generado con `-crypto All` | El keytab trae entradas DES (des-cbc-crc, des-cbc-md5) que las versiones recientes de MIT Kerberos ya no soportan. SquidManager las quita automáticamente al instalar el keytab desde 0.18.0 — si aparece en una instalación más vieja, actualizar. |
+| El mismo error de arriba, con un keytab que ya no tiene DES | Falta `/etc/squid/krb5.conf`: sin él, MIT Kerberos moderno rechaza RC4-HMAC por defecto. SquidManager lo genera automáticamente al aplicar cambios desde 0.18.0 — verificar que el archivo exista y que Squid corra con `KRB5_CONFIG=/etc/squid/krb5.conf` en su entorno (`systemctl show squid -p Environment` en modo nativo). En una instalación que ya existía antes de 0.18.0 hay que agregar ese entorno a mano una vez — ver [instalacion-nativa.md](instalacion-nativa.md#actualizar-desde-una-version-sin-kerberos). |
+| `Cannot find key for HTTP/<fqdn>@<REALM> kvno N in keytab` | El keytab en uso corresponde a una versión anterior de la contraseña de la cuenta (cada reseteo de contraseña sube el `kvno`). Esto es normal si se reseteó la contraseña de la cuenta después de generar el keytab actual: hay que generar uno nuevo (correr el script de nuevo) y volver a subirlo. **Del lado del cliente**, un navegador que ya obtuvo un ticket con el `kvno` viejo lo sigue reutilizando hasta que expira: `klist purge` en el cliente Windows y reiniciar el navegador fuerza a pedir uno nuevo, sin esperar. |
+| El navegador ya tenía un ticket válido para `HTTP/<fqdn>` (visible con `klist`) pero sigue pidiendo credenciales | El ticket puede ser real pero corresponder a una configuración vieja del lado del proxy (SPN cambiado, keytab regenerado). `klist purge` + reiniciar el navegador para descartar esa posibilidad antes de seguir buscando del lado del servidor. |
 
 ---
+
+## Validado
+
+Probado de punta a punta contra un Active Directory real (Windows Server, dominio de
+prueba), no solo con `kinit`+`curl`: cuenta de servicio creada por el script, keytab
+generado y subido desde el panel, y un cliente Windows del dominio navegando por el
+proxy **sin que el navegador pidiera usuario ni contraseña** — confirmado en
+`access.log` con la identidad real del usuario de dominio.
 
 ## Pendiente / fuera de alcance de este documento
 
 - No hay UI todavía para decidir si el keytab se incluye en backup/restore — hoy no se
   exporta, igual que la contraseña de bind LDAP.
-- No probado todavía con un cliente Windows real con GUI unido al dominio (solo
-  validado con `kinit` + `curl` desde línea de comandos, ver arriba).

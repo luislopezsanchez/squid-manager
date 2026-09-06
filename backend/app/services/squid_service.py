@@ -402,12 +402,15 @@ def _apply_squid_config(db) -> dict:
 
     escribir_ca_padre(padre)
 
-    # Keytab de Kerberos: tiene que estar en el volumen antes de que Squid lea
-    # la configuración que declara el bloque de autenticación Negotiate.
-    # `kerberos` ya se cargó arriba, antes de generar el config.
-    from app.services.kerberos_service import escribir_keytab
+    # Keytab y krb5.conf de Kerberos: tienen que estar en el volumen antes de
+    # que Squid lea la configuración que declara el bloque de autenticación
+    # Negotiate. `kerberos` ya se cargó arriba, antes de generar el config.
+    # Sin krb5.conf, Squid rechaza tickets reales de un AD con "Bad
+    # encryption type" pese a tener el keytab correcto -confirmado en vivo-.
+    from app.services.kerberos_service import escribir_keytab, escribir_krb5_conf
 
     escribir_keytab(kerberos)
+    escribir_krb5_conf(kerberos)
 
     ldap_config = db.query(LdapConfig).first()
     allowed_ldap = [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()]  # noqa: E712

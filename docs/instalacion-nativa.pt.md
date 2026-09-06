@@ -184,6 +184,30 @@ tenha dado certo.
 O painel aplica as migrações do banco de dados ao iniciar, então não há um passo
 separado para isso.
 
+### Atualizar a partir de uma versão sem Kerberos
+
+Se a instalação é anterior à versão 0.18.0 e usa (ou vai usar) Kerberos/Negotiate,
+falta mais um passo, uma única vez — uma instalação nova já vem com isso pelo
+próprio instalador:
+
+```bash
+sudo mkdir -p /etc/systemd/system/squid.service.d
+sudo tee /etc/systemd/system/squid.service.d/squidmanager-kerberos.conf > /dev/null <<'EOF'
+[Service]
+Environment=KRB5_CONFIG=/etc/squid/krb5.conf
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart squid
+```
+
+Sem isso, o Squid nunca vê a variável de ambiente que diz onde fica o
+`/etc/squid/krb5.conf` que o painel gera ao aplicar mudanças: a autenticação
+Negotiate sempre falha com `Bad encryption type` apesar de um keytab correto
+(ver [docs/kerberos.md](kerberos.md)). O `daemon-reload` só recarrega a
+definição do serviço; o `restart` também é necessário porque as variáveis de
+ambiente de um processo são fixadas ao iniciá-lo — não dá para injetá-las num
+que já está rodando.
+
 ## Desinstalar
 
 ```bash

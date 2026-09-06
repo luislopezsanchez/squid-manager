@@ -8,17 +8,39 @@ que el certificado CA del proxy padre.
 
 import logging
 import os
+import struct
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 KEYTAB_PATH = Path("/etc/squid/HTTP.keytab")
 
+# En /etc/squid, no en el /etc/krb5.conf real del sistema: es el mismo
+# directorio que ya comparten backend y Squid en modo Docker (volumen
+# squid-config) y en modo nativo (grupo `proxy`, bit setgid), así que el
+# mismo código sirve para los dos despliegues sin distinguir uno de otro. El
+# proceso de Squid lo lee de ahí porque KRB5_CONFIG apunta a esta ruta -fijado
+# en el Dockerfile (modo Docker) y en un drop-in de systemd (modo nativo)-,
+# nunca al /etc/krb5.conf del sistema: si alguien más en la máquina depende
+# de una configuración Kerberos distinta, esto no la pisa.
+KRB5_CONF_PATH = Path("/etc/squid/krb5.conf")
+
 # Cabecera fija de todo fichero keytab v5 (RFC no numerado, pero es el formato
 # que usan tanto MIT Kerberos como Heimdal). Rechazar cualquier otra cosa evita
 # que un archivo equivocado (o vacío) quede referenciado en squid.conf sin que
 # Squid avise hasta el primer intento de autenticación real.
 _KEYTAB_MAGIC = b"\x05"
+
+# Tipos de cifrado DES clásicos (RFC 3961 / valores de enctype de MIT krb5):
+# des-cbc-crc=1, des-cbc-md4=2, des-cbc-md5=3. `ktpass -crypto All` en Windows
+# los sigue generando porque cubre TODO lo que un KDC pueda haber elegido
+# históricamente, pero MIT Kerberos >= 1.18 (Ubuntu 24.04 trae 1.20) eliminó
+# el soporte de DES del todo, no solo lo desalienta. Un keytab que aún los
+# trae puede romper gss_accept_sec_context() al aceptar el contexto -"Bad
+# encryption type"- antes de llegar siquiera a las entradas AES/RC4 válidas,
+# aunque esas sí estén presentes. Confirmado en vivo: el mismo keytab dejó de
+# fallar en cuanto se le quitaron esas dos entradas.
+_ENCTYPES_DES = {1, 2, 3}
 
 
 def validar_keytab(data: bytes) -> tuple[bool, str]:
@@ -34,6 +56,73 @@ def validar_keytab(data: bytes) -> tuple[bool, str]:
             "y no, por ejemplo, un volcado de texto."
         )
     return True, "Keytab válido"
+
+
+def quitar_entradas_des(data: bytes) -> bytes:
+    """Devuelve el keytab sin las entradas DES, o el original si algo no cuadra.
+
+    Formato binario del keytab (versión 0x0502, la que produce `ktpass` en
+    Windows y `ktutil`): una cabecera de 2 bytes, y una lista de entradas
+    variable, cada una precedida por su longitud en 4 bytes (con signo: si es
+    negativa, es un hueco/entrada borrada, se salta sin más). Dentro de cada
+    entrada, tras el principal (número de componentes + reino + componentes,
+    todos con su propia longitud) vienen name_type, timestamp, el VNO de 8
+    bits y recién ahí el enctype de 2 bytes que decide si la entrada se
+    conserva. No hace falta tocar nada más del contenido de la entrada: se
+    conserva byte a byte tal cual, solo se decide incluirla o no.
+
+    Solo actúa sobre el formato 0x0502; cualquier otra cosa (versión
+    distinta, o un parseo que no cierra) devuelve el dato de entrada sin
+    tocar -mejor un keytab con DES de más que uno corrupto por una asunción
+    equivocada sobre su formato-.
+    """
+    if len(data) < 2 or data[0:2] != b"\x05\x02":
+        return data
+
+    try:
+        pos = 2
+        entradas = []
+        while pos + 4 <= len(data):
+            (longitud,) = struct.unpack_from(">i", data, pos)
+            pos += 4
+            if longitud == 0:
+                continue
+            if longitud < 0:
+                # Hueco de una entrada borrada: se salta sin conservar nada.
+                pos += -longitud
+                continue
+
+            entrada = data[pos:pos + longitud]
+            if len(entrada) != longitud:
+                return data  # el fichero se corta antes de lo declarado
+            pos += longitud
+
+            epos = 0
+            (num_componentes,) = struct.unpack_from(">H", entrada, epos); epos += 2
+            (largo_reino,) = struct.unpack_from(">H", entrada, epos); epos += 2
+            epos += largo_reino
+            for _ in range(num_componentes):
+                (largo_comp,) = struct.unpack_from(">H", entrada, epos); epos += 2
+                epos += largo_comp
+            epos += 4  # name_type (uint32, solo en formato 0x0502)
+            epos += 4  # timestamp
+            epos += 1  # vno de 8 bits
+            (enctype,) = struct.unpack_from(">H", entrada, epos)
+
+            entradas.append((enctype, longitud, entrada))
+
+        if not any(enctype in _ENCTYPES_DES for enctype, _, _ in entradas):
+            return data  # nada que quitar: no reescribir sin necesidad
+
+        salida = bytearray(b"\x05\x02")
+        for enctype, longitud, entrada in entradas:
+            if enctype in _ENCTYPES_DES:
+                continue
+            salida += struct.pack(">i", longitud)
+            salida += entrada
+        return bytes(salida)
+    except struct.error:
+        return data
 
 
 def kerberos_activo(config) -> bool:
@@ -66,7 +155,7 @@ def escribir_keytab(config) -> bool:
         tiene_keytab = kerberos_activo(config)
         if tiene_keytab:
             KEYTAB_PATH.parent.mkdir(parents=True, exist_ok=True)
-            KEYTAB_PATH.write_bytes(config.keytab_data)
+            KEYTAB_PATH.write_bytes(quitar_entradas_des(config.keytab_data))
             # El keytab equivale a la contraseña de la cuenta de equipo del
             # proxy en el AD: legible solo por el usuario que corre Squid.
             os.chmod(KEYTAB_PATH, 0o640)
@@ -92,3 +181,66 @@ def escribir_keytab(config) -> bool:
     except Exception as e:
         logger.error(f"Error escribiendo el keytab de Kerberos: {e}")
         return False
+
+
+def _krb5_conf(realm: str) -> str:
+    """Contenido de krb5.conf para el realm indicado.
+
+    Sin este archivo, libkrb5 usa sus valores por defecto, que en MIT
+    Kerberos moderno (1.18+, lo que trae Ubuntu 24.04 y Debian 12) rechazan
+    RC4-HMAC -el tipo de cifrado más común en un Active Directory real, salvo
+    que el dominio esté forzado a solo-AES- con "Bad encryption type", y
+    eliminaron el soporte de DES del todo. Confirmado en vivo contra un AD
+    real: la autenticación fallaba siempre, con un keytab válido y sin ningún
+    otro error de por medio, hasta escribir este archivo.
+
+    `dns_lookup_kdc = true` en vez de fijar un KDC a mano: un Active
+    Directory de verdad ya publica sus controladores de dominio por SRV
+    (`_kerberos._tcp.<realm>`), que es lo que este proxy va a tener siempre
+    -la alternativa, pedir la IP del KDC en el panel, es un dato más para
+    pedirle al administrador y una fuente más de desincronización si el AD
+    cambia de controlador-. `dns_lookup_realm = false` porque el realm ya lo
+    fija el panel, no hace falta adivinarlo de un PTR.
+
+    El mapeo `[domain_realm]` asume que el dominio DNS es el realm en
+    minúsculas, que es como Active Directory nombra sus dominios siempre -no
+    una convención que el administrador podría romper, es inherente a como
+    funciona un dominio de AD-.
+    """
+    dominio = realm.lower()
+    return (
+        "[libdefaults]\n"
+        f"    default_realm = {realm}\n"
+        "    dns_lookup_realm = false\n"
+        "    dns_lookup_kdc = true\n"
+        "    rdns = false\n"
+        "    permitted_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96 rc4-hmac\n"
+        "    allow_weak_crypto = true\n"
+        "\n"
+        "[domain_realm]\n"
+        f"    .{dominio} = {realm}\n"
+        f"    {dominio} = {realm}\n"
+    )
+
+
+def escribir_krb5_conf(config) -> None:
+    """Deja en `/etc/squid/krb5.conf` la configuración que necesita Squid
+
+    para aceptar tickets de un Active Directory real -no solo para tener un
+    keytab con las claves correctas, hace falta además que la librería
+    Kerberos del sistema permita el tipo de cifrado que el AD emite-. Se
+    retira si Kerberos no está activo, igual que el keytab: dejarlo con un
+    realm viejo no rompe nada por sí solo, pero es un rastro de una
+    configuración que ya no es la vigente.
+    """
+    try:
+        if kerberos_activo(config) and getattr(config, "realm", None):
+            KRB5_CONF_PATH.parent.mkdir(parents=True, exist_ok=True)
+            KRB5_CONF_PATH.write_text(_krb5_conf(config.realm))
+            os.chmod(KRB5_CONF_PATH, 0o644)  # libkrb5 lo lee como el propio Squid, sin secretos dentro
+            logger.info("krb5.conf de Kerberos escrito (realm %s)", config.realm)
+        elif KRB5_CONF_PATH.exists():
+            KRB5_CONF_PATH.unlink()
+            logger.info("krb5.conf de Kerberos retirado (Negotiate desactivado o sin keytab)")
+    except Exception as e:
+        logger.error(f"Error escribiendo krb5.conf de Kerberos: {e}")
