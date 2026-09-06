@@ -5,6 +5,24 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.17.0] - 2026-09-06
+
+### Añadido
+
+- **Script de PowerShell descargable para preparar el Active Directory**,
+  desde la propia página de Kerberos (`GET /kerberos/ad-setup-script`). Antes
+  la única ayuda para el lado Windows era la documentación manual
+  ([docs/kerberos.md](docs/kerberos.md)), con el riesgo de copiar los pasos y
+  olvidarse de cambiar el realm/FQDN de ejemplo por los propios. El script se
+  genera con el Realm y el FQDN ya completados con lo guardado en el panel,
+  crea la cuenta de servicio en el AD si hace falta y genera el keytab con
+  `ktpass -crypto All`. No incluye ninguna contraseña: la pide por consola al
+  correr y no la guarda en ningún lado. Se sirve con BOM UTF-8 para que las
+  tildes y la ñ no salgan mal en PowerShell 5.1 (el que trae Windows Server
+  por defecto, que sin BOM asume la codepage del sistema).
+
+---
+
 ## [0.16.0] - 2026-09-06
 
 Hallazgos de una instalación de prueba real en 172.30.36.33, con acceso al
