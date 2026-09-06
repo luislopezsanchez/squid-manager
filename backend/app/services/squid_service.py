@@ -274,13 +274,13 @@ def restart_squid() -> tuple[bool, str]:
 _apply_lock = threading.Lock()
 
 
-def apply_squid_config(db, force_reconfigure: bool = False) -> dict:
+def apply_squid_config(db) -> dict:
     """Aplica la configuración de Squid, serializado: una ejecución a la vez."""
     with _apply_lock:
-        return _apply_squid_config(db, force_reconfigure=force_reconfigure)
+        return _apply_squid_config(db)
 
 
-def _apply_squid_config(db, force_reconfigure: bool = False) -> dict:
+def _apply_squid_config(db) -> dict:
     """Genera y aplica la configuración de Squid de extremo a extremo.
 
     Flujo:
@@ -288,17 +288,13 @@ def _apply_squid_config(db, force_reconfigure: bool = False) -> dict:
       2. Valida la sintaxis DENTRO del contenedor de Squid.
       3. Solo si es válida, la escribe sobre el squid.conf en uso.
       4. Escribe los archivos auxiliares de auth LDAP y el fichero de usuarios.
-      5. Recarga (o reinicia, si hay SSL Bump o cambió el puerto).
+      5. Recarga con `squid -k reconfigure` (o reinicia, solo si cambió el
+         puerto: eso sí exige reabrir el socket de escucha).
       6. Marca el estado «limpio».
 
     Si la validación falla no se toca nada: antes se escribía primero y se
     validaba con una comprobación que siempre daba «válido», de modo que una
     configuración rota tumbaba el proxy.
-
-    Parámetro `force_reconfigure`: fuerza `squid -k reconfigure` en lugar de un
-    reinicio completo aunque el config tenga SSL Bump. Útil para cambios de
-    solo-ACL (p. ej. miembros de un grupo), que reconfigure recarga sin purgar
-    credenciales ni cortar conexiones activas.
     """
     from app.services.config_generator import generate_squid_config
     from app.services.config_state import mark_clean, mark_dirty
@@ -433,26 +429,17 @@ def _apply_squid_config(db, force_reconfigure: bool = False) -> dict:
             "config_preview": preview,
         }
 
-    # 5b. SSL Bump: reinicio completo, salvo que se pida reconfigure.
-    if "ssl-bump" in config_text and not force_reconfigure:
-        ok, restart_msg = get_runtime().restart()
-        if not ok:
-            return {
-                "status": "warning",
-                "message": f"Configuración aplicada, pero Squid no reinició bien: {restart_msg}",
-                "needs_restart": True,
-                "warnings": warnings,
-                "config_preview": preview,
-            }
-        return {
-            "status": "ok",
-            "message": "Squid reiniciado con SSL Bump (configuración aplicada)",
-            "needs_restart": False,
-            "warnings": warnings,
-            "config_preview": preview,
-        }
-
-    # 5c. Sin SSL Bump: reconfigure normal.
+    # 5b. Recargar en caliente. `squid -k reconfigure` sí re-lee correctamente
+    # el flag `ssl-bump` del `http_port` (activarlo, desactivarlo o dejarlo
+    # igual) sin reiniciar el proceso: verificado en vivo en Squid 6.14, mismo
+    # PID y "Accepting SSL bumped HTTP Socket connections" en las tres
+    # transiciones. Antes se forzaba un `systemctl restart`/recreación de
+    # contenedor completos cada vez que el config tenía SSL Bump —que es el
+    # caso por defecto—, aunque el cambio fuera ajeno a TLS (una ACL, un delay
+    # pool): un reinicio nativo puede tardar hasta ~60s en `_wait_until_active`
+    # y de paso corta las conexiones activas y purga la caché de credenciales
+    # de todo el mundo. Reconfigure es ahora el camino único para todo lo que
+    # no sea un cambio de puerto.
     success, reload_msg = reload_squid()
     return {
         "status": "ok" if success else "warning",

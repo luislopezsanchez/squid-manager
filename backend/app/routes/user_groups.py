@@ -83,7 +83,7 @@ async def _apply_after_member_change(db: Session) -> dict:
     llamarlo directo desde una ruta async congelaria el event loop -y con el,
     todo el panel- para todos los admins mientras dura el apply.
     """
-    result = await run_in_threadpool(apply_squid_config, db, force_reconfigure=True)
+    result = await run_in_threadpool(apply_squid_config, db)
     if result["status"] == "error":
         mark_dirty()
     return result
