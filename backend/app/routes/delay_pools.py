@@ -97,10 +97,19 @@ async def update_delay_pool(
         raise HTTPException(404, detail="Delay pool no encontrado")
 
     updates = data.model_dump(exclude_unset=True)
-    if "parameters" in updates and updates["parameters"] is not None:
+    # "parameters" no admite NULL en la BD (a diferencia de "acl_name"): un
+    # PUT con {"parameters": null} pasaba antes el guard "is not None" (falso
+    # para None) sin validar, y el setattr de abajo intentaba grabar NULL en
+    # una columna NOT NULL, reventando con un IntegrityError/500 sin manejar
+    # en vez del 400 limpio que el resto de esta validacion garantiza.
+    if "parameters" in updates:
+        if not updates["parameters"]:
+            raise HTTPException(400, detail="Los parámetros del delay pool no pueden quedar vacíos.")
         updates["parameters"] = validate_value(updates["parameters"], field="parámetros del delay pool")
-    if "acl_name" in updates and updates["acl_name"]:
-        updates["acl_name"] = validate_value(updates["acl_name"], field="ACL del delay pool")
+    if "acl_name" in updates:
+        # Vacio/None limpia la ACL (igual que al crear un pool sin ACL);
+        # cualquier otro valor se valida igual que el resto de campos.
+        updates["acl_name"] = validate_value(updates["acl_name"], field="ACL del delay pool") if updates["acl_name"] else None
 
     for field, value in updates.items():
         setattr(pool, field, value)
