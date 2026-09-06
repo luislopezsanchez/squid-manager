@@ -162,6 +162,23 @@ Crea `backups/squidmanager_YYYYMMDD_HHMMSS.sql`.
 
 Desde el panel: **Backup y migración** → **Descargar backup (JSON)**. Incluye ACLs, reglas, delay pools, usuarios, grupos y la lista de usuarios LDAP autorizados. Ver [docs/backup-restore.md](backup-restore.md) para el detalle completo.
 
+### Retención del registro de auditoría (cron)
+
+Los logs de Squid tienen retención (7 días, ver más abajo); `audit_log` —quién cambió qué ajuste y cuándo— no la tenía y crecía sin límite. Se purga por fuera, igual que el backup, no desde el panel:
+
+```bash
+# Añadir a crontab: purgar mensualmente lo anterior a 12 meses (valor por defecto)
+0 3 1 * * cd /opt/squid-manager/backend && .venv/bin/python -m scripts.purge_audit_log >> /var/log/squidmanager-purge.log 2>&1
+```
+
+En Docker, la misma tarea corre dentro del contenedor del backend:
+
+```bash
+0 3 1 * * docker exec squidmgr-backend python -m scripts.purge_audit_log >> /var/log/squidmanager-purge.log 2>&1
+```
+
+Para una retención distinta a 12 meses: `python -m scripts.purge_audit_log 6` (6 meses).
+
 ---
 
 ## Monitorización
