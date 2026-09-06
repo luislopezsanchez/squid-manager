@@ -451,34 +451,39 @@ That is on purpose, and it is explained above in
 
 ## 🔄 Upgrading
 
+The command depends on which mode you installed with
+([Mode A or Mode B](#-installation), you chose it at install time):
+
 ```bash
+# Mode A — with Docker
 cd /path/to/squid-manager && git pull && docker compose up -d --build
+
+# Mode B — without Docker (native)
+cd /opt/squid-manager && sudo git pull && sudo backend/.venv/bin/pip install -q -r backend/requirements.txt && cd frontend && sudo npm install --silent && sudo npm run build && sudo systemctl restart squidmanager
 ```
 
 Database migrations are applied automatically when the backend starts, and
 **your configuration is preserved**: users, rules, ports and certificates are
 left alone.
 
-> **The `--build` is not optional.** Without it, Docker reuses the images it
-> already has and the new code never runs, even though the `git pull` went
-> fine. Everything looks right — repository up to date, containers started —
-> but you are still on the previous version.
+> **The `--build` (Docker) or `npm run build` (native) is not optional.**
+> Without it, Docker reuses the images it already has and nginx keeps
+> serving the old compiled frontend — either way the new code never runs,
+> even though the `git pull` went fine. Everything looks right — repository
+> up to date, containers or service started — but you are still on the
+> previous version.
 
-In a native installation the equivalent step is `npm run build`, for exactly the
-same reason: nginx serves already-compiled files.
-
-To check it went well:
+To check it went well, in either mode:
 
 ```bash
-cd /path/to/squid-manager && git log --oneline -1 && git status --porcelain | wc -l && docker compose ps
+curl -s http://localhost:8000/health
 ```
 
-You should see the expected commit, **0** pending files, and the four
-containers `healthy`.
-
-See [docs/actualizacion.md](docs/actualizacion.md) to verify the database
-revision, resolve a `git pull` that aborts, a migration that fails, or to roll
-back to a previous version.
+It should show the version and commit you expected. See
+[docs/actualizacion.md](docs/actualizacion.md) (with the full check command for
+each mode) to resolve a `git pull` that aborts, a migration that fails, or to
+roll back to a previous version — and, if you use Kerberos on a native install
+from before 0.18.0, the extra step it needs.
 
 ---
 

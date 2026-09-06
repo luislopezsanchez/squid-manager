@@ -452,34 +452,39 @@ nenhuma. É de propósito, e está explicado acima em
 
 ## 🔄 Atualizar
 
+O comando depende de qual modo você usou para instalar
+([Modo A ou Modo B](#-instalação), você escolheu isso na instalação):
+
 ```bash
+# Modo A — com Docker
 cd /caminho/para/squid-manager && git pull && docker compose up -d --build
+
+# Modo B — sem Docker (nativo)
+cd /opt/squid-manager && sudo git pull && sudo backend/.venv/bin/pip install -q -r backend/requirements.txt && cd frontend && sudo npm install --silent && sudo npm run build && sudo systemctl restart squidmanager
 ```
 
 As migrações do banco de dados são aplicadas sozinhas ao iniciar o backend, e
 **sua configuração é preservada**: usuários, regras, portas e certificados não
 são tocados.
 
-> **O `--build` não é opcional.** Sem ele, o Docker reutiliza as imagens que já
-> tem e o código novo nunca chega a rodar, ainda que o `git pull` tenha dado
-> certo. Tudo parece correto — repositório em dia, contêineres iniciados — mas
-> você continua na versão anterior.
+> **O `--build` (Docker) ou o `npm run build` (nativo) não são opcionais.**
+> Sem eles, o Docker reutiliza as imagens que já tem e o nginx continua
+> servindo o frontend antigo já compilado — nos dois casos o código novo
+> nunca chega a rodar, ainda que o `git pull` tenha dado certo. Tudo parece
+> correto — repositório em dia, contêineres ou serviço iniciados — mas você
+> continua na versão anterior.
 
-Numa instalação nativa o passo equivalente é o `npm run build`, exatamente pelo
-mesmo motivo: o nginx serve arquivos já compilados.
-
-Para conferir que deu certo:
+Para conferir que deu certo, em qualquer um dos dois modos:
 
 ```bash
-cd /caminho/para/squid-manager && git log --oneline -1 && git status --porcelain | wc -l && docker compose ps
+curl -s http://localhost:8000/health
 ```
 
-Você deve ver o commit esperado, **0** arquivos pendentes e os quatro
-contêineres em `healthy`.
-
-Veja [docs/actualizacion.md](docs/actualizacion.md) para verificar a revisão do
-banco, resolver um `git pull` que aborta, uma migração que falha, ou voltar a
-uma versão anterior.
+Deve mostrar a versão e o commit esperados. Veja
+[docs/actualizacion.md](docs/actualizacion.md) (com o comando de verificação
+completo para cada modo) para resolver um `git pull` que aborta, uma migração
+que falha, ou voltar a uma versão anterior — e, se você usa Kerberos numa
+instalação nativa anterior à 0.18.0, o passo extra que ela precisa.
 
 ---
 

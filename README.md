@@ -435,31 +435,39 @@ todavía no existe ninguna. Es a propósito, y está explicado arriba en
 
 ## 🔄 Actualizar
 
+El comando depende de con qué modo instalaste ([Modo A o Modo B](#-instalación),
+lo elegiste al instalar):
+
 ```bash
+# Modo A — con Docker
 cd /ruta/a/squid-manager && git pull && docker compose up -d --build
+
+# Modo B — sin Docker (nativo)
+cd /opt/squid-manager && sudo git pull && sudo backend/.venv/bin/pip install -q -r backend/requirements.txt && cd frontend && sudo npm install --silent && sudo npm run build && sudo systemctl restart squidmanager
 ```
 
 Las migraciones de base de datos se aplican solas al arrancar el backend, y **tu
 configuración se conserva**: usuarios, reglas, puertos y certificados no se
 tocan.
 
-> **El `--build` no es opcional.** Sin él, Docker reutiliza las imágenes que ya
-> tiene y el código nuevo no llega a ejecutarse, aunque el `git pull` haya ido
-> bien. Todo parece correcto —repositorio al día, contenedores arrancados— pero
+> **El `--build` (Docker) o el `npm run build` (nativo) no son opcionales.**
+> Sin ellos, Docker reutiliza las imágenes que ya tiene y nginx sigue
+> sirviendo el frontend viejo compilado — en ambos casos el código nuevo no
+> llega a ejecutarse, aunque el `git pull` haya ido bien. Todo parece
+> correcto —repositorio al día, contenedores o servicio arrancados— pero
 > sigues usando la versión anterior.
 
-Para comprobar que fue bien:
+Para comprobar que fue bien, en cualquiera de los dos modos:
 
 ```bash
-cd /ruta/a/squid-manager && git log --oneline -1 && git status --porcelain | wc -l && docker compose ps
+curl -s http://localhost:8000/health
 ```
 
-Debes ver el commit esperado, **0** ficheros pendientes y los cuatro
-contenedores en `healthy`.
-
-Ver [docs/actualizacion.md](docs/actualizacion.md) para verificar la revisión de
-la base de datos, resolver un `git pull` que aborta, una migración que falla, o
-volver a una versión anterior.
+Debe mostrar la versión y el commit que esperabas. Ver
+[docs/actualizacion.md](docs/actualizacion.md) (con el comando de verificación
+completo para cada modo) para resolver un `git pull` que aborta, una migración
+que falla, o volver a una versión anterior — y, si usás Kerberos en una
+instalación nativa de antes de la 0.18.0, el paso extra que necesita.
 
 ---
 

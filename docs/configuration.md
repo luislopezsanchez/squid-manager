@@ -196,6 +196,45 @@ LDAPv3 no encontraba a nadie, sin ningún error visible. El panel ofrece un sele
 "Tipo de directorio" que rellena ambos filtros con un punto de partida razonable, pero
 los campos son texto libre por si el esquema del directorio es distinto.
 
+### Errores comunes al armar el Bind DN o el Search Base
+
+El síntoma de los dos es el mismo en el test de conexión: `invalidCredentials`,
+aunque la contraseña de bind sea correcta — porque el DN simplemente no
+apunta a ningún objeto real del directorio.
+
+- **`cd=` en vez de `dc=`.** El atributo de "domain component" es `dc`, no
+  `cd` — un error de tipeo fácil de cometer y fácil de no ver a simple
+  vista. `cn=admin,cd=empresa,cd=com` no es un DN válido;
+  `cn=admin,dc=empresa,dc=com` sí.
+- **Falta el contenedor de la cuenta, en Active Directory.** Las cuentas que
+  no se movieron a mano a una OU propia —el `Administrador` incorporado,
+  típicamente— viven dentro del contenedor especial `CN=Users`, no
+  directamente bajo el dominio. `cn=administrador,dc=empresa,dc=com` falla;
+  hace falta `cn=administrador,cn=Users,dc=empresa,dc=com`. Mismo cuidado
+  con el `search_base` si los usuarios reales están en una OU distinta a
+  donde vive la cuenta de bind.
+
+  Para confirmar la ruta exacta de un objeto sin adivinar: en el Windows
+  Server, **Usuarios y equipos de Active Directory** → Ver → *Características
+  avanzadas* → propiedades del objeto → pestaña *Editor de atributos* →
+  `distinguishedName`. O por línea de comandos: `dsquery user -name
+  <nombre>`.
+
+- **"Sincronizar con AD" no da error, solo trae 0 usuarios, si el
+  `search_base` está mal** — a diferencia del bind, que sí falla con
+  `invalidCredentials` cuando el DN no existe. Un `search_base` como
+  `ou=Users,dc=empresa,dc=com` en un dominio donde los usuarios viven en el
+  contenedor por defecto (`cn=Users`, no una OU) simplemente no encuentra a
+  nadie, sin ningún mensaje que lo explique. Ojo con corregir solo la
+  mayúscula (`ou=users` → `ou=Users`) y dejar pasar por alto que el atributo
+  en sí tiene que cambiar de `ou=` a `cn=` — son dos cosas distintas y el
+  error se repite fácil incluso ya sabiendo del caso de arriba. Para
+  confirmar dónde están de verdad los usuarios antes de configurar nada:
+  en el Windows Server, **Usuarios y equipos de Active Directory** con la
+  vista de árbol — si aparecen bajo la carpeta "Users" con icono de
+  contenedor (no de OU), el `search_base` es `cn=Users,dc=...`, no
+  `ou=Users,dc=...`.
+
 ### Filtros comunes
 
 | Directorio | `user_filter` (login) | `sync_filter` (importar todos) |
