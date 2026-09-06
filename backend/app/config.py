@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     # nada la sincronizaba con las otras dos versiones que declara el
     # proyecto (aquí y en frontend/package.json). Al subir la versión, las
     # tres deben moverse juntas y etiquetarse en git — ver docs/actualizacion.md.
-    APP_VERSION: str = "0.15.0"
+    APP_VERSION: str = "0.16.0"
     DEBUG: bool = False
 
     @property

@@ -5,6 +5,53 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.16.0] - 2026-09-06
+
+Hallazgos de una instalación de prueba real en 172.30.36.33, con acceso al
+servidor por SSH: cada uno se confirmó en vivo antes de corregirlo, no solo
+sobre el código.
+
+### Corregido
+
+- **La recuperación de la clave admin que indicaba el README no funcionaba**
+  si `ADMIN_INITIAL_PASSWORD` venía definida en el `.env`: el log solo
+  registra que se usó esa variable, nunca el valor (a propósito, para no
+  filtrar al log un secreto que ya está en otro sitio). Documentados los dos
+  casos reales y la ruta correcta para cada uno.
+- **`ufw allow 3128/tcp` no bastaba en una instalación nueva**: `ufw` viene
+  inactivo por defecto en Ubuntu, así que la regla quedaba cargada sin
+  ningún efecto hasta activarlo. Añadido `ufw enable` al paso post-instalación.
+- **Con SSL Bump activo —el valor por defecto— «Aplicar cambios» siempre
+  reiniciaba Squid por completo**, aunque el cambio fuera ajeno a TLS (una
+  ACL, un delay pool): hasta ~60s de espera en instalación nativa, cortando
+  conexiones activas y purgando la caché de credenciales de todo el mundo.
+  Verificado en vivo (Squid 6.14) que `squid -k reconfigure` recarga el flag
+  `ssl-bump` del `http_port` sin reiniciar el proceso, en las tres
+  transiciones (activo sin cambios, desactivarlo, reactivarlo). Ahora
+  reconfigure es el único camino salvo cuando cambia el puerto.
+- **Kerberos: los campos de Realm/FQDN se podían editar con el check
+  «Habilitar» desmarcado**, dando a entender que hacían algo cuando la
+  configuración desactivada los ignoraba.
+- **`ssl_bump_enabled` se editaba como texto libre**: un typo como «flase»
+  pasaba la sanitización genérica y el generador lo trataba como `true` por
+  defecto —justo lo contrario de lo que alguien tecleando «false» querría—.
+  Ahora es un desplegable Sí/No en el panel, y la API rechaza cualquier
+  valor que no sea `true`/`false` aunque llegue directo, sin pasar por la UI.
+
+### Añadido
+
+- **Requisito de swap documentado con poca RAM**: con 1GB de RAM (bajo el
+  mínimo de 2GB) una instalación funcionó gracias al swap; sin él, el build
+  del frontend puede terminar en OOM. Ahora está en los requisitos.
+- **Aviso de qué «Guardar» requiere «Aplicar cambios» después**: el botón de
+  la barra superior tardaba hasta 5s en reflejar un guardado reciente
+  (sondea cada 5s), así que guardar y mirar de inmediato no mostraba nada
+  distinto. Ahora se refresca al instante, y los formularios que sí
+  necesitan «Aplicar cambios» (ACLs, reglas, delay pools, proxy padre,
+  Kerberos, ajustes generales) lo marcan junto al botón de Guardar.
+
+---
+
 ## [0.15.0] - 2026-09-06
 
 Auditoría integral de seguridad, correctitud y rendimiento sobre la rama
