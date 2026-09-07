@@ -84,8 +84,8 @@ async def update_setting(
     # existe para nadie que entre por LDAP. Activarlo con LDAP habilitado
     # dejaría a esos usuarios sin poder navegar, sin ningún aviso hasta que
     # alguien reportara el problema.
-    if data.key == "proxy_auth_scheme" and data.value.strip().lower() not in ("basic", "digest"):
-        raise HTTPException(400, detail='El esquema de autenticación debe ser "basic" o "digest".')
+    if data.key == "proxy_auth_scheme" and data.value.strip().lower() not in ("basic", "digest", "none"):
+        raise HTTPException(400, detail='El esquema de autenticación debe ser "basic", "digest" o "none".')
 
     if data.key == "proxy_auth_scheme" and data.value.strip().lower() == "digest":
         from app.models.ldap_config import LdapConfig
@@ -102,6 +102,17 @@ async def update_setting(
                     "Digest, o mantén Basic si necesitas los dos."
                 ),
             )
+
+    # 'none' (sin autenticación local propia) solo tiene sentido -y solo es
+    # seguro- en un Squid hijo con un padre configurado, que es quien hace el
+    # control de acceso real. Sin esta comprobación, activar 'none' a secas
+    # deja un proxy abierto hacia Internet.
+    if data.key == "proxy_auth_scheme" and data.value.strip().lower() == "none":
+        from app.services.parent_proxy_service import validar_proxy_auth_scheme_none
+
+        valido, mensaje = validar_proxy_auth_scheme_none(db)
+        if not valido:
+            raise HTTPException(400, detail=mensaje)
 
     # true/false explícito: sin esto un typo ("flase", "verdadero") pasaba la
     # sanitización genérica y el generador lo interpretaba como "true" (activa

@@ -31,6 +31,7 @@ const ENUM_SETTINGS: Record<string, { value: string; label: string }[]> = {
   proxy_auth_scheme: [
     { value: 'basic', label: traducir('Basic — usuario y contraseña en claro (cifrado solo por HTTPS/SSL Bump)') },
     { value: 'digest', label: traducir('Digest — el navegador nunca envía la contraseña, solo un hash (RFC 2617). Solo usuarios locales, no LDAP.') },
+    { value: 'none', label: traducir('Sin autenticación local — solo para un proxy hijo con proxy padre configurado (el control de acceso lo hace el padre)') },
   ],
 }
 
@@ -165,6 +166,12 @@ export default function Settings() {
                       }`}
                     >
                       {dnsResult.ok ? '✓ ' : '✕ '}{dnsResult.message}
+                    </div>
+                  )}
+
+                  {key === 'proxy_auth_scheme' && setting.value === 'none' && (
+                    <div className="mt-3 text-[13px] p-2.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+                      ⚠ {traducir('Este proxy no pedirá usuario ni contraseña a sus clientes: cualquiera que llegue al puerto navega directamente. Solo tiene sentido si hay un proxy padre configurado y habilitado (es quien hace el control de acceso real) — al aplicar, el panel lo exige y rechaza el cambio si no lo hay.')}
                     </div>
                   )}
                 </div>

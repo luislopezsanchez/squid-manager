@@ -185,7 +185,8 @@ def seed_data():
             # autentica usuarios locales del proxy, no LDAP.
             "proxy_auth_scheme": (
                 "basic", "security",
-                "Esquema de autenticación del proxy: basic o digest",
+                "Esquema de autenticación del proxy: basic, digest o none "
+                "(sin autenticación local, solo para un hijo con proxy padre)",
             ),
             "access_log": ("/var/log/squid/access.log", "logging", "Ruta del log de acceso"),
             "cache_log": ("/var/log/squid/cache.log", "logging", "Ruta del log de caché"),

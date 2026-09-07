@@ -33,6 +33,7 @@ http_port {{ internal_port }} ssl-bump \
 # orden, y una ACL de usuario (proxy_auth) no se puede declarar mientras no
 # exista un esquema de autenticación. Poniéndolo después, cualquier regla de
 # interceptación por usuario aborta el arranque con «Invalid ACL».
+{% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 {% if kerberos_esta_activo %}
 # Negotiate (Kerberos/SPNEGO) va ANTES que basic: los navegadores que lo
 # soportan y están en el dominio lo intentan primero y entran sin que se les
@@ -62,6 +63,15 @@ auth_param basic program /usr/lib/squid/squidmanager_auth_helper
 auth_param basic children {{ settings.get('auth_children', '5') }}
 auth_param basic realm {{ settings.get('auth_realm', 'SquidManager Proxy') }}
 auth_param basic credentialsttl {{ settings.get('credentialsttl', '2 hours') }}
+{% endif %}
+{% else %}
+# proxy_auth_scheme = 'none': este Squid no pide usuario/contraseña propios.
+# Sin auth_param configurado, cualquier ACL de tipo proxy_auth abortaría el
+# arranque ("authentication scheme not configured") -por eso mas abajo, con
+# 'none', ni se declara la ACL 'authenticated' ni los grupos de usuarios.
+# El control de acceso real lo hace el proxy padre (ver validar_proxy_auth_scheme_none
+# en parent_proxy_service.py, que exige uno configurado y habilitado antes
+# de permitir este modo) o la red que rodea a este Squid.
 {% endif %}
 
 # --- Configuración SSL Bump ---
@@ -147,19 +157,25 @@ acl Safe_ports port 488         # gss-http
 acl Safe_ports port 591         # filemaker
 acl Safe_ports port 777         # multiling http
 acl CONNECT method CONNECT
+{% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 acl authenticated proxy_auth REQUIRED
+{% endif %}
 
 # --- ACLs personalizadas (desde BD) ---
 {% for acl in acls %}
 acl {{ acl.name }} {{ acl.type }} {{ acl.value }}
 {% endfor %}
 
+{% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 # --- Grupos de usuarios (ACLs proxy_auth) ---
 # Siempre se genera la ACL del grupo (incluso vacío) para evitar "ACL not found"
 # si una regla lo referencia. El placeholder __EMPTY_GROUP__ no coincide con nadie.
+# Con 'none' no se declaran: no hay auth_param configurado, y una ACL
+# proxy_auth sin esquema aborta el arranque de Squid.
 {% for group in groups %}
 acl {{ group.name }} proxy_auth {{ group.members|join(' ') if group.members else '__EMPTY_GROUP__' }}
 {% endfor %}
+{% endif %}
 
 # --- Reglas de acceso (http_access) ---
 http_access deny !Safe_ports
@@ -190,18 +206,28 @@ acl exentos_auth_dominio dstdomain {{ auth_exempt_domains|join(' ') }}
 http_access allow exentos_auth_dominio
 
 {% endif %}
+{% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 # Pedir credenciales una sola vez, antes de evaluar las reglas del panel.
 # A partir de aquí todas las peticiones llegan ya autenticadas, así que un
 # "deny <grupo>" devuelve 403 y no un 407 en bucle. Esto permite respetar el
 # orden de las reglas tal como se ve en el panel.
 http_access deny !authenticated
+{% endif %}
 
 {% for rule in rules %}
 http_access {{ rule.action }} {{ rule.acl_names }}
 {% endfor %}
 
+{% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 # Lo que ninguna regla haya denegado, se permite a los usuarios autenticados.
 http_access allow authenticated
+{% else %}
+# 'none': no se exige autenticación local -el control de acceso real lo hace
+# el proxy padre (validado como obligatorio para este modo) o la red que
+# rodea a este Squid-. Lo que ninguna regla haya denegado, se permite tal
+# cual, sin pedir usuario.
+http_access allow all
+{% endif %}
 http_access deny all
 
 {% if parent_proxy and parent_proxy.enabled and parent_proxy.host %}

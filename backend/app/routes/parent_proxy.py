@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.admin import Admin
 from app.models.parent_proxy import ParentProxy
+from app.models.squid_settings import SquidSetting
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_state import mark_dirty
 from app.services.parent_proxy_service import (
@@ -104,6 +105,22 @@ async def update_config(
         valido, mensaje = validar_auth_method_compatible(data.auth_method, db)
         if not valido:
             return {"status": "error", "message": mensaje}
+    else:
+        # 'none' (sin autenticación local de clientes) depende por completo de
+        # que exista un padre habilitado -ver validar_proxy_auth_scheme_none-:
+        # apagar el padre con 'none' todavía activo dejaría este Squid como
+        # proxy abierto sin que nadie lo pidiera explícitamente.
+        esquema = db.query(SquidSetting).filter(SquidSetting.key == "proxy_auth_scheme").first()
+        if esquema and (esquema.value or "").strip().lower() == "none":
+            return {
+                "status": "error",
+                "message": (
+                    "No se puede desactivar el proxy padre con el esquema de "
+                    "autenticación del proxy en 'none': este Squid quedaría "
+                    "abierto sin ningún control de acceso. Cambia primero el "
+                    "esquema a 'basic' o 'digest' en Configuración."
+                ),
+            }
 
     # Un certificado ilegible no rompe el arranque de Squid: solo deja un aviso
     # en su log y no confía en nadie, con lo que el síntoma vuelve a ser la

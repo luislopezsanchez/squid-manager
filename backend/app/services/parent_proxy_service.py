@@ -122,6 +122,55 @@ def validar_auth_method_compatible(auth_method: str, db) -> tuple[bool, str]:
     return True, "Compatible"
 
 
+ESQUEMAS_AUTH_CLIENTE_SOPORTADOS = ("basic", "digest", "none")
+
+
+def validar_proxy_auth_scheme_none(db) -> tuple[bool, str]:
+    """'none' deja que Squid pase clientes SIN pedirles usuario/contraseña
+    propios: pensado para un Squid HIJO cuyo control de acceso real lo hace
+    el proxy padre (o la red que lo rodea), no él mismo.
+
+    Sin un padre configurado y habilitado, 'none' convertiría este Squid en
+    un proxy abierto de verdad hacia Internet -cualquiera que alcance el
+    puerto navega sin dejar ningún usuario identificable en los logs-, que
+    es exactamente el tipo de abuso (relay abierto) que los operadores de
+    red bloquean por defecto. Por eso 'none' solo se permite si hay un
+    proxy padre configurado Y habilitado: la topología para la que existe
+    esta opción siempre tiene uno.
+    """
+    from app.models.parent_proxy import ParentProxy
+    from app.models.user_group import UserGroup
+
+    padre = db.query(ParentProxy).first()
+    if not padre or not padre.enabled:
+        return False, (
+            "El esquema 'none' (sin autenticación local) solo se puede "
+            "activar con un proxy padre configurado y habilitado: sin uno, "
+            "este Squid quedaría como un proxy abierto hacia Internet, "
+            "accesible sin usuario para cualquiera que llegue al puerto. "
+            "Configura el proxy padre en Proxy Padre antes de activar "
+            "'none', o usa 'basic'/'digest' si este Squid navega "
+            "directamente."
+        )
+
+    # Los grupos de usuarios se traducen a ACLs `proxy_auth` en squid.conf, y
+    # las reglas del panel las referencian por nombre. Sin ningún auth_param
+    # declarado (que es justo lo que hace 'none'), esa ACL no se puede
+    # emitir -Squid aborta el arranque con "ACL not found" en cuanto una
+    # regla la nombre-. Se detecta ANTES de aplicar, no dejando que el
+    # generador escriba un squid.conf que Squid va a rechazar.
+    if db.query(UserGroup).count() > 0:
+        return False, (
+            "No se puede activar 'none' con grupos de usuarios existentes: "
+            "los grupos se traducen a ACLs que dependen de la autenticación "
+            "local, y sin ella Squid no arrancaría. Borra los grupos de "
+            "usuarios (y las reglas que los referencien) antes de activar "
+            "'none'."
+        )
+
+    return True, "Compatible"
+
+
 def _metodos_ofrecidos(cabeceras: str) -> list[str]:
     """Extrae los métodos de autenticación que anuncia el padre."""
     metodos = []
