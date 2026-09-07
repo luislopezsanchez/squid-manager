@@ -20,6 +20,7 @@ import Notifications from './pages/Notifications'
 import SyslogConfig from './pages/SyslogConfig'
 import ParentProxy from './pages/ParentProxy'
 import Groups from './pages/Groups'
+import Asistente from './pages/Asistente'
 import ChangePassword from './pages/ChangePassword'
 import Layout from './components/Layout'
 import { getToken, isSuperadmin } from './api/client'
@@ -54,6 +55,7 @@ function App() {
           <Route path="delay-pools" element={<DelayPools />} />
           <Route path="ldap" element={<LdapConfig />} />
           <Route path="kerberos" element={<Kerberos />} />
+          <Route path="asistente" element={<Asistente />} />
           <Route path="settings" element={<Settings />} />
           <Route path="certificate" element={<CertificadoCA />} />
           <Route path="audit" element={<AuditLog />} />

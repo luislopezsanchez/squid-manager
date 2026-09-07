@@ -94,6 +94,15 @@ PAQUETES=(
 )
 info "Paquetes: ${PAQUETES[*]}"
 apt-get install -y -qq "${PAQUETES[@]}" >/dev/null || fail "No se pudieron instalar los paquetes."
+
+# pgvector: el paquete es especifico de la version mayor de Postgres
+# (postgresql-16-pgvector, postgresql-17-pgvector...), asi que se instala
+# aparte una vez que ya sabemos cual quedo instalada. Lo usa el asistente de
+# IA para buscar en la documentacion por significado, no solo por palabra
+# exacta -sin esto la extension no existe y esa funcion no puede activarse-.
+PG_MAJOR="$(sudo -u postgres psql -tAc 'SHOW server_version;' | cut -d. -f1 | tr -d '[:space:]')"
+apt-get install -y -qq "postgresql-${PG_MAJOR}-pgvector" >/dev/null \
+    || fail "No se pudo instalar postgresql-${PG_MAJOR}-pgvector."
 ok "Paquetes instalados"
 
 # Squid tiene que estar compilado con OpenSSL o el SSL bump del panel no
@@ -219,6 +228,12 @@ if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NA
     sudo -u postgres createdb -O "$DB_USER" -E UTF8 -T template0 --lc-collate=C --lc-ctype=C "$DB_NAME"
 fi
 sudo -u postgres psql -qc "ALTER DATABASE \"$DB_NAME\" OWNER TO \"$DB_USER\";" >/dev/null
+
+# El rol de la app ($DB_USER) no es superusuario a proposito -principio de
+# menor privilegio-, y CREATE EXTENSION exige serlo. Se crea aca, como
+# postgres, antes de que Alembic corra ninguna migracion: la migracion que
+# usa esta extension no puede crearla ella misma con el rol de la app.
+sudo -u postgres psql -d "$DB_NAME" -qc "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
 ok "Base de datos $DB_NAME lista (usuario $DB_USER)"
 
 # ============================================

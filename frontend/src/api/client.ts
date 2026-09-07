@@ -187,6 +187,14 @@ export const api = {
   deleteKeytab: () => request<any>('/kerberos/keytab', { method: 'DELETE' }),
   kerberosAdSetupScriptUrl: () => `${API_BASE}/kerberos/ad-setup-script`,
 
+  // Asistente de IA (opcional, apagado por defecto): responde consultas de
+  // uso del panel usando la documentación del proyecto como única fuente.
+  getAiConfig: () => request<any>('/ai/config'),
+  updateAiConfig: (data: any) => request<any>('/ai/config', { method: 'PUT', body: JSON.stringify(data) }),
+  reindexarDocumentacion: () => request<any>('/ai/reindexar', { method: 'POST' }),
+  preguntarAsistente: (pregunta: string) =>
+    request<any>('/ai/preguntar', { method: 'POST', body: JSON.stringify({ pregunta }) }),
+
   // Syslog externo (opcional, apagado por defecto)
   getSyslogConfig: () => request<any>('/syslog/config'),
   updateSyslogConfig: (data: any) => request<any>('/syslog/config', { method: 'PUT', body: JSON.stringify(data) }),

@@ -3,7 +3,11 @@ services:
   # PostgreSQL - Base de datos
   # ============================================
   db:
-    image: postgres:16-alpine
+    # pgvector/pgvector, no postgres:16-alpine a secas: mismo Postgres 16,
+    # con la extension pgvector ya integrada (la usa el asistente de IA para
+    # buscar en la documentacion por significado). El :16-alpine oficial no
+    # la trae compilada.
+    image: pgvector/pgvector:pg16
     container_name: squidmgr-db
     restart: unless-stopped
     environment:
@@ -12,6 +16,9 @@ services:
       POSTGRES_PASSWORD: ${DB_PASS:?Define DB_PASS en el .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Postgres corre todo lo que hay acá como superusuario, una sola vez,
+      # al inicializar un volumen de datos vacío -no en cada arranque-.
+      - ./db-init:/docker-entrypoint-initdb.d:ro
     networks:
       - squidnet
     healthcheck:

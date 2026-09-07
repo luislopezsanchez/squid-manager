@@ -1,0 +1,486 @@
+"""Asistente de IA: responde consultas sobre el uso del panel usando la
+documentación del proyecto como única fuente.
+
+Diseño deliberado, no accidental:
+- Solo lee `docs/*.md` y el `README.md` en español -nunca la base de datos,
+  nunca el squid.conf real, nunca credenciales-. Esta función es un buscador
+  con lenguaje natural encima, no un agente que actúa sobre el proxy.
+- Los embeddings son siempre de Gemini (`gemini-embedding-001`): es el único
+  de los dos proveedores con un endpoint de embeddings documentado y
+  estable (Ollama Cloud, a septiembre de 2026, solo documenta chat). El
+  proveedor de "quién responde" sí es configurable.
+- Llamadas REST directas con `httpx` (ya es dependencia del proyecto): sin
+  SDK de por medio, sin traer un framework de RAG que resuelve un problema
+  mucho más general del que hace falta acá.
+"""
+
+import logging
+import re
+import time
+from pathlib import Path
+
+import httpx
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.models.ai_config import AiConfig
+from app.models.doc_chunk import DocChunk, EMBEDDING_DIM
+
+logger = logging.getLogger(__name__)
+
+
+def _raiz_del_proyecto() -> Path | None:
+    """Directorio raíz del repo (donde viven `docs/` y `README.md`).
+
+    Mismo patrón que ya usa `backend/tests/test_logrotate.py`: en modo nativo
+    el backend corre desde `<raiz>/backend`, así que alcanza con subir
+    directorios buscando `README.md`. En Docker el código de la app no vive
+    bajo la misma jerarquía que el repo completo -solo `backend/` se copia a
+    la imagen-, así que ahí hace falta el volumen que monta el proyecto
+    entero (`PROJECT_DIR`, ya resuelto en `docker_runtime.project_dir()`
+    para el mismo propósito).
+    """
+    for base in Path(__file__).resolve().parents:
+        if (base / "README.md").is_file() and (base / "docs").is_dir():
+            return base
+
+    from app.services.runtime.docker_runtime import project_dir
+
+    return project_dir()
+
+
+_GEMINI_EMBED_MODEL = "gemini-embedding-001"
+_GEMINI_EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent"
+_GEMINI_GENERATE_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+# Archivos que se indexan: la documentación en español, la fuente canónica.
+# Las traducciones (.en.md, .pt.md) se excluyen a propósito -indexar las tres
+# versiones de cada página triplicaría el corpus sin agregar información
+# nueva, y mezclaría idiomas en la misma búsqueda semántica sin necesidad-.
+_ARCHIVOS_A_INDEXAR = ["README.md"]  # + todo docs/*.md, agregado al listar
+
+# Fragmentos de más de esto se dividen por párrafo antes de pedir el
+# embedding: los modelos de embeddings tienen un límite de tokens de entrada
+# (unos 2048 para gemini-embedding-001), y una sección de varios KB se pasa
+# de eso sin avisar -mejor partirla acá que depender de que la API trunque
+# en silencio o rechace la petición-.
+_MAX_CHARS_POR_FRAGMENTO = 3000
+
+
+class AiServiceError(Exception):
+    """Error de configuración o de la API del proveedor, para mostrar al admin."""
+
+
+# 503 ("high demand") y 429 (límite de cuota) son transitorios por
+# naturaleza, no un error de la petición en sí -visto en vivo con
+# gemini-3.6-flash, consistente varias veces seguidas en cuestión de
+# segundos-. Reintentar unas pocas veces con una espera corta es lo que
+# haría cualquiera a mano; no hace falta que el admin lo haga él mismo cada
+# vez que pregunta algo.
+_CODIGOS_REINTENTABLES = (429, 503)
+_REINTENTOS = 3
+_ESPERA_ENTRE_REINTENTOS = 3.0
+
+
+def _post_con_reintentos(url: str, headers: dict, body: dict, timeout: float) -> httpx.Response:
+    ultimo_error: Exception | None = None
+    for intento in range(1, _REINTENTOS + 1):
+        try:
+            r = httpx.post(url, headers=headers, json=body, timeout=timeout)
+            if r.status_code in _CODIGOS_REINTENTABLES and intento < _REINTENTOS:
+                logger.warning(
+                    "Proveedor de IA devolvió %d (intento %d/%d), reintentando...",
+                    r.status_code, intento, _REINTENTOS,
+                )
+                time.sleep(_ESPERA_ENTRE_REINTENTOS)
+                continue
+            r.raise_for_status()
+            return r
+        except httpx.HTTPStatusError:
+            raise
+        except httpx.HTTPError as e:
+            ultimo_error = e
+            if intento < _REINTENTOS:
+                time.sleep(_ESPERA_ENTRE_REINTENTOS)
+                continue
+            raise
+    raise ultimo_error  # pragma: no cover - inalcanzable, el bucle siempre retorna o lanza
+
+
+# --- Proveedores: embeddings (siempre Gemini) --------------------------------
+
+def _gemini_embed(texto: str, api_key: str, task_type: str) -> list[float]:
+    """Pide un embedding a Gemini, con la dimensión fija del proyecto.
+
+    `task_type` distingue indexar documentos (RETRIEVAL_DOCUMENT) de buscar
+    con una pregunta (RETRIEVAL_QUERY): son embeddings asimétricos a
+    propósito -Google los entrena distinto según el rol-, y usar el mismo
+    tipo para los dos lados empeora la búsqueda.
+    """
+    url = _GEMINI_EMBED_URL.format(model=_GEMINI_EMBED_MODEL)
+    body = {
+        "content": {"parts": [{"text": texto}]},
+        "taskType": task_type,
+        "outputDimensionality": EMBEDDING_DIM,
+    }
+    try:
+        r = _post_con_reintentos(url, {"x-goog-api-key": api_key}, body, timeout=30)
+    except httpx.HTTPStatusError as e:
+        raise AiServiceError(f"Gemini rechazó la petición de embedding: {e.response.text[:300]}")
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con Gemini (embeddings): {e}")
+
+    valores = r.json().get("embedding", {}).get("values")
+    if not valores:
+        raise AiServiceError("Gemini no devolvió un embedding válido.")
+    return valores
+
+
+# --- Proveedores: generación de la respuesta (Gemini u Ollama Cloud) --------
+
+def _gemini_generar(system: str, prompt: str, api_key: str, model: str) -> str:
+    url = _GEMINI_GENERATE_URL.format(model=model)
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "systemInstruction": {"parts": [{"text": system}]},
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048},
+    }
+    try:
+        # 60s, no 30: a diferencia de un embedding (rápido, texto corto), una
+        # respuesta generada puede tardar bastante más bajo demanda alta -se
+        # vio en vivo: un 503 "high demand" seguido de un timeout a 30s en el
+        # reintento con el mismo modelo-.
+        r = _post_con_reintentos(url, {"x-goog-api-key": api_key}, body, timeout=60)
+    except httpx.HTTPStatusError as e:
+        raise AiServiceError(f"Gemini rechazó la petición: {e.response.text[:300]}")
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con Gemini: {e}")
+
+    candidatos = r.json().get("candidates") or []
+    if not candidatos:
+        raise AiServiceError("Gemini no devolvió ninguna respuesta (puede haber bloqueado el contenido).")
+    if candidatos[0].get("finishReason") == "MAX_TOKENS":
+        # Se corta la respuesta a mitad de frase sin ningún aviso salvo este
+        # campo -visto en vivo con maxOutputTokens=800-. Mejor decirlo claro
+        # que entregar una respuesta que parece completa y no lo está.
+        logger.warning("Respuesta de Gemini cortada por MAX_TOKENS")
+    partes = candidatos[0].get("content", {}).get("parts") or []
+    texto = "".join(p.get("text", "") for p in partes).strip()
+    if not texto:
+        raise AiServiceError("Gemini devolvió una respuesta vacía.")
+    return texto
+
+
+def _ollama_cloud_generar(system: str, prompt: str, api_key: str, model: str) -> str:
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+        "stream": False,
+    }
+    try:
+        r = _post_con_reintentos(
+            "https://ollama.com/api/chat",
+            {"Authorization": f"Bearer {api_key}"},
+            body,
+            timeout=60,
+        )
+    except httpx.HTTPStatusError as e:
+        raise AiServiceError(f"Ollama Cloud rechazó la petición: {e.response.text[:300]}")
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con Ollama Cloud: {e}")
+
+    contenido = (r.json().get("message") or {}).get("content", "").strip()
+    if not contenido:
+        raise AiServiceError("Ollama Cloud devolvió una respuesta vacía.")
+    return contenido
+
+
+# Proveedores que exponen el formato estándar de OpenAI
+# (`POST {base_url}/chat/completions`, `choices[0].message.content`) — la
+# gran mayoría de los que ofrecen un nivel gratis generoso lo hacen, así que
+# sumar uno nuevo es agregar una fila acá, no escribir un adaptador nuevo.
+# Verificado en la documentación oficial de cada uno antes de sumarlo, no
+# asumido por parecido de nombre.
+_PROVEEDORES_OPENAI_COMPATIBLE = {
+    "nvidia_nim": ("https://integrate.api.nvidia.com/v1", "NVIDIA NIM"),
+    "groq": ("https://api.groq.com/openai/v1", "Groq"),
+}
+
+
+def _openai_compatible_generar(system: str, prompt: str, api_key: str, model: str, base_url: str, nombre: str) -> str:
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+    }
+    try:
+        r = _post_con_reintentos(
+            f"{base_url}/chat/completions",
+            {"Authorization": f"Bearer {api_key}"},
+            body,
+            timeout=60,
+        )
+    except httpx.HTTPStatusError as e:
+        raise AiServiceError(f"{nombre} rechazó la petición: {e.response.text[:300]}")
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con {nombre}: {e}")
+
+    choices = r.json().get("choices") or []
+    if not choices:
+        raise AiServiceError(f"{nombre} no devolvió ninguna respuesta.")
+    contenido = (choices[0].get("message") or {}).get("content", "").strip()
+    if not contenido:
+        raise AiServiceError(f"{nombre} devolvió una respuesta vacía.")
+    return contenido
+
+
+def generar_respuesta(system: str, prompt: str, config: AiConfig) -> str:
+    if config.provider == "gemini":
+        return _gemini_generar(system, prompt, config.api_key, config.chat_model)
+    if config.provider == "ollama_cloud":
+        return _ollama_cloud_generar(system, prompt, config.api_key, config.chat_model)
+    if config.provider in _PROVEEDORES_OPENAI_COMPATIBLE:
+        base_url, nombre = _PROVEEDORES_OPENAI_COMPATIBLE[config.provider]
+        return _openai_compatible_generar(system, prompt, config.api_key, config.chat_model, base_url, nombre)
+    raise AiServiceError(f"Proveedor desconocido: {config.provider!r}")
+
+
+def _key_embeddings(config: AiConfig) -> str | None:
+    """La key con la que se piden los embeddings (siempre a Gemini): la
+
+    propia si se configuró una, o la del proveedor de chat si ese proveedor
+    ya es Gemini -es la misma cuenta, no tiene sentido pedir la key dos
+    veces-. Si el chat es otro proveedor (Groq, NVIDIA NIM...) y no se
+    configuró una key de embeddings aparte, no hay con qué buscar.
+    """
+    if config.embedding_api_key:
+        return config.embedding_api_key
+    if config.provider == "gemini":
+        return config.api_key
+    return None
+
+
+# --- Indexación de la documentación ------------------------------------------
+
+def _partir_en_fragmentos(texto: str, archivo: str) -> list[tuple[str | None, str]]:
+    """Divide un .md en (encabezado, contenido) por cada sección de nivel 2
+
+    (`## Título`). Lo anterior al primer `##` (título del documento, aviso de
+    idioma) queda como un fragmento sin encabezado. Las secciones muy largas
+    se dividen además por párrafo, para no pasar el límite de tokens del
+    modelo de embeddings.
+    """
+    lineas = texto.splitlines()
+    secciones: list[tuple[str | None, list[str]]] = []
+    actual_titulo: str | None = None
+    actual_cuerpo: list[str] = []
+
+    for linea in lineas:
+        if linea.startswith("## "):
+            if actual_cuerpo:
+                secciones.append((actual_titulo, actual_cuerpo))
+            actual_titulo = linea[3:].strip()
+            actual_cuerpo = []
+        else:
+            actual_cuerpo.append(linea)
+    if actual_cuerpo:
+        secciones.append((actual_titulo, actual_cuerpo))
+
+    fragmentos: list[tuple[str | None, str]] = []
+    for titulo, cuerpo in secciones:
+        contenido = "\n".join(cuerpo).strip()
+        if not contenido or len(contenido) < 20:
+            continue  # separadores ("---") o secciones vacías: nada que buscar ahí
+        if len(contenido) <= _MAX_CHARS_POR_FRAGMENTO:
+            fragmentos.append((titulo, contenido))
+            continue
+        # Partir por párrafo, agrupando de a varios hasta acercarse al tope,
+        # en vez de un corte fijo a mitad de una frase.
+        parrafos = [p for p in contenido.split("\n\n") if p.strip()]
+        bloque: list[str] = []
+        largo = 0
+        for parrafo in parrafos:
+            if largo + len(parrafo) > _MAX_CHARS_POR_FRAGMENTO and bloque:
+                fragmentos.append((titulo, "\n\n".join(bloque)))
+                bloque, largo = [], 0
+            bloque.append(parrafo)
+            largo += len(parrafo)
+        if bloque:
+            fragmentos.append((titulo, "\n\n".join(bloque)))
+
+    return fragmentos
+
+
+def _archivos_a_indexar() -> list[str]:
+    """Rutas relativas al repo: README.md + todo docs/*.md (no las
+    traducciones .en.md/.pt.md: ver nota al principio del archivo)."""
+    raiz = _raiz_del_proyecto()
+    archivos = list(_ARCHIVOS_A_INDEXAR)
+    docs_dir = raiz / "docs"
+    if docs_dir.is_dir():
+        for p in sorted(docs_dir.glob("*.md")):
+            if re.search(r"\.(en|pt)\.md$", p.name):
+                continue
+            archivos.append(f"docs/{p.name}")
+    return archivos
+
+
+def reindexar_documentacion(db: Session, config: AiConfig) -> dict:
+    """Vuelve a indexar toda la documentación desde cero.
+
+    Se hace completo, no incremental: el corpus es chico (unas pocas decenas
+    de archivos) y así no hay que rastrear qué cambió desde la última vez.
+    """
+    key_embeddings = _key_embeddings(config)
+    if not key_embeddings:
+        raise AiServiceError(
+            "Falta configurar la API key de Gemini para embeddings (los embeddings siempre "
+            "son de Gemini, aunque el proveedor de chat sea otro)."
+        )
+
+    raiz = _raiz_del_proyecto()
+    archivos = _archivos_a_indexar()
+
+    db.query(DocChunk).delete()
+
+    total = 0
+    saltados: list[str] = []
+    for rel in archivos:
+        ruta = raiz / rel
+        if not ruta.is_file():
+            continue
+        try:
+            texto = ruta.read_text(encoding="utf-8")
+        except OSError as e:
+            saltados.append(f"{rel}: {e}")
+            continue
+
+        for titulo, contenido in _partir_en_fragmentos(texto, rel):
+            try:
+                embedding = _gemini_embed(contenido, key_embeddings, "RETRIEVAL_DOCUMENT")
+            except AiServiceError as e:
+                saltados.append(f"{rel} ({titulo or 'sin título'}): {e}")
+                continue
+
+            chunk = DocChunk(source_file=rel, heading=titulo, content=contenido, embedding=embedding)
+            db.add(chunk)
+            db.flush()  # necesario para poder calcular el tsvector por id, mas abajo
+            db.execute(
+                text("UPDATE doc_chunks SET tsv = to_tsvector('spanish', :contenido) WHERE id = :id"),
+                {"contenido": contenido, "id": chunk.id},
+            )
+            total += 1
+
+    db.commit()
+    logger.info("Documentación reindexada: %d fragmentos de %d archivos", total, len(archivos))
+    return {"fragmentos": total, "archivos": len(archivos), "saltados": saltados}
+
+
+# --- Búsqueda híbrida y respuesta ---------------------------------------------
+
+def _buscar_fragmentos(db: Session, config: AiConfig, pregunta: str, top_n: int = 5) -> list[DocChunk]:
+    """Combina búsqueda semántica (embedding) y literal (texto completo de
+
+    Postgres) — la primera encuentra fragmentos relacionados por significado
+    aunque no compartan palabras con la pregunta; la segunda encuentra
+    coincidencias exactas (nombres de ajustes, comandos) que un embedding
+    puede no priorizar. Se juntan los resultados de las dos, sin repetir.
+    """
+    key_embeddings = _key_embeddings(config)
+    if not key_embeddings:
+        raise AiServiceError(
+            "Falta configurar la API key de Gemini para embeddings (los embeddings siempre "
+            "son de Gemini, aunque el proveedor de chat sea otro)."
+        )
+    embedding_pregunta = _gemini_embed(pregunta, key_embeddings, "RETRIEVAL_QUERY")
+
+    por_significado = (
+        db.query(DocChunk)
+        .order_by(DocChunk.embedding.cosine_distance(embedding_pregunta))
+        .limit(top_n)
+        .all()
+    )
+
+    por_texto = db.execute(
+        text(
+            "SELECT id FROM doc_chunks "
+            "WHERE tsv @@ websearch_to_tsquery('spanish', :q) "
+            "ORDER BY ts_rank(tsv, websearch_to_tsquery('spanish', :q)) DESC "
+            "LIMIT :n"
+        ),
+        {"q": pregunta, "n": top_n},
+    ).fetchall()
+    ids_texto = [row[0] for row in por_texto]
+    por_texto_objs = db.query(DocChunk).filter(DocChunk.id.in_(ids_texto)).all() if ids_texto else []
+
+    vistos: set[int] = set()
+    combinados: list[DocChunk] = []
+    for chunk in por_significado + por_texto_objs:
+        if chunk.id not in vistos:
+            vistos.add(chunk.id)
+            combinados.append(chunk)
+    return combinados[:top_n]
+
+
+_SYSTEM_PROMPT = (
+    "Sos el asistente de ayuda de SquidManager, un panel de administración de "
+    "un proxy Squid. Respondé ÚNICAMENTE con la información de los fragmentos "
+    "de documentación que se te dan a continuación. Si la respuesta no está "
+    "en esos fragmentos, decí explícitamente que no encontraste eso en la "
+    "documentación del proyecto — no inventes pasos, comandos, ni nombres de "
+    "botones o ajustes que no aparezcan ahí. No tenés acceso a la "
+    "configuración real de este servidor ni podés ejecutar ninguna acción: "
+    "solo podés explicar cómo se usa el panel según su documentación."
+)
+
+# Saludos y frases sueltas sin pregunta real: sin esto, cada "hola" gasta una
+# llamada de embedding + búsqueda + LLM para terminar diciendo "no encontré
+# esa información", y además muestra fuentes que no vienen a cuento (el
+# fragmento "más parecido" a un saludo es ruido, no una fuente real). Se
+# responde acá mismo, sin tocar ningún proveedor.
+_SALUDOS = re.compile(
+    r"^(hola+|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|hey|hi|hello|"
+    r"qu[ée]\s+tal|c[oó]mo\s+andas?|c[oó]mo\s+va|gracias|muchas\s+gracias|"
+    r"chau|adi[oó]s|ok|okay|listo|buen[oa]s?)[\s!.,¿?]*$",
+    re.IGNORECASE,
+)
+
+_RESPUESTA_SALUDO = (
+    "¡Hola! Puedo responder preguntas sobre cómo usar SquidManager "
+    "(usuarios, ACLs, reglas de acceso, LDAP, certificados, etc.) según la "
+    "documentación del proyecto. ¿Qué necesitás saber?"
+)
+
+
+def preguntar(db: Session, config: AiConfig, pregunta: str) -> dict:
+    if not config.enabled or not config.api_key:
+        raise AiServiceError("El asistente de IA no está activado.")
+    if not config.chat_model:
+        raise AiServiceError("Falta configurar el modelo de respuesta en Ajustes del asistente.")
+
+    if _SALUDOS.match(pregunta.strip()):
+        return {"respuesta": _RESPUESTA_SALUDO, "fuentes": []}
+
+    fragmentos = _buscar_fragmentos(db, config, pregunta)
+    if not fragmentos:
+        return {
+            "respuesta": "No encontré nada relacionado con esa pregunta en la documentación del proyecto.",
+            "fuentes": [],
+        }
+
+    contexto = "\n\n---\n\n".join(
+        f"[{c.source_file}{' — ' + c.heading if c.heading else ''}]\n{c.content}"
+        for c in fragmentos
+    )
+    prompt = f"Documentación relevante:\n\n{contexto}\n\nPregunta del usuario: {pregunta}"
+
+    respuesta = generar_respuesta(_SYSTEM_PROMPT, prompt, config)
+    fuentes = [
+        {"archivo": c.source_file, "seccion": c.heading} for c in fragmentos
+    ]
+    return {"respuesta": respuesta, "fuentes": fuentes}

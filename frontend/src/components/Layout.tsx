@@ -5,7 +5,7 @@ import { clearToken, api, canWrite, isSuperadmin, getRole } from '../api/client'
 import {
   IconDashboard, IconUsers, IconTag, IconRules, IconGauge, IconLink, IconGroups,
   IconSettings, IconLock, IconAudit, IconBackup, IconLogs, IconBell, IconShield, IconSend,
-  IconBolt, IconKey, IconLogout, IconSpinner, IconEye, IconGlobe,
+  IconBolt, IconKey, IconLogout, IconSpinner, IconEye, IconGlobe, IconAssistant,
 } from './Icons'
 
 type Item = { to: string; label: string; Icon: (p: { className?: string }) => JSX.Element }
@@ -74,6 +74,7 @@ export default function Layout() {
       titulo: traducir("Vigilancia"),
       items: [
         { to: '/', label: traducir("Dashboard"), Icon: IconDashboard },
+        { to: '/asistente', label: traducir("Asistente"), Icon: IconAssistant },
         { to: '/logs', label: traducir("Registros"), Icon: IconLogs },
         { to: '/audit', label: traducir("Auditoría"), Icon: IconAudit },
       ],
