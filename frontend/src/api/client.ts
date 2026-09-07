@@ -285,6 +285,37 @@ export const api = {
     return `${API_BASE}/logs/export?${qs.toString()}`
   },
 
+  // Histórico de logs (meses ya consolidados en frío)
+  getHistoricalMonths: () => request<any[]>('/logs/historical/months'),
+  getHistoricalMonthIndex: (year: number, month: number) =>
+    request<any>(`/logs/historical/${year}/${month}`),
+  getHistoricalEntries: (year: number, month: number, params: {
+    limit?: number; offset?: number; user?: string; status?: number; domain?: string; ip?: string; denied?: boolean
+  } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.limit) qs.append('limit', String(params.limit))
+    if (params.offset) qs.append('offset', String(params.offset))
+    if (params.user) qs.append('user', params.user)
+    if (params.status) qs.append('status', String(params.status))
+    if (params.domain) qs.append('domain', params.domain)
+    if (params.ip) qs.append('ip', params.ip)
+    if (params.denied) qs.append('denied', 'true')
+    const q = qs.toString()
+    return request<any>(`/logs/historical/${year}/${month}/entries${q ? '?' + q : ''}`)
+  },
+  exportHistoricalLogs: (year: number, month: number, params: {
+    format?: 'csv' | 'ndjson'; user?: string; status?: number; domain?: string; ip?: string; denied?: boolean
+  } = {}) => {
+    const qs = new URLSearchParams()
+    qs.append('format', params.format ?? 'csv')
+    if (params.user) qs.append('user', params.user)
+    if (params.status) qs.append('status', String(params.status))
+    if (params.domain) qs.append('domain', params.domain)
+    if (params.ip) qs.append('ip', params.ip)
+    if (params.denied) qs.append('denied', 'true')
+    return `${API_BASE}/logs/historical/${year}/${month}/export?${qs.toString()}`
+  },
+
   // Notifications
   getNotificationConfig: () => request<any>('/notifications/config'),
   updateNotificationConfig: (data: any) => request<any>('/notifications/config', { method: 'PUT', body: JSON.stringify(data) }),

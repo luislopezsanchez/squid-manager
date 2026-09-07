@@ -28,6 +28,10 @@ const ENUM_SETTINGS: Record<string, { value: string; label: string }[]> = {
     { value: 'true', label: traducir('Sí — interceptar HTTPS para filtrar por dominio') },
     { value: 'false', label: traducir('No — solo tunelizar (splice), sin filtrar dentro de HTTPS') },
   ],
+  proxy_auth_scheme: [
+    { value: 'basic', label: traducir('Basic — usuario y contraseña en claro (cifrado solo por HTTPS/SSL Bump)') },
+    { value: 'digest', label: traducir('Digest — el navegador nunca envía la contraseña, solo un hash (RFC 2617). Solo usuarios locales, no LDAP.') },
+  ],
 }
 
 export default function Settings() {

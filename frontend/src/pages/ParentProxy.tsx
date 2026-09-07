@@ -13,6 +13,7 @@ interface Config {
   never_direct: boolean
   direct_domains: string
   ca_cert: string
+  auth_method: 'fixed' | 'passthru'
 }
 
 const VACIA: Config = {
@@ -24,6 +25,7 @@ const VACIA: Config = {
   never_direct: true,
   direct_domains: '',
   ca_cert: '',
+  auth_method: 'fixed',
 }
 
 export default function ParentProxy() {
@@ -165,31 +167,51 @@ export default function ParentProxy() {
             <p className="text-xs text-ink-3 mt-0.5">{traducir("Opcionales: muchos proxies internos no piden autenticación. Déjalo vacío si el tuyo no la exige.")}</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Usuario")}</label>
-              <input
-                type="text"
-                value={config.username}
-                onChange={e => set('username', e.target.value)}
-                autoComplete="off"
-                className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Contraseña")}</label>
-              <input
-                type="password"
-                value={config.password}
-                onChange={e => set('password', e.target.value)}
-                autoComplete="new-password"
-                className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Cómo presentar credenciales al padre")}</label>
+            <select
+              value={config.auth_method}
+              onChange={e => set('auth_method', e.target.value as Config['auth_method'])}
+              className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
+            >
+              <option value="fixed">{traducir('Fijas — usuario y contraseña de aquí abajo (solo Basic)')}</option>
+              <option value="passthru">{traducir('Reenviar las del cliente (passthru) — para un padre que exige Digest, NTLM o Negotiate')}</option>
+            </select>
           </div>
 
-          <p className="text-xs text-ink-3">
-            Squid solo sabe presentar autenticación <strong>{traducir("básica")}</strong>{traducir("a un proxy padre. Si el tuyo exige NTLM o Kerberos, la prueba de aquí abajo te lo dirá: no se resuelve con usuario y contraseña.")}</p>
+          {config.auth_method === 'fixed' ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Usuario")}</label>
+                  <input
+                    type="text"
+                    value={config.username}
+                    onChange={e => set('username', e.target.value)}
+                    autoComplete="off"
+                    className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Contraseña")}</label>
+                  <input
+                    type="password"
+                    value={config.password}
+                    onChange={e => set('password', e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-ink-3">
+                Squid solo sabe presentar autenticación <strong>{traducir("básica")}</strong>{traducir("a un proxy padre con credenciales fijas. Si el tuyo exige NTLM, Digest o Kerberos, la prueba de aquí abajo te lo dirá: no se resuelve con usuario y contraseña, hace falta 'passthru'.")}</p>
+            </>
+          ) : (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              {traducir("'Passthru' reenvía tal cual las credenciales que ya trae el cliente hacia el padre. Es la única forma de llegar a un padre que exige Digest, NTLM o Negotiate — pero no se puede combinar con que este mismo SquidManager autentique a sus propios clientes (HTTP solo permite una credencial por petición). Si hay usuarios locales habilitados, LDAP o Kerberos activos, guardar esto se va a rechazar hasta que los desactives.")}
+            </p>
+          )}
         </div>
 
         <div className="card p-5 mb-5 space-y-4">

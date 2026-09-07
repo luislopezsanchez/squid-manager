@@ -180,6 +180,13 @@ def seed_data():
             "auth_children": ("5", "security", "Procesos helper de autenticación"),
             "auth_realm": ("SquidManager Proxy", "security", "Realm de autenticación"),
             "credentialsttl": ("2 hours", "security", "TTL de credenciales"),
+            # 'basic' o 'digest'. Excluyentes entre sí -Negotiate (Kerberos)
+            # sigue coexistiendo con cualquiera de los dos-. Digest solo
+            # autentica usuarios locales del proxy, no LDAP.
+            "proxy_auth_scheme": (
+                "basic", "security",
+                "Esquema de autenticación del proxy: basic o digest",
+            ),
             "access_log": ("/var/log/squid/access.log", "logging", "Ruta del log de acceso"),
             "cache_log": ("/var/log/squid/cache.log", "logging", "Ruta del log de caché"),
             # Con un sufijo único por instalación, no por capricho: Squid
