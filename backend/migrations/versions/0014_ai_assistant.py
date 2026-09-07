@@ -4,14 +4,11 @@ documentacion del proyecto como unica fuente.
 Apagado por defecto (enabled=False), igual que Kerberos/LDAP/Syslog: sin una
 API key configurada no sale ni un byte hacia ningun proveedor.
 
-Requiere la extension `pgvector` de Postgres, ya creada de antemano -esta
-migracion NO la crea ella misma-: el rol con el que corre la app no es
-superusuario (a proposito) y CREATE EXTENSION exige serlo. La crea el
-instalador nativo como usuario `postgres` al preparar la base de datos
-(install-nativo.sh), y en Docker la trae ya integrada la imagen
-`pgvector/pgvector` (ver docker-compose.yml). Una instalacion nativa
-existente que actualice a esta version necesita el mismo paso a mano una vez
--ver docs/actualizacion.md-.
+Requiere la extension `pgvector` de Postgres (paquete
+`postgresql-<version>-pgvector` en Debian/Ubuntu, disponible en los repos
+oficiales -no hace falta un repositorio de terceros-). Se crea con
+IF NOT EXISTS: si ya estaba (por ejemplo, alguien la habilito a mano antes),
+no falla.
 
 Revision ID: 0014
 Revises: 0013
@@ -30,6 +27,8 @@ EMBEDDING_DIM = 768
 
 
 def upgrade() -> None:
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
     op.create_table(
         "ai_config",
         sa.Column("id", sa.Integer(), primary_key=True),
