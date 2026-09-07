@@ -58,33 +58,50 @@ def _write_private(path: Path, content: str) -> None:
     El modo es 640 con grupo `proxy`, no 600, y la razón es que los dos
     despliegues llegan al mismo sitio por caminos distintos:
 
-    - En contenedor el backend es root, puede hacer chown a proxy:proxy y el
-      fichero queda accesible para Squid como propietario.
-    - En instalación nativa el backend corre con su propio usuario, cuyo grupo
-      primario es `proxy`. No puede hacer chown —ni falta—, porque el fichero
-      ya nace con el grupo correcto y Squid lo lee por grupo.
+    - En contenedor el backend corre como `squidmgr`, cuyo grupo primario es
+      `proxy` (mismo gid que usa Squid en su propia imagen): no hace falta
+      chown, el fichero ya nace con el grupo correcto.
+    - En instalación nativa pasa exactamente lo mismo: el backend corre con
+      su propio usuario, cuyo grupo primario también es `proxy`.
 
     En los dos casos el conjunto de quien puede leerlo es el mismo: root, el
     panel y Squid.
+
+    Se escribe a un temporal en el mismo directorio y se reemplaza con
+    `os.replace` (rename atómico), en vez de truncar el fichero existente in
+    situ. No es solo estilo: un `O_TRUNC` sobre el fichero existente exige
+    permiso de ESCRITURA sobre ese inodo concreto, y el contenedor de Squid
+    (que corre con su propio usuario `proxy` del sistema, no con el
+    `squidmgr` de este backend) puede haber creado ese mismo fichero antes
+    -vacío, con el modo restrictivo 600- al arrancar sin encontrar aún los
+    ficheros de autenticación. Un rename solo necesita permiso de escritura
+    sobre el DIRECTORIO, que el backend sí tiene siempre sobre /etc/squid.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}")
     # Crear con los permisos definitivos, no escribir y luego ajustar.
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
     try:
         with os.fdopen(fd, "w") as f:
             f.write(content)
-    finally:
-        pass
-    os.chmod(path, 0o640)
+        os.chmod(tmp_path, 0o640)
 
-    # Solo root puede reasignar propietario. Intentarlo sin serlo falla siempre
-    # y llenaría el log de avisos en cada aplicación de la configuración.
-    if getattr(os, "geteuid", lambda: 1)() == 0:
-        uid, gid = _proxy_ids()
-        try:
-            os.chown(path, uid, gid)
-        except (PermissionError, OSError) as e:
-            logger.warning(f"No se pudo cambiar el propietario de {path}: {e}")
+        # Solo root puede reasignar propietario. Intentarlo sin serlo falla
+        # siempre y llenaría el log de avisos en cada aplicación de la
+        # configuración. Sin root, el fichero ya nace con el grupo `proxy`
+        # porque es el grupo primario del usuario que corre este proceso
+        # (squidmgr en contenedor, el usuario nativo fuera de él) -no hace
+        # falta chown para que Squid pueda leerlo por grupo.
+        if getattr(os, "geteuid", lambda: 1)() == 0:
+            uid, gid = _proxy_ids()
+            try:
+                os.chown(tmp_path, uid, gid)
+            except (PermissionError, OSError) as e:
+                logger.warning(f"No se pudo cambiar el propietario de {tmp_path}: {e}")
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def active_proxy_users(db):
