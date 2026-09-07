@@ -14,7 +14,13 @@ from app.models.admin import Admin
 from app.models.ai_config import AiConfig
 from app.models.doc_chunk import DocChunk
 from app.services.auth_service import get_current_admin, require_writer
-from app.services.ai_service import AiServiceError, preguntar, reindexar_documentacion
+from app.services.ai_service import (
+    AiServiceError,
+    listar_modelos,
+    preguntar,
+    probar_jina,
+    reindexar_documentacion,
+)
 
 router = APIRouter()
 
@@ -25,9 +31,8 @@ class AiConfigIn(BaseModel):
     enabled: bool = False
     provider: str = "gemini"
     api_key: str | None = None
-    # Los embeddings (búsqueda semántica) siempre son de Gemini, sea cual sea
-    # el proveedor de arriba -ver ai_service.py-. Si provider ya es "gemini"
-    # y esto queda vacío, el servicio reutiliza `api_key`.
+    # La key de Jina AI para embeddings (búsqueda semántica): siempre
+    # separada de la del proveedor de chat -ver ai_service.py-.
     embedding_api_key: str | None = None
     chat_model: str | None = None
     embedding_model: str | None = None
@@ -35,6 +40,15 @@ class AiConfigIn(BaseModel):
 
 class PreguntaIn(BaseModel):
     pregunta: str
+
+
+class ProbarProveedorIn(BaseModel):
+    provider: str
+    api_key: str
+
+
+class ProbarEmbeddingsIn(BaseModel):
+    api_key: str
 
 
 def _obtener_o_crear(db: Session) -> AiConfig:
@@ -89,17 +103,53 @@ async def update_config(
 
     if config.enabled and not config.api_key:
         raise HTTPException(400, detail="Hace falta una API key para habilitar el asistente")
-    # Sin key de embeddings propia, solo alcanza si el proveedor de chat ya
-    # es Gemini -ahí se reutiliza la misma key, ver _key_embeddings()-.
-    if config.enabled and not config.embedding_api_key and config.provider != "gemini":
+    if config.enabled and not config.embedding_api_key:
         raise HTTPException(
             400,
-            detail="Con un proveedor de chat distinto de Gemini hace falta configurar "
-            "también la API key de Gemini para embeddings (búsqueda en la documentación).",
+            detail="Hace falta la API key de Jina AI para poder buscar en la documentación.",
         )
 
     db.commit()
     return {"status": "ok", "message": "Configuración del asistente guardada"}
+
+
+@router.post("/probar-proveedor")
+async def probar_proveedor(
+    data: ProbarProveedorIn,
+    _: Admin = Depends(require_writer),
+):
+    """Prueba una API key contra el proveedor de chat elegido y devuelve los
+
+    modelos disponibles -así se elige de una lista real en vez de escribir
+    un nombre a mano y enterarse recién al preguntar si existe o no. No
+    toca la configuración guardada: es solo una prueba antes de guardar.
+    """
+    if data.provider not in _PROVEEDORES_VALIDOS:
+        raise HTTPException(400, detail=f"provider debe ser uno de: {', '.join(_PROVEEDORES_VALIDOS)}")
+    if not data.api_key or data.api_key == "***":
+        raise HTTPException(400, detail="Falta la API key a probar")
+
+    try:
+        modelos = await run_in_threadpool(listar_modelos, data.provider, data.api_key)
+    except AiServiceError as e:
+        raise HTTPException(400, detail=str(e))
+    return {"status": "ok", "modelos": modelos}
+
+
+@router.post("/probar-embeddings")
+async def probar_embeddings(
+    data: ProbarEmbeddingsIn,
+    _: Admin = Depends(require_writer),
+):
+    """Prueba la key de Jina AI pidiendo un embedding mínimo, sin guardar nada."""
+    if not data.api_key or data.api_key == "***":
+        raise HTTPException(400, detail="Falta la API key de Jina a probar")
+
+    try:
+        dimensiones = await run_in_threadpool(probar_jina, data.api_key)
+    except AiServiceError as e:
+        raise HTTPException(400, detail=str(e))
+    return {"status": "ok", "dimensiones": dimensiones}
 
 
 @router.post("/reindexar")

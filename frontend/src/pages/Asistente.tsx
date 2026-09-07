@@ -14,6 +14,20 @@ const PROVEEDORES = [
 
 type Turno = { pregunta: string; respuesta: string; fuentes: { archivo: string; seccion: string | null }[] }
 
+// La conversación se guarda en sessionStorage -viva mientras dure la
+// pestaña/sesión del navegador, como pidió el usuario, sin necesidad de
+// nada en el backend para algo que es puramente una comodidad de la UI-.
+const CLAVE_CONVERSACION = 'squidmanager:asistente:conversacion'
+
+function cargarConversacion(): Turno[] {
+  try {
+    const guardado = sessionStorage.getItem(CLAVE_CONVERSACION)
+    return guardado ? JSON.parse(guardado) : []
+  } catch {
+    return []
+  }
+}
+
 export default function Asistente() {
   const [config, setConfig] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -21,9 +35,17 @@ export default function Asistente() {
   const [reindexando, setReindexando] = useState(false)
   const [preguntando, setPreguntando] = useState(false)
   const [pregunta, setPregunta] = useState('')
-  const [conversacion, setConversacion] = useState<Turno[]>([])
+  const [conversacion, setConversacion] = useState<Turno[]>(cargarConversacion)
   const finRef = useRef<HTMLDivElement>(null)
   const { showToast, ToastContainer } = useToast()
+
+  // Modelos de chat listados tras "Probar conexión" -null hasta que se
+  // prueba (o cambia el proveedor, que invalida la lista anterior)-.
+  const [probandoProveedor, setProbandoProveedor] = useState(false)
+  const [modelosProveedor, setModelosProveedor] = useState<string[] | null>(null)
+
+  const [probandoEmbeddings, setProbandoEmbeddings] = useState(false)
+  const [embeddingsOk, setEmbeddingsOk] = useState<number | null>(null)
 
   const cargar = () => api.getAiConfig().then(setConfig).catch(() => showToast(traducir("Error al cargar la configuración del asistente"), 'error'))
 
@@ -34,6 +56,75 @@ export default function Asistente() {
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [conversacion])
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(CLAVE_CONVERSACION, JSON.stringify(conversacion))
+    } catch {
+      // localStorage/sessionStorage puede fallar (modo privado, cuota) — no
+      // es crítico, la conversación simplemente no sobrevive al reload.
+    }
+  }, [conversacion])
+
+  const handleLimpiarConversacion = () => {
+    setConversacion([])
+    try {
+      sessionStorage.removeItem(CLAVE_CONVERSACION)
+    } catch {
+      // ver nota arriba
+    }
+  }
+
+  const handleCambiarProveedor = (provider: string) => {
+    setConfig({ ...config, provider })
+    setModelosProveedor(null) // la lista de modelos era del proveedor anterior
+  }
+
+  const handleProbarProveedor = async () => {
+    if (!config.api_key || config.api_key === '***') {
+      showToast(traducir("Escribí la API key antes de probar la conexión"), 'warning')
+      return
+    }
+    setProbandoProveedor(true)
+    setModelosProveedor(null)
+    try {
+      const r = await api.probarProveedorAi(config.provider, config.api_key)
+      const modelos: string[] = r.modelos || []
+      setModelosProveedor(modelos)
+      if (modelos.length > 0 && !modelos.includes(config.chat_model)) {
+        const sugerido = modelos.find(m => m === proveedorActual?.ejemploModelo) || modelos[0]
+        setConfig((c: any) => ({ ...c, chat_model: sugerido }))
+      }
+      showToast(
+        modelos.length > 0
+          ? traducir(`Conexión exitosa: ${modelos.length} modelos disponibles`)
+          : traducir("Conexión exitosa, pero el proveedor no devolvió modelos"),
+        'success',
+      )
+    } catch (e: any) {
+      showToast(`Error: ${e.message}`, 'error')
+    } finally {
+      setProbandoProveedor(false)
+    }
+  }
+
+  const handleProbarEmbeddings = async () => {
+    if (!config.embedding_api_key || config.embedding_api_key === '***') {
+      showToast(traducir("Escribí la API key de Jina antes de probar"), 'warning')
+      return
+    }
+    setProbandoEmbeddings(true)
+    setEmbeddingsOk(null)
+    try {
+      const r = await api.probarEmbeddingsAi(config.embedding_api_key)
+      setEmbeddingsOk(r.dimensiones)
+      showToast(traducir("Conexión con Jina AI exitosa"), 'success')
+    } catch (e: any) {
+      showToast(`Error: ${e.message}`, 'error')
+    } finally {
+      setProbandoEmbeddings(false)
+    }
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -93,7 +184,6 @@ export default function Asistente() {
   if (!config) return <div className="p-8 text-center text-ink-3">{traducir("No se pudo cargar la configuración")}</div>
 
   const proveedorActual = PROVEEDORES.find(p => p.value === config.provider)
-  const necesitaKeyDeEmbeddings = config.provider !== 'gemini'
 
   return (
     <div className="p-6 md:p-7">
@@ -118,49 +208,116 @@ export default function Asistente() {
           </label>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="field-label block mb-1.5">{traducir("Proveedor (responde la pregunta)")}</label>
-            <select
-              value={config.provider}
-              onChange={e => setConfig({ ...config, provider: e.target.value })}
-              className="input"
-            >
-              {PROVEEDORES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="field-label block mb-1.5">{traducir("Modelo")}</label>
-            <input type="text" value={config.chat_model} onChange={e => setConfig({ ...config, chat_model: e.target.value })}
-              placeholder={proveedorActual?.ejemploModelo} className="input font-mono text-sm" />
-          </div>
-          <div>
-            <label className="field-label block mb-1.5">
-              {traducir("API key")} {necesitaKeyDeEmbeddings ? `(${proveedorActual?.label})` : ''}
-            </label>
-            <input type="password" value={config.api_key} onChange={e => setConfig({ ...config, api_key: e.target.value })}
-              placeholder={config.api_key === '***' ? traducir('Ya guardada — escribí una nueva para reemplazarla') : ''}
-              className="input font-mono text-sm" />
-          </div>
-          {necesitaKeyDeEmbeddings && (
+        {/* Paso 1: proveedor + su API key + probar conexión */}
+        <div className="mb-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-3 mb-2">
+            {traducir("1. Proveedor que responde las preguntas")}
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="field-label block mb-1.5">{traducir("API key de Gemini (para buscar en la documentación)")}</label>
-              <input type="password" value={config.embedding_api_key} onChange={e => setConfig({ ...config, embedding_api_key: e.target.value })}
-                placeholder={config.embedding_api_key === '***' ? traducir('Ya guardada — escribí una nueva para reemplazarla') : ''}
-                className="input font-mono text-sm" />
-              <p className="text-xs text-ink-3 mt-1">
-                {traducir("La búsqueda semántica en la documentación siempre usa Gemini, sea cual sea el proveedor que responde.")}
-              </p>
+              <label className="field-label block mb-1.5">{traducir("Proveedor")}</label>
+              <select value={config.provider} onChange={e => handleCambiarProveedor(e.target.value)} className="input">
+                {PROVEEDORES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
             </div>
-          )}
+            <div>
+              <label className="field-label block mb-1.5">{traducir("API key")} ({proveedorActual?.label})</label>
+              <input
+                type="password"
+                value={config.api_key}
+                onChange={e => { setConfig({ ...config, api_key: e.target.value }); setModelosProveedor(null) }}
+                placeholder={config.api_key === '***' ? traducir('Ya guardada — escribí una nueva para reemplazarla') : ''}
+                className="input font-mono text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={handleProbarProveedor}
+              disabled={probandoProveedor || !config.api_key}
+              className="btn btn-ghost disabled:opacity-50"
+            >
+              {probandoProveedor ? traducir('Probando…') : traducir('Probar conexión')}
+            </button>
+            {modelosProveedor !== null && (
+              <span className="text-xs text-ok font-medium">
+                ✓ {traducir(`Conectado — ${modelosProveedor.length} modelos disponibles`)}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-3">
+            <label className="field-label block mb-1.5">{traducir("Modelo")}</label>
+            {modelosProveedor && modelosProveedor.length > 0 ? (
+              <select
+                value={config.chat_model || ''}
+                onChange={e => setConfig({ ...config, chat_model: e.target.value })}
+                className="input font-mono text-sm"
+              >
+                {!modelosProveedor.includes(config.chat_model) && config.chat_model && (
+                  <option value={config.chat_model}>{config.chat_model} ({traducir("guardado")})</option>
+                )}
+                {modelosProveedor.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={config.chat_model || ''}
+                  onChange={e => setConfig({ ...config, chat_model: e.target.value })}
+                  placeholder={proveedorActual?.ejemploModelo}
+                  className="input font-mono text-sm"
+                />
+                <p className="text-xs text-ink-3 mt-1">
+                  {traducir("Probá la conexión arriba para elegir de la lista real de modelos disponibles con esta key.")}
+                </p>
+              </>
+            )}
+          </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-3 flex-wrap">
+        {/* Paso 2: Jina AI, fijo, para la búsqueda en la documentación */}
+        <div className="mb-5 pt-4 border-t border-line-soft">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-3 mb-2">
+            {traducir("2. Búsqueda en la documentación (siempre Jina AI)")}
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+            <div>
+              <label className="field-label block mb-1.5">{traducir("API key de Jina AI")}</label>
+              <input
+                type="password"
+                value={config.embedding_api_key || ''}
+                onChange={e => { setConfig({ ...config, embedding_api_key: e.target.value }); setEmbeddingsOk(null) }}
+                placeholder={config.embedding_api_key === '***' ? traducir('Ya guardada — escribí una nueva para reemplazarla') : ''}
+                className="input font-mono text-sm"
+              />
+              <p className="text-xs text-ink-3 mt-1">
+                {traducir("Se usa siempre para buscar en la documentación, sea cual sea el proveedor elegido arriba. Se genera gratis en jina.ai.")}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleProbarEmbeddings}
+                disabled={probandoEmbeddings || !config.embedding_api_key}
+                className="btn btn-ghost disabled:opacity-50"
+              >
+                {probandoEmbeddings ? traducir('Probando…') : traducir('Probar conexión')}
+              </button>
+              {embeddingsOk !== null && (
+                <span className="text-xs text-ok font-medium">✓ {traducir("Conectado")}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Paso 3: guardar */}
+        <div className="pt-4 border-t border-line-soft flex items-center gap-3 flex-wrap">
           <button onClick={handleSave} disabled={saving} className="btn btn-primary disabled:opacity-50">
-            {saving ? traducir('Guardando...') : traducir('Guardar Configuración')}
+            {saving ? traducir('Guardando...') : traducir('3. Guardar Configuración')}
           </button>
           <button onClick={handleReindexar} disabled={reindexando || !config.provider} className="btn btn-ghost disabled:opacity-50"
-            title={traducir("Vuelve a leer toda la documentación y recalcular la búsqueda — hace falta la API key de Gemini guardada")}>
+            title={traducir("Vuelve a leer toda la documentación y recalcular la búsqueda — hace falta la API key de Jina guardada")}>
             {reindexando ? traducir('Indexando… puede tardar unos minutos') : traducir('Reindexar documentación')}
           </button>
           <span className="text-xs text-ink-3">
@@ -171,7 +328,14 @@ export default function Asistente() {
 
       {/* Conversación */}
       <div className="card p-6">
-        <h2 className="font-medium text-ink mb-4">{traducir("Preguntas")}</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-medium text-ink">{traducir("Preguntas")}</h2>
+          {conversacion.length > 0 && (
+            <button onClick={handleLimpiarConversacion} className="text-xs text-ink-3 hover:text-danger transition">
+              {traducir("Limpiar conversación")}
+            </button>
+          )}
+        </div>
 
         {!config.enabled ? (
           <p className="text-sm text-ink-3">{traducir("Activá el asistente arriba para poder hacer preguntas.")}</p>

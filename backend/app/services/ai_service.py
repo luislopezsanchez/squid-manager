@@ -5,10 +5,15 @@ Diseño deliberado, no accidental:
 - Solo lee `docs/*.md` y el `README.md` en español -nunca la base de datos,
   nunca el squid.conf real, nunca credenciales-. Esta función es un buscador
   con lenguaje natural encima, no un agente que actúa sobre el proxy.
-- Los embeddings son siempre de Gemini (`gemini-embedding-001`): es el único
-  de los dos proveedores con un endpoint de embeddings documentado y
-  estable (Ollama Cloud, a septiembre de 2026, solo documenta chat). El
-  proveedor de "quién responde" sí es configurable.
+- Los embeddings son siempre de Jina AI (`jina-embeddings-v3`, con
+  `dimensions=768` para calzar con la columna de la tabla): se investigó
+  Gemini, NVIDIA NIM, Cohere y Voyage AI antes de elegir -Gemini tiene
+  límites de cuota muy ajustados (se vieron 503 "high demand" en vivo,
+  varias veces seguidas), NVIDIA NIM y Voyage AI no pueden emitir vectores
+  de 768 dimensiones sin truncar, y Cohere limita a 5 llamadas/min en su
+  key gratis. Jina soporta la misma tarea asimétrica (`retrieval.passage`
+  al indexar, `retrieval.query` al buscar) con 100 req/min de límite. Así
+  la búsqueda no depende de qué proveedor de chat se haya elegido arriba.
 - Llamadas REST directas con `httpx` (ya es dependencia del proyecto): sin
   SDK de por medio, sin traer un framework de RAG que resuelve un problema
   mucho más general del que hace falta acá.
@@ -49,9 +54,11 @@ def _raiz_del_proyecto() -> Path | None:
     return project_dir()
 
 
-_GEMINI_EMBED_MODEL = "gemini-embedding-001"
-_GEMINI_EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent"
 _GEMINI_GENERATE_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+_GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+_JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings"
+_JINA_EMBED_MODEL = "jina-embeddings-v3"
 
 # Archivos que se indexan: la documentación en español, la fuente canónica.
 # Las traducciones (.en.md, .pt.md) se excluyen a propósito -indexar las tres
@@ -107,33 +114,45 @@ def _post_con_reintentos(url: str, headers: dict, body: dict, timeout: float) ->
     raise ultimo_error  # pragma: no cover - inalcanzable, el bucle siempre retorna o lanza
 
 
-# --- Proveedores: embeddings (siempre Gemini) --------------------------------
+# --- Embeddings (siempre Jina AI, ver nota al principio del archivo) --------
 
-def _gemini_embed(texto: str, api_key: str, task_type: str) -> list[float]:
-    """Pide un embedding a Gemini, con la dimensión fija del proyecto.
+def _jina_embed(texto: str, api_key: str, task: str) -> list[float]:
+    """Pide un embedding a Jina AI, con la dimensión fija del proyecto.
 
-    `task_type` distingue indexar documentos (RETRIEVAL_DOCUMENT) de buscar
-    con una pregunta (RETRIEVAL_QUERY): son embeddings asimétricos a
-    propósito -Google los entrena distinto según el rol-, y usar el mismo
-    tipo para los dos lados empeora la búsqueda.
+    `task` distingue indexar documentos (`retrieval.passage`) de buscar con
+    una pregunta (`retrieval.query`): son embeddings asimétricos a propósito
+    -Jina entrena un adaptador LoRA distinto según el rol-, y usar el mismo
+    para los dos lados empeora la búsqueda.
     """
-    url = _GEMINI_EMBED_URL.format(model=_GEMINI_EMBED_MODEL)
     body = {
-        "content": {"parts": [{"text": texto}]},
-        "taskType": task_type,
-        "outputDimensionality": EMBEDDING_DIM,
+        "model": _JINA_EMBED_MODEL,
+        "task": task,
+        "dimensions": EMBEDDING_DIM,
+        "input": [texto],
     }
     try:
-        r = _post_con_reintentos(url, {"x-goog-api-key": api_key}, body, timeout=30)
+        r = _post_con_reintentos(_JINA_EMBED_URL, {"Authorization": f"Bearer {api_key}"}, body, timeout=30)
     except httpx.HTTPStatusError as e:
-        raise AiServiceError(f"Gemini rechazó la petición de embedding: {e.response.text[:300]}")
+        raise AiServiceError(f"Jina AI rechazó la petición de embedding: {e.response.text[:300]}")
     except httpx.HTTPError as e:
-        raise AiServiceError(f"No se pudo conectar con Gemini (embeddings): {e}")
+        raise AiServiceError(f"No se pudo conectar con Jina AI: {e}")
 
-    valores = r.json().get("embedding", {}).get("values")
+    datos = r.json().get("data") or []
+    valores = datos[0].get("embedding") if datos else None
     if not valores:
-        raise AiServiceError("Gemini no devolvió un embedding válido.")
+        raise AiServiceError("Jina AI no devolvió un embedding válido.")
     return valores
+
+
+def probar_jina(api_key: str) -> int:
+    """Prueba la key de Jina pidiendo un embedding de una palabra corta.
+
+    Devuelve la dimensión obtenida -confirma que la key funciona y que
+    coincide con lo que espera la tabla (768), sin gastar más que una
+    llamada mínima.
+    """
+    vector = _jina_embed("prueba de conexión", api_key, "retrieval.passage")
+    return len(vector)
 
 
 # --- Proveedores: generación de la respuesta (Gemini u Ollama Cloud) --------
@@ -239,6 +258,61 @@ def _openai_compatible_generar(system: str, prompt: str, api_key: str, model: st
     return contenido
 
 
+# --- Listado de modelos disponibles (para probar la key antes de guardar) ---
+
+def _listar_modelos_gemini(api_key: str) -> list[str]:
+    try:
+        r = httpx.get(_GEMINI_MODELS_URL, headers={"x-goog-api-key": api_key}, timeout=20)
+        r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise AiServiceError(f"Gemini rechazó la petición: {e.response.text[:300]}")
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con Gemini: {e}")
+
+    modelos = r.json().get("models") or []
+    return sorted(
+        m["name"].removeprefix("models/")
+        for m in modelos
+        if "generateContent" in (m.get("supportedGenerationMethods") or []) and m.get("name")
+    )
+
+
+def _listar_modelos_openai_compatible(base_url: str, api_key: str, nombre: str) -> list[str]:
+    try:
+        r = httpx.get(f"{base_url}/models", headers={"Authorization": f"Bearer {api_key}"}, timeout=20)
+        r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise AiServiceError(f"{nombre} rechazó la petición: {e.response.text[:300]}")
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con {nombre}: {e}")
+
+    datos = r.json().get("data") or []
+    return sorted(m["id"] for m in datos if m.get("id"))
+
+
+# Ollama Cloud expone chat en `/api/chat` (ver _ollama_cloud_generar), pero
+# para *listar* modelos sí ofrece el endpoint OpenAI-compatible estándar
+# -no hace falta un formato aparte solo para esto-.
+_OLLAMA_CLOUD_BASE_URL = "https://ollama.com/v1"
+
+
+def listar_modelos(provider: str, api_key: str) -> list[str]:
+    """Modelos de chat disponibles para la key dada, según el proveedor.
+
+    Es lo que respalda el botón "Probar conexión": si esto no falla, la key
+    funciona, y de paso deja elegir el modelo de una lista real en vez de
+    escribirlo a mano y confiar en que el nombre exista.
+    """
+    if provider == "gemini":
+        return _listar_modelos_gemini(api_key)
+    if provider == "ollama_cloud":
+        return _listar_modelos_openai_compatible(_OLLAMA_CLOUD_BASE_URL, api_key, "Ollama Cloud")
+    if provider in _PROVEEDORES_OPENAI_COMPATIBLE:
+        base_url, nombre = _PROVEEDORES_OPENAI_COMPATIBLE[provider]
+        return _listar_modelos_openai_compatible(base_url, api_key, nombre)
+    raise AiServiceError(f"Proveedor desconocido: {provider!r}")
+
+
 def generar_respuesta(system: str, prompt: str, config: AiConfig) -> str:
     if config.provider == "gemini":
         return _gemini_generar(system, prompt, config.api_key, config.chat_model)
@@ -251,18 +325,12 @@ def generar_respuesta(system: str, prompt: str, config: AiConfig) -> str:
 
 
 def _key_embeddings(config: AiConfig) -> str | None:
-    """La key con la que se piden los embeddings (siempre a Gemini): la
+    """La key de Jina AI, siempre separada de la del proveedor de chat -ver
 
-    propia si se configuró una, o la del proveedor de chat si ese proveedor
-    ya es Gemini -es la misma cuenta, no tiene sentido pedir la key dos
-    veces-. Si el chat es otro proveedor (Groq, NVIDIA NIM...) y no se
-    configuró una key de embeddings aparte, no hay con qué buscar.
+    la nota al principio del archivo sobre por qué Jina y no el proveedor
+    de chat elegido-.
     """
-    if config.embedding_api_key:
-        return config.embedding_api_key
-    if config.provider == "gemini":
-        return config.api_key
-    return None
+    return config.embedding_api_key
 
 
 # --- Indexación de la documentación ------------------------------------------
@@ -339,8 +407,7 @@ def reindexar_documentacion(db: Session, config: AiConfig) -> dict:
     key_embeddings = _key_embeddings(config)
     if not key_embeddings:
         raise AiServiceError(
-            "Falta configurar la API key de Gemini para embeddings (los embeddings siempre "
-            "son de Gemini, aunque el proveedor de chat sea otro)."
+            "Falta configurar la API key de Jina AI para poder buscar en la documentación."
         )
 
     raiz = _raiz_del_proyecto()
@@ -362,7 +429,7 @@ def reindexar_documentacion(db: Session, config: AiConfig) -> dict:
 
         for titulo, contenido in _partir_en_fragmentos(texto, rel):
             try:
-                embedding = _gemini_embed(contenido, key_embeddings, "RETRIEVAL_DOCUMENT")
+                embedding = _jina_embed(contenido, key_embeddings, "retrieval.passage")
             except AiServiceError as e:
                 saltados.append(f"{rel} ({titulo or 'sin título'}): {e}")
                 continue
@@ -394,10 +461,9 @@ def _buscar_fragmentos(db: Session, config: AiConfig, pregunta: str, top_n: int 
     key_embeddings = _key_embeddings(config)
     if not key_embeddings:
         raise AiServiceError(
-            "Falta configurar la API key de Gemini para embeddings (los embeddings siempre "
-            "son de Gemini, aunque el proveedor de chat sea otro)."
+            "Falta configurar la API key de Jina AI para poder buscar en la documentación."
         )
-    embedding_pregunta = _gemini_embed(pregunta, key_embeddings, "RETRIEVAL_QUERY")
+    embedding_pregunta = _jina_embed(pregunta, key_embeddings, "retrieval.query")
 
     por_significado = (
         db.query(DocChunk)

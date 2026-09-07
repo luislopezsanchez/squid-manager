@@ -194,6 +194,10 @@ export const api = {
   reindexarDocumentacion: () => request<any>('/ai/reindexar', { method: 'POST' }),
   preguntarAsistente: (pregunta: string) =>
     request<any>('/ai/preguntar', { method: 'POST', body: JSON.stringify({ pregunta }) }),
+  probarProveedorAi: (provider: string, api_key: string) =>
+    request<any>('/ai/probar-proveedor', { method: 'POST', body: JSON.stringify({ provider, api_key }) }),
+  probarEmbeddingsAi: (api_key: string) =>
+    request<any>('/ai/probar-embeddings', { method: 'POST', body: JSON.stringify({ api_key }) }),
 
   // Syslog externo (opcional, apagado por defecto)
   getSyslogConfig: () => request<any>('/syslog/config'),
