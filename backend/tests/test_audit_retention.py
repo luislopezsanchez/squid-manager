@@ -12,7 +12,6 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.database import Base
 from app.models.audit_log import AuditLog
 from app.services.audit_service import purgar_antiguos, RETENCION_MESES_POR_DEFECTO
 from app.utils import utcnow
@@ -20,9 +19,20 @@ from app.utils import utcnow
 
 @pytest.fixture
 def db():
-    """Sesión sobre una BD SQLite en memoria, con las tablas creadas."""
+    """Sesión sobre una BD SQLite en memoria, con SOLO la tabla audit_log.
+
+    Esta prueba necesita un motor SQL real (purgar_antiguos hace un DELETE
+    con filtro por fecha, no algo que un FakeDB pueda replicar con fidelidad
+    sin duplicar la lógica que se está probando) — es la única de la suite
+    que se conecta a una base de verdad, el resto usa FakeDB/mocks (ver
+    conftest.py). Por eso mismo hay que crear solo la tabla que hace falta:
+    `Base.metadata.create_all()` crea TODAS las tablas de la app, y
+    doc_chunks (Asistente de IA) usa TSVECTOR, un tipo exclusivo de
+    PostgreSQL que SQLite no sabe compilar — rompía este test entero por un
+    modelo con el que no tiene nada que ver.
+    """
     engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
+    AuditLog.__table__.create(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
     yield session
