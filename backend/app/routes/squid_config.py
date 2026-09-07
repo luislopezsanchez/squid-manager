@@ -79,6 +79,30 @@ async def update_setting(
         if not valido:
             raise HTTPException(400, detail=mensaje)
 
+    # Digest solo sabe autenticar usuarios LOCALES: el helper nunca ve la
+    # contraseña en claro del cliente, solo el HA1 ya calculado, y ese HA1 no
+    # existe para nadie que entre por LDAP. Activarlo con LDAP habilitado
+    # dejaría a esos usuarios sin poder navegar, sin ningún aviso hasta que
+    # alguien reportara el problema.
+    if data.key == "proxy_auth_scheme" and data.value.strip().lower() not in ("basic", "digest"):
+        raise HTTPException(400, detail='El esquema de autenticación debe ser "basic" o "digest".')
+
+    if data.key == "proxy_auth_scheme" and data.value.strip().lower() == "digest":
+        from app.models.ldap_config import LdapConfig
+
+        ldap = db.query(LdapConfig).first()
+        if ldap and ldap.enabled:
+            raise HTTPException(
+                400,
+                detail=(
+                    "No se puede activar Digest con LDAP habilitado: Digest solo "
+                    "autentica usuarios locales del proxy, no hay forma estándar de "
+                    "guardar el hash que necesita en un directorio LDAP/Active "
+                    "Directory. Desactiva LDAP en Configuración LDAP antes de activar "
+                    "Digest, o mantén Basic si necesitas los dos."
+                ),
+            )
+
     # true/false explícito: sin esto un typo ("flase", "verdadero") pasaba la
     # sanitización genérica y el generador lo interpretaba como "true" (activa
     # la interceptación de HTTPS) por defecto silenciosamente — justo lo

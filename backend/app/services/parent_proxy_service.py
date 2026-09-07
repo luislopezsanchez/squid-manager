@@ -72,6 +72,56 @@ def validar_destino(host: str | None, port: int | None) -> tuple[bool, str]:
     return True, "Destino válido"
 
 
+METODOS_AUTH_SOPORTADOS = ("fixed", "passthru")
+
+
+def validar_auth_method_compatible(auth_method: str, db) -> tuple[bool, str]:
+    """'passthru' reenvía tal cual las credenciales del cliente hacia el
+    padre: es la única forma de llegar a un padre que exige Digest, NTLM o
+    Negotiate (login=user:pass de cache_peer solo sabe hacer Basic —
+    https://www.squid-cache.org/Doc/config/cache_peer/). Pero HTTP solo
+    permite un Proxy-Authorization por petición: si este Squid también
+    autentica a SUS clientes (usuarios locales activos, LDAP o Kerberos),
+    ese header ya está siendo usado para el desafío local y no queda "hueco"
+    para el reenvío. No es una limitación de SquidManager: es como funciona
+    la autenticación HTTP orientada a conexión (RFC 7617 / RFC 2617).
+    """
+    if auth_method not in METODOS_AUTH_SOPORTADOS:
+        return False, f"Método de autenticación no soportado: '{auth_method}'."
+
+    if auth_method != "passthru":
+        return True, "Compatible"
+
+    from app.models.kerberos_config import KerberosConfig
+    from app.models.ldap_config import LdapConfig
+    from app.models.proxy_user import ProxyUser
+
+    conflictos = []
+
+    if db.query(ProxyUser).filter(ProxyUser.enabled == True).count() > 0:  # noqa: E712
+        conflictos.append("hay usuarios locales del proxy habilitados")
+
+    ldap = db.query(LdapConfig).first()
+    if ldap and ldap.enabled:
+        conflictos.append("LDAP está habilitado")
+
+    kerberos = db.query(KerberosConfig).first()
+    if kerberos and kerberos.enabled and getattr(kerberos, "keytab_data", None):
+        conflictos.append("Kerberos está activo")
+
+    if conflictos:
+        return False, (
+            "El modo 'passthru' reenvía tal cual las credenciales del cliente al "
+            "proxy padre, y no se puede combinar con que este mismo Squid "
+            "autentique a sus clientes: " + "; ".join(conflictos) + ". "
+            "Desactiva la autenticación local (deshabilita los usuarios del "
+            "proxy, LDAP y Kerberos) antes de activar 'passthru', o usa 'fixed' "
+            "si el padre solo exige Basic."
+        )
+
+    return True, "Compatible"
+
+
 def _metodos_ofrecidos(cabeceras: str) -> list[str]:
     """Extrae los métodos de autenticación que anuncia el padre."""
     metodos = []

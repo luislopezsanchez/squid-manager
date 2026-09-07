@@ -25,6 +25,7 @@ from app.utils import utcnow
 logger = logging.getLogger(__name__)
 
 PASSWD_PATH = Path("/etc/squid/squid_passwd")
+DIGEST_PATH = Path("/etc/squid/squid_digest")
 LDAP_CONF_PATH = Path("/etc/squid/ldap_helper.conf")
 LDAP_ALLOWLIST_PATH = Path("/etc/squid/ldap_allowlist")
 
@@ -113,6 +114,44 @@ def write_passwd_file(db) -> int:
     lines = [u.htpasswd_hash for u in users if u.htpasswd_hash]
     _write_private(PASSWD_PATH, "\n".join(lines) + ("\n" if lines else ""))
     logger.info(f"Archivo passwd regenerado con {len(lines)} usuarios activos")
+    return len(lines)
+
+
+# Mismo valor por defecto que config_generator.py:
+# settings.get('auth_realm', 'SquidManager Proxy'). Si uno de los dos cambia
+# sin el otro, el HA1 de cada usuario no coincidiría con el realm que Squid
+# declara de verdad en auth_param digest realm.
+REALM_POR_DEFECTO = "SquidManager Proxy"
+
+
+def realm_actual(db) -> str:
+    """El realm vigente, para regenerar squid_digest con el mismo valor que
+    Squid usará al validar (ver digest_ha1_realm en el modelo ProxyUser)."""
+    from app.models.squid_settings import SquidSetting
+
+    ajuste = db.query(SquidSetting).filter(SquidSetting.key == "auth_realm").first()
+    return ajuste.value if ajuste and ajuste.value else REALM_POR_DEFECTO
+
+
+def write_digest_file(db, realm: str) -> int:
+    """Regenera /etc/squid/squid_digest ('usuario:realm:HA1' por línea).
+
+    Se regenera SIEMPRE junto al htpasswd, esté Digest activo o no: así,
+    activar Digest desde Configuración no exige que cada usuario reingrese su
+    contraseña -el HA1 ya está calculado desde que se creó/reseteó el
+    usuario. Si el realm guardado en cada fila no coincide con el `realm`
+    vigente (se cambió auth_realm después de calcularlo), esa línea se omite:
+    un HA1 con el realm viejo no sirve para nada y solo confundiría un
+    `grep` manual del archivo.
+    """
+    users = active_proxy_users(db)
+    lines = [
+        f"{u.username}:{realm}:{u.digest_ha1}"
+        for u in users
+        if u.digest_ha1 and u.digest_ha1_realm == realm
+    ]
+    _write_private(DIGEST_PATH, "\n".join(lines) + ("\n" if lines else ""))
+    logger.info(f"Archivo digest regenerado con {len(lines)} usuarios activos")
     return len(lines)
 
 
@@ -367,6 +406,23 @@ def _apply_squid_config(db) -> dict:
                 "config_preview": preview,
             }
 
+        # 1d. 'passthru' reenvía las credenciales del cliente al padre, y no
+        #     se puede combinar con que este mismo Squid autentique a sus
+        #     clientes. A diferencia de la comprobación de PUT /parent-proxy,
+        #     esta cubre el caso de habilitar LDAP/Kerberos/un usuario local
+        #     DESPUÉS de haber dejado el padre en passthru.
+        from app.services.parent_proxy_service import validar_auth_method_compatible
+
+        auth_ok, auth_msg = validar_auth_method_compatible(padre.auth_method or "fixed", db)
+        if not auth_ok:
+            mark_dirty()
+            return {
+                "status": "error",
+                "message": f"No se ha aplicado nada:\n{auth_msg}",
+                "needs_restart": False,
+                "config_preview": preview,
+            }
+
     # 2. El puerto elegido en el panel tiene que ser el que el proxy atiende
     #    de verdad. Se lee de la base de datos, que es donde lo deja el panel,
     #    y el runtime comprueba si hace falta actuar: recrear el contenedor en
@@ -416,6 +472,7 @@ def _apply_squid_config(db) -> dict:
     allowed_ldap = [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()]  # noqa: E712
     write_ldap_aux_files(ldap_config, allowed_ldap)
     write_passwd_file(db)
+    write_digest_file(db, realm_actual(db))
 
     mark_clean()
 

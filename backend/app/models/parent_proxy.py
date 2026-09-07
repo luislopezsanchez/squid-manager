@@ -27,6 +27,15 @@ class ParentProxy(Base):
     username = Column(String(255), nullable=True)
     password = Column(String(255), nullable=True)
 
+    # 'fixed' (por defecto): cache_peer login=user:pass, la unica forma nativa
+    # de Squid de presentar credenciales propias a un padre, y solo sabe
+    # hacer Basic. 'passthru': login=PASSTHRU connection-auth=on, reenvia tal
+    # cual las credenciales del cliente -la unica forma de llegar a un padre
+    # que exige Digest, NTLM o Negotiate, pero incompatible con que este
+    # Squid autentique a sus propios clientes al mismo tiempo (ver
+    # parent_proxy_service.validar_auth_method_compatible).
+    auth_method = Column(String(20), default="fixed", nullable=False)
+
     # Si el cortafuegos bloquea la salida directa —lo habitual cuando hay
     # proxy corporativo—, intentarla solo añade una espera antes de fallar.
     # Con esto activo, Squid no lo intenta: o pasa por el padre, o no pasa.

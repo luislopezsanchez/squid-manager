@@ -15,6 +15,7 @@ from app.services.parent_proxy_service import (
     probar_padre,
     validar_destino,
     validar_certificado,
+    validar_auth_method_compatible,
 )
 from app.services.squid_names import validate_value
 
@@ -37,6 +38,11 @@ class ParentProxyIn(BaseModel):
     never_direct: bool = True
     direct_domains: str | None = None
     ca_cert: str | None = None
+    # 'fixed' (login=user:pass, solo Basic) o 'passthru' (login=PASSTHRU
+    # connection-auth=on, reenvía las credenciales del cliente tal cual —
+    # la única forma de llegar a un padre que exige Digest/NTLM/Negotiate,
+    # ver validar_auth_method_compatible).
+    auth_method: str = "fixed"
 
 
 class ParentProxyTest(BaseModel):
@@ -74,6 +80,7 @@ async def get_config(
         # El certificado no es un secreto: se devuelve entero para poder
         # revisarlo o sustituirlo desde el panel.
         "ca_cert": config.ca_cert or "",
+        "auth_method": config.auth_method or "fixed",
     }
 
 
@@ -91,6 +98,10 @@ async def update_config(
     """
     if data.enabled:
         valido, mensaje = validar_destino(data.host, data.port)
+        if not valido:
+            return {"status": "error", "message": mensaje}
+
+        valido, mensaje = validar_auth_method_compatible(data.auth_method, db)
         if not valido:
             return {"status": "error", "message": mensaje}
 
@@ -122,6 +133,7 @@ async def update_config(
     config.never_direct = data.never_direct
     config.direct_domains = data.direct_domains
     config.ca_cert = (data.ca_cert or "").strip() or None
+    config.auth_method = data.auth_method
 
     # Solo se reescribe si llega una contraseña nueva de verdad.
     if data.password and data.password != MARCADOR:

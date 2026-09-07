@@ -83,6 +83,24 @@ async def update_ldap_config(
     _: Admin = Depends(require_writer),
 ):
     """Actualiza la configuración LDAP."""
+    # Mismo motivo que en squid_config.py al revés: Digest solo autentica
+    # usuarios locales (el helper nunca ve la contraseña en claro, solo el
+    # HA1 ya calculado, que no existe para nadie de LDAP). Habilitar LDAP con
+    # Digest activo dejaría a esos usuarios sin poder navegar.
+    if data.enabled:
+        from app.models.squid_settings import SquidSetting
+
+        esquema = db.query(SquidSetting).filter(SquidSetting.key == "proxy_auth_scheme").first()
+        if esquema and (esquema.value or "").strip().lower() == "digest":
+            raise HTTPException(
+                400,
+                detail=(
+                    "No se puede habilitar LDAP con Digest activo: Digest solo "
+                    "autentica usuarios locales del proxy. Cambia el esquema de "
+                    "autenticación a Basic en Configuración antes de habilitar LDAP."
+                ),
+            )
+
     config = db.query(LdapConfig).first()
     if config:
         config.server_url = data.server_url
