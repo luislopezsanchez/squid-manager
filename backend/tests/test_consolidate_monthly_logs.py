@@ -65,6 +65,39 @@ def test_escribe_a_un_temporal_antes_de_reemplazar():
     assert "mv " in contenido
 
 
+def test_organiza_por_anio_y_mes():
+    """El histórico se organiza en carpetas AAAA/MM, no en un único directorio
+    plano: es lo que hace manejable navegar años de logs desde el panel."""
+    contenido = _script()
+    assert 'HISTORICAL_DIR="$ARCHIVE_DIR/historical"' in contenido
+    assert 'DESTINO_DIR="$HISTORICAL_DIR/$ANIO/$MES_NUM"' in contenido
+
+
+def test_genera_el_indice_solo_para_access_no_cache():
+    """cache.log es diagnostico interno de Squid, sin usuarios/dominios/
+    estados que resumir: no tiene sentido indexarlo."""
+    contenido = _script()
+    assert 'if [ "$TIPO" = "access" ]' in contenido
+    assert "build_monthly_index.py" not in contenido or "INDEXADOR" in contenido
+
+
+def test_el_indexador_es_opcional_no_bloqueante():
+    """Una instalacion vieja sin actualizar el indexador todavia debe poder
+    consolidar el .gz: perder logs por falta del resumen seria peor que no
+    tener el resumen."""
+    contenido = _script()
+    assert '[ -f "$INDEXADOR" ] || INDEXADOR=""' in contenido
+
+
+def test_indexador_fuera_de_cron_monthly():
+    """Cualquier archivo en /etc/cron.monthly lo ejecuta run-parts por su
+    cuenta una vez al mes: el indexador es una libreria que invoca este
+    script, no una tarea independiente."""
+    contenido = _script()
+    assert "/usr/local/lib/squidmanager/build_monthly_index.py" in contenido
+    assert "/etc/cron.monthly/build_monthly_index" not in contenido
+
+
 def test_se_instala_en_cron_monthly_en_los_dos_modos():
     """/etc/cron.monthly ya lo ejecuta run-parts una vez al mes: declarar una
     entrada de cron aparte seria una segunda fuente de verdad para lo mismo.
@@ -77,7 +110,9 @@ def test_se_instala_en_cron_monthly_en_los_dos_modos():
     nativo = (raiz / "install-nativo.sh").read_text(encoding="utf-8")
     assert "consolidate-monthly-logs.sh" in nativo
     assert "/etc/cron.monthly/squidmanager-log-archive" in nativo
+    assert "/usr/local/lib/squidmanager/build_monthly_index.py" in nativo
 
     dockerfile = (raiz / "squid" / "Dockerfile").read_text(encoding="utf-8")
     assert "consolidate-monthly-logs.sh" in dockerfile
     assert "/etc/cron.monthly/squidmanager-log-archive" in dockerfile
+    assert "/usr/local/lib/squidmanager/build_monthly_index.py" in dockerfile

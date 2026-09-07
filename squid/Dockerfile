@@ -86,12 +86,23 @@ COPY squid-logrotate /etc/logrotate.d/squid
 COPY consolidate-monthly-logs.sh /etc/cron.monthly/squidmanager-log-archive
 RUN chmod +x /etc/cron.monthly/squidmanager-log-archive
 
+# Indexador de estadisticas del mes consolidado (index.json), usado por el
+# modulo de historico del panel. Fuera de cron.monthly a proposito: es una
+# libreria que invoca el script de arriba, no una tarea que deba correr sola.
+RUN mkdir -p /usr/local/lib/squidmanager
+COPY build_monthly_index.py /usr/local/lib/squidmanager/build_monthly_index.py
+
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Copiar el helper de autenticación personalizado (local + LDAP)
 COPY auth_helper.py /usr/lib/squid/squidmanager_auth_helper
 RUN chmod +x /usr/lib/squid/squidmanager_auth_helper
+
+# Helper de autenticacion Digest (RFC 2617), solo usuarios locales -ver el
+# aviso de ldap.py/squid_config.py sobre por que no soporta LDAP.
+COPY digest_auth_helper.py /usr/lib/squid/squidmanager_digest_helper
+RUN chmod +x /usr/lib/squid/squidmanager_digest_helper
 
 # Guardar copia de archivos de config en /opt/squid-defaults/ (el volumen /etc/squid los ocultara)
 RUN mkdir -p /opt/squid-defaults && cp /etc/squid/mime.conf /opt/squid-defaults/ 2>/dev/null || true \

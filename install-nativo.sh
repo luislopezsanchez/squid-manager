@@ -276,6 +276,11 @@ install -o root -g root -m 755 "$INSTALL_DIR/squid/auth_helper.py" \
     /usr/lib/squid/squidmanager_auth_helper
 ok "Helper de autenticacion instalado"
 
+# Helper de autenticacion Digest (RFC 2617), solo usuarios locales.
+install -o root -g root -m 755 "$INSTALL_DIR/squid/digest_auth_helper.py" \
+    /usr/lib/squid/squidmanager_digest_helper
+ok "Helper de autenticacion Digest instalado"
+
 # Kerberos/Negotiate: el helper negotiate_kerberos_auth usa libkrb5, que sin
 # un /etc/krb5.conf usa valores por defecto que en Ubuntu 24.04 (MIT Kerberos
 # 1.20) rechazan RC4-HMAC -el tipo de cifrado mas comun en un AD real- con
@@ -368,6 +373,13 @@ ok "Rotacion diaria de logs configurada"
 # hay ahi una vez al mes, sin tener que declarar una entrada de cron propia.
 install -o root -g root -m 755 "$INSTALL_DIR/squid/consolidate-monthly-logs.sh" \
     /etc/cron.monthly/squidmanager-log-archive
+
+# Indexador de estadisticas del mes consolidado (index.json), usado por el
+# modulo de historico del panel. Fuera de cron.monthly a proposito: es una
+# libreria que invoca el script de arriba, no una tarea que deba correr sola.
+mkdir -p /usr/local/lib/squidmanager
+install -o root -g root -m 755 "$INSTALL_DIR/squid/build_monthly_index.py" \
+    /usr/local/lib/squidmanager/build_monthly_index.py
 ok "Consolidacion mensual de logs archivados configurada"
 
 # ============================================
