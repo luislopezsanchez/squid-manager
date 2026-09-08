@@ -85,6 +85,20 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
   versión, en dos contenedores de prueba (nativo y Docker) recién instalados desde cero — ver
   `docs/actualizacion.md`.
 
+### Corregido — arranque cerrado en Docker
+
+- **El proxy podía quedar con el `squid.conf` de fábrica indefinidamente, sin autenticación ni ACL
+  provisional siquiera**: en Docker, el volumen compartido de `/etc/squid` puede llegar vacío y Docker
+  lo autopobla con el `squid.conf` de fábrica que trae la propia imagen de Squid, antes de que el
+  entrypoint de Squid alcance a pisarlo con el provisional. El chequeo que decide si hace falta aplicar
+  la configuración definitiva (`_es_configuracion_provisional` en `app/main.py`) solo reconocía la
+  provisional por su propio marcador, así que si el backend consultaba justo en esa ventana, el archivo
+  no era ni uno ni el otro y el chequeo concluía "ya está aplicada" — sin programar ningún reintento, sin
+  ningún aviso en los registros. Invertido el criterio: ahora se reconoce la definitiva por su propio
+  marcador y se trata cualquier otra cosa —provisional, de fábrica, vacía— como pendiente de generar.
+  Encontrado y verificado en vivo (3 corridas limpias seguidas) probando una instalación Docker desde
+  cero en una ruta no estándar, 172.30.36.92, 2026-09-08.
+
 ---
 
 ## [0.21.0] - 2026-09-06

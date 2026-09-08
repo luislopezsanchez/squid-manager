@@ -228,21 +228,36 @@ def seed_data():
 
 
 def _es_configuracion_provisional(ruta: Path) -> bool:
-    """¿El squid.conf sigue siendo el que escribe el instalador/entrypoint?
+    """¿Todavía no está aplicada la configuración definitiva de Squid?
 
-    Ambos ponen «Configuración inicial temporal» en la primera línea (el
-    instalador nativo sin tilde), así que basta con mirarla. Si el fichero no
-    existe todavía, también hay que generar el definitivo.
+    Antes se reconocía la provisional por su propio marcador («Configuración
+    inicial temporal», que escriben tanto el entrypoint de Docker como el
+    instalador nativo). El problema real, encontrado probando un upgrade en
+    vivo (172.30.36.92, 2026-09-08): en Docker, el volumen compartido de
+    /etc/squid puede llegar vacío y Docker lo autopobla con el squid.conf de
+    fábrica que trae la propia imagen de Squid -de compilarlo/instalarlo-,
+    ANTES de que el entrypoint de Squid alcance a pisarlo con el
+    provisional. Si el backend hace esta comprobación justo en esa ventana,
+    el archivo existe pero no contiene «inicial temporal» -tampoco es la
+    definitiva-, así que el chequeo viejo concluía "ya está aplicada" y
+    nunca programaba los reintentos: el proxy quedaba con el `squid.conf` de
+    fábrica -sin las ACL del provisional siquiera-, indefinidamente, sin
+    ningún aviso.
+
+    Se invierte el criterio para no depender de reconocer TODOS los
+    contenidos que no son la definitiva: alcanza con reconocer la propia
+    definitiva (el marcador que escribe apply_squid_config, ver
+    templates/squid.conf.j2) y tratar cualquier otra cosa -provisional,
+    de fábrica, vacío, lo que sea- como pendiente de generar.
     """
     if not ruta.exists():
         return True
     try:
-        with ruta.open("r", errors="replace") as f:
-            primera = f.readline()
+        contenido = ruta.read_text(errors="replace")
     except OSError as e:
         logger.warning(f"No se pudo leer {ruta}: {e}")
         return False
-    return "inicial temporal" in primera
+    return "SquidManager - Configuración generada automáticamente" not in contenido
 
 
 def _aplicar_configuracion_definitiva():
