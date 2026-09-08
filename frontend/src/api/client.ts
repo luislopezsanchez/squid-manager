@@ -254,10 +254,16 @@ export const api = {
     return request<any>('/backup/restore', { method: 'POST', body: formData })
   },
   downloadSquidConf: () => `${API_BASE}/backup/squid-conf`,
-  importSquidConf: (file: File) => {
+  analyzeSquidConf: (files: File[], principal: string) => {
     const formData = new FormData()
-    formData.append('file', file)
-    return request<any>('/backup/import-squid-conf', { method: 'POST', body: formData })
+    for (const f of files) formData.append('files', f)
+    formData.append('principal', principal)
+    return request<any>('/backup/analyze-squid-conf', { method: 'POST', body: formData })
+  },
+  applySquidImport: (token: string) => {
+    const formData = new FormData()
+    formData.append('token', token)
+    return request<any>('/backup/apply-squid-import', { method: 'POST', body: formData })
   },
 
   // Logs
