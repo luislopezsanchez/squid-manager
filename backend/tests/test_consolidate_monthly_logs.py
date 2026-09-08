@@ -116,3 +116,35 @@ def test_se_instala_en_cron_monthly_en_los_dos_modos():
     assert "consolidate-monthly-logs.sh" in dockerfile
     assert "/etc/cron.monthly/squidmanager-log-archive" in dockerfile
     assert "/usr/local/lib/squidmanager/build_monthly_index.py" in dockerfile
+
+
+# --- Purga por retención (hallazgo 08-001 de la auditoría 2026-09-08) ------
+
+def test_tiene_retencion_configurable_con_valor_por_defecto():
+    """Sin límite, el histórico crecía para siempre -inconsistente con el
+    resto del proyecto, que sí purga lo demás (30 días los diarios, 12
+    meses el audit_log)."""
+    contenido = _script()
+    assert 'RETENCION_MESES_HISTORICO="${RETENCION_MESES_HISTORICO:-12}"' in contenido
+
+
+def test_purga_por_mes_completo_no_archivo_por_archivo():
+    """Un mes es la unidad del histórico (access+cache+index.json juntos):
+    borrar a medias dejaría un index.json huérfano sin sus .gz, o viceversa."""
+    contenido = _script()
+    assert 'rm -rf "$MES_DIR"' in contenido
+
+
+def test_ignora_directorios_con_nombre_no_numerico():
+    """Un directorio que no sea AAAA o MM (algo dejado a mano, por ejemplo)
+    no debe intentar compararse como fecha ni, mucho menos, borrarse por
+    error."""
+    contenido = _script()
+    assert "*[!0-9]*" in contenido
+
+
+def test_retira_el_anio_si_quedo_vacio():
+    """Sin esto, los directorios AAAA de años ya purgados enteros se
+    acumulan vacíos para siempre."""
+    contenido = _script()
+    assert 'rmdir "$ANIO_DIR"' in contenido

@@ -5,7 +5,8 @@ name: CI
 # suite en los dos Python que el proyecto declara soportar (README/docs),
 # y deja constancia de vulnerabilidades conocidas en las dependencias sin
 # bloquear el build por una que ya está evaluada y aceptada (ver
-# docs/production.md y CHANGELOG.md para el criterio de cada una).
+# CHANGELOG.md, sección "Dependencias" de cada versión, para el criterio
+# de cada una).
 
 on:
   push:

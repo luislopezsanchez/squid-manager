@@ -5,6 +5,57 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.22.0] - 2026-09-08
+
+### Agregado
+
+- **Autenticación Digest (RFC 2617)**, como proxy padre e hijo: el navegador nunca envía la
+  contraseña en claro, solo un hash. Helper propio (`squid/digest_auth_helper.py`), solo usuarios
+  locales — sin soporte de LDAP, porque exigiría que el directorio guarde el HA1 en un atributo no
+  estándar.
+- **Histórico de logs organizado por año/mes** (`archive/historical/AAAA/MM/`), con un `index.json`
+  precalculado por mes (`build_monthly_index.py`) para que el módulo de histórico del panel no tenga
+  que releer el `.gz` entero en cada consulta. Script de migración
+  (`squid/migrate-old-monthly-logs.sh`) para instalaciones que ya venían con el layout plano anterior.
+- **`proxy_auth_scheme='none'`**: un Squid hijo puede dejar de pedir usuario/contraseña propios cuando
+  el control de acceso real lo hace el proxy padre. Bloqueado si no hay un padre habilitado o si
+  existen grupos de usuarios (que dependen de la autenticación local).
+- **Importador de `squid.conf` ajenos reescrito**: soporta `include` (resuelto por nombre de archivo),
+  clasifica cada directiva en importable / reconocida-pero-no-soportada / desconocida, y separa el
+  análisis (nada se escribe) de la aplicación explícita.
+- **Carga masiva de dominios para ACLs** (blocklists grandes): por debajo de 200 dominios la ACL sigue
+  siendo inline; por encima, se respalda en un archivo aparte que Squid lee directo, en vez de una
+  única línea de squid.conf con miles de entradas.
+
+### Corregido — seguridad
+
+- **El backend ya no monta `/var/run/docker.sock` directo** ni corre como root: habla con Docker a
+  través de `docker-socket-proxy` (bloquea build/swarm/secrets/plugins/nodos/servicios/sesión/auth), y
+  el proceso corre como usuario sin privilegios (`squidmgr`). Ver el riesgo actualizado en
+  `docs/project-log.md`.
+- **El límite de intentos de login por cuenta se aplicaba antes de validar la contraseña**: cualquiera
+  podía dejar sin acceso al admin real mandando unas pocas contraseñas mal escritas contra su usuario.
+  Ahora la contraseña se valida siempre primero; el límite solo frena intentos que ya son incorrectos.
+
+### Dependencias — estado conocido, sin resolver todavía
+
+- `pip-audit` sigue señalando 17 vulnerabilidades en 4 paquetes de backend (`starlette`, `pyasn1`,
+  `ecdsa`, y `pytest` que es solo de desarrollo) — mismo arrastre que ya se documentó en `[0.21.0]` y
+  anteriores, pendiente de decidir cuándo subir `fastapi`/`starlette` y de evaluar reemplazar
+  `python-jose` (que trae `ecdsa`/`pyasn1` como transitivas; no explotable hoy porque el proyecto firma
+  sus JWT con HS256, no con curvas elípticas).
+- **`react-router-dom` tiene 2 CVEs moderadas** (open redirect vía backslash en `<Link>`/`useNavigate`,
+  e inyección de constructor en hidratación SSR). Se acepta por ahora, deliberadamente: el proyecto es
+  una SPA sin SSR (nginx sirve `dist/` estático, la vulnerabilidad de hidratación no aplica), y el único
+  uso de `navigate()`/`<Link>` del código (`Layout.tsx`, `LdapConfig.tsx`, `ChangePassword.tsx`) va
+  siempre a rutas fijas del propio panel, nunca a una URL que el usuario controle — sin exposición
+  práctica hoy. El fix real exige migrar a React Router v7 (*breaking change* de mayor versión),
+  planificado aparte, no incluido en esta versión. El pipeline de CI (`.github/workflows/ci.yml`) usa
+  `--audit-level=high` a propósito para dejar pasar esta vulnerabilidad ya evaluada sin bloquear el
+  build, y sí cortar ante cualquier cosa nueva y grave.
+
+---
+
 ## [0.21.0] - 2026-09-06
 
 ### Corregido

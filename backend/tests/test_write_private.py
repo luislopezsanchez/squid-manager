@@ -1,6 +1,6 @@
 """Prueba de _write_private frente a un fichero preexistente hostil.
 
-Bug real encontrado en vivo (contenedor de pruebas 172.30.36.109) al probar
+Bug real encontrado en vivo (un contenedor de pruebas) al probar
 el backend sin privilegios de root (ver docker-compose.yml /
 docker-socket-proxy): el contenedor de Squid crea squid_passwd/squid_digest/
 ldap_* con su PROPIO usuario del sistema ('proxy', uid 13) y modo 600 la

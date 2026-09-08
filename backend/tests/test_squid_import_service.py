@@ -23,7 +23,7 @@ def _leer_fixtures() -> dict[str, str]:
     }
 
 
-# --- Caso real: el squid.conf de Caneyes -------------------------------
+# --- Caso real: un squid.conf de un cliente real, con datos anonimizados ---
 
 def test_resuelve_los_include_por_nombre_de_archivo():
     """Sin resolver 'include', este archivo importaría 0 ACLs y 0 reglas
