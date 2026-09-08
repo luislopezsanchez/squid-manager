@@ -74,6 +74,23 @@ vive fuera del propio código de la app (una unidad de systemd, un cron, un
 archivo en `/etc`), asumí que necesita este mismo tipo de paso manual y
 revisá qué instala `install-nativo.sh` para ese archivo en concreto.
 
+**Si esta instalación ya venía consolidando logs mensuales antes de la
+reorganización del histórico por año/mes** (módulo "Histórico de logs" del
+panel), los meses viejos quedaron en el layout plano anterior
+(`archive/monthly/{access,cache}-AAAAMM.log.gz`) y el panel no los va a
+listar ahí —espera `archive/historical/AAAA/MM/`—. Migralos una sola vez:
+
+```bash
+cd /opt/squid-manager
+sudo bash squid/migrate-old-monthly-logs.sh
+```
+
+Es seguro correrlo aunque no haga falta (una instalación nueva, o que nunca
+llegó a consolidar un mes, simplemente no encuentra nada que mover) y
+también correrlo dos veces (no duplica ni sobreescribe nada ya migrado).
+Genera además el `index.json` que le falta a cada mes de `access` migrado,
+usando el mismo indexador que ya instala `install-nativo.sh`.
+
 ---
 
 ## Instalación con Docker
