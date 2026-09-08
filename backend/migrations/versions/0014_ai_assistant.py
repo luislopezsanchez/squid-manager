@@ -10,6 +10,19 @@ oficiales -no hace falta un repositorio de terceros-). Se crea con
 IF NOT EXISTS: si ya estaba (por ejemplo, alguien la habilito a mano antes),
 no falla.
 
+CREATE EXTENSION exige ser superusuario de Postgres (o dueño de una
+extension marcada "trusted", que `vector` no lo es). El usuario de BD de la
+aplicacion (`squid` en una instalacion nativa) NO lo es a proposito -menor
+privilegio-, asi que esta migracion FALLA con "permission denied to create
+extension" en cualquier actualizacion nativa que llegue hasta aca sin que
+alguien haya creado la extension antes como `postgres`. Confirmado en vivo:
+`install-nativo.sh` lo resuelve en una instalacion NUEVA (crea la extension
+el mismo, antes de que el backend corra ninguna migracion), pero una
+actualizacion no vuelve a correr el instalador -ver el paso manual en
+docs/actualizacion.md, seccion "Instalacion nativa"-. En Docker no pasa
+porque el usuario de BD ahi (`POSTGRES_USER`) es superusuario por como
+inicializa la imagen oficial de Postgres, no por diseno de este proyecto.
+
 Revision ID: 0014
 Revises: 0013
 """

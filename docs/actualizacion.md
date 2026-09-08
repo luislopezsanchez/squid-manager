@@ -12,6 +12,23 @@ significa Docker).
 
 ## Instalación nativa (sin Docker)
 
+**Si esta instalación es de antes del Asistente de IA** (o no estás seguro:
+comprobalo con `psql -d squidmanager -c "\dx"` como usuario `postgres` — si
+no aparece `vector` en la lista, hace falta este paso), instalá la extensión
+de PostgreSQL **antes** de reiniciar el backend:
+
+```bash
+sudo apt-get install -y "postgresql-$(psql --version | grep -oE '[0-9]+' | head -1)-pgvector"
+sudo -u postgres psql -d squidmanager -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+Sin esto, la migración correspondiente falla con `permission denied to
+create extension "vector"` (el usuario de BD de la aplicación, a propósito,
+no es superusuario — solo `postgres` puede crear extensiones) y el backend
+no arranca. `install-nativo.sh` ya hace este paso en una instalación nueva;
+una actualización no vuelve a correr el instalador, así que hay que hacerlo
+a mano una única vez.
+
 ```bash
 cd /opt/squid-manager
 sudo git pull
@@ -94,6 +111,21 @@ usando el mismo indexador que ya instala `install-nativo.sh`.
 ---
 
 ## Instalación con Docker
+
+**Si esta instalación es de antes del Asistente de IA**, en teoría hace
+falta crear la extensión `vector` a mano en el volumen de Postgres ya
+existente (`db-init/01-pgvector.sql` solo corre solo al inicializar un
+volumen vacío, no en uno que ya tenía datos). En la práctica, el usuario de
+base de datos de la aplicación (`POSTGRES_USER` del `.env`) es superusuario
+por defecto en la imagen oficial de Postgres, así que la migración
+correspondiente lo resuelve sola sin este paso —verificado en vivo—. Si en
+tu caso falla con `permission denied to create extension "vector"` (por
+ejemplo, si en algún momento le quitaste el rol de superusuario a ese
+usuario), corré esto antes de reintentar:
+
+```bash
+docker exec squidmgr-db psql -U "$DB_USER" -d "$DB_NAME" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
 
 Desde el directorio de la instalación:
 
