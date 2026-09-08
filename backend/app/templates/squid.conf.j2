@@ -82,9 +82,17 @@ acl step3 at_step SslBump3
 # ACLs de SNI para aplicar las políticas de dominio también a HTTPS
 {% for acl in acls %}
 {% if acl.type == 'dstdomain' %}
+{% if acl.source == 'file' %}
+acl sni_{{ acl.name }} ssl::server_name "/etc/squid/acl_lists/{{ acl.name }}.txt"
+{% else %}
 acl sni_{{ acl.name }} ssl::server_name {{ acl.value }}
+{% endif %}
 {% elif acl.type == 'dstdom_regex' %}
+{% if acl.source == 'file' %}
+acl sni_{{ acl.name }} ssl::server_name_regex "/etc/squid/acl_lists/{{ acl.name }}.txt"
+{% else %}
 acl sni_{{ acl.name }} ssl::server_name_regex {{ acl.value }}
+{% endif %}
 {% endif %}
 {% endfor %}
 
@@ -163,7 +171,11 @@ acl authenticated proxy_auth REQUIRED
 
 # --- ACLs personalizadas (desde BD) ---
 {% for acl in acls %}
+{% if acl.source == 'file' %}
+acl {{ acl.name }} {{ acl.type }} "/etc/squid/acl_lists/{{ acl.name }}.txt"
+{% else %}
 acl {{ acl.name }} {{ acl.type }} {{ acl.value }}
+{% endif %}
 {% endfor %}
 
 {% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}

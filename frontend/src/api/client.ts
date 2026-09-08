@@ -266,6 +266,17 @@ export const api = {
     return request<any>('/backup/apply-squid-import', { method: 'POST', body: formData })
   },
 
+  // ACLs: carga masiva de dominios desde archivo
+  bulkUploadDomains: (file: File, aclName: string, modo: 'reemplazar' | 'agregar', aclType: string, description?: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('acl_name', aclName)
+    formData.append('modo', modo)
+    formData.append('acl_type', aclType)
+    if (description) formData.append('description', description)
+    return request<any>('/acls/bulk-domains', { method: 'POST', body: formData })
+  },
+
   // Logs
   getLogs: (params: { limit?: number; offset?: number; user?: string; status?: number; domain?: string; ip?: string; denied?: boolean } = {}) => {
     const qs = new URLSearchParams()

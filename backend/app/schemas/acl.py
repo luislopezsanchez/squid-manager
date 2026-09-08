@@ -25,6 +25,12 @@ class AclResponse(BaseModel):
     name: str
     type: str
     value: str
+    # 'inline' (se edita como cualquier ACL) o 'file' (viene de una carga
+    # masiva de dominios; su valor no se edita a mano, se vuelve a subir el
+    # archivo). Solo informativo para el frontend, no se acepta en
+    # AclCreate/AclUpdate: una ACL 'file' se crea únicamente vía
+    # /acls/bulk-domains.
+    source: str = "inline"
     description: str | None = None
     enabled: bool
     created_at: datetime

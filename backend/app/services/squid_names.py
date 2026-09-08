@@ -156,6 +156,47 @@ def ensure_not_referenced(db, name: str, action: str = "eliminar") -> None:
         )
 
 
+# Un dominio válido para dstdomain: letras, dígitos, guion y punto, con un
+# '.' inicial opcional (Squid lo usa para "este dominio y sus subdominios").
+# Deliberadamente más estricto que un hostname RFC completo: es mejor
+# rechazar una línea rara de un archivo subido y que el admin la revise, que
+# aceptarla y que termine siendo, sin querer, una directiva distinta dentro
+# del archivo que arma build_acl_list_file().
+_DOMINIO_PATTERN = re.compile(r"^\.?[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
+
+MAX_DOMINIOS_POR_CARGA = 200_000  # cortafuegos ante un archivo descomunal por error
+
+
+def validar_lista_dominios(lineas: list[str]) -> tuple[list[str], list[str]]:
+    """Filtra una lista de líneas candidatas a dominio.
+
+    Pensado para archivos subidos por un admin (una blocklist descargada de
+    algún lado, exportada de otra herramienta...), no para el valor de una
+    ACL ya validada por otro camino. Devuelve (válidos sin duplicar,
+    rechazados) en vez de abortar ante la primera línea rara: un archivo de
+    miles de dominios con dos o tres líneas basura no debería descartarse
+    entero, pero el admin sí tiene que enterarse de cuáles se ignoraron.
+    """
+    vistos: set[str] = set()
+    validos: list[str] = []
+    rechazados: list[str] = []
+
+    for cruda in lineas:
+        linea = cruda.strip()
+        if not linea or linea.startswith("#"):
+            continue
+        if len(linea) > 253 or not _DOMINIO_PATTERN.match(linea):
+            rechazados.append(cruda.rstrip("\n"))
+            continue
+        clave = linea.lower()
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        validos.append(linea)
+
+    return validos, rechazados
+
+
 def known_acl_names(db) -> set[str]:
     """Conjunto de nombres utilizables en una regla de acceso."""
     from app.models.acl import Acl

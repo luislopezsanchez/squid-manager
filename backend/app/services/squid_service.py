@@ -28,6 +28,10 @@ PASSWD_PATH = Path("/etc/squid/squid_passwd")
 DIGEST_PATH = Path("/etc/squid/squid_digest")
 LDAP_CONF_PATH = Path("/etc/squid/ldap_helper.conf")
 LDAP_ALLOWLIST_PATH = Path("/etc/squid/ldap_allowlist")
+# ACLs de dominio respaldadas por archivo (Acl.source == 'file'): una por
+# cada una, nombrada por el nombre de la ACL -no hay nada secreto en una
+# lista de dominios, pero el archivo solo lo escribe este backend.
+ACL_LISTS_DIR = Path("/etc/squid/acl_lists")
 
 # uid/gid del usuario 'proxy'. En la imagen del proyecto y en una Debian recien
 # instalada son 13:13, pero no se pueden dar por sentados: si el usuario no
@@ -53,10 +57,19 @@ def _write_private(path: Path, content: str) -> None:
 
     Estos ficheros contienen la contraseña de bind de LDAP y los hashes de los
     usuarios del proxy. Con los permisos por defecto (644) los lee cualquier
-    proceso de la máquina.
+    proceso de la máquina. Ver `_write_atomic` para el resto (el porqué del
+    rename atómico, en vez de truncar in situ, está documentado ahí).
+    """
+    _write_atomic(path, content, mode=0o640)
 
-    El modo es 640 con grupo `proxy`, no 600, y la razón es que los dos
-    despliegues llegan al mismo sitio por caminos distintos:
+
+def _write_atomic(path: Path, content: str, mode: int) -> None:
+    """Escribe un fichero legible por Squid, con el modo que pida quien llama.
+
+    El modo es 640 (grupo `proxy`) para secretos, o 644 para algo público
+    como una lista de dominios -no hay nada que ocultar ahí, pero conviene
+    que solo el backend pueda escribirlo-. Los dos casos llegan al mismo
+    sitio por caminos distintos:
 
     - En contenedor el backend corre como `squidmgr`, cuyo grupo primario es
       `proxy` (mismo gid que usa Squid en su propia imagen): no hace falta
@@ -80,11 +93,11 @@ def _write_private(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}")
     # Crear con los permisos definitivos, no escribir y luego ajustar.
-    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
     try:
         with os.fdopen(fd, "w") as f:
             f.write(content)
-        os.chmod(tmp_path, 0o640)
+        os.chmod(tmp_path, mode)
 
         # Solo root puede reasignar propietario. Intentarlo sin serlo falla
         # siempre y llenaría el log de avisos en cada aplicación de la
@@ -170,6 +183,48 @@ def write_digest_file(db, realm: str) -> int:
     _write_private(DIGEST_PATH, "\n".join(lines) + ("\n" if lines else ""))
     logger.info(f"Archivo digest regenerado con {len(lines)} usuarios activos")
     return len(lines)
+
+
+def build_acl_list_files(db) -> int:
+    """Escribe un archivo por cada ACL respaldada por archivo (Acl.source ==
+    'file') y borra los que ya no correspondan a ninguna.
+
+    Pensado para listas de dominios grandes (una blocklist de miles de
+    entradas): una ACL así no se escribe inline en squid.conf -sería una
+    sola línea de decenas de miles de caracteres, incómoda de editar y más
+    lenta de parsear en cada reconfigure-, sino como
+    `acl nombre dstdomain "/etc/squid/acl_lists/nombre.txt"`, un dominio por
+    línea. La BD (`Acl.value`) sigue siendo la fuente de verdad; este
+    archivo es solo la forma en la que Squid la lee.
+
+    El borrado de sobrantes cubre el caso de una ACL que se eliminó o que
+    volvió a 'inline' (una lista que se redujo por debajo del umbral): sin
+    esto, el archivo viejo se queda ahí para siempre, sin que nada lo
+    referencie -no rompe nada, pero confunde a cualquiera que mire el
+    directorio más adelante-.
+    """
+    from app.models.acl import Acl
+
+    ACL_LISTS_DIR.mkdir(parents=True, exist_ok=True)
+    acls_de_archivo = db.query(Acl).filter(Acl.source == "file").all()
+
+    esperados = set()
+    for acl in acls_de_archivo:
+        nombre_archivo = f"{acl.name}.txt"
+        esperados.add(nombre_archivo)
+        dominios = [d.strip() for d in (acl.value or "").splitlines() if d.strip()]
+        contenido = "\n".join(dominios) + ("\n" if dominios else "")
+        _write_atomic(ACL_LISTS_DIR / nombre_archivo, contenido, mode=0o644)
+
+    borrados = 0
+    for existente in ACL_LISTS_DIR.glob("*.txt"):
+        if existente.name not in esperados:
+            existente.unlink()
+            borrados += 1
+
+    if borrados:
+        logger.info(f"{borrados} archivo(s) de ACL sobrante(s) eliminado(s) de {ACL_LISTS_DIR}")
+    return len(acls_de_archivo)
 
 
 def reload_squid() -> tuple[bool, str]:
@@ -340,6 +395,9 @@ def _apply_squid_config(db) -> dict:
     """Genera y aplica la configuración de Squid de extremo a extremo.
 
     Flujo:
+      0. Escribe los archivos de las ACLs respaldadas por archivo (listas de
+         dominio grandes): Squid los abre AL PARSEAR, así que tienen que
+         existir antes del paso 2, a diferencia del resto de auxiliares.
       1. Genera squid.conf desde la BD.
       2. Valida la sintaxis DENTRO del contenedor de Squid.
       3. Solo si es válida, la escribe sobre el squid.conf en uso.
@@ -365,7 +423,19 @@ def _apply_squid_config(db) -> dict:
     config_text = generate_squid_config(db, kerberos=kerberos)
     preview = config_text[:500] + ("..." if len(config_text) > 500 else "")
 
-    # 1. Validar ANTES de escribir nada.
+    # 0. Las ACLs respaldadas por archivo se escriben ANTES de validar -única
+    # excepción a "nada se toca antes de validar squid.conf"-, porque a
+    # diferencia de squid_passwd/squid_digest (que el helper de auth abre en
+    # caliente, cuando llega una petición real) Squid abre el archivo de una
+    # ACL dstdomain/dstdom_regex DURANTE EL PROPIO PARSEO de la config. Sin
+    # esto, la primera vez que se crea una ACL así la validación fallaba con
+    # "Can not open file ... for reading" -confirmado en vivo- aunque el
+    # squid.conf generado fuera perfectamente válido. Escribir estos
+    # archivos no afecta al Squid en producción: son datos independientes de
+    # que el candidato de squid.conf termine aplicándose o no.
+    build_acl_list_files(db)
+
+    # 1. Validar ANTES de escribir squid.conf.
     valid, msg = validate_squid_config(config_text)
     if not valid:
         mark_dirty()
