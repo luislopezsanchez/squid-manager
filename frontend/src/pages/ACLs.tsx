@@ -1,5 +1,5 @@
 import { traducir } from '../i18n'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import RequiereAplicar from '../components/RequiereAplicar'
@@ -9,6 +9,7 @@ interface Acl {
   name: string
   type: string
   value: string
+  source: string
   description: string | null
   enabled: boolean
   created_at: string
@@ -70,9 +71,48 @@ export default function ACLs() {
   }
 
   const handleEdit = (acl: Acl) => {
+    if (acl.source === 'file') {
+      setBulkAclName(acl.name)
+      setBulkType(acl.type as any)
+      setBulkModo('reemplazar')
+      setShowBulk(true)
+      setShowForm(false)
+      return
+    }
     setForm({ name: acl.name, type: acl.type, value: acl.value, description: acl.description || '', enabled: acl.enabled })
     setEditingId(acl.id)
     setShowForm(true)
+  }
+
+  // --- Carga masiva de dominios ---
+  const [showBulk, setShowBulk] = useState(false)
+  const [bulkAclName, setBulkAclName] = useState('')
+  const [bulkModo, setBulkModo] = useState<'reemplazar' | 'agregar'>('reemplazar')
+  const [bulkType, setBulkType] = useState<'dstdomain' | 'dstdom_regex'>('dstdomain')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const bulkFileRef = useRef<HTMLInputElement>(null)
+
+  const handleBulkUpload = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const file = bulkFileRef.current?.files?.[0]
+    if (!file || !bulkAclName.trim()) return
+    setBulkBusy(true)
+    try {
+      const result = await api.bulkUploadDomains(file, bulkAclName.trim(), bulkModo, bulkType)
+      notificarCambioPendiente()
+      showToast(
+        `"${bulkAclName}": ${result.dominios_importados} dominios (${result.acl.source === 'file' ? 'archivo' : 'inline'})` +
+        (result.total_rechazados > 0 ? `, ${result.total_rechazados} línea(s) rechazada(s)` : '')
+      )
+      setShowBulk(false)
+      setBulkAclName('')
+      if (bulkFileRef.current) bulkFileRef.current.value = ''
+      loadAcls()
+    } catch (err: any) {
+      showToast(`Error: ${err.message}`, 'error')
+    } finally {
+      setBulkBusy(false)
+    }
   }
 
   const handleDelete = async (id: number) => {
@@ -95,13 +135,62 @@ export default function ACLs() {
           <h1 className="page-title">{traducir("Listas de Control de Acceso (ACLs)")}</h1>
           <p className="page-sub">{traducir("Define qué tráfico coincide con cada criterio")}</p>
         </div>
-        <button
-          onClick={() => { setShowForm(!showForm); setEditingId(null); setForm({ name: '', type: 'dstdomain', value: '', description: '', enabled: true }) }}
-          className="btn btn-primary"
-        >
-          {showForm ? traducir('Cancelar') : traducir('+ Nueva ACL')}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setShowBulk(!showBulk); setShowForm(false) }}
+            className="btn btn-ghost"
+            title={traducir("Para listas grandes (blocklists): un dominio por línea")}
+          >
+            {showBulk ? traducir('Cancelar') : traducir('Cargar dominios')}
+          </button>
+          <button
+            onClick={() => { setShowForm(!showForm); setShowBulk(false); setEditingId(null); setForm({ name: '', type: 'dstdomain', value: '', description: '', enabled: true }) }}
+            className="btn btn-primary"
+          >
+            {showForm ? traducir('Cancelar') : traducir('+ Nueva ACL')}
+          </button>
+        </div>
       </div>
+
+      {showBulk && (
+        <form onSubmit={handleBulkUpload} className="card p-6 mb-6">
+          <h3 className="font-medium text-ink mb-1">{traducir('Cargar dominios desde archivo')}</h3>
+          <p className="text-xs text-ink-3 mb-4">
+            {traducir('Un dominio por línea (líneas vacías o que empiezan con # se ignoran). Listas grandes se guardan en un archivo aparte que Squid lee directo, no como una única línea gigante en squid.conf.')}
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="field-label block mb-1.5">{traducir("Nombre de la ACL")}</label>
+              <input type="text" value={bulkAclName} onChange={e => setBulkAclName(e.target.value)}
+                placeholder={traducir("ej: blocklist_publicidad")} className="input" required />
+            </div>
+            <div>
+              <label className="field-label block mb-1.5">{traducir("Tipo")}</label>
+              <select value={bulkType} onChange={e => setBulkType(e.target.value as any)} className="input">
+                <option value="dstdomain">{traducir('Dominio (dstdomain)')}</option>
+                <option value="dstdom_regex">{traducir('Regex de dominio (dstdom_regex)')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="field-label block mb-1.5">{traducir("Si la ACL ya existe")}</label>
+              <select value={bulkModo} onChange={e => setBulkModo(e.target.value as any)} className="input">
+                <option value="reemplazar">{traducir('Reemplazar toda la lista')}</option>
+                <option value="agregar">{traducir('Agregar a lo que ya había')}</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-4">
+            <label className="field-label block mb-1.5">{traducir("Archivo")}</label>
+            <input ref={bulkFileRef} type="file" accept=".txt,.csv,text/plain" className="input" required />
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <button type="submit" disabled={bulkBusy} className="btn btn-primary">
+              {bulkBusy ? traducir('Cargando…') : traducir('Cargar')}
+            </button>
+            <RequiereAplicar />
+          </div>
+        </form>
+      )}
 
       {showForm && (
         <form onSubmit={handleSave} className="card p-6 mb-6">
@@ -159,15 +248,28 @@ export default function ACLs() {
               {acls.map(acl => (
                 <tr key={acl.id} className="hover:bg-brand-50">
                   <td className="px-6 py-4 font-medium text-ink">{acl.name}</td>
-                  <td className="px-6 py-4"><span className="px-2 py-1 bg-brand-50 text-brand-700 text-xs font-mono rounded">{acl.type}</span></td>
-                  <td className="px-6 py-4 font-mono text-sm text-ink-2 max-w-xs truncate">{acl.value}</td>
+                  <td className="px-6 py-4">
+                    <span className="px-2 py-1 bg-brand-50 text-brand-700 text-xs font-mono rounded">{acl.type}</span>
+                    {acl.source === 'file' && (
+                      <span className="ml-1 px-2 py-1 bg-amber-50 text-amber-700 text-xs font-mono rounded" title={traducir("Cargada desde archivo, no se edita a mano")}>
+                        {traducir("archivo")}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 font-mono text-sm text-ink-2 max-w-xs truncate">
+                    {acl.source === 'file'
+                      ? `${acl.value.split('\n').filter(Boolean).length} ${traducir('dominios')}`
+                      : acl.value}
+                  </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${acl.enabled ? 'pill-ok' : 'pill-danger'}`}>
                       {acl.enabled ? 'Activa' : 'Inactiva'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right space-x-2">
-                    <button onClick={() => handleEdit(acl)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">{traducir("Editar")}</button>
+                    <button onClick={() => handleEdit(acl)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">
+                      {acl.source === 'file' ? traducir('Reemplazar') : traducir('Editar')}
+                    </button>
                     <button onClick={() => handleDelete(acl.id)} className="text-danger hover:text-danger text-sm font-medium">{traducir("Eliminar")}</button>
                   </td>
                 </tr>

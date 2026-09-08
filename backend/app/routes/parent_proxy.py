@@ -9,12 +9,14 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.admin import Admin
 from app.models.parent_proxy import ParentProxy
+from app.models.squid_settings import SquidSetting
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_state import mark_dirty
 from app.services.parent_proxy_service import (
     probar_padre,
     validar_destino,
     validar_certificado,
+    validar_auth_method_compatible,
 )
 from app.services.squid_names import validate_value
 
@@ -37,6 +39,11 @@ class ParentProxyIn(BaseModel):
     never_direct: bool = True
     direct_domains: str | None = None
     ca_cert: str | None = None
+    # 'fixed' (login=user:pass, solo Basic) o 'passthru' (login=PASSTHRU
+    # connection-auth=on, reenvía las credenciales del cliente tal cual —
+    # la única forma de llegar a un padre que exige Digest/NTLM/Negotiate,
+    # ver validar_auth_method_compatible).
+    auth_method: str = "fixed"
 
 
 class ParentProxyTest(BaseModel):
@@ -74,6 +81,7 @@ async def get_config(
         # El certificado no es un secreto: se devuelve entero para poder
         # revisarlo o sustituirlo desde el panel.
         "ca_cert": config.ca_cert or "",
+        "auth_method": config.auth_method or "fixed",
     }
 
 
@@ -93,6 +101,26 @@ async def update_config(
         valido, mensaje = validar_destino(data.host, data.port)
         if not valido:
             return {"status": "error", "message": mensaje}
+
+        valido, mensaje = validar_auth_method_compatible(data.auth_method, db)
+        if not valido:
+            return {"status": "error", "message": mensaje}
+    else:
+        # 'none' (sin autenticación local de clientes) depende por completo de
+        # que exista un padre habilitado -ver validar_proxy_auth_scheme_none-:
+        # apagar el padre con 'none' todavía activo dejaría este Squid como
+        # proxy abierto sin que nadie lo pidiera explícitamente.
+        esquema = db.query(SquidSetting).filter(SquidSetting.key == "proxy_auth_scheme").first()
+        if esquema and (esquema.value or "").strip().lower() == "none":
+            return {
+                "status": "error",
+                "message": (
+                    "No se puede desactivar el proxy padre con el esquema de "
+                    "autenticación del proxy en 'none': este Squid quedaría "
+                    "abierto sin ningún control de acceso. Cambia primero el "
+                    "esquema a 'basic' o 'digest' en Configuración."
+                ),
+            }
 
     # Un certificado ilegible no rompe el arranque de Squid: solo deja un aviso
     # en su log y no confía en nadie, con lo que el síntoma vuelve a ser la
@@ -122,6 +150,7 @@ async def update_config(
     config.never_direct = data.never_direct
     config.direct_domains = data.direct_domains
     config.ca_cert = (data.ca_cert or "").strip() or None
+    config.auth_method = data.auth_method
 
     # Solo se reescribe si llega una contraseña nueva de verdad.
     if data.password and data.password != MARCADOR:

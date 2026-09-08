@@ -79,6 +79,41 @@ async def update_setting(
         if not valido:
             raise HTTPException(400, detail=mensaje)
 
+    # Digest solo sabe autenticar usuarios LOCALES: el helper nunca ve la
+    # contraseña en claro del cliente, solo el HA1 ya calculado, y ese HA1 no
+    # existe para nadie que entre por LDAP. Activarlo con LDAP habilitado
+    # dejaría a esos usuarios sin poder navegar, sin ningún aviso hasta que
+    # alguien reportara el problema.
+    if data.key == "proxy_auth_scheme" and data.value.strip().lower() not in ("basic", "digest", "none"):
+        raise HTTPException(400, detail='El esquema de autenticación debe ser "basic", "digest" o "none".')
+
+    if data.key == "proxy_auth_scheme" and data.value.strip().lower() == "digest":
+        from app.models.ldap_config import LdapConfig
+
+        ldap = db.query(LdapConfig).first()
+        if ldap and ldap.enabled:
+            raise HTTPException(
+                400,
+                detail=(
+                    "No se puede activar Digest con LDAP habilitado: Digest solo "
+                    "autentica usuarios locales del proxy, no hay forma estándar de "
+                    "guardar el hash que necesita en un directorio LDAP/Active "
+                    "Directory. Desactiva LDAP en Configuración LDAP antes de activar "
+                    "Digest, o mantén Basic si necesitas los dos."
+                ),
+            )
+
+    # 'none' (sin autenticación local propia) solo tiene sentido -y solo es
+    # seguro- en un Squid hijo con un padre configurado, que es quien hace el
+    # control de acceso real. Sin esta comprobación, activar 'none' a secas
+    # deja un proxy abierto hacia Internet.
+    if data.key == "proxy_auth_scheme" and data.value.strip().lower() == "none":
+        from app.services.parent_proxy_service import validar_proxy_auth_scheme_none
+
+        valido, mensaje = validar_proxy_auth_scheme_none(db)
+        if not valido:
+            raise HTTPException(400, detail=mensaje)
+
     # true/false explícito: sin esto un typo ("flase", "verdadero") pasaba la
     # sanitización genérica y el generador lo interpretaba como "true" (activa
     # la interceptación de HTTPS) por defecto silenciosamente — justo lo

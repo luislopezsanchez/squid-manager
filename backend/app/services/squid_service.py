@@ -25,8 +25,13 @@ from app.utils import utcnow
 logger = logging.getLogger(__name__)
 
 PASSWD_PATH = Path("/etc/squid/squid_passwd")
+DIGEST_PATH = Path("/etc/squid/squid_digest")
 LDAP_CONF_PATH = Path("/etc/squid/ldap_helper.conf")
 LDAP_ALLOWLIST_PATH = Path("/etc/squid/ldap_allowlist")
+# ACLs de dominio respaldadas por archivo (Acl.source == 'file'): una por
+# cada una, nombrada por el nombre de la ACL -no hay nada secreto en una
+# lista de dominios, pero el archivo solo lo escribe este backend.
+ACL_LISTS_DIR = Path("/etc/squid/acl_lists")
 
 # uid/gid del usuario 'proxy'. En la imagen del proyecto y en una Debian recien
 # instalada son 13:13, pero no se pueden dar por sentados: si el usuario no
@@ -52,38 +57,64 @@ def _write_private(path: Path, content: str) -> None:
 
     Estos ficheros contienen la contraseña de bind de LDAP y los hashes de los
     usuarios del proxy. Con los permisos por defecto (644) los lee cualquier
-    proceso de la máquina.
+    proceso de la máquina. Ver `_write_atomic` para el resto (el porqué del
+    rename atómico, en vez de truncar in situ, está documentado ahí).
+    """
+    _write_atomic(path, content, mode=0o640)
 
-    El modo es 640 con grupo `proxy`, no 600, y la razón es que los dos
-    despliegues llegan al mismo sitio por caminos distintos:
 
-    - En contenedor el backend es root, puede hacer chown a proxy:proxy y el
-      fichero queda accesible para Squid como propietario.
-    - En instalación nativa el backend corre con su propio usuario, cuyo grupo
-      primario es `proxy`. No puede hacer chown —ni falta—, porque el fichero
-      ya nace con el grupo correcto y Squid lo lee por grupo.
+def _write_atomic(path: Path, content: str, mode: int) -> None:
+    """Escribe un fichero legible por Squid, con el modo que pida quien llama.
+
+    El modo es 640 (grupo `proxy`) para secretos, o 644 para algo público
+    como una lista de dominios -no hay nada que ocultar ahí, pero conviene
+    que solo el backend pueda escribirlo-. Los dos casos llegan al mismo
+    sitio por caminos distintos:
+
+    - En contenedor el backend corre como `squidmgr`, cuyo grupo primario es
+      `proxy` (mismo gid que usa Squid en su propia imagen): no hace falta
+      chown, el fichero ya nace con el grupo correcto.
+    - En instalación nativa pasa exactamente lo mismo: el backend corre con
+      su propio usuario, cuyo grupo primario también es `proxy`.
 
     En los dos casos el conjunto de quien puede leerlo es el mismo: root, el
     panel y Squid.
+
+    Se escribe a un temporal en el mismo directorio y se reemplaza con
+    `os.replace` (rename atómico), en vez de truncar el fichero existente in
+    situ. No es solo estilo: un `O_TRUNC` sobre el fichero existente exige
+    permiso de ESCRITURA sobre ese inodo concreto, y el contenedor de Squid
+    (que corre con su propio usuario `proxy` del sistema, no con el
+    `squidmgr` de este backend) puede haber creado ese mismo fichero antes
+    -vacío, con el modo restrictivo 600- al arrancar sin encontrar aún los
+    ficheros de autenticación. Un rename solo necesita permiso de escritura
+    sobre el DIRECTORIO, que el backend sí tiene siempre sobre /etc/squid.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}")
     # Crear con los permisos definitivos, no escribir y luego ajustar.
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
     try:
         with os.fdopen(fd, "w") as f:
             f.write(content)
-    finally:
-        pass
-    os.chmod(path, 0o640)
+        os.chmod(tmp_path, mode)
 
-    # Solo root puede reasignar propietario. Intentarlo sin serlo falla siempre
-    # y llenaría el log de avisos en cada aplicación de la configuración.
-    if getattr(os, "geteuid", lambda: 1)() == 0:
-        uid, gid = _proxy_ids()
-        try:
-            os.chown(path, uid, gid)
-        except (PermissionError, OSError) as e:
-            logger.warning(f"No se pudo cambiar el propietario de {path}: {e}")
+        # Solo root puede reasignar propietario. Intentarlo sin serlo falla
+        # siempre y llenaría el log de avisos en cada aplicación de la
+        # configuración. Sin root, el fichero ya nace con el grupo `proxy`
+        # porque es el grupo primario del usuario que corre este proceso
+        # (squidmgr en contenedor, el usuario nativo fuera de él) -no hace
+        # falta chown para que Squid pueda leerlo por grupo.
+        if getattr(os, "geteuid", lambda: 1)() == 0:
+            uid, gid = _proxy_ids()
+            try:
+                os.chown(tmp_path, uid, gid)
+            except (PermissionError, OSError) as e:
+                logger.warning(f"No se pudo cambiar el propietario de {tmp_path}: {e}")
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def active_proxy_users(db):
@@ -114,6 +145,86 @@ def write_passwd_file(db) -> int:
     _write_private(PASSWD_PATH, "\n".join(lines) + ("\n" if lines else ""))
     logger.info(f"Archivo passwd regenerado con {len(lines)} usuarios activos")
     return len(lines)
+
+
+# Mismo valor por defecto que config_generator.py:
+# settings.get('auth_realm', 'SquidManager Proxy'). Si uno de los dos cambia
+# sin el otro, el HA1 de cada usuario no coincidiría con el realm que Squid
+# declara de verdad en auth_param digest realm.
+REALM_POR_DEFECTO = "SquidManager Proxy"
+
+
+def realm_actual(db) -> str:
+    """El realm vigente, para regenerar squid_digest con el mismo valor que
+    Squid usará al validar (ver digest_ha1_realm en el modelo ProxyUser)."""
+    from app.models.squid_settings import SquidSetting
+
+    ajuste = db.query(SquidSetting).filter(SquidSetting.key == "auth_realm").first()
+    return ajuste.value if ajuste and ajuste.value else REALM_POR_DEFECTO
+
+
+def write_digest_file(db, realm: str) -> int:
+    """Regenera /etc/squid/squid_digest ('usuario:realm:HA1' por línea).
+
+    Se regenera SIEMPRE junto al htpasswd, esté Digest activo o no: así,
+    activar Digest desde Configuración no exige que cada usuario reingrese su
+    contraseña -el HA1 ya está calculado desde que se creó/reseteó el
+    usuario. Si el realm guardado en cada fila no coincide con el `realm`
+    vigente (se cambió auth_realm después de calcularlo), esa línea se omite:
+    un HA1 con el realm viejo no sirve para nada y solo confundiría un
+    `grep` manual del archivo.
+    """
+    users = active_proxy_users(db)
+    lines = [
+        f"{u.username}:{realm}:{u.digest_ha1}"
+        for u in users
+        if u.digest_ha1 and u.digest_ha1_realm == realm
+    ]
+    _write_private(DIGEST_PATH, "\n".join(lines) + ("\n" if lines else ""))
+    logger.info(f"Archivo digest regenerado con {len(lines)} usuarios activos")
+    return len(lines)
+
+
+def build_acl_list_files(db) -> int:
+    """Escribe un archivo por cada ACL respaldada por archivo (Acl.source ==
+    'file') y borra los que ya no correspondan a ninguna.
+
+    Pensado para listas de dominios grandes (una blocklist de miles de
+    entradas): una ACL así no se escribe inline en squid.conf -sería una
+    sola línea de decenas de miles de caracteres, incómoda de editar y más
+    lenta de parsear en cada reconfigure-, sino como
+    `acl nombre dstdomain "/etc/squid/acl_lists/nombre.txt"`, un dominio por
+    línea. La BD (`Acl.value`) sigue siendo la fuente de verdad; este
+    archivo es solo la forma en la que Squid la lee.
+
+    El borrado de sobrantes cubre el caso de una ACL que se eliminó o que
+    volvió a 'inline' (una lista que se redujo por debajo del umbral): sin
+    esto, el archivo viejo se queda ahí para siempre, sin que nada lo
+    referencie -no rompe nada, pero confunde a cualquiera que mire el
+    directorio más adelante-.
+    """
+    from app.models.acl import Acl
+
+    ACL_LISTS_DIR.mkdir(parents=True, exist_ok=True)
+    acls_de_archivo = db.query(Acl).filter(Acl.source == "file").all()
+
+    esperados = set()
+    for acl in acls_de_archivo:
+        nombre_archivo = f"{acl.name}.txt"
+        esperados.add(nombre_archivo)
+        dominios = [d.strip() for d in (acl.value or "").splitlines() if d.strip()]
+        contenido = "\n".join(dominios) + ("\n" if dominios else "")
+        _write_atomic(ACL_LISTS_DIR / nombre_archivo, contenido, mode=0o644)
+
+    borrados = 0
+    for existente in ACL_LISTS_DIR.glob("*.txt"):
+        if existente.name not in esperados:
+            existente.unlink()
+            borrados += 1
+
+    if borrados:
+        logger.info(f"{borrados} archivo(s) de ACL sobrante(s) eliminado(s) de {ACL_LISTS_DIR}")
+    return len(acls_de_archivo)
 
 
 def reload_squid() -> tuple[bool, str]:
@@ -284,6 +395,9 @@ def _apply_squid_config(db) -> dict:
     """Genera y aplica la configuración de Squid de extremo a extremo.
 
     Flujo:
+      0. Escribe los archivos de las ACLs respaldadas por archivo (listas de
+         dominio grandes): Squid los abre AL PARSEAR, así que tienen que
+         existir antes del paso 2, a diferencia del resto de auxiliares.
       1. Genera squid.conf desde la BD.
       2. Valida la sintaxis DENTRO del contenedor de Squid.
       3. Solo si es válida, la escribe sobre el squid.conf en uso.
@@ -309,7 +423,19 @@ def _apply_squid_config(db) -> dict:
     config_text = generate_squid_config(db, kerberos=kerberos)
     preview = config_text[:500] + ("..." if len(config_text) > 500 else "")
 
-    # 1. Validar ANTES de escribir nada.
+    # 0. Las ACLs respaldadas por archivo se escriben ANTES de validar -única
+    # excepción a "nada se toca antes de validar squid.conf"-, porque a
+    # diferencia de squid_passwd/squid_digest (que el helper de auth abre en
+    # caliente, cuando llega una petición real) Squid abre el archivo de una
+    # ACL dstdomain/dstdom_regex DURANTE EL PROPIO PARSEO de la config. Sin
+    # esto, la primera vez que se crea una ACL así la validación fallaba con
+    # "Can not open file ... for reading" -confirmado en vivo- aunque el
+    # squid.conf generado fuera perfectamente válido. Escribir estos
+    # archivos no afecta al Squid en producción: son datos independientes de
+    # que el candidato de squid.conf termine aplicándose o no.
+    build_acl_list_files(db)
+
+    # 1. Validar ANTES de escribir squid.conf.
     valid, msg = validate_squid_config(config_text)
     if not valid:
         mark_dirty()
@@ -367,6 +493,23 @@ def _apply_squid_config(db) -> dict:
                 "config_preview": preview,
             }
 
+        # 1d. 'passthru' reenvía las credenciales del cliente al padre, y no
+        #     se puede combinar con que este mismo Squid autentique a sus
+        #     clientes. A diferencia de la comprobación de PUT /parent-proxy,
+        #     esta cubre el caso de habilitar LDAP/Kerberos/un usuario local
+        #     DESPUÉS de haber dejado el padre en passthru.
+        from app.services.parent_proxy_service import validar_auth_method_compatible
+
+        auth_ok, auth_msg = validar_auth_method_compatible(padre.auth_method or "fixed", db)
+        if not auth_ok:
+            mark_dirty()
+            return {
+                "status": "error",
+                "message": f"No se ha aplicado nada:\n{auth_msg}",
+                "needs_restart": False,
+                "config_preview": preview,
+            }
+
     # 2. El puerto elegido en el panel tiene que ser el que el proxy atiende
     #    de verdad. Se lee de la base de datos, que es donde lo deja el panel,
     #    y el runtime comprueba si hace falta actuar: recrear el contenedor en
@@ -416,6 +559,7 @@ def _apply_squid_config(db) -> dict:
     allowed_ldap = [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()]  # noqa: E712
     write_ldap_aux_files(ldap_config, allowed_ldap)
     write_passwd_file(db)
+    write_digest_file(db, realm_actual(db))
 
     mark_clean()
 

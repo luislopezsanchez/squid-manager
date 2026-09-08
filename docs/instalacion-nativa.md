@@ -167,27 +167,29 @@ systemctl restart squidmanager
 
 ## Actualizar
 
+`upgrade-nativo.sh` es la forma recomendada — un script aparte del
+instalador, que se baja fresco cada vez, hace un backup de la base, trae el
+código nuevo de forma segura y recién ahí corre el `install-nativo.sh` ya
+actualizado (que es quien preserva tu configuración y repara lo que un
+`git pull` a secas nunca vuelve a tocar: paquete de PostgreSQL, drop-in de
+Kerberos, rotación de logs):
+
 ```bash
 cd /opt/squid-manager
-sudo git pull
-sudo backend/.venv/bin/pip install -q -r backend/requirements.txt
-cd frontend && sudo npm install --silent && sudo npm run build
-sudo systemctl restart squidmanager
+wget -O upgrade-nativo.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-nativo.sh
+sudo BRANCH=main bash upgrade-nativo.sh
 ```
 
-**El `npm run build` no es opcional**, y es el equivalente exacto del `--build`
-de Docker: nginx sirve los ficheros ya compilados de `frontend/dist`, así que
-sin recompilar el panel sigue ejecutando la versión anterior aunque el `git
-pull` haya ido bien.
-
-El panel aplica las migraciones de base de datos al arrancar, así que no hay
-paso aparte para eso.
+Ver [docs/actualizacion.md](actualizacion.md) para el detalle completo —
+incluido por qué no alcanza con re-correr `install-nativo.sh` a mano—, el
+comando manual equivalente y qué hacer si algo falla a mitad de camino.
 
 ### Actualizar desde una version sin Kerberos
 
 Si la instalación es de antes de la versión 0.18.0 y usa (o va a usar)
-Kerberos/Negotiate, hace falta un paso más, una sola vez — una instalación
-nueva ya lo trae el propio instalador:
+Kerberos/Negotiate, y preferís el camino manual en vez de re-correr el
+instalador, hace falta un paso más, una sola vez — una instalación nueva ya
+lo trae el propio instalador, y volver a correrlo también lo repara solo:
 
 ```bash
 sudo mkdir -p /etc/systemd/system/squid.service.d

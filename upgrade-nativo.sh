@@ -1,0 +1,129 @@
+#!/bin/bash
+# Actualiza una instalacion nativa (sin Docker) de SquidManager: backup
+# previo de la base de datos, trae el codigo nuevo de forma segura, y
+# vuelve a correr install-nativo.sh -que es quien sabe instalar pgvector,
+# reparar sudoers/systemd/cron y reiniciar el servicio si hace falta- ya
+# sobre el checkout recien actualizado.
+#
+# Por que un script aparte y no basta con re-correr install-nativo.sh
+# directamente (que ya es seguro de re-ejecutar sobre una instalacion que
+# existe, ver docs/actualizacion.md): install-nativo.sh hace git
+# checkout/fetch/reset SOBRE SI MISMO como parte de la actualizacion. Si la
+# version ya instalada difiere de la version destino en la logica del
+# propio script -exactamente lo que paso al probar main -> pruebas en
+# vivo, porque esta seccion de install-nativo.sh cambio entre una y otra-,
+# bash sigue ejecutando en memoria el codigo VIEJO durante el resto de la
+# corrida mientras los archivos de disco -el propio script incluido- ya
+# cambiaron por debajo. Consecuencia real, observada en 172.30.36.63
+# (2026-09-08): el aviso de "actualizado" nunca aparecio (se vio el de
+# instalacion nueva), pgvector no se instalo, y el servicio nunca se
+# reinicio de verdad -"systemctl enable --now" no hace nada si el servicio
+# ya esta activo-: el backend siguio corriendo el codigo y las migraciones
+# de ANTES del upgrade, sin ningun error visible que lo delatara.
+# Corriendolo una segunda vez, ya con la version nueva instalada de punta a
+# punta y sin salto de version del propio script por medio, todo funciono
+# como se espera -asi se aislo que el bug era ese, y no otro-.
+#
+# Este script evita el problema por diseno: NUNCA se modifica a si mismo.
+# El "git checkout/reset" de aqui abajo actua sobre INSTALL_DIR, pero quien
+# ejecuta esos comandos es ESTE proceso, que no cambia bajo sus propios
+# pies. Una vez que el checkout esta al dia, se invoca -como proceso
+# nuevo, nunca "source"- el install-nativo.sh que quedo ahi: en ese
+# momento ya es 100% la version destino, sin ambiguedad posible.
+#
+# Aun asi, el paso final de este script vuelve a comprobar el commit que
+# /health reporta de verdad, y reintenta un reinicio si no coincide: en
+# pruebas repetidas (con y sin INSTALL_DIR por defecto) el primer reinicio
+# de install-nativo.sh, dentro de la misma corrida, a veces seguia
+# sirviendo el commit anterior un rato -sin __pycache__ de por medio, ya
+# descartado como causa- y un reinicio posterior, ya fuera del script,
+# siempre mostro el commit correcto. No se pudo aislar la causa exacta con
+# certeza suficiente para explicarla aca; verificar y reintentar es lo
+# unico honesto de hacer sin esa certeza.
+set -euo pipefail
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
+info()  { echo -e "${BLUE}[INFO]${NC} $1"; }
+ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
+warn()  { echo -e "${YELLOW}[AVISO]${NC} $1"; }
+fail()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+paso()  { echo; echo -e "${BLUE}=== $1 ===${NC}"; }
+
+INSTALL_DIR="${INSTALL_DIR:-/opt/squid-manager}"
+BRANCH="${BRANCH:-main}"
+
+[ -d "$INSTALL_DIR/.git" ] || fail "No hay una instalacion en $INSTALL_DIR (o no es un checkout git). Para instalar desde cero usa install-nativo.sh, no este script."
+[ -x "$INSTALL_DIR/install-nativo.sh" ] || fail "$INSTALL_DIR/install-nativo.sh no existe o no es ejecutable; no se puede completar la actualizacion."
+
+cd "$INSTALL_DIR"
+
+paso "1. Backup antes de actualizar"
+if [ -x "$INSTALL_DIR/backup-database.sh" ]; then
+    "$INSTALL_DIR/backup-database.sh" || warn "El backup fallo; se continua igual, pero revisa el motivo antes de confiar en el upgrade."
+else
+    warn "No se encontro backup-database.sh; se continua sin backup previo."
+fi
+
+paso "2. Trayendo el codigo nuevo (rama $BRANCH)"
+# Mismo mecanismo, y el mismo bug real de fondo, que en upgrade-docker.sh:
+# `git checkout` se niega a cambiar de rama si eso pisaria una modificacion
+# local -aunque el `reset --hard` de abajo la fuera a descartar de todas
+# formas-, y sin descartarla ANTES el script entero aborta. `git clean -fd`
+# respeta .gitignore: no toca `.env` ni nada gitignored.
+git checkout --quiet -- . 2>/dev/null || true
+git clean -fdq
+git fetch --all --quiet
+git checkout --quiet "$BRANCH"
+git reset --hard --quiet "origin/$BRANCH"
+
+# __pycache__ esta en .gitignore, asi que "git clean -fd" (que respeta el
+# .gitignore a proposito, para no llevarse .env ni node_modules/) nunca lo
+# toca. Un .pyc viejo ahi puede quedar sirviendo al proceso reiniciado con
+# codigo de ANTES del upgrade -visto en pruebas repetidas sobre el mismo
+# checkout en 172.30.36.63-. Encontrar la causa exacta de cuando pasa no
+# vale lo que cuesta: borrarlo es gratis y siempre correcto, porque Python
+# lo regenera solo en el primer import.
+find "$INSTALL_DIR/backend" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+
+ok "Codigo actualizado a $(git log --oneline -1)"
+
+paso "3. Aplicando la actualizacion"
+info "De aqui en mas continua install-nativo.sh de la version nueva (paquetes, pgvector, permisos, migraciones, reinicio de servicios)."
+# INSTALL_DIR y BRANCH se pasan explicitos para que el comportamiento no
+# dependa de que el entorno los tenga ya exportados -por ejemplo si este
+# script se invoco con `sudo` sin `-E`-. install-nativo.sh vuelve a hacer
+# su propio fetch/checkout/reset sobre el mismo commit al que ya lo
+# dejamos: es un no-op (ya esta todo al dia), no un problema.
+INSTALL_DIR="$INSTALL_DIR" BRANCH="$BRANCH" bash "$INSTALL_DIR/install-nativo.sh"
+
+paso "4. Confirmando que el servicio quedo sirviendo el codigo nuevo"
+# install-nativo.sh ya reinicia squidmanager (paso 10) y verifica que
+# responda, pero eso solo confirma que ALGO responde en /health -no que sea
+# el commit que se acaba de dejar en el checkout-. Visto en vivo mas de una
+# vez, en mas de un checkout, con __pycache__ ya descartado como causa: el
+# primer reinicio dentro de la misma corrida puede quedar sirviendo todavia
+# el commit anterior un rato -no se pudo aislar la causa exacta con
+# certeza, asi que en vez de dar el upgrade por bueno a ciegas, se verifica
+# y se reintenta una vez si hace falta, que es lo unico honesto de hacer
+# sin esa certeza-. Un restart mas tarde, ya fuera del script, siempre
+# mostro el commit correcto.
+if [ -f "$INSTALL_DIR/.env" ]; then
+    WEB_PORT="$(grep -m1 '^WEB_PORT=' "$INSTALL_DIR/.env" 2>/dev/null | cut -d= -f2-)"
+fi
+WEB_PORT="${WEB_PORT:-3000}"
+
+COMMIT_ESPERADO="$(git -C "$INSTALL_DIR" rev-parse --short HEAD)"
+COMMIT_SERVIDO="$(curl -fsS -m 10 "http://127.0.0.1:${WEB_PORT}/health" 2>/dev/null | grep -oE '"commit":\s*"[^"]*"' | grep -oE '[0-9a-f]{7,}' || echo "")"
+
+if [ "$COMMIT_SERVIDO" != "$COMMIT_ESPERADO" ]; then
+    warn "El panel respondio con el commit '$COMMIT_SERVIDO', no '$COMMIT_ESPERADO'. Reintentando un reinicio."
+    systemctl restart squidmanager
+    sleep 5
+    COMMIT_SERVIDO="$(curl -fsS -m 10 "http://127.0.0.1:${WEB_PORT}/health" 2>/dev/null | grep -oE '"commit":\s*"[^"]*"' | grep -oE '[0-9a-f]{7,}' || echo "")"
+fi
+
+if [ "$COMMIT_SERVIDO" = "$COMMIT_ESPERADO" ]; then
+    ok "El panel confirma que esta sirviendo $COMMIT_SERVIDO."
+else
+    warn "El panel sigue reportando '$COMMIT_SERVIDO' en vez de '$COMMIT_ESPERADO' despues de reintentar. Revisa a mano: systemctl restart squidmanager && curl http://127.0.0.1:${WEB_PORT}/health"
+fi

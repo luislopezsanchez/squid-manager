@@ -33,6 +33,7 @@ http_port {{ internal_port }} ssl-bump \
 # orden, y una ACL de usuario (proxy_auth) no se puede declarar mientras no
 # exista un esquema de autenticación. Poniéndolo después, cualquier regla de
 # interceptación por usuario aborta el arranque con «Invalid ACL».
+{% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 {% if kerberos_esta_activo %}
 # Negotiate (Kerberos/SPNEGO) va ANTES que basic: los navegadores que lo
 # soportan y están en el dominio lo intentan primero y entran sin que se les
@@ -42,10 +43,36 @@ auth_param negotiate program /usr/lib/squid/negotiate_kerberos_auth -k /etc/squi
 auth_param negotiate children 10
 auth_param negotiate keep_alive on
 {% endif %}
+{% if settings.get('proxy_auth_scheme', 'basic') == 'digest' %}
+# Digest (RFC 2617): igual que basic pero Squid nunca ve la contraseña en
+# claro del cliente -solo el HA1 que ya calculó el backend al crear el
+# usuario (ver routes/proxy_users.py:_generate_digest_ha1). Reemplaza a
+# basic, no coexiste con él: HTTP solo permite un esquema "no-negotiate"
+# activo a la vez para no confundir a los navegadores que solo entienden el
+# primero que ven (mismo motivo que el orden Negotiate > Digest > Basic de
+# arriba). Solo usuarios LOCALES: no hay soporte de LDAP con Digest, porque
+# exigiría que el directorio guarde el HA1 en un atributo no estándar.
+auth_param digest program /usr/lib/squid/squidmanager_digest_helper
+auth_param digest children {{ settings.get('auth_children', '5') }}
+auth_param digest realm {{ settings.get('auth_realm', 'SquidManager Proxy') }}
+auth_param digest nonce_garbage_interval 5 minutes
+auth_param digest nonce_max_duration 30 minutes
+auth_param digest nonce_max_count 50
+{% else %}
 auth_param basic program /usr/lib/squid/squidmanager_auth_helper
 auth_param basic children {{ settings.get('auth_children', '5') }}
 auth_param basic realm {{ settings.get('auth_realm', 'SquidManager Proxy') }}
 auth_param basic credentialsttl {{ settings.get('credentialsttl', '2 hours') }}
+{% endif %}
+{% else %}
+# proxy_auth_scheme = 'none': este Squid no pide usuario/contraseña propios.
+# Sin auth_param configurado, cualquier ACL de tipo proxy_auth abortaría el
+# arranque ("authentication scheme not configured") -por eso mas abajo, con
+# 'none', ni se declara la ACL 'authenticated' ni los grupos de usuarios.
+# El control de acceso real lo hace el proxy padre (ver validar_proxy_auth_scheme_none
+# en parent_proxy_service.py, que exige uno configurado y habilitado antes
+# de permitir este modo) o la red que rodea a este Squid.
+{% endif %}
 
 # --- Configuración SSL Bump ---
 acl step1 at_step SslBump1
@@ -55,9 +82,17 @@ acl step3 at_step SslBump3
 # ACLs de SNI para aplicar las políticas de dominio también a HTTPS
 {% for acl in acls %}
 {% if acl.type == 'dstdomain' %}
+{% if acl.source == 'file' %}
+acl sni_{{ acl.name }} ssl::server_name "/etc/squid/acl_lists/{{ acl.name }}.txt"
+{% else %}
 acl sni_{{ acl.name }} ssl::server_name {{ acl.value }}
+{% endif %}
 {% elif acl.type == 'dstdom_regex' %}
+{% if acl.source == 'file' %}
+acl sni_{{ acl.name }} ssl::server_name_regex "/etc/squid/acl_lists/{{ acl.name }}.txt"
+{% else %}
 acl sni_{{ acl.name }} ssl::server_name_regex {{ acl.value }}
+{% endif %}
 {% endif %}
 {% endfor %}
 
@@ -130,19 +165,29 @@ acl Safe_ports port 488         # gss-http
 acl Safe_ports port 591         # filemaker
 acl Safe_ports port 777         # multiling http
 acl CONNECT method CONNECT
+{% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 acl authenticated proxy_auth REQUIRED
+{% endif %}
 
 # --- ACLs personalizadas (desde BD) ---
 {% for acl in acls %}
+{% if acl.source == 'file' %}
+acl {{ acl.name }} {{ acl.type }} "/etc/squid/acl_lists/{{ acl.name }}.txt"
+{% else %}
 acl {{ acl.name }} {{ acl.type }} {{ acl.value }}
+{% endif %}
 {% endfor %}
 
+{% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 # --- Grupos de usuarios (ACLs proxy_auth) ---
 # Siempre se genera la ACL del grupo (incluso vacío) para evitar "ACL not found"
 # si una regla lo referencia. El placeholder __EMPTY_GROUP__ no coincide con nadie.
+# Con 'none' no se declaran: no hay auth_param configurado, y una ACL
+# proxy_auth sin esquema aborta el arranque de Squid.
 {% for group in groups %}
 acl {{ group.name }} proxy_auth {{ group.members|join(' ') if group.members else '__EMPTY_GROUP__' }}
 {% endfor %}
+{% endif %}
 
 # --- Reglas de acceso (http_access) ---
 http_access deny !Safe_ports
@@ -173,18 +218,28 @@ acl exentos_auth_dominio dstdomain {{ auth_exempt_domains|join(' ') }}
 http_access allow exentos_auth_dominio
 
 {% endif %}
+{% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 # Pedir credenciales una sola vez, antes de evaluar las reglas del panel.
 # A partir de aquí todas las peticiones llegan ya autenticadas, así que un
 # "deny <grupo>" devuelve 403 y no un 407 en bucle. Esto permite respetar el
 # orden de las reglas tal como se ve en el panel.
 http_access deny !authenticated
+{% endif %}
 
 {% for rule in rules %}
 http_access {{ rule.action }} {{ rule.acl_names }}
 {% endfor %}
 
+{% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 # Lo que ninguna regla haya denegado, se permite a los usuarios autenticados.
 http_access allow authenticated
+{% else %}
+# 'none': no se exige autenticación local -el control de acceso real lo hace
+# el proxy padre (validado como obligatorio para este modo) o la red que
+# rodea a este Squid-. Lo que ninguna regla haya denegado, se permite tal
+# cual, sin pedir usuario.
+http_access allow all
+{% endif %}
 http_access deny all
 
 {% if parent_proxy and parent_proxy.enabled and parent_proxy.host %}
@@ -194,7 +249,18 @@ http_access deny all
 #
 # El 0 es el puerto ICP, que no se usa: `no-query` desactiva ese sondeo, y
 # `default` marca a este peer como la salida a usar cuando no hay otra regla.
+{% if parent_proxy.auth_method == 'passthru' %}
+{# PASSTHRU reenvia tal cual las credenciales que ya trae el cliente: la unica
+   forma de llegar a un padre que exige Digest/NTLM/Negotiate, porque
+   login=user:pass de cache_peer solo sabe presentar Basic
+   (https://www.squid-cache.org/Doc/config/cache_peer/). connection-auth=on
+   es obligatorio para que PASSTHRU funcione con algo que no sea Basic. La
+   compatibilidad con la auth local de este Squid ya se valido antes de
+   llegar aqui (ver parent_proxy_service.validar_auth_method_compatible). #}
+cache_peer {{ parent_proxy.host }} parent {{ parent_proxy.port }} 0 no-query default login=PASSTHRU connection-auth=on
+{% else %}
 cache_peer {{ parent_proxy.host }} parent {{ parent_proxy.port }} 0 no-query default{% if parent_proxy.username %} login={{ parent_proxy.username }}:{{ parent_proxy.password or '' }}{% endif %}
+{% endif %}
 
 {% if parent_ca %}
 # El proxy padre también intercepta HTTPS, así que al reenviarle el tráfico

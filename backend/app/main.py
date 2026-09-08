@@ -20,7 +20,7 @@ from app.config import settings
 from app.i18n import idioma_de_cabecera, traducir
 from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
-from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy, kerberos
+from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy, kerberos, ai
 from app.middleware import rate_limit_middleware
 
 logging.basicConfig(level=logging.INFO)
@@ -180,6 +180,14 @@ def seed_data():
             "auth_children": ("5", "security", "Procesos helper de autenticación"),
             "auth_realm": ("SquidManager Proxy", "security", "Realm de autenticación"),
             "credentialsttl": ("2 hours", "security", "TTL de credenciales"),
+            # 'basic' o 'digest'. Excluyentes entre sí -Negotiate (Kerberos)
+            # sigue coexistiendo con cualquiera de los dos-. Digest solo
+            # autentica usuarios locales del proxy, no LDAP.
+            "proxy_auth_scheme": (
+                "basic", "security",
+                "Esquema de autenticación del proxy: basic, digest o none "
+                "(sin autenticación local, solo para un hijo con proxy padre)",
+            ),
             "access_log": ("/var/log/squid/access.log", "logging", "Ruta del log de acceso"),
             "cache_log": ("/var/log/squid/cache.log", "logging", "Ruta del log de caché"),
             # Con un sufijo único por instalación, no por capricho: Squid
@@ -220,21 +228,36 @@ def seed_data():
 
 
 def _es_configuracion_provisional(ruta: Path) -> bool:
-    """¿El squid.conf sigue siendo el que escribe el instalador/entrypoint?
+    """¿Todavía no está aplicada la configuración definitiva de Squid?
 
-    Ambos ponen «Configuración inicial temporal» en la primera línea (el
-    instalador nativo sin tilde), así que basta con mirarla. Si el fichero no
-    existe todavía, también hay que generar el definitivo.
+    Antes se reconocía la provisional por su propio marcador («Configuración
+    inicial temporal», que escriben tanto el entrypoint de Docker como el
+    instalador nativo). El problema real, encontrado probando un upgrade en
+    vivo (172.30.36.92, 2026-09-08): en Docker, el volumen compartido de
+    /etc/squid puede llegar vacío y Docker lo autopobla con el squid.conf de
+    fábrica que trae la propia imagen de Squid -de compilarlo/instalarlo-,
+    ANTES de que el entrypoint de Squid alcance a pisarlo con el
+    provisional. Si el backend hace esta comprobación justo en esa ventana,
+    el archivo existe pero no contiene «inicial temporal» -tampoco es la
+    definitiva-, así que el chequeo viejo concluía "ya está aplicada" y
+    nunca programaba los reintentos: el proxy quedaba con el `squid.conf` de
+    fábrica -sin las ACL del provisional siquiera-, indefinidamente, sin
+    ningún aviso.
+
+    Se invierte el criterio para no depender de reconocer TODOS los
+    contenidos que no son la definitiva: alcanza con reconocer la propia
+    definitiva (el marcador que escribe apply_squid_config, ver
+    templates/squid.conf.j2) y tratar cualquier otra cosa -provisional,
+    de fábrica, vacío, lo que sea- como pendiente de generar.
     """
     if not ruta.exists():
         return True
     try:
-        with ruta.open("r", errors="replace") as f:
-            primera = f.readline()
+        contenido = ruta.read_text(errors="replace")
     except OSError as e:
         logger.warning(f"No se pudo leer {ruta}: {e}")
         return False
-    return "inicial temporal" in primera
+    return "SquidManager - Configuración generada automáticamente" not in contenido
 
 
 def _aplicar_configuracion_definitiva():
@@ -380,6 +403,7 @@ app.include_router(user_groups.router, prefix="/api/groups", tags=["Grupos de us
 app.include_router(syslog.router, prefix="/api/syslog", tags=["Syslog externo"])
 app.include_router(parent_proxy.router, prefix="/api/parent-proxy", tags=["Proxy padre"])
 app.include_router(kerberos.router, prefix="/api/kerberos", tags=["Kerberos"])
+app.include_router(ai.router, prefix="/api/ai", tags=["Asistente de IA"])
 
 
 @app.get("/")

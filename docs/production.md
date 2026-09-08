@@ -153,9 +153,24 @@ Crea `backups/squidmanager_YYYYMMDD_HHMMSS.sql`.
 
 ### Backup automático (cron)
 
+`backup-database.sh` funciona en los dos modos de despliegue (autodetecta
+por `DEPLOY_MODE` del `.env`), guarda en `backups/` dentro del propio
+proyecto, comprimido, y purga solo los más viejos que
+`RETENCION_DIAS_BACKUP` (14 días por defecto):
+
 ```bash
 # Añadir a crontab: backup diario a las 2am
-0 2 * * * cd /opt/squid-manager && make backup >> /var/log/squidmanager-backup.log 2>&1
+0 2 * * * /opt/squid-manager/backup-database.sh >> /var/log/squidmanager-backup.log 2>&1
+```
+
+`make backup` (Docker) sigue disponible para un backup manual puntual, pero
+no rota nada — para el backup programado, usar el script.
+
+**Restaurar** (reemplaza la base entera, avisa 5 segundos antes de tocar
+nada):
+
+```bash
+/opt/squid-manager/restore-database.sh backups/squidmanager_20260908_020000.sql.gz
 ```
 
 ### Backup de la configuración (JSON)
@@ -245,14 +260,30 @@ Los logs de Squid (`access.log`, `cache.log`) rotan a diario con `logrotate`, co
 
 **Consolidación mensual, aparte de la rotación diaria.** El día 1 de cada mes,
 `/etc/cron.monthly/squidmanager-log-archive` junta los diarios ya archivados
-del mes que acaba de cerrar en un único archivo (`archive/monthly/access-
-202608.log.gz`, `cache-202608.log.gz`) y borra los diarios sueltos que
-consolidó. Es puro almacenamiento en frío: no toca el archivo activo que lee
-el panel ni la rotación diaria en absoluto, así que no tiene ningún efecto
-sobre el rendimiento — solo deja el historial más largo ordenado en un
-archivo por mes en vez de 30 archivos diarios sueltos.
+del mes que acaba de cerrar en un único archivo por año/mes
+(`archive/historical/2026/08/access-202608.log.gz`, `cache-202608.log.gz`),
+con un `index.json` precalculado para el módulo **Histórico de logs** del
+panel, y borra los diarios sueltos que consolidó. Es puro almacenamiento en
+frío: no toca el archivo activo que lee el panel ni la rotación diaria en
+absoluto, así que no tiene ningún efecto sobre el rendimiento.
 
-Para retención de meses, lo recomendado sigue siendo reenviar los logs a un sistema externo (**Syslog externo** en el panel) en vez de acumularlos localmente: un log que solo vive en el propio proxy es más frágil como evidencia de auditoría, y nada los indexa para buscar en ellos más allá de grep. La consolidación mensual es un respaldo local razonable, no un reemplazo de eso.
+**Retención del histórico: 12 meses por defecto**, purgados por el mismo
+script en cada corrida (mes completo, incluido su `index.json`; nunca a
+medias). Mismo criterio que el `audit_log` del panel (ver más abajo): un
+límite explícito, no "para siempre" — el histórico de navegación es el dato
+más sensible que maneja este sistema (IPs, usuarios, dominios visitados), y
+antes no tenía ningún límite. Para cambiarlo, definir
+`RETENCION_MESES_HISTORICO` en el entorno donde corre el cron (por ejemplo,
+agregando `RETENCION_MESES_HISTORICO=24` antes de la línea en
+`/etc/cron.monthly/squidmanager-log-archive`, o exportándolo en el mismo
+archivo de entorno que usa el resto de la instalación).
+
+Para retención más larga que unos pocos meses, sigue siendo preferible
+reenviar los logs a un sistema externo (**Syslog externo** en el panel) en
+vez de acumularlos localmente: un log que solo vive en el propio proxy es
+más frágil como evidencia de auditoría, y nada los indexa para buscar en
+ellos más allá de grep. La consolidación mensual es un respaldo local
+acotado, no un reemplazo de eso.
 
 ---
 

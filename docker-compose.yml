@@ -3,7 +3,11 @@ services:
   # PostgreSQL - Base de datos
   # ============================================
   db:
-    image: postgres:16-alpine
+    # pgvector/pgvector, no postgres:16-alpine a secas: mismo Postgres 16,
+    # con la extension pgvector ya integrada (la usa el asistente de IA para
+    # buscar en la documentacion por significado). El :16-alpine oficial no
+    # la trae compilada.
+    image: pgvector/pgvector:pg16
     container_name: squidmgr-db
     restart: unless-stopped
     environment:
@@ -12,6 +16,9 @@ services:
       POSTGRES_PASSWORD: ${DB_PASS:?Define DB_PASS en el .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Postgres corre todo lo que hay acá como superusuario, una sola vez,
+      # al inicializar un volumen de datos vacío -no en cada arranque-.
+      - ./db-init:/docker-entrypoint-initdb.d:ro
     networks:
       - squidnet
     healthcheck:
@@ -19,6 +26,54 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # ============================================
+  # Docker Socket Proxy - acceso acotado a la API de Docker
+  # ============================================
+  # El backend necesita hablar con el daemon Docker (recrear Squid al cambiar
+  # de puerto, exec_run para reconfigure/reload, leer estadisticas), pero
+  # montarle /var/run/docker.sock directamente le da acceso COMPLETO a la API
+  # -equivalente a root del host- ante cualquier RCE en el backend. Este
+  # proxy (Tecnativa/docker-socket-proxy, muy usado para esto) se pone en
+  # medio: solo el permite las llamadas que el backend usa de verdad, y
+  # bloquea explicitamente todo lo demas (build de imagenes, swarm, secrets,
+  # plugins, nodos, servicios, sesion, auth).
+  #
+  # Limite real, no un detalle: crear un contenedor nuevo (necesario para
+  # `docker compose up -d --force-recreate` al cambiar el puerto) requiere
+  # CONTAINERS=1 + POST=1, y el proxy no distingue "crear un contenedor" de
+  # "crear un contenedor con configuracion peligrosa" -no hay una variable
+  # mas fina para eso. Esto reduce mucho la superficie de ataque frente a
+  # docker.sock sin restriccion (cierra build/swarm/secrets/plugins/nodos por
+  # completo), pero no la cierra del todo: alguien con RCE en el backend
+  # todavia podria, en teoria, crear un contenedor malicioso. Cerrar eso del
+  # todo exigiria un demonio aparte fuera del backend con una API propia y
+  # minima -un rediseno mas grande, pendiente como mejora futura.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: squidmgr-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      EXEC: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      IMAGES: 1
+      POST: 1
+      ALLOW_RESTARTS: 1
+      # Todo lo demas queda en su valor por defecto (0/deshabilitado):
+      # BUILD, COMMIT, CONFIGS, DISTRIBUTION, GRPC, INFO, NODES, PLUGINS,
+      # SERVICES, SESSION, SWARM, SYSTEM, TASKS, AUTH, SECRETS.
+    volumes:
+      # :ro por buena practica (defensa en profundidad), aunque al ser un
+      # socket Unix esto no restringe por si solo las operaciones de
+      # escritura sobre la API -esa restriccion la hace el propio proxy
+      # segun las variables de arriba, no el modo de montaje.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - squidnet
+    # Sin exponer nada hacia fuera: solo el backend le habla, por la red
+    # interna, con el nombre del servicio como host.
 
   # ============================================
   # Backend - FastAPI (Python)
@@ -32,6 +87,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      docker-socket-proxy:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql+psycopg://${DB_USER:-squid}:${DB_PASS:?Define DB_PASS en el .env}@db:5432/${DB_NAME:-squidmanager}
       SECRET_KEY: ${SECRET_KEY:?Define SECRET_KEY en el .env (openssl rand -hex 32)}
@@ -51,11 +108,15 @@ services:
       # sincronizado con la base de datos.
       PROJECT_DIR: ${PROJECT_DIR:-/opt/squid-manager}
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-squid-manager}
+      # El SDK de Docker (docker-py) y el propio CLI `docker` respetan esta
+      # variable sin cambios de código: hablan con el proxy de arriba en vez
+      # de con el socket real, tanto para las llamadas directas del backend
+      # como para los `docker compose ...` que lanza como subproceso.
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
     volumes:
       - squid-config:/etc/squid
       - squid-spool:/var/spool/squid
       - squid-logs:/var/log/squid
-      - /var/run/docker.sock:/var/run/docker.sock
       # El proyecto se monta en la MISMA ruta que tiene en el host. Compose
       # graba su directorio de trabajo en las etiquetas del contenedor: si el
       # backend lo viera en otra ruta, cada `docker compose up -d` lanzado a

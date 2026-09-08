@@ -187,6 +187,18 @@ export const api = {
   deleteKeytab: () => request<any>('/kerberos/keytab', { method: 'DELETE' }),
   kerberosAdSetupScriptUrl: () => `${API_BASE}/kerberos/ad-setup-script`,
 
+  // Asistente de IA (opcional, apagado por defecto): responde consultas de
+  // uso del panel usando la documentación del proyecto como única fuente.
+  getAiConfig: () => request<any>('/ai/config'),
+  updateAiConfig: (data: any) => request<any>('/ai/config', { method: 'PUT', body: JSON.stringify(data) }),
+  reindexarDocumentacion: () => request<any>('/ai/reindexar', { method: 'POST' }),
+  preguntarAsistente: (pregunta: string) =>
+    request<any>('/ai/preguntar', { method: 'POST', body: JSON.stringify({ pregunta }) }),
+  probarProveedorAi: (provider: string, api_key: string) =>
+    request<any>('/ai/probar-proveedor', { method: 'POST', body: JSON.stringify({ provider, api_key }) }),
+  probarEmbeddingsAi: (api_key: string) =>
+    request<any>('/ai/probar-embeddings', { method: 'POST', body: JSON.stringify({ api_key }) }),
+
   // Syslog externo (opcional, apagado por defecto)
   getSyslogConfig: () => request<any>('/syslog/config'),
   updateSyslogConfig: (data: any) => request<any>('/syslog/config', { method: 'PUT', body: JSON.stringify(data) }),
@@ -242,10 +254,27 @@ export const api = {
     return request<any>('/backup/restore', { method: 'POST', body: formData })
   },
   downloadSquidConf: () => `${API_BASE}/backup/squid-conf`,
-  importSquidConf: (file: File) => {
+  analyzeSquidConf: (files: File[], principal: string) => {
+    const formData = new FormData()
+    for (const f of files) formData.append('files', f)
+    formData.append('principal', principal)
+    return request<any>('/backup/analyze-squid-conf', { method: 'POST', body: formData })
+  },
+  applySquidImport: (token: string) => {
+    const formData = new FormData()
+    formData.append('token', token)
+    return request<any>('/backup/apply-squid-import', { method: 'POST', body: formData })
+  },
+
+  // ACLs: carga masiva de dominios desde archivo
+  bulkUploadDomains: (file: File, aclName: string, modo: 'reemplazar' | 'agregar', aclType: string, description?: string) => {
     const formData = new FormData()
     formData.append('file', file)
-    return request<any>('/backup/import-squid-conf', { method: 'POST', body: formData })
+    formData.append('acl_name', aclName)
+    formData.append('modo', modo)
+    formData.append('acl_type', aclType)
+    if (description) formData.append('description', description)
+    return request<any>('/acls/bulk-domains', { method: 'POST', body: formData })
   },
 
   // Logs
@@ -271,6 +300,37 @@ export const api = {
     if (params.ip) qs.append('ip', params.ip)
     if (params.denied) qs.append('denied', 'true')
     return `${API_BASE}/logs/export?${qs.toString()}`
+  },
+
+  // Histórico de logs (meses ya consolidados en frío)
+  getHistoricalMonths: () => request<any[]>('/logs/historical/months'),
+  getHistoricalMonthIndex: (year: number, month: number) =>
+    request<any>(`/logs/historical/${year}/${month}`),
+  getHistoricalEntries: (year: number, month: number, params: {
+    limit?: number; offset?: number; user?: string; status?: number; domain?: string; ip?: string; denied?: boolean
+  } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.limit) qs.append('limit', String(params.limit))
+    if (params.offset) qs.append('offset', String(params.offset))
+    if (params.user) qs.append('user', params.user)
+    if (params.status) qs.append('status', String(params.status))
+    if (params.domain) qs.append('domain', params.domain)
+    if (params.ip) qs.append('ip', params.ip)
+    if (params.denied) qs.append('denied', 'true')
+    const q = qs.toString()
+    return request<any>(`/logs/historical/${year}/${month}/entries${q ? '?' + q : ''}`)
+  },
+  exportHistoricalLogs: (year: number, month: number, params: {
+    format?: 'csv' | 'ndjson'; user?: string; status?: number; domain?: string; ip?: string; denied?: boolean
+  } = {}) => {
+    const qs = new URLSearchParams()
+    qs.append('format', params.format ?? 'csv')
+    if (params.user) qs.append('user', params.user)
+    if (params.status) qs.append('status', String(params.status))
+    if (params.domain) qs.append('domain', params.domain)
+    if (params.ip) qs.append('ip', params.ip)
+    if (params.denied) qs.append('denied', 'true')
+    return `${API_BASE}/logs/historical/${year}/${month}/export?${qs.toString()}`
   },
 
   // Notifications

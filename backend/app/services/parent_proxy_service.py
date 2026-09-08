@@ -72,6 +72,105 @@ def validar_destino(host: str | None, port: int | None) -> tuple[bool, str]:
     return True, "Destino válido"
 
 
+METODOS_AUTH_SOPORTADOS = ("fixed", "passthru")
+
+
+def validar_auth_method_compatible(auth_method: str, db) -> tuple[bool, str]:
+    """'passthru' reenvía tal cual las credenciales del cliente hacia el
+    padre: es la única forma de llegar a un padre que exige Digest, NTLM o
+    Negotiate (login=user:pass de cache_peer solo sabe hacer Basic —
+    https://www.squid-cache.org/Doc/config/cache_peer/). Pero HTTP solo
+    permite un Proxy-Authorization por petición: si este Squid también
+    autentica a SUS clientes (usuarios locales activos, LDAP o Kerberos),
+    ese header ya está siendo usado para el desafío local y no queda "hueco"
+    para el reenvío. No es una limitación de SquidManager: es como funciona
+    la autenticación HTTP orientada a conexión (RFC 7617 / RFC 2617).
+    """
+    if auth_method not in METODOS_AUTH_SOPORTADOS:
+        return False, f"Método de autenticación no soportado: '{auth_method}'."
+
+    if auth_method != "passthru":
+        return True, "Compatible"
+
+    from app.models.kerberos_config import KerberosConfig
+    from app.models.ldap_config import LdapConfig
+    from app.models.proxy_user import ProxyUser
+
+    conflictos = []
+
+    if db.query(ProxyUser).filter(ProxyUser.enabled == True).count() > 0:  # noqa: E712
+        conflictos.append("hay usuarios locales del proxy habilitados")
+
+    ldap = db.query(LdapConfig).first()
+    if ldap and ldap.enabled:
+        conflictos.append("LDAP está habilitado")
+
+    kerberos = db.query(KerberosConfig).first()
+    if kerberos and kerberos.enabled and getattr(kerberos, "keytab_data", None):
+        conflictos.append("Kerberos está activo")
+
+    if conflictos:
+        return False, (
+            "El modo 'passthru' reenvía tal cual las credenciales del cliente al "
+            "proxy padre, y no se puede combinar con que este mismo Squid "
+            "autentique a sus clientes: " + "; ".join(conflictos) + ". "
+            "Desactiva la autenticación local (deshabilita los usuarios del "
+            "proxy, LDAP y Kerberos) antes de activar 'passthru', o usa 'fixed' "
+            "si el padre solo exige Basic."
+        )
+
+    return True, "Compatible"
+
+
+ESQUEMAS_AUTH_CLIENTE_SOPORTADOS = ("basic", "digest", "none")
+
+
+def validar_proxy_auth_scheme_none(db) -> tuple[bool, str]:
+    """'none' deja que Squid pase clientes SIN pedirles usuario/contraseña
+    propios: pensado para un Squid HIJO cuyo control de acceso real lo hace
+    el proxy padre (o la red que lo rodea), no él mismo.
+
+    Sin un padre configurado y habilitado, 'none' convertiría este Squid en
+    un proxy abierto de verdad hacia Internet -cualquiera que alcance el
+    puerto navega sin dejar ningún usuario identificable en los logs-, que
+    es exactamente el tipo de abuso (relay abierto) que los operadores de
+    red bloquean por defecto. Por eso 'none' solo se permite si hay un
+    proxy padre configurado Y habilitado: la topología para la que existe
+    esta opción siempre tiene uno.
+    """
+    from app.models.parent_proxy import ParentProxy
+    from app.models.user_group import UserGroup
+
+    padre = db.query(ParentProxy).first()
+    if not padre or not padre.enabled:
+        return False, (
+            "El esquema 'none' (sin autenticación local) solo se puede "
+            "activar con un proxy padre configurado y habilitado: sin uno, "
+            "este Squid quedaría como un proxy abierto hacia Internet, "
+            "accesible sin usuario para cualquiera que llegue al puerto. "
+            "Configura el proxy padre en Proxy Padre antes de activar "
+            "'none', o usa 'basic'/'digest' si este Squid navega "
+            "directamente."
+        )
+
+    # Los grupos de usuarios se traducen a ACLs `proxy_auth` en squid.conf, y
+    # las reglas del panel las referencian por nombre. Sin ningún auth_param
+    # declarado (que es justo lo que hace 'none'), esa ACL no se puede
+    # emitir -Squid aborta el arranque con "ACL not found" en cuanto una
+    # regla la nombre-. Se detecta ANTES de aplicar, no dejando que el
+    # generador escriba un squid.conf que Squid va a rechazar.
+    if db.query(UserGroup).count() > 0:
+        return False, (
+            "No se puede activar 'none' con grupos de usuarios existentes: "
+            "los grupos se traducen a ACLs que dependen de la autenticación "
+            "local, y sin ella Squid no arrancaría. Borra los grupos de "
+            "usuarios (y las reglas que los referencien) antes de activar "
+            "'none'."
+        )
+
+    return True, "Compatible"
+
+
 def _metodos_ofrecidos(cabeceras: str) -> list[str]:
     """Extrae los métodos de autenticación que anuncia el padre."""
     metodos = []

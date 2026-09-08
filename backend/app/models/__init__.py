@@ -14,6 +14,8 @@ from app.models.user_group import UserGroup, UserGroupMember
 from app.models.syslog_config import SyslogConfig
 from app.models.parent_proxy import ParentProxy
 from app.models.kerberos_config import KerberosConfig
+from app.models.ai_config import AiConfig
+from app.models.doc_chunk import DocChunk
 
 __all__ = [
     "Admin",
@@ -31,4 +33,6 @@ __all__ = [
     "SyslogConfig",
     "ParentProxy",
     "KerberosConfig",
+    "AiConfig",
+    "DocChunk",
 ]

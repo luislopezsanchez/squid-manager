@@ -134,3 +134,30 @@ def test_si_no_hay_fichero_hay_que_generarlo(tmp_path):
     from app.main import _es_configuracion_provisional
 
     assert _es_configuracion_provisional(tmp_path / "no-existe.conf") is True
+
+
+def test_reconoce_como_pendiente_un_contenido_que_no_es_ni_uno_ni_otro(tmp_path):
+    """Caso real, encontrado probando un upgrade en vivo: en Docker, el
+    volumen compartido de /etc/squid puede llegar vacío y Docker lo
+    autopobla con el squid.conf de fábrica de la propia imagen de Squid,
+    ANTES de que el entrypoint alcance a pisarlo con el provisional. Ese
+    contenido no dice «inicial temporal» -el chequeo viejo, que solo
+    reconocía la provisional por su marcador, concluía "ya está la
+    definitiva" y nunca programaba los reintentos, dejando el proxy con la
+    config de fábrica indefinidamente-. El criterio nuevo reconoce la
+    DEFINITIVA por su marcador y trata cualquier otra cosa como pendiente,
+    así que un contenido ajeno como este tiene que dar True."""
+    from app.main import _es_configuracion_provisional
+
+    de_fabrica = tmp_path / "fabrica.conf"
+    de_fabrica.write_text(
+        "# Squid recommended minimum configuration\n"
+        "acl localnet src 0.0.0.1-0.255.255.255\n"
+        "http_access allow localhost\n"
+        "http_access deny all\n"
+    )
+    assert _es_configuracion_provisional(de_fabrica) is True
+
+    vacio = tmp_path / "vacio.conf"
+    vacio.write_text("")
+    assert _es_configuracion_provisional(vacio) is True
