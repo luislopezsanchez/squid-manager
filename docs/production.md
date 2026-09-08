@@ -153,9 +153,24 @@ Crea `backups/squidmanager_YYYYMMDD_HHMMSS.sql`.
 
 ### Backup automático (cron)
 
+`backup-database.sh` funciona en los dos modos de despliegue (autodetecta
+por `DEPLOY_MODE` del `.env`), guarda en `backups/` dentro del propio
+proyecto, comprimido, y purga solo los más viejos que
+`RETENCION_DIAS_BACKUP` (14 días por defecto):
+
 ```bash
 # Añadir a crontab: backup diario a las 2am
-0 2 * * * cd /opt/squid-manager && make backup >> /var/log/squidmanager-backup.log 2>&1
+0 2 * * * /opt/squid-manager/backup-database.sh >> /var/log/squidmanager-backup.log 2>&1
+```
+
+`make backup` (Docker) sigue disponible para un backup manual puntual, pero
+no rota nada — para el backup programado, usar el script.
+
+**Restaurar** (reemplaza la base entera, avisa 5 segundos antes de tocar
+nada):
+
+```bash
+/opt/squid-manager/restore-database.sh backups/squidmanager_20260908_020000.sql.gz
 ```
 
 ### Backup de la configuración (JSON)
