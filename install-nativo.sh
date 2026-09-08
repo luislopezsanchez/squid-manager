@@ -33,6 +33,39 @@ REPO_URL="${REPO_URL:-https://github.com/luislopezsanchez/squid-manager.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/squid-manager}"
 APP_USER="${APP_USER:-squidmgr}"
+
+# Si ya hay un .env de una instalacion anterior, sus valores tienen prioridad
+# sobre los valores por defecto de mas abajo -pero NUNCA sobre una variable
+# que quien invoca el script ya haya exportado a proposito (BRANCH=pruebas
+# sudo -E ./install-nativo.sh sigue funcionando igual)-.
+#
+# Sin esto, volver a correr este script -que es exactamente lo que
+# docs/actualizacion.md recomienda como forma de actualizar una instalacion
+# nativa, porque de paso repara sudoers/systemd/cron/pgvector si algo de eso
+# quedo desactualizado- reescribia el .env entero con valores de fabrica en
+# cada corrida: rotaba el SECRET_KEY (cerraba la sesion de todo el mundo sin
+# aviso) y podia perder un CORS_ORIGINS o un WEB_PORT personalizados. Bug
+# real, encontrado probando el upgrade en vivo antes de recomendar este
+# camino como "el" procedimiento de actualizacion.
+_ENV_PREVIO="$INSTALL_DIR/.env"
+if [ -f "$_ENV_PREVIO" ]; then
+    for _VAR in SECRET_KEY WEB_PORT CORS_ORIGINS TRUSTED_PROXY_HOSTS DEBUG BCRYPT_COST ACCESS_TOKEN_EXPIRE_MINUTES; do
+        if [ -z "${!_VAR:-}" ]; then
+            _VALOR="$(grep -m1 "^${_VAR}=" "$_ENV_PREVIO" 2>/dev/null | cut -d= -f2-)"
+            [ -n "$_VALOR" ] && export "$_VAR=$_VALOR"
+        fi
+    done
+    # DB_PASS no se guarda como linea propia: vive embebida en DATABASE_URL
+    # (postgresql+psycopg://usuario:CONTRASEÑA@host/base). Se extrae de ahi
+    # para no rotarla en cada actualizacion sin necesidad -aunque rotarla
+    # tampoco rompe nada por si sola (el ALTER ROLE de mas abajo usa el mismo
+    # valor nuevo), es churn de un secreto sin motivo real.
+    if [ -z "${DB_PASS:-}" ]; then
+        _DB_PASS_PREVIA="$(grep -m1 '^DATABASE_URL=' "$_ENV_PREVIO" 2>/dev/null | sed -E 's#.*://[^:]+:([^@]+)@.*#\1#')"
+        [ -n "$_DB_PASS_PREVIA" ] && export "DB_PASS=$_DB_PASS_PREVIA"
+    fi
+fi
+
 WEB_PORT="${WEB_PORT:-3000}"
 PROXY_PORT="${PROXY_PORT:-3128}"
 DB_NAME="${DB_NAME:-squidmanager}"
@@ -154,7 +187,20 @@ ok "Usuario del panel: $APP_USER (grupo primario: $(id -gn "$APP_USER"))"
 paso "4. Obteniendo el codigo"
 
 if [ -d "$INSTALL_DIR/.git" ]; then
+    ES_ACTUALIZACION=1
     info "Ya existe un checkout en $INSTALL_DIR; actualizando a $BRANCH"
+    # Se descarta cualquier cambio local ANTES de cambiar de rama, no
+    # despues: `git checkout` se niega a cambiar de rama si eso pisaria una
+    # modificacion local (aunque el reset --hard de abajo la iba a borrar
+    # de todas formas), y aborta el script entero -bug real, encontrado
+    # probando el upgrade en vivo: un `pip install`/`npm install` corrido a
+    # mano deja el lockfile con una version resuelta distinta a la
+    # commiteada, y sin este paso cualquier actualizacion posterior fallaba
+    # con "Your local changes... would be overwritten by checkout". Un
+    # script de actualizacion no puede depender de que el checkout este
+    # impoluto: es exactamente lo que viene a resolver.
+    git -C "$INSTALL_DIR" checkout --quiet -- . 2>/dev/null || true
+    git -C "$INSTALL_DIR" clean -fdq
     git -C "$INSTALL_DIR" fetch --all --quiet
     git -C "$INSTALL_DIR" checkout --quiet "$BRANCH"
     git -C "$INSTALL_DIR" reset --hard --quiet "origin/$BRANCH"
@@ -413,6 +459,10 @@ ok "Entorno virtual listo"
 
 SECRET_KEY="${SECRET_KEY:-$(openssl rand -hex 32)}"
 ADMIN_INITIAL_PASSWORD="${ADMIN_INITIAL_PASSWORD:-$(openssl rand -base64 12 | tr -d '/+=' | cut -c1-14)}"
+ACCESS_TOKEN_EXPIRE_MINUTES="${ACCESS_TOKEN_EXPIRE_MINUTES:-480}"
+BCRYPT_COST="${BCRYPT_COST:-12}"
+TRUSTED_PROXY_HOSTS="${TRUSTED_PROXY_HOSTS:-localhost}"
+DEBUG="${DEBUG:-false}"
 
 cat > "$INSTALL_DIR/.env" <<EOF
 # Generado por install-nativo.sh el $(date -Iseconds)
@@ -420,12 +470,12 @@ DEPLOY_MODE=native
 NATIVE_SQUID_SERVICE=squid
 DATABASE_URL=postgresql+psycopg://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}
 SECRET_KEY=${SECRET_KEY}
-ACCESS_TOKEN_EXPIRE_MINUTES=480
+ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
 ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD}
-BCRYPT_COST=12
-CORS_ORIGINS=
-TRUSTED_PROXY_HOSTS=localhost
-DEBUG=false
+BCRYPT_COST=${BCRYPT_COST}
+CORS_ORIGINS=${CORS_ORIGINS:-}
+TRUSTED_PROXY_HOSTS=${TRUSTED_PROXY_HOSTS}
+DEBUG=${DEBUG}
 SQUID_CONFIG_PATH=/etc/squid/squid.conf
 WEB_PORT=${WEB_PORT}
 # PROXY_PORT no se escribe a proposito: en modo nativo el puerto vive solo
@@ -613,26 +663,46 @@ IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 
 echo
 echo "================================================"
-if [ "$FALLOS" -eq 0 ]; then
-    echo -e "${GREEN} SquidManager instalado (modo nativo, sin Docker)${NC}"
+if [ "${ES_ACTUALIZACION:-0}" = "1" ]; then
+    if [ "$FALLOS" -eq 0 ]; then
+        echo -e "${GREEN} SquidManager actualizado (modo nativo, sin Docker)${NC}"
+    else
+        echo -e "${YELLOW} SquidManager actualizado con $FALLOS aviso(s)${NC}"
+    fi
+    echo "================================================"
+    echo
+    echo "  Panel:    http://${IP:-127.0.0.1}:${WEB_PORT}"
+    echo "  Tu configuracion (usuarios, ACLs, reglas, contraseñas) se conservo"
+    echo "  tal cual. La clave de 'admin' sigue siendo la que ya tenias -la"
+    echo "  linea de abajo es solo el valor por defecto para una instalacion"
+    echo "  nueva, no aplica aca-."
+    echo
+    echo "  Servicios:  systemctl status squid squidmanager nginx"
+    echo "  Registros:  journalctl -u squidmanager -f"
+    echo "  Ajustes:    ${INSTALL_DIR}/.env"
+    echo
 else
-    echo -e "${YELLOW} SquidManager instalado con $FALLOS aviso(s)${NC}"
+    if [ "$FALLOS" -eq 0 ]; then
+        echo -e "${GREEN} SquidManager instalado (modo nativo, sin Docker)${NC}"
+    else
+        echo -e "${YELLOW} SquidManager instalado con $FALLOS aviso(s)${NC}"
+    fi
+    echo "================================================"
+    echo
+    echo "  Panel:    http://${IP:-127.0.0.1}:${WEB_PORT}"
+    echo "  Proxy:    ${IP:-127.0.0.1}:${PROXY_PORT}"
+    echo "  Usuario:  admin"
+    echo "  Clave:    ${ADMIN_INITIAL_PASSWORD}"
+    echo
+    echo "  Se te pedira cambiarla en el primer acceso."
+    echo
+    echo "  El proxy EXIGE usuario y contrasena, y todavia no hay ninguno:"
+    echo "  hasta que crees el primero en el panel (Usuarios > Nuevo usuario)"
+    echo "  no navegara nadie. Es a proposito: recien instalado no queda"
+    echo "  abierto a la red."
+    echo
+    echo "  Servicios:  systemctl status squid squidmanager nginx"
+    echo "  Registros:  journalctl -u squidmanager -f"
+    echo "  Ajustes:    ${INSTALL_DIR}/.env"
+    echo
 fi
-echo "================================================"
-echo
-echo "  Panel:    http://${IP:-127.0.0.1}:${WEB_PORT}"
-echo "  Proxy:    ${IP:-127.0.0.1}:${PROXY_PORT}"
-echo "  Usuario:  admin"
-echo "  Clave:    ${ADMIN_INITIAL_PASSWORD}"
-echo
-echo "  Se te pedira cambiarla en el primer acceso."
-echo
-echo "  El proxy EXIGE usuario y contrasena, y todavia no hay ninguno:"
-echo "  hasta que crees el primero en el panel (Usuarios > Nuevo usuario)"
-echo "  no navegara nadie. Es a proposito: recien instalado no queda"
-echo "  abierto a la red."
-echo
-echo "  Servicios:  systemctl status squid squidmanager nginx"
-echo "  Registros:  journalctl -u squidmanager -f"
-echo "  Ajustes:    ${INSTALL_DIR}/.env"
-echo

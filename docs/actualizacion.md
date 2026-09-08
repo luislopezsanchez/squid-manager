@@ -12,22 +12,43 @@ significa Docker).
 
 ## Instalación nativa (sin Docker)
 
-**Si esta instalación es de antes del Asistente de IA** (o no estás seguro:
-comprobalo con `psql -d squidmanager -c "\dx"` como usuario `postgres` — si
-no aparece `vector` en la lista, hace falta este paso), instalá la extensión
-de PostgreSQL **antes** de reiniciar el backend:
+**Forma recomendada: volver a correr `install-nativo.sh`.** Desde la versión
+que agrega esta guía, el propio instalador es seguro de re-ejecutar sobre una
+instalación que ya existe — es la manera de que actualizar deje de depender
+de que alguien lea esta página:
 
 ```bash
-sudo apt-get install -y "postgresql-$(psql --version | grep -oE '[0-9]+' | head -1)-pgvector"
-sudo -u postgres psql -d squidmanager -c "CREATE EXTENSION IF NOT EXISTS vector;"
+cd /opt/squid-manager
+sudo BRANCH=pruebas bash install-nativo.sh   # o BRANCH=main, según tu caso
 ```
 
-Sin esto, la migración correspondiente falla con `permission denied to
-create extension "vector"` (el usuario de BD de la aplicación, a propósito,
-no es superusuario — solo `postgres` puede crear extensiones) y el backend
-no arranca. `install-nativo.sh` ya hace este paso en una instalación nueva;
-una actualización no vuelve a correr el instalador, así que hay que hacerlo
-a mano una única vez.
+Con esto, en una sola corrida:
+
+- Trae el código nuevo (`git fetch` + `checkout` + `reset --hard`, descartando
+  cualquier modificación local del propio checkout —nunca la de `.env`, que es
+  un archivo aparte, gitignored, y no lo toca `git clean`—).
+- Deja instalada la extensión `pgvector` de Postgres si faltaba (el hueco real
+  que motivó reescribir esta sección: antes solo se creaba en una instalación
+  nueva, y una actualización se quedaba sin arrancar con `permission denied to
+  create extension "vector"`).
+- Reinstala el drop-in de systemd de Kerberos, el `logrotate` y el script de
+  `cron.monthly` si el código de alguno cambió — los tres son archivos que
+  `git pull` a secas nunca vuelve a copiar (ver más abajo el porqué), y que
+  antes de esta versión había que reinstalar a mano, uno por uno, revisando el
+  `CHANGELOG.md` para saber si hacía falta.
+- Reinstala las dependencias de Python y recompila el frontend.
+- Reinicia el servicio.
+
+**Qué NO toca**: tu `.env` (`SECRET_KEY`, contraseña de la base, puerto del
+panel, orígenes CORS...) se preserva tal cual —se lee del `.env` existente
+antes de escribir el nuevo—, y los datos de la base (usuarios, ACLs, reglas,
+certificados) ni se rozan: el instalador nunca borra una base que ya existe,
+solo la crea si falta. Verificado en vivo, más de una vez, con datos reales
+cargados antes de actualizar.
+
+Si preferís no volver a correr el instalador completo, el equivalente manual
+—y lo que hace falta revisar caso por caso si un futuro cambio toca algo que
+el instalador no cubre— es:
 
 ```bash
 cd /opt/squid-manager
@@ -45,9 +66,20 @@ pull` haya ido bien.
 Squid solo hay que reiniciarlo si la actualización cambia su configuración, y de
 eso se encarga el propio panel al aplicar cambios.
 
-**Si esta instalación es de antes de la versión 0.18.0 y usa (o vas a usar)
-Kerberos/Negotiate**, hace falta un paso más, una sola vez — una instalación
-nueva ya lo trae el propio instalador:
+### Por qué el camino manual necesita revisión caso por caso
+
+`git pull` trae el código nuevo al repositorio clonado, pero **no vuelve a
+copiar** los archivos que `install-nativo.sh` deja fuera de `/opt/squid-manager`
+la primera vez —el paquete `postgresql-N-pgvector` y la extensión en la base,
+la configuración de `logrotate`, el script de `cron.monthly`, el drop-in de
+systemd de Kerberos—. Si una versión nueva cambia alguno de esos, hace falta
+reinstalarlo a mano después del `git pull` (o, más simple, volver a correr el
+instalador completo, que es justo lo que resuelve esto). Este caso solo existe
+en modo nativo: en Docker, `--build` reconstruye la imagen entera con lo que el
+`Dockerfile` copia.
+
+Ejemplo concreto del paso manual, para quien no quiera re-correr el
+instalador — Kerberos/Negotiate, desde la versión 0.18.0:
 
 ```bash
 sudo mkdir -p /etc/systemd/system/squid.service.d
@@ -64,19 +96,8 @@ Sin esto, Squid no ve la variable de entorno que le dice dónde está el
 autenticación Negotiate falla siempre con `Bad encryption type` pese a un
 keytab correcto. Detalle completo en [kerberos.md](kerberos.md).
 
-### Archivos que el instalador coloca una sola vez
-
-`git pull` trae el código nuevo al repositorio clonado, pero **no vuelve a
-copiar** los archivos que `install-nativo.sh` deja fuera de `/opt/squid-manager`
-la primera vez —la configuración de `logrotate`, el script de `cron.monthly`,
-el drop-in de systemd de Kerberos de arriba—. Si una versión nueva cambia
-alguno de esos archivos, hace falta reinstalarlo a mano después del `git pull`.
-Este caso solo existe en modo nativo: en Docker, `--build` reconstruye la
-imagen entera con lo que el `Dockerfile` copia, así que no hay un paso
-equivalente que se pueda pasar por alto.
-
-Ejemplo concreto, desde 0.20.0 (rotación de logs por fecha, retención a 30
-días, consolidación mensual):
+Rotación de logs por fecha, retención a 30 días y consolidación mensual, desde
+la versión 0.20.0:
 
 ```bash
 cd /opt/squid-manager
@@ -86,10 +107,7 @@ sudo install -o root -g root -m 755 squid/consolidate-monthly-logs.sh /etc/cron.
 
 No hace falta reiniciar nada después de esto: `logrotate` y `cron.monthly` los
 ejecuta el sistema por su cuenta cuando corresponde, no un servicio de
-SquidManager. Si el `CHANGELOG.md` de una versión menciona un cambio a algo que
-vive fuera del propio código de la app (una unidad de systemd, un cron, un
-archivo en `/etc`), asumí que necesita este mismo tipo de paso manual y
-revisá qué instala `install-nativo.sh` para ese archivo en concreto.
+SquidManager.
 
 **Si esta instalación ya venía consolidando logs mensuales antes de la
 reorganización del histórico por año/mes** (módulo "Histórico de logs" del
