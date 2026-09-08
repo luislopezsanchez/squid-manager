@@ -33,12 +33,45 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "Certificado válido": "Valid certificate",
         "Contraseña actual incorrecta": "Current password is incorrect",
         "Delay pool no encontrado": "Delay pool not found",
-        "Demasiados intentos para esta cuenta. Espera un minuto.":
-            "Too many attempts for this account. Wait a minute.",
+        "Demasiados intentos fallidos para esta cuenta. Espera un minuto.":
+            "Too many failed attempts for this account. Wait a minute.",
+        "Demasiados intentos de login. Espera un minuto.":
+            "Too many login attempts. Wait a minute.",
+        "Demasiadas peticiones. Espera un momento.":
+            "Too many requests. Wait a moment.",
         "Destino válido": "Valid destination",
         "Direcciones válidas": "Valid addresses",
+        "El análisis expiró o ya se aplicó. Vuelve a subir el archivo y analízalo de nuevo.":
+            "The analysis expired or was already applied. Upload the file again and analyze it once more.",
         "El certificado está incompleto: falta la línea final.":
             "The certificate is incomplete: the final line is missing.",
+        "El esquema de autenticación debe ser \"basic\", \"digest\" o \"none\".":
+            "The authentication scheme must be \"basic\", \"digest\" or \"none\".",
+        "El modo debe ser 'reemplazar' o 'agregar'.":
+            "The mode must be 'reemplazar' or 'agregar'.",
+        "El valor de «ssl_bump_enabled» debe ser \"true\" o \"false\".":
+            "The value of «ssl_bump_enabled» must be \"true\" or \"false\".",
+        "La carga masiva es solo para ACLs de dominio (dstdomain/dstdom_regex).":
+            "Bulk upload is only for domain ACLs (dstdomain/dstdom_regex).",
+        "No se puede activar Digest con LDAP habilitado: Digest solo "
+        "autentica usuarios locales del proxy, no hay forma estándar de "
+        "guardar el hash que necesita en un directorio LDAP/Active "
+        "Directory. Desactiva LDAP en Configuración LDAP antes de activar "
+        "Digest, o mantén Basic si necesitas los dos.":
+            "Digest cannot be enabled with LDAP enabled: Digest only "
+            "authenticates local proxy users, and there is no standard way "
+            "to store the hash it needs in an LDAP/Active Directory "
+            "directory. Disable LDAP in LDAP Configuration before enabling "
+            "Digest, or keep Basic if you need both.",
+        "No se pueden crear grupos de usuarios con el esquema de "
+        "autenticación del proxy en 'none': los grupos dependen de "
+        "la autenticación local, que está desactivada. Cambia el "
+        "esquema a 'basic' o 'digest' en Configuración antes de "
+        "crear grupos.":
+            "User groups cannot be created with the proxy authentication "
+            "scheme set to 'none': groups depend on local authentication, "
+            "which is disabled. Change the scheme to 'basic' or 'digest' "
+            "in Settings before creating groups.",
         "El grupo ya existe": "The group already exists",
         "El nombre de usuario ya existe": "That username already exists",
         "El puerto del proxy padre no es un número": "The parent proxy port is not a number",
@@ -119,12 +152,46 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "Certificado válido": "Certificado válido",
         "Contraseña actual incorrecta": "Senha atual incorreta",
         "Delay pool no encontrado": "Delay pool não encontrado",
-        "Demasiados intentos para esta cuenta. Espera un minuto.":
-            "Tentativas demais para esta conta. Aguarde um minuto.",
+        "Demasiados intentos fallidos para esta cuenta. Espera un minuto.":
+            "Tentativas falhas demais para esta conta. Aguarde um minuto.",
+        "Demasiados intentos de login. Espera un minuto.":
+            "Tentativas de login demais. Aguarde um minuto.",
+        "Demasiadas peticiones. Espera un momento.":
+            "Requisições demais. Aguarde um momento.",
         "Destino válido": "Destino válido",
         "Direcciones válidas": "Endereços válidos",
+        "El análisis expiró o ya se aplicó. Vuelve a subir el archivo y analízalo de nuevo.":
+            "A análise expirou ou já foi aplicada. Envie o arquivo novamente e analise-o de novo.",
         "El certificado está incompleto: falta la línea final.":
             "O certificado está incompleto: falta a linha final.",
+        "El esquema de autenticación debe ser \"basic\", \"digest\" o \"none\".":
+            "O esquema de autenticação deve ser \"basic\", \"digest\" ou \"none\".",
+        "El modo debe ser 'reemplazar' o 'agregar'.":
+            "O modo deve ser 'reemplazar' ou 'agregar'.",
+        "El valor de «ssl_bump_enabled» debe ser \"true\" o \"false\".":
+            "O valor de «ssl_bump_enabled» deve ser \"true\" ou \"false\".",
+        "La carga masiva es solo para ACLs de dominio (dstdomain/dstdom_regex).":
+            "O carregamento em massa é só para ACLs de domínio (dstdomain/dstdom_regex).",
+        "No se puede activar Digest con LDAP habilitado: Digest solo "
+        "autentica usuarios locales del proxy, no hay forma estándar de "
+        "guardar el hash que necesita en un directorio LDAP/Active "
+        "Directory. Desactiva LDAP en Configuración LDAP antes de activar "
+        "Digest, o mantén Basic si necesitas los dos.":
+            "Não é possível ativar o Digest com o LDAP habilitado: o Digest "
+            "só autentica usuários locais do proxy, e não há forma padrão "
+            "de guardar o hash que ele precisa num diretório LDAP/Active "
+            "Directory. Desative o LDAP em Configuração LDAP antes de "
+            "ativar o Digest, ou mantenha o Basic se precisar dos dois.",
+        "No se pueden crear grupos de usuarios con el esquema de "
+        "autenticación del proxy en 'none': los grupos dependen de "
+        "la autenticación local, que está desactivada. Cambia el "
+        "esquema a 'basic' o 'digest' en Configuración antes de "
+        "crear grupos.":
+            "Não é possível criar grupos de usuários com o esquema de "
+            "autenticação do proxy em 'none': os grupos dependem da "
+            "autenticação local, que está desativada. Mude o esquema "
+            "para 'basic' ou 'digest' em Configurações antes de criar "
+            "grupos.",
         "El grupo ya existe": "O grupo já existe",
         "El nombre de usuario ya existe": "Esse nome de usuário já existe",
         "El puerto del proxy padre no es un número": "A porta do proxy pai não é um número",

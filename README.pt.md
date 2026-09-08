@@ -74,6 +74,7 @@ uma instância do SquidManager por nó.
 
 ### Gerenciamento do proxy
 - **ACLs visuais** — Crie listas de controle de acesso por domínio, IP, horário, regex, porta, método HTTP e mais (29 tipos suportados)
+- **Carga em massa de domínios** — Envie um arquivo com milhares de domínios para uma blocklist; abaixo de 200 entra como ACL normal, acima disso fica num arquivo à parte que o Squid lê diretamente, em vez de uma linha gigante no `squid.conf`
 - **Regras de acesso** — Ordene regras `http_access` com botões de subir/descer
 - **Grupos de usuários** — Agrupe usuários locais ou LDAP e aplique políticas de acesso ao grupo inteiro de uma vez
 - **Delay Pools** — Controle de largura de banda por usuário com interface visual (sem precisar entender o formato `64000/64000 64000/32000`)
@@ -81,26 +82,32 @@ uma instância do SquidManager por nó.
 
 ### Autenticação
 - **Usuários locais** — Gerenciamento completo de usuários com autenticação básica (htpasswd) e data de expiração opcional
+- **Digest (RFC 2617)** — O navegador nunca envia a senha em texto claro, só um hash; alternativa ao Basic para usuários locais
+- **Sem autenticação local (`none`)** — Para um proxy filho cujo controle de acesso real é feito por um proxy pai encadeado, sem duplicar usuários dos dois lados
 - **LDAP / Active Directory** — Integração com diretório externo, com teste de conexão integrado e sincronização paginada
-- **Painel seguro** — Login com JWT, papéis (superadmin / admin / somente leitura) e troca de senha obrigatória no primeiro acesso
+- **Kerberos / Negotiate** — Login único com o Active Directory, sem o navegador pedir credenciais
+- **Proxy pai encadeado** — Com credenciais fixas, ou repassando as do cliente (`passthru`) para um pai que exige Digest, NTLM ou Negotiate
+- **Painel seguro** — Login com JWT, papéis (superadmin / admin / somente leitura) e troca de senha obrigatória no primeiro acesso; uma senha correta nunca fica bloqueada pelas tentativas falhas de outra pessoa
 
 ### Segurança
 - **SSL Bump** — Intercepta e filtra tráfego HTTPS, não apenas HTTP
 - **Bloqueio de HTTPS por SNI** — Bloqueia domínios antes de descriptografar (ex.: Facebook ou YouTube por HTTPS)
 - **Exclusão de domínios sensíveis** — Bancos, saúde ou aplicativos com *certificate pinning* podem ficar de fora da descriptografia
-- **Auditoria completa** — Registro de todas as alterações: quem, o quê, quando
+- **Auditoria completa** — Registro de todas as alterações: quem, o quê, quando, com retenção automática
 - **Certificado CA** — Geração automática e download pelo painel, com instaladores para Windows, macOS e iOS
+- **Backend sem privilégios nos dois modos** — No Docker, o backend não monta mais o socket do Docker direto: fala com ele através de um proxy de socket restrito (`docker-socket-proxy`) que bloqueia build/swarm/segredos/plugins, e roda como usuário sem privilégios — igual ao que o modo nativo já fazia
 
 ### Operação
 - **Aplicar alterações a quente** — Valida a configuração no Squid *antes* de gravá-la; recarrega ou reinicia conforme necessário
 - **Mudança de porta automática** — Detecta a mudança e recria o contêiner sem perder a configuração se algo falhar
 - **Painel** — Tráfego em tempo real, principais usuários e domínios, estado do sistema
-- **Backup e migração** — Exporte toda a configuração para JSON (incluindo grupos e usuários LDAP) ou importe um `squid.conf` tradicional
+- **Histórico de logs** — Meses já fechados, organizados por ano/mês com um resumo pré-calculado (usuários, domínios, negados), com retenção configurável — separado do visualizador ao vivo
+- **Backup e migração** — Backup automático do banco de dados com retenção (script pronto para cron, nos dois modos de implantação), exporte toda a configuração para JSON, ou importe um `squid.conf` tradicional com um relatório prévio do que pode e do que não pode ser trazido (suporta `include`)
 - **Notificações** — Alertas por e-mail ou Telegram quando alterações são aplicadas ou se detecta atividade suspeita
 
 ### Implantação e idiomas
 - **Dois modos de implantação** — Com Docker (um único comando sobe tudo) ou **sem Docker**, com o Squid, o painel e o PostgreSQL como serviços do sistema. Escolhe-se com `DEPLOY_MODE`; o resto do produto é idêntico — veja [docs/instalacion-nativa.pt.md](docs/instalacion-nativa.pt.md)
-- **Sem root** — No modo nativo o painel roda com seu próprio usuário e um sudoers de três comandos, bem menos do que o socket do Docker concede
+- **Atualizar é um único comando** — No modo nativo, rodar o instalador de novo (`install-nativo.sh`) é a forma recomendada de atualizar: repara sozinho o que um simples `git pull` nunca volta a tocar (pacote do PostgreSQL, drop-in de systemd do Kerberos, rotação de logs), preservando sua configuração — veja [🔄 Atualizar](#-atualizar)
 - **Painel em três idiomas** — Espanhol, inglês e português, selecionável no próprio painel. As mensagens de erro da API também são traduzidas, e as páginas de erro que os usuários do proxy veem seguem o idioma deles — veja [docs/idiomas.md](docs/idiomas.md)
 
 ---
@@ -459,20 +466,29 @@ O comando depende de qual modo você usou para instalar
 # Modo A — com Docker
 cd /caminho/para/squid-manager && git pull && docker compose up -d --build
 
-# Modo B — sem Docker (nativo)
-cd /opt/squid-manager && sudo git pull && sudo backend/.venv/bin/pip install -q -r backend/requirements.txt && cd frontend && sudo npm install --silent && sudo npm run build && sudo systemctl restart squidmanager
+# Modo B — sem Docker (nativo): rodar o instalador de novo
+cd /opt/squid-manager && sudo BRANCH=main bash install-nativo.sh
 ```
+
+**No modo nativo, rodar `install-nativo.sh` de novo é a forma recomendada de
+atualizar** — é seguro fazer isso numa instalação que já existe: preserva
+seu `.env` (chave secreta, senha do banco, porta do painel) e seus dados tal
+como estão, e de quebra repara o que um simples `git pull` nunca volta a
+tocar (pacote do PostgreSQL que estiver faltando, drop-in de systemd do
+Kerberos, rotação de logs). O comando manual equivalente (`git pull` +
+`pip install` + `npm run build` + reiniciar o serviço) continua documentado
+em [docs/actualizacion.md](docs/actualizacion.md) para quem preferir não
+rodar o instalador inteiro de novo.
 
 As migrações do banco de dados são aplicadas sozinhas ao iniciar o backend, e
 **sua configuração é preservada**: usuários, regras, portas e certificados não
 são tocados.
 
-> **O `--build` (Docker) ou o `npm run build` (nativo) não são opcionais.**
-> Sem eles, o Docker reutiliza as imagens que já tem e o nginx continua
-> servindo o frontend antigo já compilado — nos dois casos o código novo
-> nunca chega a rodar, ainda que o `git pull` tenha dado certo. Tudo parece
-> correto — repositório em dia, contêineres ou serviço iniciados — mas você
-> continua na versão anterior.
+> **O `--build` (Docker) não é opcional.**
+> Sem ele, o Docker reutiliza as imagens que já tem: o código novo nunca
+> chega a rodar, ainda que o `git pull` tenha dado certo. Tudo parece
+> correto — repositório em dia, contêineres iniciados — mas você continua na
+> versão anterior.
 
 Para conferir que deu certo, em qualquer um dos dois modos:
 
