@@ -9,6 +9,12 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ### Agregado
 
+- **Asistente de IA**: responde preguntas en lenguaje natural sobre el uso del panel citando de qué
+  archivo y sección de la documentación salió cada respuesta. Solo lee `README.md` + `docs/*.md` en
+  español —nunca la base de datos, el `squid.conf` real ni credenciales—; búsqueda híbrida (embeddings
+  + texto completo de Postgres, con `pgvector`), apagado por defecto. Ver `docs/asistente-ia.md`.
+- **Backup y restore automatizados de la base de datos**, con retención configurable, listos para cron
+  en los dos modos de despliegue (`backup-database.sh` / `restore-database.sh`).
 - **Autenticación Digest (RFC 2617)**, como proxy padre e hijo: el navegador nunca envía la
   contraseña en claro, solo un hash. Helper propio (`squid/digest_auth_helper.py`), solo usuarios
   locales — sin soporte de LDAP, porque exigiría que el directorio guarde el HA1 en un atributo no
