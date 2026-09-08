@@ -59,6 +59,36 @@ Un usuario del proxy puede tener una fecha de caducidad opcional. Al regenerar `
 
 ---
 
+## Esquema de autenticación (`proxy_auth_scheme`)
+
+Configurable en **Configuración → proxy_auth_scheme**, elige **qué helper presenta Squid a los clientes**, con tres valores posibles:
+
+| Valor | Qué hace | Restricción |
+|---|---|---|
+| `basic` (default) | El helper local+LDAP descrito arriba (Basic Auth: usuario y contraseña, o su hash, viajan en cada petición) | — |
+| `digest` | Autenticación Digest (RFC 2617) — ver abajo | No se puede activar con LDAP habilitado |
+| `none` | Squid no pide credenciales propias | Exige un proxy padre habilitado (ver más abajo) |
+
+### Digest (RFC 2617)
+
+El navegador nunca envía la contraseña en claro: solo un hash calculado a partir de ella, un `realm` y un nonce que cambia en cada intercambio, de forma que ni siquiera capturando el tráfico se puede recuperar la contraseña original (a diferencia de Basic, donde solo la codifica en base64).
+
+- **Solo para usuarios locales** — no hay integración con LDAP para Digest: exigiría que el directorio guarde el hash HA1 en un atributo no estándar, algo que la mayoría de los AD/OpenLDAP no tienen habilitado. Por eso el panel **no deja activar `digest` con LDAP habilitado**, y viceversa.
+- El hash **HA1** (`MD5(usuario:realm:contraseña)`) se calcula una vez, al crear o resetear la contraseña del usuario, y queda guardado junto al `realm` con el que se calculó (`digest_ha1_realm`). Si después se cambia el `realm` en Configuración, los usuarios con un HA1 calculado para el `realm` anterior quedan excluidos del fichero de credenciales hasta que se les resetee la contraseña — un HA1 con el realm viejo no sirve para validar contra el nuevo.
+- Helper propio (`squid/digest_auth_helper.py`), separado del de Basic.
+- **También sirve como proxy padre e hijo**: un Squid hijo puede autenticarse contra un padre que exige Digest usando `passthru` en la configuración del proxy padre (ver [proxy-padre.md](proxy-padre.md)).
+- `credentialsttl` se comporta igual que con Basic (ver más abajo): es una propiedad de la caché de credenciales de Squid, no del esquema de autenticación en sí.
+
+### Sin autenticación local (`none`)
+
+Pensado para un Squid **hijo** cuyo control de acceso real ya lo hace un proxy padre encadenado — evita duplicar usuarios en los dos lados. Restricciones, ambas verificadas al guardar:
+
+- Exige que haya un **proxy padre habilitado**: sin uno, este Squid quedaría abierto sin ningún control de acceso, así que el panel rechaza el cambio.
+- Por el mismo motivo, **no se puede desactivar el proxy padre** mientras el esquema siga en `none` — hay que volver primero a `basic` o `digest`.
+- Los **grupos de usuarios** (que dependen de la autenticación local vía ACL `proxy_auth`) no tienen sentido con `none`: no hay usuarios locales autenticándose contra los que aplicarles una política.
+
+---
+
 ## Vida de la sesión (credentialsttl)
 
 Cuando un usuario se autentica, Squid **cachea sus credenciales** durante un tiempo

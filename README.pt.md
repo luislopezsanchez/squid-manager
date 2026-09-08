@@ -104,6 +104,12 @@ uma instância do SquidManager por nó.
 - **Histórico de logs** — Meses já fechados, organizados por ano/mês com um resumo pré-calculado (usuários, domínios, negados), com retenção configurável — separado do visualizador ao vivo
 - **Backup e migração** — Backup automático do banco de dados com retenção (script pronto para cron, nos dois modos de implantação), exporte toda a configuração para JSON, ou importe um `squid.conf` tradicional com um relatório prévio do que pode e do que não pode ser trazido (suporta `include`)
 - **Notificações** — Alertas por e-mail ou Telegram quando alterações são aplicadas ou se detecta atividade suspeita
+- **Syslog externo** — Encaminha os logs de acesso a um servidor syslog (SIEM, ELK, Splunk) além de gravá-los localmente
+
+### Assistente de IA
+- **Perguntas em linguagem natural sobre o painel** — Responde citando de qual arquivo e seção da documentação veio a resposta; nunca vê seu banco de dados, seu `squid.conf` real nem credenciais — veja [docs/asistente-ia.md](docs/asistente-ia.md) (só em espanhol)
+- **Busca híbrida** — Combina busca semântica (embeddings) e busca de texto completo sobre a documentação em espanhol
+- **Desligado por padrão** — Exige ativá-lo e configurar duas API keys (um provedor de chat + Jina AI para os embeddings); a documentação viaja a esses serviços externos ao reindexar e ao perguntar
 
 ### Implantação e idiomas
 - **Dois modos de implantação** — Com Docker (um único comando sobe tudo) ou **sem Docker**, com o Squid, o painel e o PostgreSQL como serviços do sistema. Escolhe-se com `DEPLOY_MODE`; o resto do produto é idêntico — veja [docs/instalacion-nativa.pt.md](docs/instalacion-nativa.pt.md)
@@ -703,7 +709,7 @@ suportado, responde em espanhol. Veja [docs/idiomas.md](docs/idiomas.md).
 > URL que contenha "metrics" por associá-la a telemetria, e a requisição nem
 > chega a sair do navegador.
 
-São 14 routers e 72 endpoints no total. Para a documentação completa, veja
+São 18 routers e 96 endpoints no total. Para a documentação completa, veja
 [docs/api-reference.md](docs/api-reference.md).
 
 ---
@@ -722,7 +728,9 @@ Em espanhol:
 | [docs/idiomas.md](docs/idiomas.md) | Idiomas do painel, da API e do proxy |
 | [docs/configuration.md](docs/configuration.md) | Todas as opções de configuração |
 | [docs/architecture.md](docs/architecture.md) | Arquitetura técnica detalhada |
-| [docs/authentication.md](docs/authentication.md) | Contas, sessões, papéis e grupos |
+| [docs/authentication.md](docs/authentication.md) | Contas, sessões, papéis, grupos e esquemas de autenticação (Basic/Digest/none) |
+| [docs/kerberos.md](docs/kerberos.md) | Autenticação Negotiate (SSO) contra Active Directory |
+| [docs/asistente-ia.md](docs/asistente-ia.md) | Assistente de IA: o que vê, o que não vê, como ativar |
 | [docs/ssl-bump.md](docs/ssl-bump.md) | Guia de SSL Bump e certificados CA |
 | [docs/proxy-padre.md](docs/proxy-padre.md) | Sair à internet por outro proxy |
 | [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md) | Instalar num servidor atrás de um proxy |

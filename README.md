@@ -94,6 +94,12 @@ El sistema está pensado para gestionar **un nodo Squid** de forma modular: la b
 - **Histórico de logs** — Meses ya cerrados, organizados por año/mes con un resumen precalculado (usuarios, dominios, denegados), con retención configurable — separado del visor en vivo
 - **Backup y migración** — Backup automático de la base de datos con retención (script listo para cron, en los dos modos de despliegue), exporta toda la configuración a JSON, o importa un `squid.conf` tradicional con un informe previo de qué se puede traer y qué no (soporta `include`)
 - **Notificaciones** — Avisos por email o Telegram cuando se aplican cambios o se detecta actividad sospechosa
+- **Syslog externo** — Reenvía los logs de acceso a un servidor syslog (SIEM, ELK, Splunk) además de escribirlos localmente
+
+### Asistente de IA
+- **Preguntas en lenguaje natural sobre el panel** — Responde citando de qué archivo y sección de la documentación salió la respuesta; nunca ve tu base de datos, tu `squid.conf` real ni credenciales — ver [docs/asistente-ia.md](docs/asistente-ia.md)
+- **Búsqueda híbrida** — Combina búsqueda semántica (embeddings) y de texto completo sobre la documentación en español
+- **Apagado por defecto** — Exige activarlo y configurar dos API keys (un proveedor de chat + Jina AI para los embeddings); la documentación viaja a esos servicios externos al reindexar y al preguntar
 
 ### Despliegue e idiomas
 - **Dos modos de despliegue** — Con Docker (un solo comando levanta todo) o **sin Docker**, con Squid, el panel y PostgreSQL como servicios del sistema. Se elige con `DEPLOY_MODE` y el resto del producto es idéntico — ver [docs/instalacion-nativa.md](docs/instalacion-nativa.md)
@@ -666,7 +672,7 @@ publicado — es el que responde en el puerto del panel.
 | GET | `/api/logs/access` | Consultar el access.log |
 | GET | `/api/audit/` | Listar log de auditoría |
 
-Son 14 routers con 72 endpoints en total. Para la documentación completa, ver [docs/api-reference.md](docs/api-reference.md).
+Son 18 routers con 96 endpoints en total. Para la documentación completa, ver [docs/api-reference.md](docs/api-reference.md).
 
 ---
 
@@ -708,7 +714,7 @@ squid-manager/
 │   ├── nginx.conf              # Proxy reverso al backend
 │   └── src/
 │       ├── main.tsx            # Entry point + rutas
-│       ├── pages/              # 16 páginas
+│       ├── pages/              # 21 páginas
 │       ├── components/         # Layout, Icons, AuthShell, Toast
 │       └── api/client.ts       # Cliente HTTP
 │
@@ -719,14 +725,21 @@ squid-manager/
 │   └── squid-logrotate         # Rotación diaria de los logs de Squid
 │
 ├── docs/                       # Documentación
-│   ├── installation.md         # Guía detallada de instalación
+│   ├── installation.md         # Guía detallada de instalación (Docker)
+│   ├── instalacion-nativa.md   # Guía de instalación sin Docker
+│   ├── actualizacion.md        # Cómo actualizar, en los dos modos
 │   ├── configuration.md        # Todas las opciones de configuración
 │   ├── architecture.md         # Arquitectura técnica
-│   ├── authentication.md       # Cuentas, sesiones y roles
+│   ├── authentication.md       # Cuentas, sesiones, roles, Digest/Basic/none
+│   ├── kerberos.md             # Autenticación Negotiate contra Active Directory
+│   ├── proxy-padre.md          # Proxies encadenados (padre e hijo)
+│   ├── asistente-ia.md         # Asistente de IA: qué ve, qué no, cómo activarlo
 │   ├── ssl-bump.md             # Guía de SSL Bump + certificados
 │   ├── backup-restore.md       # Backup, restore y migración
+│   ├── instalacion-tras-proxy.md  # Instalar detrás de un proxy corporativo
+│   ├── idiomas.md              # Arquitectura de traducciones del proyecto
 │   ├── production.md           # Guía de despliegue en producción
-│   ├── api-reference.md        # Documentación de la API
+│   ├── api-reference.md        # Documentación de la API (18 routers, 96 endpoints)
 │   └── project-log.md          # Bitácora del proyecto
 │
 └── examples/                   # Ejemplos y configs
@@ -746,7 +759,9 @@ squid-manager/
 | [docs/installation.md](docs/installation.md) | Guía paso a paso de instalación |
 | [docs/configuration.md](docs/configuration.md) | Todas las opciones de configuración |
 | [docs/architecture.md](docs/architecture.md) | Arquitectura técnica detallada |
-| [docs/authentication.md](docs/authentication.md) | Cuentas, sesiones, roles y grupos |
+| [docs/authentication.md](docs/authentication.md) | Cuentas, sesiones, roles, grupos y esquemas de autenticación (Basic/Digest/none) |
+| [docs/kerberos.md](docs/kerberos.md) | Autenticación Negotiate (SSO) contra Active Directory |
+| [docs/asistente-ia.md](docs/asistente-ia.md) | Asistente de IA: qué ve, qué no, cómo activarlo |
 | [docs/ssl-bump.md](docs/ssl-bump.md) | Guía de SSL Bump + certificados CA |
 | [docs/proxy-padre.md](docs/proxy-padre.md) | Salir a Internet por otro proxy (padre e hijo) |
 | [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md) | Instalar en un servidor que sale por un proxy |

@@ -136,7 +136,12 @@ Verificar que las funcionalidades principales siguen funcionando:
 - [ ] Los contenedores levantan sin errores
 - [ ] Si cambiaste un modelo, generaste y revisaste la migración de Alembic correspondiente
 - [ ] No se incluyen credenciales ni secrets
-- [ ] Se actualizó la documentación si es necesario
+- [ ] Si agregaste, cambiaste o quitaste un endpoint: se refleja en `docs/api-reference.md`
+- [ ] Si agregaste una feature de cara al usuario: tiene su bullet en el README (los 3 idiomas)
+      y, si necesita más de una línea para explicarse, su propio archivo en `docs/`
+      -el Asistente de IA solo indexa `README.md` + `docs/*.md` en español (ver
+      [docs/asistente-ia.md](docs/asistente-ia.md)): una feature ausente de ahí es una
+      feature sobre la que el asistente no puede responder-
 - [ ] Se actualizó el CHANGELOG.md
 - [ ] Los commits siguen la convención
 
