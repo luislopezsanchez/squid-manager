@@ -73,7 +73,8 @@ jobs:
 
       - name: Auditoría de dependencias (solo alta/crítica)
         working-directory: frontend
-        # --audit-level=high: no falla por la vulnerabilidad moderada de
-        # react-router-dom ya evaluada y aceptada a propósito (requiere
-        # v6->v7, planificado aparte). Sí falla ante algo nuevo y grave.
+        # --audit-level=high: umbral general, no una excepción puntual (la
+        # única vulnerabilidad conocida hasta ahora, en react-router-dom, ya
+        # se cerró con la migración a v7 -ver CHANGELOG.md-). Deja pasar algo
+        # moderado nuevo sin investigar, pero corta ante cualquier cosa grave.
         run: npm audit --omit=dev --audit-level=high

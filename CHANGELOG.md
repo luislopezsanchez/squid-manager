@@ -37,22 +37,28 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
   podía dejar sin acceso al admin real mandando unas pocas contraseñas mal escritas contra su usuario.
   Ahora la contraseña se valida siempre primero; el límite solo frena intentos que ya son incorrectos.
 
-### Dependencias — estado conocido, sin resolver todavía
+### Dependencias — actualizadas (cierre de los hallazgos 06-001/06-002 de la auditoría 2026-09-08)
 
-- `pip-audit` sigue señalando 17 vulnerabilidades en 4 paquetes de backend (`starlette`, `pyasn1`,
-  `ecdsa`, y `pytest` que es solo de desarrollo) — mismo arrastre que ya se documentó en `[0.21.0]` y
-  anteriores, pendiente de decidir cuándo subir `fastapi`/`starlette` y de evaluar reemplazar
-  `python-jose` (que trae `ecdsa`/`pyasn1` como transitivas; no explotable hoy porque el proyecto firma
-  sus JWT con HS256, no con curvas elípticas).
-- **`react-router-dom` tiene 2 CVEs moderadas** (open redirect vía backslash en `<Link>`/`useNavigate`,
-  e inyección de constructor en hidratación SSR). Se acepta por ahora, deliberadamente: el proyecto es
-  una SPA sin SSR (nginx sirve `dist/` estático, la vulnerabilidad de hidratación no aplica), y el único
-  uso de `navigate()`/`<Link>` del código (`Layout.tsx`, `LdapConfig.tsx`, `ChangePassword.tsx`) va
-  siempre a rutas fijas del propio panel, nunca a una URL que el usuario controle — sin exposición
-  práctica hoy. El fix real exige migrar a React Router v7 (*breaking change* de mayor versión),
-  planificado aparte, no incluido en esta versión. El pipeline de CI (`.github/workflows/ci.yml`) usa
-  `--audit-level=high` a propósito para dejar pasar esta vulnerabilidad ya evaluada sin bloquear el
-  build, y sí cortar ante cualquier cosa nueva y grave.
+- **`fastapi` 0.115.0 → 0.115.14** (misma serie menor, sin cambios de comportamiento: la suite
+  completa pasa sin tocar código de la app). Sube `starlette` de 0.38.6 a 0.46.2, que cierra varias de
+  las 17 vulnerabilidades que arrastraba el proyecto. Se probó subir más lejos (`fastapi` 0.141.1 +
+  `starlette` 1.6.0, que resolvería el resto) pero **rompe el registro de rutas de la app**
+  (`test_rutas_bloqueables.py` lo detectó de inmediato: las rutas alternativas del panel dejan de
+  existir) — revertido. Con `no romper lo que ya está en uso` como prioridad, se deja en la versión
+  segura y ya verificada; subir más allá exige una migración aparte, con tiempo para investigar qué
+  cambió en el registro de routers entre esas versiones.
+- **`pytest` 8.3.3 → 9.0.3** (solo dependencia de desarrollo, no viaja a producción): cierra su CVE sin
+  ningún ajuste, suite completa sin cambios.
+- `pyasn1`/`ecdsa` (transitivas de `python-jose`) siguen con sus CVEs: no alcanzables por el flujo real
+  de JWT del proyecto (firma con HS256, no con curvas elípticas ni ASN.1 de certificados), y
+  reemplazar `python-jose` es un cambio de más alcance, no incluido en esta tanda.
+- **`react-router` 6.26.2 → 7.18.3**: cierra las 2 CVEs moderadas por completo (`npm audit
+  --omit=dev` → 0 vulnerabilidades). El proyecto solo usa la API declarativa clásica
+  (`BrowserRouter`/`Routes`/`Route`/`Navigate`/`NavLink`/`useNavigate`/`Outlet`), que v7 mantiene
+  compatible — build sin cambios de código, y verificado en vivo en un despliegue real (nativo,
+  172.30.36.91): login, el flujo obligatorio de cambio de contraseña, navegación entre páginas con
+  rutas anidadas, recarga directa de una URL profunda, la ruta protegida por rol (solo
+  superadministrador) y logout, todo funcionando igual que antes.
 
 ---
 
