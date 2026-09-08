@@ -589,8 +589,20 @@ chmod 755 "$INSTALL_DIR" "$INSTALL_DIR/frontend"
 paso "10. Arrancando los servicios"
 
 systemctl daemon-reload
-systemctl enable --now squid >/dev/null 2>&1 || warn "Squid no arranco; revisa: journalctl -u squid"
-systemctl enable --now squidmanager >/dev/null 2>&1 || warn "El panel no arranco; revisa: journalctl -u squidmanager"
+
+# "enable --now" solo garantiza que el servicio termine activo -si ya lo
+# estaba, no hace nada-, no que este corriendo el codigo que acaba de
+# quedar en disco. En una instalacion nueva da igual (no hay nada corriendo
+# todavia), pero en un upgrade es el bug real: el codigo se actualiza pero
+# el proceso viejo sigue en pie, sirviendo la version y las migraciones de
+# ANTES, sin ningun error que lo delate -confirmado en vivo en
+# 172.30.36.63, 2026-09-08, con upgrade-nativo.sh-. "restart" fuerza el
+# reinicio siempre, y en un servicio que todavia no existe equivale a
+# arrancarlo, asi que sirve igual para instalacion nueva y upgrade.
+systemctl enable squid >/dev/null 2>&1 || true
+systemctl restart squid >/dev/null 2>&1 || warn "Squid no arranco; revisa: journalctl -u squid"
+systemctl enable squidmanager >/dev/null 2>&1 || true
+systemctl restart squidmanager >/dev/null 2>&1 || warn "El panel no arranco; revisa: journalctl -u squidmanager"
 systemctl reload-or-restart nginx
 
 sleep 5

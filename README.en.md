@@ -106,7 +106,7 @@ means deploying one SquidManager instance per node.
 
 ### Deployment and languages
 - **Two deployment modes** — With Docker (a single command brings everything up) or **without Docker**, with Squid, the panel and PostgreSQL running as system services. Chosen with `DEPLOY_MODE`; the rest of the product is identical — see [docs/instalacion-nativa.en.md](docs/instalacion-nativa.en.md)
-- **Upgrading is a single command** — In native mode, re-running the installer (`install-nativo.sh`) is the recommended way to upgrade: it repairs whatever a plain `git pull` never touches again (a PostgreSQL extension package, the Kerberos systemd drop-in, log rotation), while preserving your configuration — see [🔄 Upgrading](#-upgrading)
+- **Upgrading is a single command** — `upgrade-docker.sh` / `upgrade-nativo.sh`: a prior backup, the new code brought in safely, and everything rebuilt and restarted, while preserving your configuration — see [🔄 Upgrading](#-upgrading)
 - **Panel in three languages** — Spanish, English and Portuguese, selectable from the panel itself. API error messages are translated too, and the error pages your proxy users see follow their own language — see [docs/idiomas.md](docs/idiomas.md)
 
 ---
@@ -459,25 +459,41 @@ That is on purpose, and it is explained above in
 ## 🔄 Upgrading
 
 The command depends on which mode you installed with
-([Mode A or Mode B](#-installation), you chose it at install time):
+([Mode A or Mode B](#-installation), you chose it at install time). Either
+way it's a script separate from the installer — freshly downloaded each
+time, never the copy already sitting on disk:
 
 ```bash
 # Mode A — with Docker
-cd /path/to/squid-manager && git pull && docker compose up -d --build
+cd /path/to/squid-manager
+wget -O upgrade-docker.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-docker.sh
+sudo bash upgrade-docker.sh
 
-# Mode B — without Docker (native): re-run the installer
-cd /opt/squid-manager && sudo BRANCH=main bash install-nativo.sh
+# Mode B — without Docker (native)
+cd /opt/squid-manager
+wget -O upgrade-nativo.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-nativo.sh
+sudo bash upgrade-nativo.sh
 ```
 
-**In native mode, re-running `install-nativo.sh` is the recommended way to
-upgrade** — it's safe to run on an installation that already exists: it
-preserves your `.env` (secret key, database password, panel port) and your
-data as they are, and along the way repairs whatever a plain `git pull`
-never touches again (a PostgreSQL package if one's missing, the Kerberos
-systemd drop-in, log rotation). The equivalent manual command (`git pull` +
-`pip install` + `npm run build` + service restart) is still documented in
+Both do the same thing for their mode: back up the database before touching
+anything, bring in the new code safely (discarding uncommitted local changes
+in the checkout itself, never your `.env`), and leave everything rebuilt and
+restarted — with `--build` on Docker, and on native by repeating whatever
+`install-nativo.sh` knows how to repair (a missing PostgreSQL package, the
+Kerberos systemd drop-in, log rotation, Python dependencies, rebuilding the
+panel) and **actually restarting the service**, not only if it was down.
+
+**Why re-running `install-nativo.sh` by hand isn't enough in native mode**:
+that script does its own `git checkout`/`reset` on its own checkout as part
+of upgrading, and if the version you already have installed differs from
+the new one in that very logic, you end up running the old logic while the
+files underneath have already changed — the concrete reason
+`upgrade-nativo.sh` exists instead of documenting that path. You can still
+pass `BRANCH=main` (or whichever branch applies) to either script if you
+need to target something other than its default. The equivalent manual
+command, step by step, is still documented in
 [docs/actualizacion.md](docs/actualizacion.md) for anyone who'd rather not
-re-run the whole installer.
+run either script.
 
 Database migrations are applied automatically when the backend starts, and
 **your configuration is preserved**: users, rules, ports and certificates are

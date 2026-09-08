@@ -60,6 +60,31 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
   rutas anidadas, recarga directa de una URL profunda, la ruta protegida por rol (solo
   superadministrador) y logout, todo funcionando igual que antes.
 
+### Corregido — actualización
+
+- **`upgrade-docker.sh` (nuevo)**: backup previo de la base con `backup-database.sh`, trae el código
+  nuevo descartando cambios locales sin commitear antes de cambiar de rama (mismo mecanismo de git que
+  el fix de `install-nativo.sh` de más abajo), `docker compose up -d --build` y verificación de
+  `/health` al final.
+- **`upgrade-nativo.sh` (nuevo)**: mismo respaldo para el modo nativo, pero como script aparte de
+  `install-nativo.sh` en vez de sumarle más lógica encima. Motivo: `install-nativo.sh` hace `git
+  checkout`/`reset` sobre su propio checkout como parte de actualizar, y si la versión instalada
+  difiere de la destino en esa misma lógica, bash sigue ejecutando en memoria el código viejo mientras
+  los archivos de disco —el propio script incluido— ya cambiaron por debajo: el fix de checkout, la
+  instalación de `pgvector` y el reinicio de servicios podían no llegar a aplicarse nunca, sin ningún
+  error visible. `upgrade-nativo.sh` nunca se modifica a sí mismo: trae el código nuevo y recién
+  entonces invoca, como proceso aparte, el `install-nativo.sh` ya actualizado. También purga
+  `__pycache__` (gitignorado, así que `git clean` no lo toca) antes de reinstalar, para no dejar
+  bytecode viejo sirviendo al proceso reiniciado.
+- **`install-nativo.sh` ya no usa `systemctl enable --now` para arrancar Squid y el panel**:
+  `enable --now` no reinicia un servicio que ya está activo, así que en una actualización el código
+  quedaba escrito en disco pero el proceso viejo seguía corriendo, sirviendo la versión y las
+  migraciones de antes sin ningún aviso. Ahora hace `enable` + `restart` explícito, que fuerza el
+  reinicio siempre y también sirve para arrancar el servicio la primera vez.
+- Bugs encontrados y corregidos probando en vivo el camino completo de actualización de `main` a esta
+  versión, en dos contenedores de prueba (nativo y Docker) recién instalados desde cero — ver
+  `docs/actualizacion.md`.
+
 ---
 
 ## [0.21.0] - 2026-09-06

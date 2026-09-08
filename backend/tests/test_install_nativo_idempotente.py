@@ -88,3 +88,19 @@ def test_mensaje_final_distingue_actualizacion_de_instalacion_nueva():
     contenido = _script()
     assert 'ES_ACTUALIZACION=1' in contenido
     assert 'if [ "${ES_ACTUALIZACION:-0}" = "1" ]; then' in contenido
+
+
+def test_arranque_final_reinicia_de_verdad_no_solo_enable_now():
+    """`systemctl enable --now` no reinicia un servicio que ya estaba
+    activo -es un no-op-, así que en una actualización el código quedaba
+    escrito en disco pero el proceso viejo seguía corriendo, sirviendo la
+    versión y las migraciones de ANTES sin ningún error visible. Bug real,
+    confirmado en vivo probando upgrade-nativo.sh en 172.30.36.63
+    (2026-09-08): `restart` fuerza el reinicio siempre y también sirve para
+    arrancar el servicio la primera vez, así que no hace falta distinguir
+    instalación nueva de actualización aquí."""
+    contenido = _script()
+    assert "systemctl restart squid " in contenido
+    assert "systemctl restart squidmanager " in contenido
+    assert "systemctl enable --now squid" not in contenido
+    assert "systemctl enable --now squidmanager" not in contenido

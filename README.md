@@ -97,7 +97,7 @@ El sistema está pensado para gestionar **un nodo Squid** de forma modular: la b
 
 ### Despliegue e idiomas
 - **Dos modos de despliegue** — Con Docker (un solo comando levanta todo) o **sin Docker**, con Squid, el panel y PostgreSQL como servicios del sistema. Se elige con `DEPLOY_MODE` y el resto del producto es idéntico — ver [docs/instalacion-nativa.md](docs/instalacion-nativa.md)
-- **Actualizar es un solo comando** — En modo nativo, volver a correr el instalador (`install-nativo.sh`) es la forma recomendada de actualizar: repara solo lo que un `git pull` nunca vuelve a tocar (extensión de PostgreSQL, drop-in de Kerberos, rotación de logs), preservando tu configuración — ver [🔄 Actualizar](#-actualizar)
+- **Actualizar es un solo comando** — `upgrade-docker.sh` / `upgrade-nativo.sh`: backup previo, código nuevo traído de forma segura y todo reconstruido y reiniciado, preservando tu configuración — ver [🔄 Actualizar](#-actualizar)
 - **Panel en tres idiomas** — Español, inglés y portugués, seleccionable desde el propio panel. Los mensajes de error de la API también se traducen, y las páginas de error que ven los usuarios del proxy siguen su propio idioma — ver [docs/idiomas.md](docs/idiomas.md)
 
 ---
@@ -443,25 +443,41 @@ todavía no existe ninguna. Es a propósito, y está explicado arriba en
 ## 🔄 Actualizar
 
 El comando depende de con qué modo instalaste ([Modo A o Modo B](#-instalación),
-lo elegiste al instalar):
+lo elegiste al instalar). En los dos casos es un script aparte del
+instalador — se baja fresco cada vez, nunca la copia que ya tenías en disco:
 
 ```bash
 # Modo A — con Docker
-cd /ruta/a/squid-manager && git pull && docker compose up -d --build
+cd /ruta/a/squid-manager
+wget -O upgrade-docker.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-docker.sh
+sudo bash upgrade-docker.sh
 
-# Modo B — sin Docker (nativo): volver a correr el instalador
-cd /opt/squid-manager && sudo BRANCH=main bash install-nativo.sh
+# Modo B — sin Docker (nativo)
+cd /opt/squid-manager
+wget -O upgrade-nativo.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-nativo.sh
+sudo bash upgrade-nativo.sh
 ```
 
-**En modo nativo, volver a correr `install-nativo.sh` es la forma
-recomendada de actualizar** — es seguro hacerlo sobre una instalación que ya
-existe: preserva tu `.env` (clave secreta, contraseña de la base, puerto del
-panel) y tus datos tal cual, y de paso repara lo que un simple `git pull`
-nunca vuelve a tocar (paquete de PostgreSQL que haga falta, drop-in de
-systemd de Kerberos, rotación de logs). El comando manual equivalente
-(`git pull` + `pip install` + `npm run build` + reinicio del servicio) sigue
-documentado en [docs/actualizacion.md](docs/actualizacion.md) para quien
-prefiera no re-correr el instalador completo.
+Los dos hacen lo mismo en su modo: backup de la base antes de tocar nada,
+traen el código nuevo de forma segura (descartando cambios locales sin
+commitear del propio checkout, nunca tu `.env`) y dejan todo reconstruido y
+reiniciado — en Docker con `--build`, en nativo repitiendo lo que
+`install-nativo.sh` sabe reparar (paquete de PostgreSQL que haga falta,
+drop-in de systemd de Kerberos, rotación de logs, dependencias de Python,
+recompilar el panel) y **reiniciando el servicio de verdad**, no solo si
+estaba caído.
+
+**Por qué no alcanza con re-correr `install-nativo.sh` a mano en modo
+nativo**: ese script hace `git checkout`/`reset` sobre su propio checkout
+como parte de la actualización, y si la versión que ya tenés instalada
+difiere de la nueva en esa misma lógica, terminás ejecutando la lógica
+vieja mientras los archivos de abajo ya cambiaron — el motivo concreto de
+que exista `upgrade-nativo.sh` en vez de documentar eso. Podés seguir
+usando `BRANCH=main` (o la rama que corresponda) con cualquiera de los dos
+scripts si necesitás apuntar a otra rama que la que tienen por defecto. El
+comando manual equivalente, paso por paso, sigue documentado en
+[docs/actualizacion.md](docs/actualizacion.md) para quien prefiera no
+correr ninguno de los dos scripts.
 
 Las migraciones de base de datos se aplican solas al arrancar el backend, y **tu
 configuración se conserva**: usuarios, reglas, puertos y certificados no se

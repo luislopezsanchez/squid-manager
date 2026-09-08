@@ -168,20 +168,23 @@ systemctl restart squidmanager
 
 ## Atualizar
 
-Rodar o instalador de novo é a forma recomendada — é seguro fazer isso numa
-instalação que já existe, preserva sua configuração, e de quebra repara o
-que um `git pull` simples nunca volta a tocar (pacote do PostgreSQL,
-drop-in de systemd do Kerberos, rotação de logs):
+`upgrade-nativo.sh` é a forma recomendada — um script separado do
+instalador, baixado na hora a cada vez, que faz backup do banco, traz o
+código novo com segurança e só então roda o `install-nativo.sh` já
+atualizado (que é quem preserva sua configuração e repara o que um `git
+pull` simples nunca volta a tocar: pacote do PostgreSQL, drop-in de
+systemd do Kerberos, rotação de logs):
 
 ```bash
 cd /opt/squid-manager
-sudo BRANCH=main bash install-nativo.sh
+wget -O upgrade-nativo.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-nativo.sh
+sudo BRANCH=main bash upgrade-nativo.sh
 ```
 
 Veja [docs/actualizacion.md](actualizacion.md) (só em espanhol) para o
-detalhe completo, o comando manual equivalente (para quem preferir não
-rodar o instalador inteiro de novo) e o que fazer se algo falhar no meio
-do caminho.
+detalhe completo — incluindo por que só rodar `install-nativo.sh` de novo
+à mão não basta —, o comando manual equivalente e o que fazer se algo
+falhar no meio do caminho.
 
 ### Atualizar a partir de uma versão sem Kerberos
 

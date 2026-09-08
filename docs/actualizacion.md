@@ -12,32 +12,51 @@ significa Docker).
 
 ## Instalación nativa (sin Docker)
 
-**Forma recomendada: volver a correr `install-nativo.sh`.** Desde la versión
-que agrega esta guía, el propio instalador es seguro de re-ejecutar sobre una
-instalación que ya existe — es la manera de que actualizar deje de depender
-de que alguien lea esta página:
+**Forma recomendada: `upgrade-nativo.sh`.** Es un script aparte del
+instalador, pensado para bajarse fresco cada vez —nunca la copia que ya
+tenés en `/opt/squid-manager`—:
 
 ```bash
 cd /opt/squid-manager
-sudo BRANCH=pruebas bash install-nativo.sh   # o BRANCH=main, según tu caso
+wget -O upgrade-nativo.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-nativo.sh
+sudo BRANCH=pruebas bash upgrade-nativo.sh   # o BRANCH=main, según tu caso
 ```
 
 Con esto, en una sola corrida:
 
+- Hace un backup de la base con `backup-database.sh` antes de tocar nada
+  (si el script no existe todavía en tu instalación —versiones previas a
+  que se agregara—, avisa y sigue sin backup en vez de abortar).
 - Trae el código nuevo (`git fetch` + `checkout` + `reset --hard`, descartando
   cualquier modificación local del propio checkout —nunca la de `.env`, que es
-  un archivo aparte, gitignored, y no lo toca `git clean`—).
-- Deja instalada la extensión `pgvector` de Postgres si faltaba (el hueco real
-  que motivó reescribir esta sección: antes solo se creaba en una instalación
-  nueva, y una actualización se quedaba sin arrancar con `permission denied to
-  create extension "vector"`).
-- Reinstala el drop-in de systemd de Kerberos, el `logrotate` y el script de
-  `cron.monthly` si el código de alguno cambió — los tres son archivos que
-  `git pull` a secas nunca vuelve a copiar (ver más abajo el porqué), y que
-  antes de esta versión había que reinstalar a mano, uno por uno, revisando el
-  `CHANGELOG.md` para saber si hacía falta.
-- Reinstala las dependencias de Python y recompila el frontend.
-- Reinicia el servicio.
+  un archivo aparte, gitignored, y no lo toca `git clean`—) y purga
+  `__pycache__` (gitignoreado, así que `git clean` tampoco lo toca, y un
+  `.pyc` viejo ahí puede quedar sirviendo código de antes del upgrade).
+- Invoca, como proceso nuevo, el `install-nativo.sh` que quedó en el
+  checkout ya actualizado —nunca el que estaba corriendo antes—, que es
+  quien deja instalada la extensión `pgvector` de Postgres si faltaba,
+  reinstala el drop-in de systemd de Kerberos, el `logrotate` y el script
+  de `cron.monthly` si el código de alguno cambió, reinstala las
+  dependencias de Python, recompila el frontend, y reinicia el servicio de
+  verdad (no solo si estaba caído).
+
+**Por qué un script aparte, y no alcanza con volver a correr
+`install-nativo.sh` directamente** —que sigue siendo seguro de re-ejecutar
+sobre una instalación que ya existe, y es lo que `upgrade-nativo.sh` invoca
+por dentro—: ese script hace su propio `git checkout`/`reset` sobre sí
+mismo como parte de la actualización. Si la versión ya instalada difiere de
+la versión destino en la lógica de esa misma sección —como pasó al pasar de
+una versión sin este mecanismo a una con él—, bash sigue ejecutando en
+memoria el código VIEJO durante el resto de la corrida mientras los
+archivos de disco, el propio script incluido, ya cambiaron por debajo: el
+fix de `git checkout`, la instalación de `pgvector` y el reinicio de
+servicios pueden no llegar a aplicarse, sin ningún error que lo delate.
+Bug real, encontrado y aislado probando el upgrade en vivo. `upgrade-nativo.sh`
+lo evita por diseño —nunca se modifica a sí mismo— y de paso resuelve
+también el reinicio: **`systemctl enable --now` no reinicia un servicio que
+ya está activo**, así que sin este cambio el código podía quedar
+actualizado en disco mientras el proceso seguía corriendo la versión
+anterior.
 
 **Qué NO toca**: tu `.env` (`SECRET_KEY`, contraseña de la base, puerto del
 panel, orígenes CORS...) se preserva tal cual —se lee del `.env` existente
@@ -46,9 +65,9 @@ certificados) ni se rozan: el instalador nunca borra una base que ya existe,
 solo la crea si falta. Verificado en vivo, más de una vez, con datos reales
 cargados antes de actualizar.
 
-Si preferís no volver a correr el instalador completo, el equivalente manual
-—y lo que hace falta revisar caso por caso si un futuro cambio toca algo que
-el instalador no cubre— es:
+Si preferís no correr el script, el equivalente manual —y lo que hace falta
+revisar caso por caso si un futuro cambio toca algo que el instalador no
+cubre— es:
 
 ```bash
 cd /opt/squid-manager
@@ -129,6 +148,23 @@ usando el mismo indexador que ya instala `install-nativo.sh`.
 ---
 
 ## Instalación con Docker
+
+**Forma recomendada: `upgrade-docker.sh`.** También aparte del `install.sh`,
+también bajado fresco cada vez:
+
+```bash
+cd /ruta/a/squid-manager
+wget -O upgrade-docker.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-docker.sh
+sudo BRANCH=main bash upgrade-docker.sh   # o la rama que corresponda
+```
+
+Hace, en una sola corrida: backup de la base con `backup-database.sh` antes
+de tocar nada (si falla, avisa y sigue igual —preferible actualizar sin
+backup que no actualizar—), trae el código nuevo con el mismo mecanismo
+seguro que en modo nativo (descarta cambios locales antes de cambiar de
+rama, para que un `git checkout` no aborte el script entero por una
+modificación sin commitear), reconstruye con `docker compose up -d
+--build` y verifica que `/health` responda al final.
 
 **Si esta instalación es de antes del Asistente de IA**, en teoría hace
 falta crear la extensión `vector` a mano en el volumen de Postgres ya
