@@ -66,3 +66,7 @@ proxy.conf
 # (backend/app/services/update_service.py): no es código ni configuración
 # versionable, es el estado de ESTE despliegue puntual.
 backend/.update_state.json*
+
+# Idem para el buffer de métricas de red (metrics_service.py) -antes vivía
+# en /tmp, movido por el hallazgo 05-004 de la auditoría 2026-09-09.
+backend/.network_state.json

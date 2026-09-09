@@ -31,7 +31,16 @@ _network_buffer = []
 _network_buffer_lock = threading.Lock()
 _prev_network = {"timestamp": 0, "rx_bytes": 0, "tx_bytes": 0}
 _MAX_BUFFER = 120  # 10 minutos a 5s por punto
-_STATE_FILE = "/tmp/squidmgr_network_state.json"
+# Junto al resto del estado operativo del backend (mismo patron que
+# update_service.py con .update_state.json), no en /tmp: en el despliegue
+# nativo /tmp es compartido con el resto del sistema, y una ruta fija y
+# adivinable ahi es el patron que un usuario local sin privilegios podria
+# explotar -crear el archivo antes, o dejarlo como enlace simbolico a otro
+# archivo escribible por squidmgr- para que el proceso lo sobrescriba.
+# Impacto bajo (no son datos sensibles, los errores se tragan), pero el
+# patron no conviene repetirlo (auditoria 2026-09-09, hallazgo 05-004).
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_STATE_FILE = str(_BACKEND_DIR / ".network_state.json")
 
 
 def _load_prev_state() -> dict:
