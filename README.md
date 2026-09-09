@@ -104,6 +104,7 @@ El sistema está pensado para gestionar **un nodo Squid** de forma modular: la b
 ### Despliegue e idiomas
 - **Dos modos de despliegue** — Con Docker (un solo comando levanta todo) o **sin Docker**, con Squid, el panel y PostgreSQL como servicios del sistema. Se elige con `DEPLOY_MODE` y el resto del producto es idéntico — ver [docs/instalacion-nativa.md](docs/instalacion-nativa.md)
 - **Actualizar es un solo comando** — `upgrade-docker.sh` / `upgrade-nativo.sh`: backup previo, código nuevo traído de forma segura y todo reconstruido y reiniciado, preservando tu configuración — ver [🔄 Actualizar](#-actualizar)
+- **Actualizaciones desde el propio panel** (instalación nativa) — Avisa cuándo hay una versión nueva en GitHub y qué cambió; aprobarla —ahora o programada— nunca le da al panel web permisos nuevos, solo deja la aprobación para un mecanismo aparte que ya corría con privilegios propios — ver [docs/actualizaciones-automaticas.md](docs/actualizaciones-automaticas.md)
 - **Panel en tres idiomas** — Español, inglés y portugués, seleccionable desde el propio panel. Los mensajes de error de la API también se traducen, y las páginas de error que ven los usuarios del proxy siguen su propio idioma — ver [docs/idiomas.md](docs/idiomas.md)
 
 ---
@@ -728,6 +729,7 @@ squid-manager/
 │   ├── installation.md         # Guía detallada de instalación (Docker)
 │   ├── instalacion-nativa.md   # Guía de instalación sin Docker
 │   ├── actualizacion.md        # Cómo actualizar, en los dos modos
+│   ├── actualizaciones-automaticas.md  # Aprobar actualizaciones desde el panel (nativo)
 │   ├── configuration.md        # Todas las opciones de configuración
 │   ├── architecture.md         # Arquitectura técnica
 │   ├── authentication.md       # Cuentas, sesiones, roles, Digest/Basic/none
@@ -766,6 +768,7 @@ squid-manager/
 | [docs/proxy-padre.md](docs/proxy-padre.md) | Salir a Internet por otro proxy (padre e hijo) |
 | [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md) | Instalar en un servidor que sale por un proxy |
 | [docs/actualizacion.md](docs/actualizacion.md) | Cómo actualizar, verificar y volver atrás |
+| [docs/actualizaciones-automaticas.md](docs/actualizaciones-automaticas.md) | Aprobar actualizaciones desde el propio panel (instalación nativa) |
 | [docs/backup-restore.md](docs/backup-restore.md) | Backup, restore y migración |
 | [docs/production.md](docs/production.md) | Despliegue en producción |
 | [docs/api-reference.md](docs/api-reference.md) | Documentación completa de la API |
