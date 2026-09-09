@@ -12,5 +12,15 @@ python-multipart==0.0.31
 httpx==0.27.2
 docker==7.1.0
 ldap3==2.9.1
+# pyasn1 entra como transitiva de ldap3 (0.4.8, con 5 avisos de DoS de
+# decodificacion). NO se puede fijar mas arriba mientras se use
+# python-jose: su version 3.4.0 publicada en PyPI exige
+# "pyasn1<0.5.0,>=0.4.1" -tope duro-, asi que "pyasn1==0.6.4" (lo que
+# sugeria la auditoria 2026-09-09, hallazgo 06-001) es literalmente
+# imposible de instalar junto a python-jose 3.4.0 (probado en vivo:
+# ResolutionImpossible). Cerrar esto de verdad exige migrar de
+# python-jose a PyJWT primero -que python-jose no comparte esa cota, y
+# es justo el cambio de mas alcance que la propia auditoria ya
+# identificaba aparte (recomendacion 3, no la 2).
 pgvector==0.5.0
 pytest==9.0.3

@@ -163,7 +163,13 @@ def record_failed_login(username: str) -> None:
 async def rate_limit_middleware(request: Request, call_next):
     """Middleware de rate limiting por IP."""
     ip = _get_client_ip(request)
-    path = request.url.path
+    # request.scope["path"], no request.url.path: la reconstruccion de URL
+    # que hace .url.path esta involucrada en varios avisos de starlette
+    # (PYSEC-2026-161/248, ver CHANGELOG). scope["path"] es el path ya
+    # resuelto por el servidor ASGI, sin pasar por esa reconstruccion -mismo
+    # valor en el caso normal, sin la superficie de esos avisos (auditoria
+    # 2026-09-09, hallazgo 06-001).
+    path = request.scope["path"]
 
     if path.endswith("/auth/login"):
         if _check_rate_limit(f"login-ip:{ip}", LOGIN_MAX_REQUESTS):
