@@ -151,28 +151,28 @@ export default function Admins() {
             <h2 className="text-xl font-bold mb-4">{editing ? traducir('Editar Admin') : traducir('Nuevo Admin')}</h2>
             <div className="space-y-4">
               <div>
-                <label className="field-label block mb-1.5">{traducir("Usuario")}</label>
-                <input type="text" value={formData.username} disabled={!!editing}
+                <label htmlFor="admin-username" className="field-label block mb-1.5">{traducir("Usuario")}</label>
+                <input id="admin-username" type="text" value={formData.username} disabled={!!editing}
                   onChange={e => setFormData({ ...formData, username: e.target.value })}
                   className="input disabled:bg-line-soft" />
               </div>
               {!editing && (
                 <div>
-                  <label className="field-label block mb-1.5">{traducir("Contraseña")}</label>
-                  <input type="password" value={formData.password}
+                  <label htmlFor="admin-password" className="field-label block mb-1.5">{traducir("Contraseña")}</label>
+                  <input id="admin-password" type="password" value={formData.password}
                     onChange={e => setFormData({ ...formData, password: e.target.value })}
                     className="input" />
                 </div>
               )}
               <div>
-                <label className="field-label block mb-1.5">{traducir("Email (opcional)")}</label>
-                <input type="email" value={formData.email}
+                <label htmlFor="admin-email" className="field-label block mb-1.5">{traducir("Email (opcional)")}</label>
+                <input id="admin-email" type="email" value={formData.email}
                   onChange={e => setFormData({ ...formData, email: e.target.value })}
                   className="input" />
               </div>
               <div>
-                <label className="field-label block mb-1.5">{traducir("Rol")}</label>
-                <select value={formData.role}
+                <label htmlFor="admin-role" className="field-label block mb-1.5">{traducir("Rol")}</label>
+                <select id="admin-role" value={formData.role}
                   onChange={e => setFormData({ ...formData, role: e.target.value })}
                   className="input"
                   disabled={editing?.id === 1}>

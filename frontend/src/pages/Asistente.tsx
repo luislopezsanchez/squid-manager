@@ -215,14 +215,15 @@ export default function Asistente() {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="field-label block mb-1.5">{traducir("Proveedor")}</label>
-              <select value={config.provider} onChange={e => handleCambiarProveedor(e.target.value)} className="input">
+              <label htmlFor="ai-provider" className="field-label block mb-1.5">{traducir("Proveedor")}</label>
+              <select id="ai-provider" value={config.provider} onChange={e => handleCambiarProveedor(e.target.value)} className="input">
                 {PROVEEDORES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="field-label block mb-1.5">{traducir("API key")} ({proveedorActual?.label})</label>
+              <label htmlFor="ai-api-key" className="field-label block mb-1.5">{traducir("API key")} ({proveedorActual?.label})</label>
               <input
+                id="ai-api-key"
                 type="password"
                 value={config.api_key}
                 onChange={e => { setConfig({ ...config, api_key: e.target.value }); setModelosProveedor(null) }}
@@ -248,9 +249,10 @@ export default function Asistente() {
           </div>
 
           <div className="mt-3">
-            <label className="field-label block mb-1.5">{traducir("Modelo")}</label>
+            <label htmlFor="ai-chat-model" className="field-label block mb-1.5">{traducir("Modelo")}</label>
             {modelosProveedor && modelosProveedor.length > 0 ? (
               <select
+                id="ai-chat-model"
                 value={config.chat_model || ''}
                 onChange={e => setConfig({ ...config, chat_model: e.target.value })}
                 className="input font-mono text-sm"
@@ -263,6 +265,7 @@ export default function Asistente() {
             ) : (
               <>
                 <input
+                  id="ai-chat-model"
                   type="text"
                   value={config.chat_model || ''}
                   onChange={e => setConfig({ ...config, chat_model: e.target.value })}
@@ -284,8 +287,9 @@ export default function Asistente() {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div>
-              <label className="field-label block mb-1.5">{traducir("API key de Jina AI")}</label>
+              <label htmlFor="ai-embedding-key" className="field-label block mb-1.5">{traducir("API key de Jina AI")}</label>
               <input
+                id="ai-embedding-key"
                 type="password"
                 value={config.embedding_api_key || ''}
                 onChange={e => { setConfig({ ...config, embedding_api_key: e.target.value }); setEmbeddingsOk(null) }}

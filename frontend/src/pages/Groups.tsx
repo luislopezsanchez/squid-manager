@@ -101,8 +101,9 @@ export default function Groups() {
         <form onSubmit={handleCreate} className="card p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="field-label block mb-1.5">{traducir("Nombre del grupo")}</label>
+              <label htmlFor="group-name" className="field-label block mb-1.5">{traducir("Nombre del grupo")}</label>
               <input
+                id="group-name"
                 type="text" value={newGroup.name}
                 onChange={e => setNewGroup({ ...newGroup, name: e.target.value })}
                 className="input"
@@ -111,8 +112,9 @@ export default function Groups() {
               />
             </div>
             <div>
-              <label className="field-label block mb-1.5">{traducir("Descripción")}</label>
+              <label htmlFor="group-description" className="field-label block mb-1.5">{traducir("Descripción")}</label>
               <input
+                id="group-description"
                 type="text" value={newGroup.description}
                 onChange={e => setNewGroup({ ...newGroup, description: e.target.value })}
                 className="input"

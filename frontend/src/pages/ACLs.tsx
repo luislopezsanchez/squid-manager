@@ -160,28 +160,28 @@ export default function ACLs() {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="field-label block mb-1.5">{traducir("Nombre de la ACL")}</label>
-              <input type="text" value={bulkAclName} onChange={e => setBulkAclName(e.target.value)}
+              <label htmlFor="acl-bulk-name" className="field-label block mb-1.5">{traducir("Nombre de la ACL")}</label>
+              <input id="acl-bulk-name" type="text" value={bulkAclName} onChange={e => setBulkAclName(e.target.value)}
                 placeholder={traducir("ej: blocklist_publicidad")} className="input" required />
             </div>
             <div>
-              <label className="field-label block mb-1.5">{traducir("Tipo")}</label>
-              <select value={bulkType} onChange={e => setBulkType(e.target.value as any)} className="input">
+              <label htmlFor="acl-bulk-type" className="field-label block mb-1.5">{traducir("Tipo")}</label>
+              <select id="acl-bulk-type" value={bulkType} onChange={e => setBulkType(e.target.value as any)} className="input">
                 <option value="dstdomain">{traducir('Dominio (dstdomain)')}</option>
                 <option value="dstdom_regex">{traducir('Regex de dominio (dstdom_regex)')}</option>
               </select>
             </div>
             <div>
-              <label className="field-label block mb-1.5">{traducir("Si la ACL ya existe")}</label>
-              <select value={bulkModo} onChange={e => setBulkModo(e.target.value as any)} className="input">
+              <label htmlFor="acl-bulk-modo" className="field-label block mb-1.5">{traducir("Si la ACL ya existe")}</label>
+              <select id="acl-bulk-modo" value={bulkModo} onChange={e => setBulkModo(e.target.value as any)} className="input">
                 <option value="reemplazar">{traducir('Reemplazar toda la lista')}</option>
                 <option value="agregar">{traducir('Agregar a lo que ya había')}</option>
               </select>
             </div>
           </div>
           <div className="mt-4">
-            <label className="field-label block mb-1.5">{traducir("Archivo")}</label>
-            <input ref={bulkFileRef} type="file" accept=".txt,.csv,text/plain" className="input" required />
+            <label htmlFor="acl-bulk-file" className="field-label block mb-1.5">{traducir("Archivo")}</label>
+            <input id="acl-bulk-file" ref={bulkFileRef} type="file" accept=".txt,.csv,text/plain" className="input" required />
           </div>
           <div className="mt-4 flex items-center gap-3">
             <button type="submit" disabled={bulkBusy} className="btn btn-primary">
@@ -197,27 +197,27 @@ export default function ACLs() {
           <h3 className="font-medium text-ink mb-4">{editingId ? traducir('Editar ACL') : traducir('Nueva ACL')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="field-label block mb-1.5">{traducir("Nombre")}</label>
-              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+              <label htmlFor="acl-name" className="field-label block mb-1.5">{traducir("Nombre")}</label>
+              <input id="acl-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
                 placeholder={traducir("ej: redes_sociales")} className="input" required />
             </div>
             <div>
-              <label className="field-label block mb-1.5">{traducir("Tipo de ACL")}</label>
-              <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
+              <label htmlFor="acl-type" className="field-label block mb-1.5">{traducir("Tipo de ACL")}</label>
+              <select id="acl-type" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
                 className="input">
                 {ACL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
           </div>
           <div className="mt-4">
-            <label className="field-label block mb-1.5">{traducir("Valor")}</label>
-            <input type="text" value={form.value} onChange={e => setForm({ ...form, value: e.target.value })}
+            <label htmlFor="acl-value" className="field-label block mb-1.5">{traducir("Valor")}</label>
+            <input id="acl-value" type="text" value={form.value} onChange={e => setForm({ ...form, value: e.target.value })}
               placeholder={selectedType?.example || ''} className="input font-mono text-sm" required />
             {selectedType && <p className="text-xs text-ink-3 mt-1">Ejemplo: {selectedType.example}</p>}
           </div>
           <div className="mt-4">
-            <label className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
-            <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+            <label htmlFor="acl-description" className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
+            <input id="acl-description" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
               placeholder={traducir("ej: Bloquear acceso a redes sociales")} className="input" />
           </div>
           {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}

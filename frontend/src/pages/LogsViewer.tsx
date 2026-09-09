@@ -158,24 +158,24 @@ export default function LogsViewer() {
       <div className="card p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
-            <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Usuario")}</label>
-            <select value={fUser} onChange={e => { setFUser(e.target.value); setOffset(0) }}
+            <label htmlFor="logs-filter-user" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Usuario")}</label>
+            <select id="logs-filter-user" value={fUser} onChange={e => { setFUser(e.target.value); setOffset(0) }}
               className="input text-sm">
               <option value="">{traducir("Todos")}</option>
               {stats?.users.map(u => <option key={u} value={u}>{u}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Estado HTTP")}</label>
-            <select value={fStatus} onChange={e => { setFStatus(e.target.value); setOffset(0) }}
+            <label htmlFor="logs-filter-status" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Estado HTTP")}</label>
+            <select id="logs-filter-status" value={fStatus} onChange={e => { setFStatus(e.target.value); setOffset(0) }}
               className="input text-sm">
               <option value="">{traducir("Todos")}</option>
               {stats?.statuses.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Dominio")}</label>
-            <input type="text" value={fDomain} placeholder={traducir("ej: youtube.com")}
+            <label htmlFor="logs-filter-domain" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Dominio")}</label>
+            <input id="logs-filter-domain" type="text" value={fDomain} placeholder={traducir("ej: youtube.com")}
               onChange={e => { setFDomain(e.target.value); setOffset(0) }}
               className="input text-sm" />
           </div>

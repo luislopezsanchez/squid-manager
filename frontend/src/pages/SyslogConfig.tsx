@@ -76,38 +76,38 @@ export default function SyslogConfig() {
         <h2 className="font-medium text-ink mb-4">{traducir("Destino")}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="field-label block mb-1.5">{traducir("Host")}</label>
-            <input type="text" value={config.host ?? ''} onChange={e => setConfig({ ...config, host: e.target.value })}
+            <label htmlFor="syslog-host" className="field-label block mb-1.5">{traducir("Host")}</label>
+            <input id="syslog-host" type="text" value={config.host ?? ''} onChange={e => setConfig({ ...config, host: e.target.value })}
               placeholder={traducir("siem.empresa.com o 10.0.0.5")} className="input font-mono text-sm" />
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Puerto")}</label>
-            <input type="number" value={config.port} onChange={e => setConfig({ ...config, port: Number(e.target.value) })}
+            <label htmlFor="syslog-port" className="field-label block mb-1.5">{traducir("Puerto")}</label>
+            <input id="syslog-port" type="number" value={config.port} onChange={e => setConfig({ ...config, port: Number(e.target.value) })}
               placeholder="514" className="input font-mono text-sm" />
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Protocolo")}</label>
-            <select value={config.protocol} onChange={e => setConfig({ ...config, protocol: e.target.value })} className="input text-sm">
+            <label htmlFor="syslog-protocol" className="field-label block mb-1.5">{traducir("Protocolo")}</label>
+            <select id="syslog-protocol" value={config.protocol} onChange={e => setConfig({ ...config, protocol: e.target.value })} className="input text-sm">
               <option value="udp">{traducir("UDP (más simple, puede perder paquetes)")}</option>
               <option value="tcp">{traducir("TCP (confiable, algo más de carga)")}</option>
             </select>
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Facility")}</label>
-            <select value={config.facility} onChange={e => setConfig({ ...config, facility: e.target.value })} className="input text-sm">
+            <label htmlFor="syslog-facility" className="field-label block mb-1.5">{traducir("Facility")}</label>
+            <select id="syslog-facility" value={config.facility} onChange={e => setConfig({ ...config, facility: e.target.value })} className="input text-sm">
               {FACILITIES.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Formato del mensaje syslog")}</label>
-            <select value={config.rfc_format} onChange={e => setConfig({ ...config, rfc_format: e.target.value })} className="input text-sm">
+            <label htmlFor="syslog-rfc-format" className="field-label block mb-1.5">{traducir("Formato del mensaje syslog")}</label>
+            <select id="syslog-rfc-format" value={config.rfc_format} onChange={e => setConfig({ ...config, rfc_format: e.target.value })} className="input text-sm">
               <option value="rfc3164">{traducir("RFC 3164 (clásico, el más compatible)")}</option>
               <option value="rfc5424">{traducir("RFC 5424 (estructurado, con fecha ISO)")}</option>
             </select>
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Contenido de cada línea")}</label>
-            <select value={config.log_format} onChange={e => setConfig({ ...config, log_format: e.target.value })} className="input text-sm">
+            <label htmlFor="syslog-log-format" className="field-label block mb-1.5">{traducir("Contenido de cada línea")}</label>
+            <select id="syslog-log-format" value={config.log_format} onChange={e => setConfig({ ...config, log_format: e.target.value })} className="input text-sm">
               <option value="raw">{traducir("Log nativo de Squid (para AWStats, SARG, el módulo Squid de Splunk/ELK)")}</option>
               <option value="ndjson">{traducir("JSON (para ingesta genérica en un SIEM)")}</option>
             </select>
