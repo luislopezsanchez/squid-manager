@@ -46,6 +46,15 @@ invoca el mismo script de actualización (`upgrade-nativo.sh`) que ya se usa a
 mano desde hace tiempo, en una unidad de systemd aparte —para que reiniciar el
 panel a mitad de la actualización no la mate a mitad de camino—.
 
+## Si una programación no arranca a tiempo
+
+El temporizador revisa cada minuto, así que una actualización programada
+debería empezar dentro del minuto de la hora elegida. Si pasan más de 3
+minutos sin que arranque, el panel lo marca como "atrasada" y avisa —no se
+cancela sola, pero deja de mostrar "programada" en silencio para siempre.
+Suele significar que el temporizador está caído: `systemctl status
+squidmanager-autoupdate.timer` en el servidor.
+
 ## Solo instalación nativa
 
 En Docker, el contenedor del backend no puede reconstruirse ni reiniciar a
