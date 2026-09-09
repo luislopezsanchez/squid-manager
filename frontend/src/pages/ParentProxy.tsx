@@ -140,8 +140,9 @@ export default function ParentProxy() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Servidor")}</label>
+              <label htmlFor="parent-proxy-host" className="block text-sm font-medium text-ink-2 mb-1">{traducir("Servidor")}</label>
               <input
+                id="parent-proxy-host"
                 type="text"
                 value={config.host}
                 onChange={e => set('host', e.target.value)}
@@ -150,8 +151,9 @@ export default function ParentProxy() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Puerto")}</label>
+              <label htmlFor="parent-proxy-port" className="block text-sm font-medium text-ink-2 mb-1">{traducir("Puerto")}</label>
               <input
+                id="parent-proxy-port"
                 type="number"
                 value={config.port}
                 onChange={e => set('port', parseInt(e.target.value) || 0)}
@@ -168,8 +170,9 @@ export default function ParentProxy() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Cómo presentar credenciales al padre")}</label>
+            <label htmlFor="parent-proxy-auth-method" className="block text-sm font-medium text-ink-2 mb-1">{traducir("Cómo presentar credenciales al padre")}</label>
             <select
+              id="parent-proxy-auth-method"
               value={config.auth_method}
               onChange={e => set('auth_method', e.target.value as Config['auth_method'])}
               className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
@@ -183,8 +186,9 @@ export default function ParentProxy() {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Usuario")}</label>
+                  <label htmlFor="parent-proxy-username" className="block text-sm font-medium text-ink-2 mb-1">{traducir("Usuario")}</label>
                   <input
+                    id="parent-proxy-username"
                     type="text"
                     value={config.username}
                     onChange={e => set('username', e.target.value)}
@@ -193,8 +197,9 @@ export default function ParentProxy() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Contraseña")}</label>
+                  <label htmlFor="parent-proxy-password" className="block text-sm font-medium text-ink-2 mb-1">{traducir("Contraseña")}</label>
                   <input
+                    id="parent-proxy-password"
                     type="password"
                     value={config.password}
                     onChange={e => set('password', e.target.value)}
@@ -232,7 +237,7 @@ export default function ParentProxy() {
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-ink-2">{traducir("Certificado CA del proxy padre")}</label>
+              <label htmlFor="parent-proxy-ca-cert" className="block text-sm font-medium text-ink-2">{traducir("Certificado CA del proxy padre")}</label>
               <label className="btn btn-ghost btn-sm cursor-pointer">
                 Cargar desde archivo
                 <input
@@ -244,6 +249,7 @@ export default function ParentProxy() {
               </label>
             </div>
             <textarea
+              id="parent-proxy-ca-cert"
               value={config.ca_cert}
               onChange={e => set('ca_cert', e.target.value)}
               rows={4}
@@ -258,8 +264,9 @@ export default function ParentProxy() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-ink-2 mb-1">{traducir("Destinos que no pasan por el padre")}</label>
+            <label htmlFor="parent-proxy-direct-domains" className="block text-sm font-medium text-ink-2 mb-1">{traducir("Destinos que no pasan por el padre")}</label>
             <textarea
+              id="parent-proxy-direct-domains"
               value={config.direct_domains}
               onChange={e => set('direct_domains', e.target.value)}
               rows={3}
