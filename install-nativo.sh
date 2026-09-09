@@ -166,6 +166,26 @@ if [ "${ID:-}" = "debian" ] && [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
         || fail "No se pudo importar la clave del repositorio de PostgreSQL (PGDG)."
     echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
         > /etc/apt/sources.list.d/pgdg.list
+
+    # Sin esto, PGDG reemplaza silenciosamente el Postgres que ya trae
+    # Debian: sus paquetes llevan un numero de version mayor (Postgres 18
+    # hoy) y, con la prioridad por defecto, apt prefiere ESE en cualquier
+    # instalacion futura de "postgresql" a secas -exactamente lo que hace
+    # este mismo script en cada re-corrida (paso 2, PAQUETES)-. Bug real,
+    # reproducido en 172.30.36.88: una segunda corrida de este script tras
+    # la primera (con el repo PGDG ya agregado) instalo postgresql-18 al
+    # lado del 15 que ya tenia los datos, y el cluster 15 quedo sin
+    # servicio. Es el comportamiento documentado del propio proyecto
+    # PostgreSQL (wiki.postgresql.org/wiki/Apt): bajar la prioridad de PGDG
+    # por debajo de la de Debian (500) para que solo se use cuando se pide
+    # un paquete que EXISTE UNICAMENTE ahi -como postgresql-15-pgvector-,
+    # nunca para "ganarle" a un paquete que Debian ya provee.
+    cat > /etc/apt/preferences.d/pgdg.pref <<EOF
+Package: *
+Pin: release o=apt.postgresql.org
+Pin-Priority: 200
+EOF
+
     apt-get update -qq
 fi
 
