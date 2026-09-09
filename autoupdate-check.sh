@@ -119,8 +119,16 @@ if [ "$ESTADO_APPLY" = "running" ]; then
     # unidad transient (--collect) ya se autolimpio para el momento en que
     # esto corre -no es parte del log real de la actualizacion, es un aviso
     # de journalctl sobre si misma-. Se descarta explicitamente.
+    #
+    # install-nativo.sh imprime con colores ANSI (piensa en una terminal
+    # interactiva, no en un log que despues se muestra en el panel): sin
+    # quitarlos, el navegador los muestra como caracteres sueltos en vez de
+    # interpretarlos -visto en vivo-. ESC se arma con $'\033' porque sed no
+    # siempre acepta \x1b tal cual en la expresion regular.
+    ESC=$'\033'
     COLA="$(journalctl -u "$UNIDAD" --no-pager -n 40 -o cat 2>/dev/null \
         | grep -v 'Failed to open /run/systemd/transient' \
+        | sed -E "s/${ESC}\[[0-9;]*m//g" \
         | tail -c 4000 | sed "s/'/ /g")"
     COMMIT_FINAL="$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo "")"
 
