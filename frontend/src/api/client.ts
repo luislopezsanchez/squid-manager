@@ -255,7 +255,7 @@ export const api = {
   getConnections: (limit = 20) => request<any>(`/panel/connections?limit=${limit}`),
   // Mismos endpoints que ya alimentan las tarjetas "Top" del dashboard
   // (con limit=10, fijo) -aca con el limit que pida quien llama, para la
-  // pagina de "Top 20 con graficos".
+  // pagina de "Actividad de red".
   getTopUsers: (limit = 20) => request<any>(`/panel/top-users?limit=${limit}`),
   getTopDomains: (limit = 20, denied = false) =>
     request<any>(`/panel/top-domains?limit=${limit}&denied=${denied}`),

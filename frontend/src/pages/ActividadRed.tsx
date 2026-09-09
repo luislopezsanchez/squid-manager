@@ -10,12 +10,29 @@ type RespuestaBloqueados = { users: FilaBloqueado[]; anonymous_blocked: number }
 
 type Pestana = 'usuarios' | 'dominios' | 'bloqueados-dominio' | 'bloqueados-usuario'
 
-const COLORES = {
+const COLORES: Record<Pestana, string> = {
   usuarios: '#0B497C',
   dominios: '#2E93BC',
   'bloqueados-dominio': '#C0392B',
   'bloqueados-usuario': '#C0392B',
-} as const
+}
+
+// Por que importa cada vista -no es solo "una tabla mas": cada una responde
+// una pregunta concreta que un admin de red se hace de verdad.
+const EXPLICACIONES: Record<Pestana, string> = {
+  usuarios: traducir(
+    "Quién consume más ancho de banda o hace más peticiones. Un consumo alto no es necesariamente un problema -puede ser trabajo legítimo-, pero es el primer lugar donde mirar si el enlace va lento o si conviene revisar una cuota."
+  ),
+  dominios: traducir(
+    "Qué se visita más, permitido o no. Sirve para decidir con datos reales si vale la pena sumar una ACL nueva -si algo no productivo aparece seguido acá, es candidato a bloquear- en vez de adivinar."
+  ),
+  'bloqueados-dominio': traducir(
+    "Contra qué está chocando la política de acceso ahora mismo. Si un dominio se repite mucho, la regla que lo bloquea está funcionando de verdad -no es solo teoría en la configuración."
+  ),
+  'bloqueados-usuario': traducir(
+    "Quién insiste más contra la política. Unos pocos bloqueos son ruido normal (un enlace viejo, una redirección); una cifra alta y sostenida de la misma persona sí amerita una conversación."
+  ),
+}
 
 /** Barra horizontal proporcional al máximo del conjunto -no a una escala
 
@@ -43,7 +60,37 @@ function FilaBarra({ etiqueta, valor, valorFormateado, maximo, color, posicion }
   )
 }
 
-export default function Top20() {
+/** Anillo que muestra que porcion del total concentra el top 3 -el
+
+ * "grafico" que complementa a la tabla de barras, no una repeticion del
+ * mismo dato: responde "¿esto esta repartido parejo, o son cuatro
+ * personas/sitios los que explican casi todo?", que la tabla sola no
+ * contesta de un vistazo. */
+function AnilloConcentracion({ pct, color }: { pct: number; color: string }) {
+  const size = 108
+  const stroke = 10
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const arco = Math.max(0, Math.min(pct, 100))
+  return (
+    <div className="relative flex-none" style={{ width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--line-soft)" strokeWidth={stroke} />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={stroke}
+          strokeLinecap="round" strokeDasharray={circumference}
+          strokeDashoffset={circumference - (arco / 100) * circumference}
+          style={{ transition: 'stroke-dashoffset .6s ease' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-xl font-extrabold tabular" style={{ color: 'var(--ink)' }}>{Math.round(pct)}%</span>
+      </div>
+    </div>
+  )
+}
+
+export default function ActividadRed() {
   const [pestana, setPestana] = useState<Pestana>('usuarios')
   const [porDatos, setPorDatos] = useState(true) // solo aplica a la pestana "usuarios"
   const [usuarios, setUsuarios] = useState<FilaUsuario[] | null>(null)
@@ -113,10 +160,13 @@ export default function Top20() {
   }
 
   const maximo = Math.max(...filas.map(f => f.valor), 1)
+  const total = filas.reduce((acc, f) => acc + f.valor, 0)
+  const top3 = filas.slice(0, 3).reduce((acc, f) => acc + f.valor, 0)
+  const pctTop3 = total > 0 ? (top3 / total) * 100 : 0
 
   return (
     <div className="p-6 md:p-8">
-      <h1 className="text-2xl font-bold text-ink mb-1">{traducir("Top 20")}</h1>
+      <h1 className="text-2xl font-bold text-ink mb-1">{traducir("Actividad de red")}</h1>
       <p className="text-sm text-ink-3 mb-6">
         {traducir("De las últimas 1.000 peticiones registradas — se refresca solo, cada 30 s.")}
       </p>
@@ -160,31 +210,44 @@ export default function Top20() {
         )}
       </div>
 
-      <div className="card p-5">
-        {filas.length === 0 ? (
-          <p className="text-sm text-ink-3 text-center py-8">{traducir("Sin datos todavía.")}</p>
-        ) : (
-          <div className="flex flex-col">
-            {filas.map((f, i) => (
-              <FilaBarra
-                key={f.etiqueta}
-                posicion={i + 1}
-                etiqueta={f.etiqueta}
-                valor={f.valor}
-                valorFormateado={f.valorFormateado}
-                maximo={maximo}
-                color={color}
-              />
-            ))}
+      <p className="text-sm text-ink-2 mb-4 max-w-3xl">{EXPLICACIONES[pestana]}</p>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+        <div className="card p-5">
+          {filas.length === 0 ? (
+            <p className="text-sm text-ink-3 text-center py-8">{traducir("Sin datos todavía.")}</p>
+          ) : (
+            <div className="flex flex-col">
+              {filas.map((f, i) => (
+                <FilaBarra
+                  key={f.etiqueta}
+                  posicion={i + 1}
+                  etiqueta={f.etiqueta}
+                  valor={f.valor}
+                  valorFormateado={f.valorFormateado}
+                  maximo={maximo}
+                  color={color}
+                />
+              ))}
+            </div>
+          )}
+          {pestana === 'bloqueados-usuario' && anonimosBloqueados > 0 && (
+            <p className="text-[11px] text-ink-3 mt-3 pt-3 border-t border-line-soft">
+              {traducir(
+                "+ {n} bloqueos sin usuario identificado (tráfico de fondo del navegador, sin credenciales)",
+                { n: anonimosBloqueados },
+              )}
+            </p>
+          )}
+        </div>
+
+        {filas.length > 0 && (
+          <div className="card p-5 flex flex-col items-center justify-center gap-2 w-full lg:w-48">
+            <AnilloConcentracion pct={pctTop3} color={color} />
+            <p className="text-xs text-ink-3 text-center leading-snug">
+              {traducir("concentran los primeros {n}", { n: Math.min(3, filas.length) })}
+            </p>
           </div>
-        )}
-        {pestana === 'bloqueados-usuario' && anonimosBloqueados > 0 && (
-          <p className="text-[11px] text-ink-3 mt-3 pt-3 border-t border-line-soft">
-            {traducir(
-              "+ {n} bloqueos sin usuario identificado (tráfico de fondo del navegador, sin credenciales)",
-              { n: anonimosBloqueados },
-            )}
-          </p>
         )}
       </div>
     </div>

@@ -143,7 +143,7 @@ export default function Layout() {
 
   // Reorganizado en 5 grupos en vez de 3 (2026-09-09): "Sistema" habia
   // crecido a 9 items, dificil de escanear, y no habia ningun lugar para
-  // reportes/estadisticas (Top 20, cache, cuotas) ni para una futura
+  // reportes/estadisticas (actividad de red, cache, cuotas) ni para una futura
   // seccion de cluster/monitoreo centralizado -esta ultima se agrega el
   // dia que exista, no antes: un grupo vacio no aporta nada al menu.
   // Los grupos sin items no se renderizan (ver el filter() de abajo), asi
@@ -164,7 +164,7 @@ export default function Layout() {
       id: 'reportes',
       titulo: traducir("Reportes y estadísticas"),
       items: [
-        { to: '/reportes/top20', label: traducir("Top 20"), Icon: IconGauge },
+        { to: '/reportes/actividad', label: traducir("Actividad de red"), Icon: IconGauge },
         { to: '/reportes/cache', label: traducir("Estadísticas de caché"), Icon: IconArchive },
         // Cuotas por usuario/grupo se suma aca cuando exista.
       ],

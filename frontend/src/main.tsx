@@ -24,7 +24,7 @@ import Groups from './pages/Groups'
 import Asistente from './pages/Asistente'
 import Actualizaciones from './pages/Actualizaciones'
 import CacheStats from './pages/CacheStats'
-import Top20 from './pages/Top20'
+import ActividadRed from './pages/ActividadRed'
 import ChangePassword from './pages/ChangePassword'
 import Layout from './components/Layout'
 import { getToken, isSuperadmin } from './api/client'
@@ -73,7 +73,7 @@ function App() {
           <Route path="admins" element={isSuperadmin() ? <Admins /> : <Navigate to="/" />} />
           <Route path="actualizaciones" element={<Actualizaciones />} />
           <Route path="reportes/cache" element={<CacheStats />} />
-          <Route path="reportes/top20" element={<Top20 />} />
+          <Route path="reportes/actividad" element={<ActividadRed />} />
         </Route>
       </Routes>
     </BrowserRouter>

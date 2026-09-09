@@ -1,5 +1,5 @@
 // Formateo de numeros compartido entre paginas -antes vivia duplicado
-// dentro de Dashboard.tsx; se extrae aca para que Top20.tsx (y lo que
+// dentro de Dashboard.tsx; se extrae aca para que ActividadRed.tsx (y lo que
 // venga despues) no tenga su propia copia que pueda desincronizarse.
 
 export function formatBytes(bytes: number): string {
