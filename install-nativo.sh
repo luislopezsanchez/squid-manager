@@ -51,16 +51,19 @@ _ENV_PREVIO="$INSTALL_DIR/.env"
 if [ -f "$_ENV_PREVIO" ]; then
     for _VAR in SECRET_KEY DATA_KEY WEB_PORT CORS_ORIGINS TRUSTED_PROXY_HOSTS DEBUG BCRYPT_COST ACCESS_TOKEN_EXPIRE_MINUTES; do
         if [ -z "${!_VAR:-}" ]; then
-            _VALOR="$(grep -m1 "^${_VAR}=" "$_ENV_PREVIO" 2>/dev/null | cut -d= -f2-)"
-            # "|| true" al final: con `set -e` activo, si $_VALOR esta vacio
-            # (variable ausente del .env previo -exactamente lo que pasa con
-            # DATA_KEY en cualquier instalacion de antes de que existiera esa
-            # variable) el "[ -n ... ] && export ..." completo devuelve
-            # fallo, y sin este "|| true" abortaba el script entero ANTES de
-            # imprimir un solo mensaje. Bug real, encontrado corriendo el
-            # upgrade de verdad sobre una instalacion existente sin DATA_KEY
-            # (172.30.36.63, 2026-09-09): el script moria en silencio, sin
-            # ningun error visible, justo despues del backup.
+            # "|| true" en la asignacion misma, no solo en el uso de mas
+            # abajo: con "set -o pipefail" activo, "grep (sin coincidencias)
+            # | cut" devuelve fallo aunque cut si haya corrido bien -y esta
+            # asignacion NO esta protegida por ningun "if"/"||", asi que con
+            # "set -e" abortaba el script COMPLETO ahi mismo, en silencio,
+            # ni bien tocaba una variable ausente del .env previo. Eso es
+            # EXACTAMENTE lo que pasa con DATA_KEY en cualquier instalacion
+            # de antes de que existiera esa variable -o sea, cualquier
+            # instalacion existente hoy-. Bug real y grave, encontrado
+            # corriendo el upgrade de verdad sobre una instalacion con datos
+            # reales (172.30.36.63, 2026-09-09): el script moria justo
+            # despues del backup, sin imprimir un solo error.
+            _VALOR="$(grep -m1 "^${_VAR}=" "$_ENV_PREVIO" 2>/dev/null | cut -d= -f2-)" || true
             [ -n "$_VALOR" ] && export "$_VAR=$_VALOR" || true
         fi
     done
@@ -70,7 +73,11 @@ if [ -f "$_ENV_PREVIO" ]; then
     # tampoco rompe nada por si sola (el ALTER ROLE de mas abajo usa el mismo
     # valor nuevo), es churn de un secreto sin motivo real.
     if [ -z "${DB_PASS:-}" ]; then
-        _DB_PASS_PREVIA="$(grep -m1 '^DATABASE_URL=' "$_ENV_PREVIO" 2>/dev/null | sed -E 's#.*://[^:]+:([^@]+)@.*#\1#')"
+        # "|| true" tambien en la asignacion: mismo motivo de pipefail que
+        # arriba (grep sin match + sed => la asignacion entera falla y
+        # aborta el script bajo set -e), aunque en la practica DATABASE_URL
+        # siempre existe en un .env previo real.
+        _DB_PASS_PREVIA="$(grep -m1 '^DATABASE_URL=' "$_ENV_PREVIO" 2>/dev/null | sed -E 's#.*://[^:]+:([^@]+)@.*#\1#')" || true
         # Mismo motivo del "|| true" de arriba: sin esto, un .env previo sin
         # DATABASE_URL (no debería pasar, pero defensivo es gratis) abortaria
         # el script entero en silencio en vez de seguir y generar una nueva.
