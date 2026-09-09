@@ -1,18 +1,38 @@
 import { traducir, cambiarIdioma, idiomaActual, IDIOMAS, type Idioma } from '../i18n'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import { clearToken, api, canWrite, isSuperadmin, getRole } from '../api/client'
 import {
   IconDashboard, IconUsers, IconTag, IconRules, IconGauge, IconLink, IconGroups,
   IconSettings, IconLock, IconAudit, IconBackup, IconLogs, IconBell, IconShield, IconSend,
   IconBolt, IconKey, IconLogout, IconSpinner, IconEye, IconGlobe, IconAssistant, IconArchive,
+  IconChevronDown,
 } from './Icons'
 
 type Item = { to: string; label: string; Icon: (p: { className?: string }) => JSX.Element }
-type Grupo = { titulo: string; items: Item[] }
+// id estable, independiente del titulo traducido: el titulo cambia segun
+// el idioma, pero la clave que se guarda en localStorage (que grupo quedo
+// abierto/cerrado) no puede depender de eso.
+type Grupo = { id: string; titulo: string; items: Item[] }
+
+// Que grupos quedan colapsados entre sesiones, por admin -en el navegador
+// de cada uno, no en el backend: es una preferencia de pantalla, no un
+// dato que valga la pena sincronizar entre dispositivos.
+const CLAVE_COLAPSADOS = 'squidmanager:menu-colapsado'
+
+function leerColapsados(): Set<string> {
+  try {
+    const guardado = localStorage.getItem(CLAVE_COLAPSADOS)
+    return new Set(guardado ? JSON.parse(guardado) : [])
+  } catch {
+    return new Set()
+  }
+}
 
 export default function Layout() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [colapsados, setColapsados] = useState<Set<string>>(leerColapsados)
   const [applying, setApplying] = useState(false)
   const [pending, setPending] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
@@ -113,19 +133,40 @@ export default function Layout() {
     }
   }
 
-  // El menú va agrupado por tarea, no como una lista larga de catorce entradas.
+  // Asistente vive fuera de los grupos colapsables: es de uso frecuente y
+  // conceptualmente distinto (ayuda, no monitoreo/politica/sistema) -antes
+  // estaba enterrado dentro de "Vigilancia", lo cual no tenia sentido.
+  const asistente: Item = { to: '/asistente', label: traducir("Asistente"), Icon: IconAssistant }
+
+  // Reorganizado en 5 grupos en vez de 3 (2026-09-09): "Sistema" habia
+  // crecido a 9 items, dificil de escanear, y no habia ningun lugar para
+  // reportes/estadisticas (Top 20, cache, cuotas) ni para una futura
+  // seccion de cluster/monitoreo centralizado -esta ultima se agrega el
+  // dia que exista, no antes: un grupo vacio no aporta nada al menu.
+  // Los grupos sin items no se renderizan (ver el filter() de abajo), asi
+  // que agregar "Reportes y estadisticas" como grupo ya armado, aunque
+  // estos items no existen todavia.
   const grupos: Grupo[] = [
     {
+      id: 'vigilancia',
       titulo: traducir("Vigilancia"),
       items: [
         { to: '/', label: traducir("Dashboard"), Icon: IconDashboard },
-        { to: '/asistente', label: traducir("Asistente"), Icon: IconAssistant },
         { to: '/logs', label: traducir("Registros"), Icon: IconLogs },
         { to: '/logs-historico', label: traducir("Histórico"), Icon: IconArchive },
         { to: '/audit', label: traducir("Auditoría"), Icon: IconAudit },
       ],
     },
     {
+      id: 'reportes',
+      titulo: traducir("Reportes y estadísticas"),
+      items: [
+        // Top 20 con graficos, estadisticas de cache (Cache Manager de
+        // Squid) y cuotas por usuario/grupo se suman aca cuando existan.
+      ],
+    },
+    {
+      id: 'politicas',
       titulo: traducir("Políticas"),
       items: [
         { to: '/users', label: traducir("Usuarios"), Icon: IconUsers },
@@ -136,20 +177,58 @@ export default function Layout() {
       ],
     },
     {
-      titulo: traducir("Sistema"),
+      id: 'integraciones',
+      titulo: traducir("Integraciones"),
       items: [
         { to: '/ldap', label: 'LDAP', Icon: IconLink },
         { to: '/kerberos', label: 'Kerberos', Icon: IconKey },
-        { to: '/certificate', label: traducir("Certificado"), Icon: IconLock },
-        { to: '/settings', label: traducir("Configuración"), Icon: IconSettings },
-        { to: '/notifications', label: traducir("Notificaciones"), Icon: IconBell },
         { to: '/syslog', label: traducir("Syslog externo"), Icon: IconSend },
         { to: '/parent-proxy', label: traducir("Proxy padre"), Icon: IconLink },
+        { to: '/notifications', label: traducir("Notificaciones"), Icon: IconBell },
+      ],
+    },
+    {
+      id: 'sistema',
+      titulo: traducir("Sistema"),
+      items: [
+        { to: '/certificate', label: traducir("Certificado"), Icon: IconLock },
+        { to: '/settings', label: traducir("Configuración"), Icon: IconSettings },
         { to: '/backup', label: traducir("Backup y migración"), Icon: IconBackup },
         ...(isSuperadmin() ? [{ to: '/admins', label: traducir("Administradores"), Icon: IconShield }] : []),
       ],
     },
-  ]
+  ].filter(g => g.items.length > 0)
+
+  // El grupo que contiene la pagina actual siempre se muestra abierto,
+  // sin importar lo que diga la preferencia guardada -entrar a una pagina
+  // y no ver su propio item resaltado en el menu seria confuso.
+  const grupoActivoId = grupos.find(g => g.items.some(it => it.to === '/'
+    ? location.pathname === '/'
+    : location.pathname.startsWith(it.to)))?.id
+
+  const grupoAbierto = (id: string) => id === grupoActivoId || !colapsados.has(id)
+
+  const toggleGrupo = (id: string) => {
+    setColapsados(prev => {
+      const next = new Set(prev)
+      // Si el grupo esta abierto SOLO porque es el activo (no por
+      // preferencia propia), togglear tiene que colapsarlo de verdad:
+      // se agrega a colapsados igual, y grupoAbierto() ya prioriza
+      // grupoActivoId por encima de esto -asi que colapsar el grupo activo
+      // desde aca no tiene efecto visible hasta que se navegue a otro lado,
+      // que es el comportamiento esperado (la pagina en la que estas
+      // parado siempre se ve).
+      if (grupoAbierto(id)) next.add(id)
+      else next.delete(id)
+      try {
+        localStorage.setItem(CLAVE_COLAPSADOS, JSON.stringify([...next]))
+      } catch {
+        // localStorage puede fallar (modo privado, cuota) -no es critico,
+        // la preferencia simplemente no sobrevive al reload.
+      }
+      return next
+    })
+  }
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     [
@@ -216,25 +295,50 @@ export default function Layout() {
 
         {/* Navegación */}
         <nav className="relative flex-1 px-3 pb-3">
-          {grupos.map(grupo => (
-            <div key={grupo.titulo}>
-              <p className="px-2.5 pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-[.13em] text-brand-300/65">
-                {grupo.titulo}
-              </p>
-              <div className="flex flex-col gap-0.5">
-                {grupo.items.map(({ to, label, Icon }) => (
-                  <NavLink key={to} to={to} end={to === '/'} className={navClass}>
-                    {({ isActive }) => (
-                      <>
-                        <Icon className={`w-[18px] h-[18px] flex-none ${isActive ? 'text-brand-300' : 'opacity-85'}`} />
-                        {label}
-                      </>
-                    )}
-                  </NavLink>
-                ))}
+          {/* Asistente: fijo, fuera de los grupos colapsables -uso frecuente,
+              no encaja en ningun grupo de tarea. */}
+          <NavLink to={asistente.to} className={navClass + ' mb-2'}>
+            {({ isActive }) => (
+              <>
+                <asistente.Icon className={`w-[18px] h-[18px] flex-none ${isActive ? 'text-brand-300' : 'opacity-85'}`} />
+                {asistente.label}
+              </>
+            )}
+          </NavLink>
+
+          {grupos.map(grupo => {
+            const abierto = grupoAbierto(grupo.id)
+            return (
+              <div key={grupo.id}>
+                <button
+                  type="button"
+                  onClick={() => toggleGrupo(grupo.id)}
+                  aria-expanded={abierto}
+                  className="w-full flex items-center justify-between px-2.5 pt-4 pb-1.5 text-[10px] font-bold
+                             uppercase tracking-[.13em] text-brand-300/65 hover:text-brand-300 transition"
+                >
+                  {grupo.titulo}
+                  <IconChevronDown
+                    className={`w-3 h-3 flex-none transition-transform ${abierto ? '' : '-rotate-90'}`}
+                  />
+                </button>
+                {abierto && (
+                  <div className="flex flex-col gap-0.5">
+                    {grupo.items.map(({ to, label, Icon }) => (
+                      <NavLink key={to} to={to} end={to === '/'} className={navClass}>
+                        {({ isActive }) => (
+                          <>
+                            <Icon className={`w-[18px] h-[18px] flex-none ${isActive ? 'text-brand-300' : 'opacity-85'}`} />
+                            {label}
+                          </>
+                        )}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </nav>
 
         {/* Pie: aplicar cambios y sesión */}
