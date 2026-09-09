@@ -13,12 +13,13 @@ class FakeSetting:
 
 
 class FakeAcl:
-    def __init__(self, name, type_, value, enabled=True, description=""):
+    def __init__(self, name, type_, value, enabled=True, description="", source="inline"):
         self.name = name
         self.type = type_
         self.value = value
         self.enabled = enabled
         self.description = description
+        self.source = source
 
 
 class FakeRule:

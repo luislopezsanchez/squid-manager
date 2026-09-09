@@ -1,5 +1,6 @@
 """Rutas de gestión de usuarios del proxy."""
 
+import hashlib
 import re
 import secrets
 import string
@@ -19,7 +20,8 @@ from app.schemas.proxy_user import (
 )
 from app.services.auth_service import get_password_hash, get_current_admin, require_writer
 from app.services.squid_service import (
-    write_passwd_file, reload_squid, purge_credentials, active_proxy_users,
+    write_passwd_file, write_digest_file, reload_squid, purge_credentials, active_proxy_users,
+    realm_actual,
 )
 from app.services.notification_service import queue_notification
 from app.services.config_state import mark_dirty
@@ -82,6 +84,17 @@ def _generate_htpasswd_hash(username: str, password: str) -> str:
     return result.stdout.strip()
 
 
+def _generate_digest_ha1(username: str, password: str, realm: str) -> str:
+    """HA1 = MD5(usuario:realm:password), tal como lo espera digest_file_auth.
+
+    MD5 aquí no es una elección de seguridad nuestra: es el algoritmo que fija
+    RFC 2617 para HTTP Digest Auth, y Squid no ofrece variante. Nunca se
+    guarda la contraseña en claro para esto: se calcula una sola vez, en el
+    momento en que el backend ya la recibió para el htpasswd de Basic.
+    """
+    return hashlib.md5(f"{username}:{realm}:{password}".encode("utf-8")).hexdigest()
+
+
 def _sync_passwd(db: Session):
     """Regenera el archivo htpasswd. No recarga Squid, y no hace falta.
 
@@ -110,6 +123,7 @@ def _sync_passwd(db: Session):
     # futuro) puede olvidarlo.
     db.flush()
     write_passwd_file(db)
+    write_digest_file(db, realm_actual(db))
 
 
 @router.get("/", response_model=list[ProxyUserResponse])
@@ -142,11 +156,14 @@ async def create_proxy_user(
         raise HTTPException(400, detail="El usuario ya existe")
 
     htpasswd_line = _generate_htpasswd_hash(username, data.password)
+    realm = realm_actual(db)
 
     user = ProxyUser(
         username=username,
         password_hash=get_password_hash(data.password),
         htpasswd_hash=htpasswd_line,
+        digest_ha1=_generate_digest_ha1(username, data.password, realm),
+        digest_ha1_realm=realm,
         enabled=data.enabled,
         expires_at=as_naive_utc(data.expires_at),
     )
@@ -188,8 +205,11 @@ async def update_proxy_user(
 
     revoke = False
     if data.password is not None:
+        realm = realm_actual(db)
         user.password_hash = get_password_hash(data.password)
         user.htpasswd_hash = _generate_htpasswd_hash(user.username, data.password)
+        user.digest_ha1 = _generate_digest_ha1(user.username, data.password, realm)
+        user.digest_ha1_realm = realm
         revoke = True
     if data.enabled is not None and data.enabled != user.enabled:
         user.enabled = data.enabled
@@ -302,6 +322,7 @@ async def sync_passwd_endpoint(
     Aplica las caducidades que hayan vencido desde la última escritura.
     """
     count = write_passwd_file(db)
+    write_digest_file(db, realm_actual(db))
     ok, message = reload_squid()
     return {
         "status": "ok" if ok else "warning",
@@ -329,9 +350,12 @@ async def reset_password(
 
     alphabet = string.ascii_letters + string.digits
     new_password = "".join(secrets.choice(alphabet) for _ in range(16))
+    realm = realm_actual(db)
 
     user.password_hash = get_password_hash(new_password)
     user.htpasswd_hash = _generate_htpasswd_hash(user.username, new_password)
+    user.digest_ha1 = _generate_digest_ha1(user.username, new_password, realm)
+    user.digest_ha1_realm = realm
 
     db.add(AuditLog(
         admin_id=current_admin.id, admin_username=current_admin.username,

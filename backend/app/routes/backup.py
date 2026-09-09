@@ -1,11 +1,10 @@
 """Rutas de backup, restore e importación de squid.conf."""
 
-import re
 import json
 import logging
 from io import StringIO
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
@@ -367,155 +366,117 @@ async def download_squid_conf(
 
 
 # ============================================
-# IMPORTAR squid.conf tradicional
+# IMPORTAR squid.conf tradicional (analizar -> revisar -> aplicar)
 # ============================================
+#
+# Un Squid administrado a mano varía demasiado de una instalación a otra
+# (include de ACLs en archivos aparte, NTLM/AD, squidGuard, proxy padres con
+# opciones propias...) como para que un import de un solo paso sea seguro:
+# la versión anterior escribía en la BD directo al subir el archivo, sin
+# soporte de `include` (con lo que un squid.conf típico, que separa ACLs y
+# reglas en archivos incluidos, importaba "0 ACLs, 0 reglas" sin que nadie
+# se enterara de por qué) y sin validar nombres/tipos contra lo que el resto
+# del panel exige. Ahora es un análisis (nada se escribe) seguido de una
+# aplicación explícita sobre lo ya revisado -ver squid_import_service.py-.
+from app.services import squid_import_service as import_svc
 
-ACL_PATTERN = re.compile(r'^acl\s+(\S+)\s+(\S+)\s+(.+)$')
-RULE_PATTERN = re.compile(r'^http_access\s+(\S+)\s+(.+)$')
-DELAY_POOL_PATTERN = re.compile(r'^delay_class\s+(\d+)\s+(\d+)$')
-DELAY_PARAMS_PATTERN = re.compile(r'^delay_parameters\s+(\d+)\s+(.+)$')
-
-SETTING_PATTERNS = {
-    "http_port": re.compile(r'^http_port\s+(\d+)', re.MULTILINE),
-    "cache_mem": re.compile(r'^cache_mem\s+(\S+\s*\S*)', re.MULTILINE),
-    "cache_dir": re.compile(r'^cache_dir\s+(.+)', re.MULTILINE),
-    "maximum_object_size": re.compile(r'^maximum_object_size\s+(\S+\s*\S*)', re.MULTILINE),
-    "visible_hostname": re.compile(r'^visible_hostname\s+(\S+)', re.MULTILINE),
-    # Estas dos son directivas de auth_param, no directivas sueltas: los
-    # patrones anteriores (^auth_realm, ^auth_children) no existían en Squid y
-    # por eso nunca importaban nada.
-    "auth_realm": re.compile(r'^auth_param\s+basic\s+realm\s+(.+)', re.MULTILINE),
-    "auth_children": re.compile(r'^auth_param\s+basic\s+children\s+(\d+)', re.MULTILINE),
-    "credentialsttl": re.compile(r'^auth_param\s+basic\s+credentialsttl\s+(.+)', re.MULTILINE),
-    "refresh_pattern": re.compile(r'^refresh_pattern\s+(.+)', re.MULTILINE),
-    "access_log": re.compile(r'^access_log\s+(?:stdio:)?(\S+)', re.MULTILINE),
-    "cache_log": re.compile(r'^cache_log\s+(?:stdio:)?(\S+)', re.MULTILINE),
-}
-
-# ACLs que define la propia plantilla: importarlas duplicaría definiciones.
-INTERNAL_ACLS = {
-    "all", "localhost", "to_localhost", "SSL_ports", "Safe_ports", "CONNECT",
-    "localnet", "authenticated", "step1", "step2", "step3", "manager",
-    "ssl_exclude", "exentos_auth_dominio",
-}
+MAX_IMPORT_FILES = 20
 
 
-@router.post("/import-squid-conf")
-async def import_squid_conf(
-    file: UploadFile = File(...),
+@router.post("/analyze-squid-conf")
+async def analyze_squid_conf(
+    files: list[UploadFile] = File(...),
+    principal: str = Form(...),
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_writer),
 ):
-    """Importar un squid.conf tradicional a SquidManager.
+    """Analiza uno o más archivos de un squid.conf tradicional SIN escribir
+    nada en la base de datos. `principal` es el nombre del archivo que hace
+    de punto de entrada (el squid.conf en sí); el resto solo se usan si
+    algún `include` los referencia por nombre de archivo.
 
-    Parsea ACLs, reglas http_access, delay pools y settings básicos.
-    Los usuarios (htpasswd) NO se importan (están en otro archivo).
+    Devuelve un informe detallado (qué se importaría, qué no y por qué) más
+    un token de corta duración para confirmar con /apply-squid-import sin
+    tener que volver a subir los archivos.
     """
-    content = await _read_upload(file)
-    text = content.decode("utf-8", errors="replace")
+    if len(files) > MAX_IMPORT_FILES:
+        raise HTTPException(400, detail=f"Como mucho {MAX_IMPORT_FILES} archivos por vez.")
 
-    results = {"acls": 0, "rules": 0, "delay_pools": 0, "settings": 0, "warnings": []}
+    contenidos: dict[str, str] = {}
+    for f in files:
+        data = await _read_upload(f)
+        contenidos[f.filename or "squid.conf"] = data.decode("utf-8", errors="replace")
 
-    # Una misma ACL suele declararse en varias líneas; hay que acumular los
-    # valores en lugar de quedarse con la primera y descartar el resto.
-    parsed_acls: dict[str, dict] = {}
-    parsed_rules: list[tuple[str, str]] = []
+    if principal not in contenidos:
+        raise HTTPException(400, detail=f"El archivo principal '{principal}' no está entre los subidos.")
 
-    for line in text.split("\n"):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
+    existentes = {a[0] for a in db.query(Acl.name).all()}
+    conocidos = import_svc.known_acl_names(db)
 
-        m = ACL_PATTERN.match(line)
-        if m:
-            name, acl_type, value = m.group(1), m.group(2), m.group(3).strip()
-            # Quitar comentarios al final de la línea
-            value = value.split("#")[0].strip()
-            if name in INTERNAL_ACLS or name.startswith("sni_"):
-                continue
-            if name in parsed_acls:
-                if parsed_acls[name]["type"] == acl_type:
-                    parsed_acls[name]["value"] += f" {value}"
-                else:
-                    results["warnings"].append(
-                        f"La ACL '{name}' aparece con dos tipos distintos; se usa '{parsed_acls[name]['type']}'."
-                    )
-            else:
-                parsed_acls[name] = {"type": acl_type, "value": value}
-            continue
+    resultado = import_svc.analizar(contenidos, principal, existentes, conocidos)
+    token = import_svc.guardar_analisis(resultado)
 
-        m = RULE_PATTERN.match(line)
-        if m:
-            action, acl_names = m.group(1), m.group(2).split("#")[0].strip()
-            if action not in ("allow", "deny"):
-                continue
-            # Las reglas base las genera la plantilla.
-            if acl_names in ("all", "!Safe_ports", "CONNECT !SSL_ports", "manager",
-                             "!authenticated", "authenticated", "localhost manager"):
-                continue
-            parsed_rules.append((action, acl_names))
-            continue
+    def _acl_dict(a):
+        return {"name": a.name, "type": a.type, "value": a.value, "estado": a.estado, "motivo": a.motivo}
 
-    existing_acl_names = {a.name for a in db.query(Acl).all()}
-    for name, info in parsed_acls.items():
-        if name in existing_acl_names:
-            continue
-        db.add(Acl(
-            name=name, type=info["type"], value=info["value"],
-            description="Importado de squid.conf", enabled=True,
-        ))
-        results["acls"] += 1
+    def _regla_dict(r):
+        return {"action": r.action, "acl_names": r.acl_names, "estado": r.estado, "motivo": r.motivo}
 
-    base_order = db.query(AccessRule).count()
-    for i, (action, acl_names) in enumerate(parsed_rules):
-        db.add(AccessRule(
-            action=action, acl_names=acl_names,
-            order=base_order + i, description="Importado de squid.conf", enabled=True,
-        ))
-        results["rules"] += 1
+    return {
+        "status": "ok",
+        "token": token,
+        "resumen": resultado.resumen(),
+        "acls": [_acl_dict(a) for a in resultado.acls],
+        "reglas": [_regla_dict(r) for r in resultado.reglas],
+        "settings": [{"key": s.key, "value": s.value} for s in resultado.settings],
+        "delay_pools": [{"pool_class": d.pool_class, "parameters": d.parameters} for d in resultado.delay_pools],
+        "parent_proxy": (
+            {
+                "host": resultado.parent_proxy.host, "port": resultado.parent_proxy.port,
+                "username": resultado.parent_proxy.username, "estado": resultado.parent_proxy.estado,
+                "motivo": resultado.parent_proxy.motivo,
+            }
+            if resultado.parent_proxy else None
+        ),
+        "no_soportadas": [
+            {"directiva": h.directiva, "archivo": h.archivo, "linea": h.linea, "motivo": h.motivo}
+            for h in resultado.no_soportadas
+        ],
+        "desconocidas": [
+            {"directiva": h.directiva, "archivo": h.archivo, "linea": h.linea, "motivo": h.motivo}
+            for h in resultado.desconocidas
+        ],
+        "includes_faltantes": resultado.includes_faltantes,
+    }
 
-    for key, pattern in SETTING_PATTERNS.items():
-        m = pattern.search(text)
-        if not m:
-            continue
-        value = m.group(1).split("#")[0].strip()
-        existing = db.query(SquidSetting).filter(SquidSetting.key == key).first()
-        if existing:
-            existing.value = value
-        else:
-            db.add(SquidSetting(key=key, value=value, category="imported",
-                                description="Importado de squid.conf"))
-        results["settings"] += 1
 
-    delay_classes = {}
-    delay_params = {}
-    for line in text.split("\n"):
-        line = line.strip()
-        m = DELAY_POOL_PATTERN.match(line)
-        if m:
-            delay_classes[int(m.group(1))] = int(m.group(2))
-        m = DELAY_PARAMS_PATTERN.match(line)
-        if m:
-            delay_params[int(m.group(1))] = m.group(2).strip()
+@router.post("/apply-squid-import")
+async def apply_squid_import(
+    token: str = Form(...),
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(require_writer),
+):
+    """Aplica un análisis previo (por su token de /analyze-squid-conf).
 
-    for pool_num, pool_class in delay_classes.items():
-        db.add(DelayPool(
-            pool_class=pool_class, parameters=delay_params.get(pool_num, ""),
-            acl_name="", description=f"Pool {pool_num} importado de squid.conf", enabled=True,
-        ))
-        results["delay_pools"] += 1
+    El token vive en memoria unos minutos y se consume al usarlo: no se
+    puede aplicar el mismo análisis dos veces ni reutilizarlo más tarde.
+    """
+    resultado = import_svc.recuperar_analisis(token)
+    if resultado is None:
+        raise HTTPException(
+            400,
+            detail="El análisis expiró o ya se aplicó. Vuelve a subir el archivo y analízalo de nuevo.",
+        )
+
+    detalle = import_svc.aplicar(db, resultado)
 
     db.add(AuditLog(
         admin_id=admin.id, admin_username=admin.username,
         action="import", entity="squid_conf",
-        new_value=f"{results['acls']} ACLs, {results['rules']} reglas",
+        new_value=f"{detalle['acls']} ACLs, {detalle['reglas']} reglas, {detalle['settings']} settings",
     ))
     db.commit()
     mark_dirty()
 
-    if results["acls"] == 0 and results["rules"] == 0:
-        results["warnings"].append("No se encontraron ACLs o reglas para importar")
-    results["warnings"].append("Los usuarios (htpasswd) no se importan. Debes crearlos manualmente.")
-    results["warnings"].append("Revisa las ACLs y reglas importadas y pulsa «Aplicar cambios».")
-
-    return {"status": "ok", "message": "squid.conf importado", "details": results}
+    detalle["avisos"].append("Revisa la configuración importada y pulsa «Aplicar cambios» para activarla.")
+    return {"status": "ok", "message": "Importación aplicada", "details": detalle}

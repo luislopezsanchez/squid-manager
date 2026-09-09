@@ -370,7 +370,11 @@ export default function Asistente() {
                   </div>
                 </div>
               ))}
-              {preguntando && <p className="text-sm text-ink-3 italic">{traducir("Pensando...")}</p>}
+              {preguntando && (
+                <p className="text-sm text-ink-3 italic">
+                  {traducir("Pensando... (puede tardar hasta un minuto)")}
+                </p>
+              )}
               <div ref={finRef} />
             </div>
 

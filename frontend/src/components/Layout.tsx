@@ -1,11 +1,11 @@
 import { traducir, cambiarIdioma, idiomaActual, IDIOMAS, type Idioma } from '../i18n'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { clearToken, api, canWrite, isSuperadmin, getRole } from '../api/client'
 import {
   IconDashboard, IconUsers, IconTag, IconRules, IconGauge, IconLink, IconGroups,
   IconSettings, IconLock, IconAudit, IconBackup, IconLogs, IconBell, IconShield, IconSend,
-  IconBolt, IconKey, IconLogout, IconSpinner, IconEye, IconGlobe, IconAssistant,
+  IconBolt, IconKey, IconLogout, IconSpinner, IconEye, IconGlobe, IconAssistant, IconArchive,
 } from './Icons'
 
 type Item = { to: string; label: string; Icon: (p: { className?: string }) => JSX.Element }
@@ -16,6 +16,15 @@ export default function Layout() {
   const [applying, setApplying] = useState(false)
   const [pending, setPending] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
+  const [version, setVersion] = useState<{ version: string; update_available: boolean } | null>(null)
+  // Detecta, desde CUALQUIER página (no solo /actualizaciones), que una
+  // actualización que estaba aprobada/programada ya terminó -por si el
+  // admin navegó a otro lado mientras esperaba la hora programada-. Mismo
+  // diseño de dos efectos que Actualizaciones.tsx: nada de lógica de
+  // timing manual, solo comparar valores en cada render.
+  const [commitVigilado, setCommitVigilado] = useState<string | null>(null)
+  const [actualizado, setActualizado] = useState(false)
+  const fastPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const readOnly = !canWrite()
 
@@ -23,14 +32,50 @@ export default function Layout() {
     api.getPending().then(r => setPending(r.dirty)).catch(() => {})
   }
 
+  const checkVersion = () => {
+    api.getUpdateStatus()
+      .then(r => {
+        setVersion({ version: r.version_actual, update_available: !!r.check?.update_available })
+        const enCurso = r.apply?.status === 'running' || r.apply?.status === 'verificando'
+        const yaVencida = !!(r.request?.approved && r.request?.scheduled_at
+          && new Date(r.request.scheduled_at).getTime() <= Date.now())
+        const vigilando = enCurso || yaVencida
+        if (vigilando) {
+          setCommitVigilado(prev => prev ?? (r.check?.local_commit ?? null))
+          if (!fastPollRef.current) {
+            fastPollRef.current = setInterval(checkVersion, 4000)
+          }
+        } else if (fastPollRef.current) {
+          clearInterval(fastPollRef.current)
+          fastPollRef.current = null
+        }
+        setCommitVigilado(prev => {
+          if (prev && r.check?.local_commit && r.check.local_commit !== prev) {
+            setActualizado(true)
+            return null
+          }
+          return prev
+        })
+      })
+      .catch(() => {})
+  }
+
   useEffect(() => {
     checkPending()
+    checkVersion()
     const interval = setInterval(checkPending, 5000)
+    // La comprobación real contra GitHub la hace el backend cada 6 h; acá
+    // solo se relee el estado ya calculado, así que alcanza con sondear
+    // bastante menos seguido -salvo mientras haya un ciclo activo, ver
+    // checkVersion(), que ahí pasa a cada 4s por su cuenta-.
+    const intervalVersion = setInterval(checkVersion, 5 * 60 * 1000)
     // Refresco inmediato cuando una pantalla guarda un cambio que requiere
     // Aplicar, en vez de esperar hasta 5s a que llegue el próximo sondeo.
     window.addEventListener('squidmanager:cambio-pendiente', checkPending)
     return () => {
       clearInterval(interval)
+      clearInterval(intervalVersion)
+      if (fastPollRef.current) clearInterval(fastPollRef.current)
       window.removeEventListener('squidmanager:cambio-pendiente', checkPending)
     }
   }, [])
@@ -76,6 +121,7 @@ export default function Layout() {
         { to: '/', label: traducir("Dashboard"), Icon: IconDashboard },
         { to: '/asistente', label: traducir("Asistente"), Icon: IconAssistant },
         { to: '/logs', label: traducir("Registros"), Icon: IconLogs },
+        { to: '/logs-historico', label: traducir("Histórico"), Icon: IconArchive },
         { to: '/audit', label: traducir("Auditoría"), Icon: IconAudit },
       ],
     },
@@ -149,6 +195,24 @@ export default function Layout() {
             <span className="text-[10.5px] font-semibold uppercase tracking-[.1em] text-brand-300">{traducir("Proxy")}</span>
           </div>
         </div>
+
+        {/* Versión + aviso de actualización disponible */}
+        {version && (
+          <NavLink
+            to="/actualizaciones"
+            className="relative mx-4 mb-3 flex items-center justify-between px-2.5 py-1.5 rounded-lg
+                       text-[11px] font-medium text-[#B9D2E0]/75 hover:bg-white/[.07] hover:text-white transition"
+            title={traducir("Ver actualizaciones")}
+          >
+            <span className="font-mono">v{version.version}</span>
+            <span className="relative">
+              <IconBell className={`w-[15px] h-[15px] ${version.update_available ? 'text-brand-300' : 'opacity-50'}`} />
+              {version.update_available && (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-warn ring-2 ring-[#0f2f4a]" />
+              )}
+            </span>
+          </NavLink>
+        )}
 
         {/* Navegación */}
         <nav className="relative flex-1 px-3 pb-3">
@@ -246,6 +310,22 @@ export default function Layout() {
 
       {/* ---------- Contenido ---------- */}
       <main className="flex-1 ml-[248px] min-w-0">
+        {actualizado && (
+          <div className="flex items-center gap-3 px-6 py-2 text-[13px] font-medium border-b"
+               style={{ background: 'var(--ok-soft)', color: 'var(--ok)', borderColor: 'var(--ok)' }}>
+            <IconBell className="w-4 h-4 flex-none" />
+            <span className="flex-1">
+              {traducir("Se aplicó una actualización de SquidManager. Recargá la página para ver la versión nueva.")}
+            </span>
+            <button
+              onClick={() => window.location.reload()}
+              className="flex-none px-3 py-1 rounded-md text-xs font-bold text-white transition"
+              style={{ background: 'var(--ok)' }}
+            >
+              {traducir("Recargar")}
+            </button>
+          </div>
+        )}
         {readOnly && (
           <div className="flex items-center gap-2 px-6 py-2 text-[13px] font-medium bg-warn-soft text-warn border-b border-warn/20">
             <IconEye className="w-4 h-4 flex-none" />

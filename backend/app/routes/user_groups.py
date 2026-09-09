@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.admin import Admin
 from app.models.audit_log import AuditLog
+from app.models.squid_settings import SquidSetting
 from app.models.user_group import UserGroup, UserGroupMember
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_state import mark_dirty
@@ -109,6 +110,22 @@ async def create_group(
 ):
     """Crea un nuevo grupo de usuarios."""
     name = validate_name(data.name, "grupo")
+
+    # Los grupos son ACLs `proxy_auth`: sin ningún auth_param declarado (que
+    # es justo lo que hace proxy_auth_scheme='none'), Squid aborta el
+    # arranque en cuanto una regla nombre esa ACL.
+    esquema = db.query(SquidSetting).filter(SquidSetting.key == "proxy_auth_scheme").first()
+    if esquema and (esquema.value or "").strip().lower() == "none":
+        raise HTTPException(
+            400,
+            detail=(
+                "No se pueden crear grupos de usuarios con el esquema de "
+                "autenticación del proxy en 'none': los grupos dependen de "
+                "la autenticación local, que está desactivada. Cambia el "
+                "esquema a 'basic' o 'digest' en Configuración antes de "
+                "crear grupos."
+            ),
+        )
 
     if db.query(UserGroup).filter(UserGroup.name == name).first():
         raise HTTPException(400, detail="El grupo ya existe")

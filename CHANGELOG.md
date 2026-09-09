@@ -5,6 +5,146 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.23.1] - 2026-09-09
+
+### Corregido
+
+- **Reindexación de la documentación del Asistente de IA**: se perdía todo el progreso si el
+  corpus tardaba más que el `proxy_read_timeout` de nginx (120s) en indexarse por completo, porque
+  todo se guardaba en una única transacción al final. Ahora cada archivo se confirma en la base por
+  separado, y el timeout de nginx sube a 300s. También se agregó un candado para que dos
+  reindexaciones simultáneas (dos pestañas, dos administradores) no se pisen entre sí.
+- **Pregunta en vivo del Asistente de IA sin aviso claro cuando el proveedor falla**: si el
+  proveedor devolvía un error transitorio (429 por límite de cuota agotado, 503 por alta demanda),
+  el sistema reintentaba hasta 3 veces con esperas de hasta 60s cada una —hasta 3 minutos de espera
+  silenciosa antes de mostrar cualquier mensaje—. La reindexación de fondo mantiene esos reintentos
+  (tiene sentido insistir sin nadie mirando la pantalla), pero una pregunta en vivo ahora reintenta
+  una sola vez y avisa enseguida, con un mensaje que indica el motivo real (cuota agotada o
+  proveedor saturado) en vez del texto crudo del proveedor.
+
+## [0.23.0] - 2026-09-09
+
+### Agregado
+
+- **Actualizaciones desde el propio panel** (instalación nativa): comprueba contra la API pública de
+  GitHub si hay una versión nueva, muestra los commits de diferencia, y permite aprobarla —de
+  inmediato o programada para una fecha y hora— sin entrar por SSH. El panel web **nunca** ejecuta la
+  actualización en sí ni gana ningún permiso nuevo: solo puede aprobarla (escribir un archivo de
+  estado, mismo nivel de privilegio que guardar cualquier otro ajuste). Un temporizador de systemd que
+  ya corría como root, con exactamente una línea nueva y fija de `sudoers` (sin argumentos variables),
+  es quien decide si corresponde actuar y aplica el mismo `upgrade-nativo.sh` que ya se usaba a mano,
+  en una unidad aparte para sobrevivir al propio reinicio del panel. Revisa cada minuto; aprobar
+  "ahora" adelanta ese chequeo en vez de esperar. Avisa con un botón de recargar, en cualquier página,
+  en cuanto el commit servido cambia. Ver `docs/actualizaciones-automaticas.md`.
+
+### Corregido
+
+- El botón "Aplicar ahora" del aviso del Dashboard no mostraba el motivo cuando Squid rechazaba la
+  configuración (DNS que no responde, etc.) — reintentaba en silencio en vez de explicar por qué,
+  a diferencia del botón de la barra lateral, que sí lo hacía.
+
+## [0.22.0] - 2026-09-08
+
+### Agregado
+
+- **Asistente de IA**: responde preguntas en lenguaje natural sobre el uso del panel citando de qué
+  archivo y sección de la documentación salió cada respuesta. Solo lee `README.md` + `docs/*.md` en
+  español —nunca la base de datos, el `squid.conf` real ni credenciales—; búsqueda híbrida (embeddings
+  + texto completo de Postgres, con `pgvector`), apagado por defecto. Ver `docs/asistente-ia.md`.
+- **Backup y restore automatizados de la base de datos**, con retención configurable, listos para cron
+  en los dos modos de despliegue (`backup-database.sh` / `restore-database.sh`).
+- **Autenticación Digest (RFC 2617)**, como proxy padre e hijo: el navegador nunca envía la
+  contraseña en claro, solo un hash. Helper propio (`squid/digest_auth_helper.py`), solo usuarios
+  locales — sin soporte de LDAP, porque exigiría que el directorio guarde el HA1 en un atributo no
+  estándar.
+- **Histórico de logs organizado por año/mes** (`archive/historical/AAAA/MM/`), con un `index.json`
+  precalculado por mes (`build_monthly_index.py`) para que el módulo de histórico del panel no tenga
+  que releer el `.gz` entero en cada consulta. Script de migración
+  (`squid/migrate-old-monthly-logs.sh`) para instalaciones que ya venían con el layout plano anterior.
+- **`proxy_auth_scheme='none'`**: un Squid hijo puede dejar de pedir usuario/contraseña propios cuando
+  el control de acceso real lo hace el proxy padre. Bloqueado si no hay un padre habilitado o si
+  existen grupos de usuarios (que dependen de la autenticación local).
+- **Importador de `squid.conf` ajenos reescrito**: soporta `include` (resuelto por nombre de archivo),
+  clasifica cada directiva en importable / reconocida-pero-no-soportada / desconocida, y separa el
+  análisis (nada se escribe) de la aplicación explícita.
+- **Carga masiva de dominios para ACLs** (blocklists grandes): por debajo de 200 dominios la ACL sigue
+  siendo inline; por encima, se respalda en un archivo aparte que Squid lee directo, en vez de una
+  única línea de squid.conf con miles de entradas.
+
+### Corregido — seguridad
+
+- **El backend ya no monta `/var/run/docker.sock` directo** ni corre como root: habla con Docker a
+  través de `docker-socket-proxy` (bloquea build/swarm/secrets/plugins/nodos/servicios/sesión/auth), y
+  el proceso corre como usuario sin privilegios (`squidmgr`). Ver el riesgo actualizado en
+  `docs/project-log.md`.
+- **El límite de intentos de login por cuenta se aplicaba antes de validar la contraseña**: cualquiera
+  podía dejar sin acceso al admin real mandando unas pocas contraseñas mal escritas contra su usuario.
+  Ahora la contraseña se valida siempre primero; el límite solo frena intentos que ya son incorrectos.
+
+### Dependencias — actualizadas (cierre de los hallazgos 06-001/06-002 de la auditoría 2026-09-08)
+
+- **`fastapi` 0.115.0 → 0.115.14** (misma serie menor, sin cambios de comportamiento: la suite
+  completa pasa sin tocar código de la app). Sube `starlette` de 0.38.6 a 0.46.2, que cierra varias de
+  las 17 vulnerabilidades que arrastraba el proyecto. Se probó subir más lejos (`fastapi` 0.141.1 +
+  `starlette` 1.6.0, que resolvería el resto) pero **rompe el registro de rutas de la app**
+  (`test_rutas_bloqueables.py` lo detectó de inmediato: las rutas alternativas del panel dejan de
+  existir) — revertido. Con `no romper lo que ya está en uso` como prioridad, se deja en la versión
+  segura y ya verificada; subir más allá exige una migración aparte, con tiempo para investigar qué
+  cambió en el registro de routers entre esas versiones.
+- **`pytest` 8.3.3 → 9.0.3** (solo dependencia de desarrollo, no viaja a producción): cierra su CVE sin
+  ningún ajuste, suite completa sin cambios.
+- `pyasn1`/`ecdsa` (transitivas de `python-jose`) siguen con sus CVEs: no alcanzables por el flujo real
+  de JWT del proyecto (firma con HS256, no con curvas elípticas ni ASN.1 de certificados), y
+  reemplazar `python-jose` es un cambio de más alcance, no incluido en esta tanda.
+- **`react-router` 6.26.2 → 7.18.3**: cierra las 2 CVEs moderadas por completo (`npm audit
+  --omit=dev` → 0 vulnerabilidades). El proyecto solo usa la API declarativa clásica
+  (`BrowserRouter`/`Routes`/`Route`/`Navigate`/`NavLink`/`useNavigate`/`Outlet`), que v7 mantiene
+  compatible — build sin cambios de código, y verificado en vivo en un despliegue real (nativo,
+  172.30.36.91): login, el flujo obligatorio de cambio de contraseña, navegación entre páginas con
+  rutas anidadas, recarga directa de una URL profunda, la ruta protegida por rol (solo
+  superadministrador) y logout, todo funcionando igual que antes.
+
+### Corregido — actualización
+
+- **`upgrade-docker.sh` (nuevo)**: backup previo de la base con `backup-database.sh`, trae el código
+  nuevo descartando cambios locales sin commitear antes de cambiar de rama (mismo mecanismo de git que
+  el fix de `install-nativo.sh` de más abajo), `docker compose up -d --build` y verificación de
+  `/health` al final.
+- **`upgrade-nativo.sh` (nuevo)**: mismo respaldo para el modo nativo, pero como script aparte de
+  `install-nativo.sh` en vez de sumarle más lógica encima. Motivo: `install-nativo.sh` hace `git
+  checkout`/`reset` sobre su propio checkout como parte de actualizar, y si la versión instalada
+  difiere de la destino en esa misma lógica, bash sigue ejecutando en memoria el código viejo mientras
+  los archivos de disco —el propio script incluido— ya cambiaron por debajo: el fix de checkout, la
+  instalación de `pgvector` y el reinicio de servicios podían no llegar a aplicarse nunca, sin ningún
+  error visible. `upgrade-nativo.sh` nunca se modifica a sí mismo: trae el código nuevo y recién
+  entonces invoca, como proceso aparte, el `install-nativo.sh` ya actualizado. También purga
+  `__pycache__` (gitignorado, así que `git clean` no lo toca) antes de reinstalar, para no dejar
+  bytecode viejo sirviendo al proceso reiniciado.
+- **`install-nativo.sh` ya no usa `systemctl enable --now` para arrancar Squid y el panel**:
+  `enable --now` no reinicia un servicio que ya está activo, así que en una actualización el código
+  quedaba escrito en disco pero el proceso viejo seguía corriendo, sirviendo la versión y las
+  migraciones de antes sin ningún aviso. Ahora hace `enable` + `restart` explícito, que fuerza el
+  reinicio siempre y también sirve para arrancar el servicio la primera vez.
+- Bugs encontrados y corregidos probando en vivo el camino completo de actualización de `main` a esta
+  versión, en dos contenedores de prueba (nativo y Docker) recién instalados desde cero — ver
+  `docs/actualizacion.md`.
+
+### Corregido — arranque cerrado en Docker
+
+- **El proxy podía quedar con el `squid.conf` de fábrica indefinidamente, sin autenticación ni ACL
+  provisional siquiera**: en Docker, el volumen compartido de `/etc/squid` puede llegar vacío y Docker
+  lo autopobla con el `squid.conf` de fábrica que trae la propia imagen de Squid, antes de que el
+  entrypoint de Squid alcance a pisarlo con el provisional. El chequeo que decide si hace falta aplicar
+  la configuración definitiva (`_es_configuracion_provisional` en `app/main.py`) solo reconocía la
+  provisional por su propio marcador, así que si el backend consultaba justo en esa ventana, el archivo
+  no era ni uno ni el otro y el chequeo concluía "ya está aplicada" — sin programar ningún reintento, sin
+  ningún aviso en los registros. Invertido el criterio: ahora se reconoce la definitiva por su propio
+  marcador y se trata cualquier otra cosa —provisional, de fábrica, vacía— como pendiente de generar.
+  Encontrado y verificado en vivo (3 corridas limpias seguidas) probando una instalación Docker desde
+  cero en una ruta no estándar, 172.30.36.92, 2026-09-08.
+
+---
+
 ## [0.21.0] - 2026-09-06
 
 ### Corregido

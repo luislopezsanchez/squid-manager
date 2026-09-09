@@ -14,6 +14,9 @@ from app.database import get_db
 from app.models.admin import Admin
 from app.services.auth_service import get_current_admin
 from app.services.log_service import get_logs, get_log_stats, get_recent_entries
+from app.services.historical_log_service import (
+    list_months, get_month_index, get_historical_entries, iter_historical_lines,
+)
 
 router = APIRouter()
 
@@ -148,4 +151,108 @@ async def export_logs(
         output,
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.csv"}
+    )
+
+
+# ============================================
+# HISTÓRICO — meses ya consolidados en frío (archive/historical/AAAA/MM/).
+# Separado a propósito del resto de este router: estos endpoints no forman
+# parte de ningún polling del panel, se consultan solo cuando el admin abre
+# la pestaña de histórico.
+# ============================================
+
+@router.get("/historical/months")
+async def historical_months(_: Admin = Depends(get_current_admin)):
+    """Lista los meses con log consolidado, con su resumen de index.json."""
+    return await run_in_threadpool(list_months)
+
+
+@router.get("/historical/{year}/{month}")
+async def historical_month_summary(
+    year: int, month: int,
+    _: Admin = Depends(get_current_admin),
+):
+    """El index.json de un mes concreto."""
+    indice = await run_in_threadpool(get_month_index, year, month)
+    if indice is None:
+        from fastapi import HTTPException
+        raise HTTPException(404, detail=f"No hay log consolidado para {year}-{month:02d}")
+    return indice
+
+
+@router.get("/historical/{year}/{month}/entries")
+async def historical_entries(
+    year: int, month: int,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    user: str | None = Query(None),
+    status: int | None = Query(None),
+    domain: str | None = Query(None),
+    ip: str | None = Query(None),
+    denied: bool = Query(False),
+    _: Admin = Depends(get_current_admin),
+):
+    """Líneas de un mes histórico, filtradas y paginadas.
+
+    A diferencia de /access (que cachea unos segundos porque el panel hace
+    polling), esto no cachea nada: un mes cerrado no cambia, y cada consulta
+    ya es bajo demanda, no repetida cada 5s.
+    """
+    return await run_in_threadpool(
+        get_historical_entries,
+        year, month, limit=limit, offset=offset,
+        user=user, status=status, domain=domain, ip=ip, denied_only=denied,
+    )
+
+
+@router.get("/historical/{year}/{month}/export")
+async def historical_export(
+    year: int, month: int,
+    format: Literal["csv", "ndjson"] = Query("csv"),
+    user: str | None = Query(None),
+    status: int | None = Query(None),
+    domain: str | None = Query(None),
+    ip: str | None = Query(None),
+    denied: bool = Query(False),
+    _: Admin = Depends(get_current_admin),
+):
+    """Exporta un mes histórico completo (hasta el tope de líneas), en streaming.
+
+    Sin 'raw' aquí a propósito: reconstruir la línea original de un archivo ya
+    comprimido no aporta nada sobre re-leerla tal cual del .gz (ver /export
+    de arriba, pensado para el access.log activo); para el histórico sirve
+    directamente el .gz consolidado si alguien quiere el formato nativo.
+    """
+    filtros = {"user": user, "status": status, "domain": domain, "ip": ip, "denied_only": denied}
+    stamp = f"{year}{month:02d}"
+
+    if format == "ndjson":
+        def _gen_ndjson():
+            for e in iter_historical_lines(year, month, filtros):
+                yield json.dumps({k: v for k, v in e.items() if k != "raw_line"}, ensure_ascii=False) + "\n"
+        return StreamingResponse(
+            _gen_ndjson(),
+            media_type="application/x-ndjson",
+            headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.ndjson"},
+        )
+
+    def _gen_csv():
+        header = io.StringIO()
+        writer = csv.writer(header)
+        writer.writerow(["timestamp", "time", "client_ip", "action", "status", "bytes", "method", "url", "domain", "user", "content_type", "denied"])
+        yield header.getvalue()
+        for e in iter_historical_lines(year, month, filtros):
+            row = io.StringIO()
+            writer = csv.writer(row)
+            writer.writerow([
+                e["timestamp"], e["time"], e["client_ip"], e["action"], e["status"],
+                e["bytes"], e["method"], e["url"], e["domain"], e["user"],
+                e["content_type"], "yes" if e["denied"] else "no",
+            ])
+            yield row.getvalue()
+
+    return StreamingResponse(
+        _gen_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.csv"},
     )

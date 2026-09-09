@@ -74,6 +74,7 @@ uma instância do SquidManager por nó.
 
 ### Gerenciamento do proxy
 - **ACLs visuais** — Crie listas de controle de acesso por domínio, IP, horário, regex, porta, método HTTP e mais (29 tipos suportados)
+- **Carga em massa de domínios** — Envie um arquivo com milhares de domínios para uma blocklist; abaixo de 200 entra como ACL normal, acima disso fica num arquivo à parte que o Squid lê diretamente, em vez de uma linha gigante no `squid.conf`
 - **Regras de acesso** — Ordene regras `http_access` com botões de subir/descer
 - **Grupos de usuários** — Agrupe usuários locais ou LDAP e aplique políticas de acesso ao grupo inteiro de uma vez
 - **Delay Pools** — Controle de largura de banda por usuário com interface visual (sem precisar entender o formato `64000/64000 64000/32000`)
@@ -81,26 +82,38 @@ uma instância do SquidManager por nó.
 
 ### Autenticação
 - **Usuários locais** — Gerenciamento completo de usuários com autenticação básica (htpasswd) e data de expiração opcional
+- **Digest (RFC 2617)** — O navegador nunca envia a senha em texto claro, só um hash; alternativa ao Basic para usuários locais
+- **Sem autenticação local (`none`)** — Para um proxy filho cujo controle de acesso real é feito por um proxy pai encadeado, sem duplicar usuários dos dois lados
 - **LDAP / Active Directory** — Integração com diretório externo, com teste de conexão integrado e sincronização paginada
-- **Painel seguro** — Login com JWT, papéis (superadmin / admin / somente leitura) e troca de senha obrigatória no primeiro acesso
+- **Kerberos / Negotiate** — Login único com o Active Directory, sem o navegador pedir credenciais
+- **Proxy pai encadeado** — Com credenciais fixas, ou repassando as do cliente (`passthru`) para um pai que exige Digest, NTLM ou Negotiate
+- **Painel seguro** — Login com JWT, papéis (superadmin / admin / somente leitura) e troca de senha obrigatória no primeiro acesso; uma senha correta nunca fica bloqueada pelas tentativas falhas de outra pessoa
 
 ### Segurança
 - **SSL Bump** — Intercepta e filtra tráfego HTTPS, não apenas HTTP
 - **Bloqueio de HTTPS por SNI** — Bloqueia domínios antes de descriptografar (ex.: Facebook ou YouTube por HTTPS)
 - **Exclusão de domínios sensíveis** — Bancos, saúde ou aplicativos com *certificate pinning* podem ficar de fora da descriptografia
-- **Auditoria completa** — Registro de todas as alterações: quem, o quê, quando
+- **Auditoria completa** — Registro de todas as alterações: quem, o quê, quando, com retenção automática
 - **Certificado CA** — Geração automática e download pelo painel, com instaladores para Windows, macOS e iOS
+- **Backend sem privilégios nos dois modos** — No Docker, o backend não monta mais o socket do Docker direto: fala com ele através de um proxy de socket restrito (`docker-socket-proxy`) que bloqueia build/swarm/segredos/plugins, e roda como usuário sem privilégios — igual ao que o modo nativo já fazia
 
 ### Operação
 - **Aplicar alterações a quente** — Valida a configuração no Squid *antes* de gravá-la; recarrega ou reinicia conforme necessário
 - **Mudança de porta automática** — Detecta a mudança e recria o contêiner sem perder a configuração se algo falhar
 - **Painel** — Tráfego em tempo real, principais usuários e domínios, estado do sistema
-- **Backup e migração** — Exporte toda a configuração para JSON (incluindo grupos e usuários LDAP) ou importe um `squid.conf` tradicional
+- **Histórico de logs** — Meses já fechados, organizados por ano/mês com um resumo pré-calculado (usuários, domínios, negados), com retenção configurável — separado do visualizador ao vivo
+- **Backup e migração** — Backup automático do banco de dados com retenção (script pronto para cron, nos dois modos de implantação), exporte toda a configuração para JSON, ou importe um `squid.conf` tradicional com um relatório prévio do que pode e do que não pode ser trazido (suporta `include`)
 - **Notificações** — Alertas por e-mail ou Telegram quando alterações são aplicadas ou se detecta atividade suspeita
+- **Syslog externo** — Encaminha os logs de acesso a um servidor syslog (SIEM, ELK, Splunk) além de gravá-los localmente
+
+### Assistente de IA
+- **Perguntas em linguagem natural sobre o painel** — Responde citando de qual arquivo e seção da documentação veio a resposta; nunca vê seu banco de dados, seu `squid.conf` real nem credenciais — veja [docs/asistente-ia.md](docs/asistente-ia.md) (só em espanhol)
+- **Busca híbrida** — Combina busca semântica (embeddings) e busca de texto completo sobre a documentação em espanhol
+- **Desligado por padrão** — Exige ativá-lo e configurar duas API keys (um provedor de chat + Jina AI para os embeddings); a documentação viaja a esses serviços externos ao reindexar e ao perguntar
 
 ### Implantação e idiomas
 - **Dois modos de implantação** — Com Docker (um único comando sobe tudo) ou **sem Docker**, com o Squid, o painel e o PostgreSQL como serviços do sistema. Escolhe-se com `DEPLOY_MODE`; o resto do produto é idêntico — veja [docs/instalacion-nativa.pt.md](docs/instalacion-nativa.pt.md)
-- **Sem root** — No modo nativo o painel roda com seu próprio usuário e um sudoers de três comandos, bem menos do que o socket do Docker concede
+- **Atualizar é um único comando** — `upgrade-docker.sh` / `upgrade-nativo.sh`: backup prévio, código novo trazido com segurança e tudo reconstruído e reiniciado, preservando sua configuração — veja [🔄 Atualizar](#-atualizar)
 - **Painel em três idiomas** — Espanhol, inglês e português, selecionável no próprio painel. As mensagens de erro da API também são traduzidas, e as páginas de erro que os usuários do proxy veem seguem o idioma deles — veja [docs/idiomas.md](docs/idiomas.md)
 
 ---
@@ -453,26 +466,52 @@ nenhuma. É de propósito, e está explicado acima em
 ## 🔄 Atualizar
 
 O comando depende de qual modo você usou para instalar
-([Modo A ou Modo B](#-instalação), você escolheu isso na instalação):
+([Modo A ou Modo B](#-instalação), você escolheu isso na instalação). Nos
+dois casos é um script separado do instalador — baixado na hora, nunca a
+cópia que já está no disco:
 
 ```bash
 # Modo A — com Docker
-cd /caminho/para/squid-manager && git pull && docker compose up -d --build
+cd /caminho/para/squid-manager
+wget -O upgrade-docker.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-docker.sh
+sudo bash upgrade-docker.sh
 
 # Modo B — sem Docker (nativo)
-cd /opt/squid-manager && sudo git pull && sudo backend/.venv/bin/pip install -q -r backend/requirements.txt && cd frontend && sudo npm install --silent && sudo npm run build && sudo systemctl restart squidmanager
+cd /opt/squid-manager
+wget -O upgrade-nativo.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-nativo.sh
+sudo bash upgrade-nativo.sh
 ```
+
+Os dois fazem a mesma coisa no seu modo: backup do banco antes de tocar em
+qualquer coisa, trazem o código novo com segurança (descartando mudanças
+locais não commitadas do próprio checkout, nunca o seu `.env`) e deixam
+tudo reconstruído e reiniciado — no Docker com `--build`, e no nativo
+repetindo o que `install-nativo.sh` sabe reparar (pacote do PostgreSQL que
+estiver faltando, drop-in de systemd do Kerberos, rotação de logs,
+dependências Python, recompilar o painel) e **reiniciando o serviço de
+verdade**, não só se estivesse parado.
+
+**Por que só rodar `install-nativo.sh` de novo à mão não basta no modo
+nativo**: esse script faz seu próprio `git checkout`/`reset` sobre o
+próprio checkout como parte da atualização, e se a versão que você já tem
+instalada difere da nova nessa mesma lógica, você acaba rodando a lógica
+velha enquanto os arquivos por baixo já mudaram — o motivo concreto de
+existir o `upgrade-nativo.sh` em vez de documentar esse caminho. Você ainda
+pode passar `BRANCH=main` (ou a branch que for o caso) para qualquer um dos
+dois scripts se precisar apontar para outra além da padrão. O comando
+manual equivalente, passo a passo, continua documentado em
+[docs/actualizacion.md](docs/actualizacion.md) para quem preferir não rodar
+nenhum dos dois scripts.
 
 As migrações do banco de dados são aplicadas sozinhas ao iniciar o backend, e
 **sua configuração é preservada**: usuários, regras, portas e certificados não
 são tocados.
 
-> **O `--build` (Docker) ou o `npm run build` (nativo) não são opcionais.**
-> Sem eles, o Docker reutiliza as imagens que já tem e o nginx continua
-> servindo o frontend antigo já compilado — nos dois casos o código novo
-> nunca chega a rodar, ainda que o `git pull` tenha dado certo. Tudo parece
-> correto — repositório em dia, contêineres ou serviço iniciados — mas você
-> continua na versão anterior.
+> **O `--build` (Docker) não é opcional.**
+> Sem ele, o Docker reutiliza as imagens que já tem: o código novo nunca
+> chega a rodar, ainda que o `git pull` tenha dado certo. Tudo parece
+> correto — repositório em dia, contêineres iniciados — mas você continua na
+> versão anterior.
 
 Para conferir que deu certo, em qualquer um dos dois modos:
 
@@ -670,7 +709,7 @@ suportado, responde em espanhol. Veja [docs/idiomas.md](docs/idiomas.md).
 > URL que contenha "metrics" por associá-la a telemetria, e a requisição nem
 > chega a sair do navegador.
 
-São 14 routers e 72 endpoints no total. Para a documentação completa, veja
+São 18 routers e 96 endpoints no total. Para a documentação completa, veja
 [docs/api-reference.md](docs/api-reference.md).
 
 ---
@@ -689,7 +728,9 @@ Em espanhol:
 | [docs/idiomas.md](docs/idiomas.md) | Idiomas do painel, da API e do proxy |
 | [docs/configuration.md](docs/configuration.md) | Todas as opções de configuração |
 | [docs/architecture.md](docs/architecture.md) | Arquitetura técnica detalhada |
-| [docs/authentication.md](docs/authentication.md) | Contas, sessões, papéis e grupos |
+| [docs/authentication.md](docs/authentication.md) | Contas, sessões, papéis, grupos e esquemas de autenticação (Basic/Digest/none) |
+| [docs/kerberos.md](docs/kerberos.md) | Autenticação Negotiate (SSO) contra Active Directory |
+| [docs/asistente-ia.md](docs/asistente-ia.md) | Assistente de IA: o que vê, o que não vê, como ativar |
 | [docs/ssl-bump.md](docs/ssl-bump.md) | Guia de SSL Bump e certificados CA |
 | [docs/proxy-padre.md](docs/proxy-padre.md) | Sair à internet por outro proxy |
 | [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md) | Instalar num servidor atrás de um proxy |

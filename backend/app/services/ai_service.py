@@ -21,6 +21,7 @@ Diseño deliberado, no accidental:
 
 import logging
 import re
+import threading
 import time
 from pathlib import Path
 
@@ -32,6 +33,16 @@ from app.models.ai_config import AiConfig
 from app.models.doc_chunk import DocChunk, EMBEDDING_DIM
 
 logger = logging.getLogger(__name__)
+
+# Candado para que dos reindexaciones no corran a la vez. Encontrado en vivo:
+# cada reindexación empieza borrando TODA la tabla antes de reconstruirla, así
+# que dos corriendo en paralelo (dos pestañas, o un click doble) se pisan
+# entre sí -una borra lo que la otra ya había confirmado- y el resultado
+# final queda con archivos de punta a la mitad, sin ningún error visible. Un
+# `threading.Lock` alcanza porque el backend corre en un único proceso (sin
+# `--workers`, ver el ExecStart de systemd) -no hace falta coordinación entre
+# procesos ni un lock a nivel de base de datos-.
+_REINDEXANDO = threading.Lock()
 
 
 def _raiz_del_proyecto() -> Path | None:
@@ -88,18 +99,35 @@ _CODIGOS_REINTENTABLES = (429, 503)
 _REINTENTOS = 3
 _ESPERA_ENTRE_REINTENTOS = 3.0
 
+# El reindexado (proceso de fondo, nadie mirando la pantalla) puede permitirse
+# insistir varias veces. Una pregunta en vivo del Asistente no: el admin está
+# esperando la respuesta en pantalla, y con 3 reintentos de hasta 60s cada uno
+# la espera real llega a ~3 minutos antes de mostrar cualquier error -se sintió
+# "colgado" en vivo con Gemini devolviendo 503 "high demand"-. Para ese camino
+# interactivo alcanza con un solo reintento corto: si el proveedor sigue
+# fallando después de eso, mejor avisar ya que seguir insistiendo en silencio.
+_REINTENTOS_INTERACTIVO = 1
+_ESPERA_ENTRE_REINTENTOS_INTERACTIVO = 2.0
 
-def _post_con_reintentos(url: str, headers: dict, body: dict, timeout: float) -> httpx.Response:
+
+def _post_con_reintentos(
+    url: str,
+    headers: dict,
+    body: dict,
+    timeout: float,
+    reintentos: int = _REINTENTOS,
+    espera: float = _ESPERA_ENTRE_REINTENTOS,
+) -> httpx.Response:
     ultimo_error: Exception | None = None
-    for intento in range(1, _REINTENTOS + 1):
+    for intento in range(1, reintentos + 1):
         try:
             r = httpx.post(url, headers=headers, json=body, timeout=timeout)
-            if r.status_code in _CODIGOS_REINTENTABLES and intento < _REINTENTOS:
+            if r.status_code in _CODIGOS_REINTENTABLES and intento < reintentos:
                 logger.warning(
                     "Proveedor de IA devolvió %d (intento %d/%d), reintentando...",
-                    r.status_code, intento, _REINTENTOS,
+                    r.status_code, intento, reintentos,
                 )
-                time.sleep(_ESPERA_ENTRE_REINTENTOS)
+                time.sleep(espera)
                 continue
             r.raise_for_status()
             return r
@@ -107,8 +135,8 @@ def _post_con_reintentos(url: str, headers: dict, body: dict, timeout: float) ->
             raise
         except httpx.HTTPError as e:
             ultimo_error = e
-            if intento < _REINTENTOS:
-                time.sleep(_ESPERA_ENTRE_REINTENTOS)
+            if intento < reintentos:
+                time.sleep(espera)
                 continue
             raise
     raise ultimo_error  # pragma: no cover - inalcanzable, el bucle siempre retorna o lanza
@@ -155,23 +183,51 @@ def probar_jina(api_key: str) -> int:
     return len(vector)
 
 
+def _error_proveedor(nombre: str, e: httpx.HTTPStatusError) -> AiServiceError:
+    """Traduce un error HTTP del proveedor a un mensaje claro para el usuario.
+
+    429/503 son los casos que motivaron esto -límite de cuota agotado o el
+    proveedor saturado-, y son justo los que un admin necesita distinguir de
+    "la pregunta está mal" o "hay un bug": acá no hay nada que arreglar del
+    lado de SquidManager, hay que esperar o cambiar de proveedor/modelo en
+    Configuración.
+    """
+    if e.response.status_code == 429:
+        return AiServiceError(
+            f"{nombre} rechazó la petición: se agotó el límite de uso de la API key "
+            "(código 429). Esperá a que se renueve la cuota o cambiá de proveedor/"
+            "modelo en Configuración."
+        )
+    if e.response.status_code == 503:
+        return AiServiceError(
+            f"{nombre} no está disponible en este momento (alta demanda, código 503). "
+            "Probá de nuevo en un momento."
+        )
+    return AiServiceError(f"{nombre} rechazó la petición: {e.response.text[:300]}")
+
+
 # --- Proveedores: generación de la respuesta (Gemini u Ollama Cloud) --------
 
-def _gemini_generar(system: str, prompt: str, api_key: str, model: str) -> str:
+def _gemini_generar(system: str, prompt: str, api_key: str, model: str, interactivo: bool = False) -> str:
     url = _GEMINI_GENERATE_URL.format(model=model)
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "systemInstruction": {"parts": [{"text": system}]},
         "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048},
     }
+    reintentos = _REINTENTOS_INTERACTIVO if interactivo else _REINTENTOS
+    espera = _ESPERA_ENTRE_REINTENTOS_INTERACTIVO if interactivo else _ESPERA_ENTRE_REINTENTOS
     try:
         # 60s, no 30: a diferencia de un embedding (rápido, texto corto), una
         # respuesta generada puede tardar bastante más bajo demanda alta -se
         # vio en vivo: un 503 "high demand" seguido de un timeout a 30s en el
         # reintento con el mismo modelo-.
-        r = _post_con_reintentos(url, {"x-goog-api-key": api_key}, body, timeout=60)
+        r = _post_con_reintentos(
+            url, {"x-goog-api-key": api_key}, body, timeout=60,
+            reintentos=reintentos, espera=espera,
+        )
     except httpx.HTTPStatusError as e:
-        raise AiServiceError(f"Gemini rechazó la petición: {e.response.text[:300]}")
+        raise _error_proveedor("Gemini", e)
     except httpx.HTTPError as e:
         raise AiServiceError(f"No se pudo conectar con Gemini: {e}")
 
@@ -190,7 +246,7 @@ def _gemini_generar(system: str, prompt: str, api_key: str, model: str) -> str:
     return texto
 
 
-def _ollama_cloud_generar(system: str, prompt: str, api_key: str, model: str) -> str:
+def _ollama_cloud_generar(system: str, prompt: str, api_key: str, model: str, interactivo: bool = False) -> str:
     body = {
         "model": model,
         "messages": [
@@ -199,15 +255,19 @@ def _ollama_cloud_generar(system: str, prompt: str, api_key: str, model: str) ->
         ],
         "stream": False,
     }
+    reintentos = _REINTENTOS_INTERACTIVO if interactivo else _REINTENTOS
+    espera = _ESPERA_ENTRE_REINTENTOS_INTERACTIVO if interactivo else _ESPERA_ENTRE_REINTENTOS
     try:
         r = _post_con_reintentos(
             "https://ollama.com/api/chat",
             {"Authorization": f"Bearer {api_key}"},
             body,
             timeout=60,
+            reintentos=reintentos,
+            espera=espera,
         )
     except httpx.HTTPStatusError as e:
-        raise AiServiceError(f"Ollama Cloud rechazó la petición: {e.response.text[:300]}")
+        raise _error_proveedor("Ollama Cloud", e)
     except httpx.HTTPError as e:
         raise AiServiceError(f"No se pudo conectar con Ollama Cloud: {e}")
 
@@ -229,7 +289,10 @@ _PROVEEDORES_OPENAI_COMPATIBLE = {
 }
 
 
-def _openai_compatible_generar(system: str, prompt: str, api_key: str, model: str, base_url: str, nombre: str) -> str:
+def _openai_compatible_generar(
+    system: str, prompt: str, api_key: str, model: str, base_url: str, nombre: str,
+    interactivo: bool = False,
+) -> str:
     body = {
         "model": model,
         "messages": [
@@ -237,15 +300,19 @@ def _openai_compatible_generar(system: str, prompt: str, api_key: str, model: st
             {"role": "user", "content": prompt},
         ],
     }
+    reintentos = _REINTENTOS_INTERACTIVO if interactivo else _REINTENTOS
+    espera = _ESPERA_ENTRE_REINTENTOS_INTERACTIVO if interactivo else _ESPERA_ENTRE_REINTENTOS
     try:
         r = _post_con_reintentos(
             f"{base_url}/chat/completions",
             {"Authorization": f"Bearer {api_key}"},
             body,
             timeout=60,
+            reintentos=reintentos,
+            espera=espera,
         )
     except httpx.HTTPStatusError as e:
-        raise AiServiceError(f"{nombre} rechazó la petición: {e.response.text[:300]}")
+        raise _error_proveedor(nombre, e)
     except httpx.HTTPError as e:
         raise AiServiceError(f"No se pudo conectar con {nombre}: {e}")
 
@@ -313,14 +380,24 @@ def listar_modelos(provider: str, api_key: str) -> list[str]:
     raise AiServiceError(f"Proveedor desconocido: {provider!r}")
 
 
-def generar_respuesta(system: str, prompt: str, config: AiConfig) -> str:
+def generar_respuesta(system: str, prompt: str, config: AiConfig, interactivo: bool = False) -> str:
+    """Genera una respuesta con el proveedor configurado.
+
+    `interactivo=True` es el camino de una pregunta del Asistente en vivo -el
+    admin está esperando en pantalla, así que reintenta menos y más rápido
+    (ver nota junto a `_REINTENTOS_INTERACTIVO`)-. Queda en False por defecto
+    para cualquier otro uso futuro de este generador que no tenga a nadie
+    esperando en pantalla.
+    """
     if config.provider == "gemini":
-        return _gemini_generar(system, prompt, config.api_key, config.chat_model)
+        return _gemini_generar(system, prompt, config.api_key, config.chat_model, interactivo=interactivo)
     if config.provider == "ollama_cloud":
-        return _ollama_cloud_generar(system, prompt, config.api_key, config.chat_model)
+        return _ollama_cloud_generar(system, prompt, config.api_key, config.chat_model, interactivo=interactivo)
     if config.provider in _PROVEEDORES_OPENAI_COMPATIBLE:
         base_url, nombre = _PROVEEDORES_OPENAI_COMPATIBLE[config.provider]
-        return _openai_compatible_generar(system, prompt, config.api_key, config.chat_model, base_url, nombre)
+        return _openai_compatible_generar(
+            system, prompt, config.api_key, config.chat_model, base_url, nombre, interactivo=interactivo,
+        )
     raise AiServiceError(f"Proveedor desconocido: {config.provider!r}")
 
 
@@ -401,8 +478,21 @@ def _archivos_a_indexar() -> list[str]:
 def reindexar_documentacion(db: Session, config: AiConfig) -> dict:
     """Vuelve a indexar toda la documentación desde cero.
 
-    Se hace completo, no incremental: el corpus es chico (unas pocas decenas
-    de archivos) y así no hay que rastrear qué cambió desde la última vez.
+    Se hace completo, no incremental en el sentido de "solo lo que cambió"
+    -el corpus es chico (unas pocas decenas de archivos) y así no hay que
+    rastrear qué cambió desde la última vez-, pero SÍ confirma (commit) por
+    archivo, no todo en una sola transacción al final. Encontrado en vivo:
+    con el corpus ya creciendo (17+ archivos, ~200 fragmentos) la reindexación
+    completa puede tardar más que el `proxy_read_timeout` de nginx (120 s por
+    defecto) -sobre todo si Jina devuelve algún 429/503 y entran los
+    reintentos-. Con todo en una única transacción, una conexión cortada a
+    mitad de camino perdía TODO el progreso sin ningún error visible (la
+    petición del navegador simplemente se cortaba): quedaba viéndose "no
+    pasó nada" con el conteo de fragmentos intacto, cuando en realidad se
+    habían gastado minutos de llamadas reales a Jina. Confirmando por
+    archivo, una reindexación interrumpida deja indexados los archivos ya
+    procesados en vez de perderlos todos -y volver a pulsar "Reindexar" solo
+    tiene que rehacer lo que falta, no todo de nuevo-.
     """
     key_embeddings = _key_embeddings(config)
     if not key_embeddings:
@@ -410,42 +500,61 @@ def reindexar_documentacion(db: Session, config: AiConfig) -> dict:
             "Falta configurar la API key de Jina AI para poder buscar en la documentación."
         )
 
-    raiz = _raiz_del_proyecto()
-    archivos = _archivos_a_indexar()
+    if not _REINDEXANDO.acquire(blocking=False):
+        raise AiServiceError(
+            "Ya hay una reindexación en curso (puede haberla lanzado otra pestaña o otro "
+            "administrador) — esperá a que termine antes de lanzar otra."
+        )
 
-    db.query(DocChunk).delete()
+    try:
+        raiz = _raiz_del_proyecto()
+        archivos = _archivos_a_indexar()
 
-    total = 0
-    saltados: list[str] = []
-    for rel in archivos:
-        ruta = raiz / rel
-        if not ruta.is_file():
-            continue
-        try:
-            texto = ruta.read_text(encoding="utf-8")
-        except OSError as e:
-            saltados.append(f"{rel}: {e}")
-            continue
+        # Se borra y confirma aparte, antes de empezar: así, si la
+        # reindexación se corta enseguida (antes de terminar ni un solo
+        # archivo), esa eliminación por sí sola también se revierte -el
+        # índice viejo queda intacto en vez de vaciarse sin nada nuevo que
+        # lo reemplace-.
+        db.query(DocChunk).delete()
+        db.commit()
 
-        for titulo, contenido in _partir_en_fragmentos(texto, rel):
+        total = 0
+        saltados: list[str] = []
+        for rel in archivos:
+            ruta = raiz / rel
+            if not ruta.is_file():
+                continue
             try:
-                embedding = _jina_embed(contenido, key_embeddings, "retrieval.passage")
-            except AiServiceError as e:
-                saltados.append(f"{rel} ({titulo or 'sin título'}): {e}")
+                texto = ruta.read_text(encoding="utf-8")
+            except OSError as e:
+                saltados.append(f"{rel}: {e}")
                 continue
 
-            chunk = DocChunk(source_file=rel, heading=titulo, content=contenido, embedding=embedding)
-            db.add(chunk)
-            db.flush()  # necesario para poder calcular el tsvector por id, mas abajo
-            db.execute(
-                text("UPDATE doc_chunks SET tsv = to_tsvector('spanish', :contenido) WHERE id = :id"),
-                {"contenido": contenido, "id": chunk.id},
-            )
-            total += 1
+            for titulo, contenido in _partir_en_fragmentos(texto, rel):
+                try:
+                    embedding = _jina_embed(contenido, key_embeddings, "retrieval.passage")
+                except AiServiceError as e:
+                    saltados.append(f"{rel} ({titulo or 'sin título'}): {e}")
+                    continue
 
-    db.commit()
-    logger.info("Documentación reindexada: %d fragmentos de %d archivos", total, len(archivos))
-    return {"fragmentos": total, "archivos": len(archivos), "saltados": saltados}
+                chunk = DocChunk(source_file=rel, heading=titulo, content=contenido, embedding=embedding)
+                db.add(chunk)
+                db.flush()  # necesario para poder calcular el tsvector por id, mas abajo
+                db.execute(
+                    text("UPDATE doc_chunks SET tsv = to_tsvector('spanish', :contenido) WHERE id = :id"),
+                    {"contenido": contenido, "id": chunk.id},
+                )
+                total += 1
+
+            # Confirmado al cerrar cada archivo, no al final de todos: ver la
+            # nota de diseño de esta función.
+            db.commit()
+
+        db.commit()
+        logger.info("Documentación reindexada: %d fragmentos de %d archivos", total, len(archivos))
+        return {"fragmentos": total, "archivos": len(archivos), "saltados": saltados}
+    finally:
+        _REINDEXANDO.release()
 
 
 # --- Búsqueda híbrida y respuesta ---------------------------------------------
@@ -545,7 +654,7 @@ def preguntar(db: Session, config: AiConfig, pregunta: str) -> dict:
     )
     prompt = f"Documentación relevante:\n\n{contexto}\n\nPregunta del usuario: {pregunta}"
 
-    respuesta = generar_respuesta(_SYSTEM_PROMPT, prompt, config)
+    respuesta = generar_respuesta(_SYSTEM_PROMPT, prompt, config, interactivo=True)
     fuentes = [
         {"archivo": c.source_file, "seccion": c.heading} for c in fragmentos
     ]

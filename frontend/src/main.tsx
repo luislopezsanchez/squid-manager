@@ -16,11 +16,13 @@ import CertificadoCA from './pages/CertificadoCA'
 import BackupRestore from './pages/BackupRestore'
 import Admins from './pages/Admins'
 import LogsViewer from './pages/LogsViewer'
+import HistoricalLogs from './pages/HistoricalLogs'
 import Notifications from './pages/Notifications'
 import SyslogConfig from './pages/SyslogConfig'
 import ParentProxy from './pages/ParentProxy'
 import Groups from './pages/Groups'
 import Asistente from './pages/Asistente'
+import Actualizaciones from './pages/Actualizaciones'
 import ChangePassword from './pages/ChangePassword'
 import Layout from './components/Layout'
 import { getToken, isSuperadmin } from './api/client'
@@ -61,11 +63,13 @@ function App() {
           <Route path="audit" element={<AuditLog />} />
           <Route path="backup" element={<BackupRestore />} />
           <Route path="logs" element={<LogsViewer />} />
+          <Route path="logs-historico" element={<HistoricalLogs />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="syslog" element={<SyslogConfig />} />
           <Route path="parent-proxy" element={<ParentProxy />} />
           <Route path="groups" element={<Groups />} />
           <Route path="admins" element={isSuperadmin() ? <Admins /> : <Navigate to="/" />} />
+          <Route path="actualizaciones" element={<Actualizaciones />} />
         </Route>
       </Routes>
     </BrowserRouter>

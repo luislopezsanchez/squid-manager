@@ -1,6 +1,6 @@
 # API Reference — SquidManager
 
-La API tiene 14 routers y 72 endpoints.
+La API tiene 19 routers y 101 endpoints.
 
 ## Idioma de las respuestas
 
@@ -278,7 +278,7 @@ Content-Type: application/json
 }
 ```
 
-**Tipos soportados (27):** `src`, `dst`, `srcdomain`, `dstdomain`, `srcdom_regex`, `dstdom_regex`, `url_regex`, `urlpath_regex`, `port`, `myport`, `localport`, `proto`, `method`, `browser`, `referer_regex`, `time`, `proxy_auth`, `proxy_auth_regex`, `maxconn`, `max_user_ip`, `ident`, `arp`, `req_mime_type`, `rep_mime_type`, `http_status`, `snmp_community`, `ssl::server_name`, `ssl::server_name_regex`, `at_step`. Ver [docs/configuration.md](configuration.md) para la lista completa con ejemplos.
+**Tipos soportados (29):** `src`, `dst`, `srcdomain`, `dstdomain`, `srcdom_regex`, `dstdom_regex`, `url_regex`, `urlpath_regex`, `port`, `myport`, `localport`, `proto`, `method`, `browser`, `referer_regex`, `time`, `proxy_auth`, `proxy_auth_regex`, `maxconn`, `max_user_ip`, `ident`, `arp`, `req_mime_type`, `rep_mime_type`, `http_status`, `snmp_community`, `ssl::server_name`, `ssl::server_name_regex`, `at_step`. Ver [docs/configuration.md](configuration.md) para la lista completa con ejemplos.
 
 El nombre debe empezar por una letra, usar solo letras/números/guion/guion bajo, y no coincidir con los nombres que usa internamente la plantilla (`all`, `localnet`, `authenticated`, etc.). El valor no puede contener saltos de línea.
 
@@ -303,6 +303,40 @@ Authorization: Bearer <token>
 ```
 
 Se rechaza con `409` si alguna regla de acceso la está usando, indicando cuál.
+
+### Carga masiva de dominios
+```http
+POST /api/acls/bulk-domains
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+file: dominios.txt
+acl_name: blocklist_grande
+modo: reemplazar
+acl_type: dstdomain
+description: (opcional)
+```
+
+Para blocklists de miles de dominios, uno por línea (líneas vacías o que empiezan con `#` se ignoran). Solo para `dstdomain`/`dstdom_regex` — el resto de tipos de ACL no tiene sentido cargarlos así.
+
+Por debajo del umbral configurado (200 dominios) la ACL queda **inline**, igual que una creada a mano; por encima pasa a **file**: un archivo aparte que Squid lee directo, no una línea de `squid.conf` con miles de entradas. El umbral se reevalúa en cada carga — una lista que creció puede pasar de inline a file, y una que se redujo puede volver.
+
+`modo`:
+- `reemplazar` (default): el archivo define la lista completa, pisa lo que hubiera.
+- `agregar`: se suma a lo que ya había en la ACL, sin duplicar.
+
+**Respuesta:**
+```json
+{
+  "acl": { "id": 12, "name": "blocklist_grande", "type": "dstdomain", "source": "file", "...": "..." },
+  "dominios_importados": 4500,
+  "dominios_nuevos": 4500,
+  "rechazados": ["linea-invalida-1", "linea-invalida-2"],
+  "total_rechazados": 2
+}
+```
+
+`rechazados` trae como mucho las primeras 20 líneas rechazadas (`total_rechazados` da el conteo real). Límite de la lista combinada: 200.000 dominios — pensado como cortafuegos ante un archivo descomunal por error, no como techo real de uso.
 
 ---
 
@@ -592,6 +626,110 @@ Deshabilitar purga la caché de credenciales de Squid (afecta a todos los usuari
 
 ---
 
+## Kerberos
+
+Autenticación Negotiate (SPNEGO/Kerberos) contra Active Directory: inicio de sesión único, sin que el navegador pida credenciales. Ver [docs/kerberos.md](kerberos.md) para el procedimiento completo.
+
+### Ver configuración
+```http
+GET /api/kerberos/config
+Authorization: Bearer <token>
+```
+
+El keytab nunca se devuelve, solo si hay uno subido (`keytab_uploaded`).
+
+### Guardar realm y FQDN
+```http
+PUT /api/kerberos/config
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "enabled": true,
+  "realm": "EMPRESA.COM",
+  "proxy_fqdn": "proxy.empresa.com"
+}
+```
+
+El keytab se sube aparte (endpoint de abajo). No se comprueba aquí que el keytab funcione de verdad — eso solo se sabe cuando un cliente real presenta un ticket; al aplicar se valida al menos que el archivo tenga forma de keytab.
+
+### Descargar el script de preparación del AD
+```http
+GET /api/kerberos/ad-setup-script
+Authorization: Bearer <token>
+```
+
+Devuelve un `.zip` con un script de PowerShell (para correr en el Active Directory del cliente, no en el servidor de SquidManager) y un lanzador `.cmd` — Windows bloquea por defecto cualquier `.ps1` sin firma digital, el `.cmd` lo evita sin cambiar la política de ejecución del sistema. Requiere haber guardado antes realm y FQDN (`400` si faltan). No incluye ninguna contraseña ni credencial: la cuenta de servicio y el keytab se generan en el propio AD al correr el script.
+
+### Subir el keytab
+```http
+POST /api/kerberos/keytab
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+file: squidmanager.keytab
+```
+
+Límite 256 KB. SquidManager no genera este archivo ni pide credenciales de dominio — crear la cuenta de equipo en el AD es una operación que hace el propio cliente, fuera del panel.
+
+### Quitar el keytab
+```http
+DELETE /api/kerberos/keytab
+Authorization: Bearer <token>
+```
+
+Kerberos deja de ofrecerse al pulsar «Aplicar cambios».
+
+---
+
+## Proxy padre
+
+Salida a Internet a través de otro proxy (encadenado), con credenciales fijas o reenviando las del cliente (`passthru`) hacia un padre que exige Digest, NTLM o Negotiate. Ver [docs/proxy-padre.md](proxy-padre.md).
+
+### Ver configuración
+```http
+GET /api/parent-proxy/config
+Authorization: Bearer <token>
+```
+
+La contraseña viaja enmascarada (`***`) si ya hay una guardada — igual que el bind de LDAP.
+
+### Guardar configuración
+```http
+PUT /api/parent-proxy/config
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "enabled": true,
+  "host": "padre.empresa.com",
+  "port": 3128,
+  "username": "usuario",
+  "password": "contraseña",
+  "never_direct": true,
+  "direct_domains": "",
+  "ca_cert": "",
+  "auth_method": "fixed"
+}
+```
+
+`auth_method`: `fixed` (usuario/contraseña propios, solo Basic) o `passthru` (reenvía las credenciales del cliente tal cual — la única forma de llegar a un padre que exige Digest/NTLM/Negotiate). Enviar `password: "***"` conserva la que ya había guardada. No se comprueba aquí que el padre responda — eso se hace al aplicar. No se puede desactivar con el esquema de autenticación del proxy en `none` (dependencia real: ese esquema depende de que exista un padre habilitado, apagarlo dejaría el Squid abierto).
+
+### Probar sin guardar
+```http
+POST /api/parent-proxy/test
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"host": "padre.empresa.com", "port": 3128, "username": "usuario", "password": "contraseña"}
+```
+
+```json
+{"ok": true, "message": "Conexión exitosa"}
+```
+
+---
+
 ## Backup, Restore y Migración
 
 ### Exportar configuración a JSON
@@ -619,16 +757,56 @@ GET /api/backup/squid-conf
 Authorization: Bearer <token>
 ```
 
-### Importar un squid.conf tradicional
+### Importar un squid.conf tradicional (analizar → aplicar)
+
+Dos pasos, no uno: un `squid.conf` administrado a mano varía demasiado entre instalaciones (`include` de ACLs en archivos aparte, NTLM/AD, squidGuard, proxy padres con opciones propias...) como para que un import de un solo paso sea seguro. Primero se analiza sin escribir nada, después se aplica explícitamente lo ya revisado.
+
+**1. Analizar:**
 ```http
-POST /api/backup/import-squid-conf
+POST /api/backup/analyze-squid-conf
 Authorization: Bearer <token>
 Content-Type: multipart/form-data
 
-file: squid.conf
+files: squid.conf
+files: acls-bloqueadas.conf   (opcional, uno o más, hasta 20 archivos)
+principal: squid.conf
 ```
 
-Parsea ACLs (acumulando las declaradas en varias líneas), reglas, delay pools y los parámetros básicos, incluidos los de `auth_param basic realm/children/credentialsttl`. Los usuarios (htpasswd) no se importan.
+`principal` es el nombre del archivo que hace de punto de entrada; el resto solo se usan si algún `include` los referencia por nombre. No escribe nada en la base — solo devuelve un informe y un `token` de corta duración para confirmar con `/apply-squid-import` sin volver a subir los archivos.
+
+**Respuesta:**
+```json
+{
+  "status": "ok",
+  "token": "a1b2c3...",
+  "resumen": { "acls_nuevas": 12, "reglas_nuevas": 8, "...": "..." },
+  "acls": [{"name": "...", "type": "dstdomain", "value": "...", "estado": "importable", "motivo": null}],
+  "reglas": [{"action": "deny", "acl_names": ["..."], "estado": "importable", "motivo": null}],
+  "settings": [{"key": "...", "value": "..."}],
+  "delay_pools": [{"pool_class": 2, "parameters": "..."}],
+  "parent_proxy": {"host": "...", "port": 3128, "username": "...", "estado": "importable", "motivo": null},
+  "no_soportadas": [{"directiva": "acl_uses_indirect_client", "archivo": "squid.conf", "linea": 42, "motivo": "..."}],
+  "desconocidas": [{"directiva": "...", "archivo": "...", "linea": 0, "motivo": "..."}],
+  "includes_faltantes": ["archivo-que-no-se-subio.conf"]
+}
+```
+
+Cada ACL, regla y el proxy padre traen su propio `estado` (`importable` / `existe` / `no_soportada` / etc.) y `motivo` cuando no es directo. `no_soportadas` son directivas reconocidas pero que SquidManager no puede representar; `desconocidas` son directivas que el parser no reconoce en absoluto. Los usuarios (htpasswd) nunca se importan.
+
+**2. Aplicar el análisis ya revisado:**
+```http
+POST /api/backup/apply-squid-import
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+token: a1b2c3...
+```
+
+El token vive en memoria unos minutos y se consume al usarlo: no se puede aplicar el mismo análisis dos veces ni reutilizarlo más tarde (expira con `400` y hay que volver a analizar).
+
+```json
+{"status": "ok", "message": "Importación aplicada", "details": {"acls": 12, "reglas": 8, "settings": 3, "avisos": ["Revisa la configuración importada y pulsa «Aplicar cambios» para activarla."]}}
+```
 
 ---
 
@@ -690,6 +868,38 @@ Mismos filtros que `/api/logs/access`, hasta 50.000 entradas. El parametro `form
 | `csv` (default) | Tabla, una fila por entrada | Abrir en una planilla |
 | `ndjson` | Un objeto JSON por linea | Ingesta generica en un SIEM |
 | `raw` | La linea del access.log de Squid sin modificar | AWStats, SARG, modulos Squid de Splunk/ELK |
+
+### Histórico de logs
+
+Meses ya cerrados y consolidados en frío (`archive/historical/AAAA/MM/`), separado a propósito del resto de este router: no forman parte del polling del panel, se consultan solo cuando alguien abre la pestaña de histórico.
+
+```http
+GET /api/logs/historical/months
+Authorization: Bearer <token>
+```
+
+Lista los meses con log consolidado, más nuevo primero, leyendo solo los `index.json` (nunca abre los `.gz` para armar este listado).
+
+```http
+GET /api/logs/historical/{year}/{month}
+Authorization: Bearer <token>
+```
+
+El `index.json` precalculado de un mes concreto (usuarios, dominios, denegados). `404` si ese mes no tiene log consolidado.
+
+```http
+GET /api/logs/historical/{year}/{month}/entries?limit=100&offset=0&user=jperez&status=403&domain=facebook&denied=true
+Authorization: Bearer <token>
+```
+
+Mismos filtros que `/api/logs/access`, pero sobre el `.gz` de ese mes. No cachea nada (un mes cerrado no cambia, y cada consulta ya es bajo demanda).
+
+```http
+GET /api/logs/historical/{year}/{month}/export?format=csv&denied=true
+Authorization: Bearer <token>
+```
+
+Igual que `/api/logs/export` pero para un mes histórico completo, en streaming. Sin `raw`: para el formato nativo de Squid alcanza con el `.gz` consolidado directamente.
 
 ---
 
@@ -978,3 +1188,177 @@ Authorization: Bearer <token>
   }
 }
 ```
+
+---
+
+## Asistente de IA
+
+Responde preguntas sobre el uso del panel usando **solo la documentación del proyecto** como fuente (README + `docs/*.md` en español, nunca la base de datos ni la configuración real). Apagado por defecto, igual que LDAP/Kerberos/Syslog. Necesita dos API keys separadas: una de un proveedor de chat (para generar la respuesta) y una de Jina AI (para la búsqueda semántica por embeddings — sin ella no puede encontrar los fragmentos relevantes).
+
+### Ver configuración
+```http
+GET /api/ai/config
+Authorization: Bearer <token>
+```
+
+Las API keys nunca se devuelven en claro (`"***"` si ya hay una guardada). Incluye `fragmentos_indexados`, para saber si hace falta (re)indexar.
+
+### Guardar configuración
+```http
+PUT /api/ai/config
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "enabled": true,
+  "provider": "gemini",
+  "api_key": "...",
+  "embedding_api_key": "...",
+  "chat_model": "gemini-2.0-flash",
+  "embedding_model": "jina-embeddings-v3"
+}
+```
+
+`provider`: `gemini`, `ollama_cloud`, `nvidia_nim` o `groq`. Enviar `api_key`/`embedding_api_key` como `"***"` conserva la que ya había guardada. Habilitar (`enabled: true`) exige tener las dos keys — sin la de Jina, `400`.
+
+### Probar una API key de proveedor
+```http
+POST /api/ai/probar-proveedor
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"provider": "gemini", "api_key": "..."}
+```
+
+No toca la configuración guardada: solo prueba la key y devuelve los modelos disponibles, para elegir de una lista real en vez de escribir un nombre a mano y enterarse recién al preguntar si existe.
+
+```json
+{"status": "ok", "modelos": ["gemini-2.0-flash", "gemini-2.0-pro"]}
+```
+
+### Probar la key de Jina AI (embeddings)
+```http
+POST /api/ai/probar-embeddings
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"api_key": "..."}
+```
+
+Pide un embedding mínimo sin guardar nada.
+
+```json
+{"status": "ok", "dimensiones": 1024}
+```
+
+### Reindexar la documentación
+```http
+POST /api/ai/reindexar
+Authorization: Bearer <token>
+```
+
+Vuelve a indexar toda la documentación desde cero (README + `docs/*.md`, sin las traducciones `.en.md`/`.pt.md`). Bloqueante — una llamada de red por fragmento a Jina AI — se corre en un threadpool para no congelar el panel mientras dura. Hay que correrlo a mano después de cualquier cambio en la documentación: no hay reindexado automático.
+
+```json
+{"status": "ok", "fragmentos": 214, "archivos": 19, "saltados": 0}
+```
+
+### Preguntar
+```http
+POST /api/ai/preguntar
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"pregunta": "¿Cómo habilito la carga masiva de dominios?"}
+```
+
+Cualquier admin puede preguntar, incluida una cuenta de solo lectura: es una consulta de lectura sobre documentación, no una acción sobre el proxy. `400` si el asistente no está activado.
+
+```json
+{
+  "respuesta": "Subí un archivo con un dominio por línea desde...",
+  "fuentes": [
+    {"archivo": "README.md", "seccion": "Gestión de proxy"},
+    {"archivo": "docs/api-reference.md", "seccion": "ACLs"}
+  ]
+}
+```
+
+`fuentes` son los fragmentos de documentación que se usaron para armar la respuesta — sirve para verificar de dónde salió, no es una alucinación sin base.
+
+---
+
+## Actualizaciones
+
+Comprueba si hay una versión nueva de SquidManager en GitHub y permite aprobarla —de inmediato o programada— sin salir del panel. Solo instalación nativa. El panel nunca ejecuta la actualización en sí: solo puede aprobarla; quién la aplica de verdad y con qué permisos está explicado en [docs/actualizaciones-automaticas.md](actualizaciones-automaticas.md).
+
+### Ver el estado
+
+```http
+GET /api/update/estado
+Authorization: Bearer <token>
+```
+
+Cualquier admin puede consultarlo, incluida una cuenta de solo lectura.
+
+```json
+{
+  "es_nativo": true,
+  "version_actual": "0.23.0",
+  "check_enabled": true,
+  "check": {
+    "last_checked_at": "2026-09-09T12:00:00Z",
+    "local_commit": "abc1234",
+    "remote_commit": "def5678",
+    "update_available": true,
+    "commits": [{"sha": "def5678", "message": "fix: ..."}],
+    "last_check_error": null
+  },
+  "request": {"approved": false, "scheduled_at": null, "requested_by": null, "requested_at": null, "atrasada": false},
+  "apply": {"status": null, "started_at": null, "finished_at": null, "commit": null, "log_tail": null}
+}
+```
+
+`apply.status` es `null`, `"running"`, `"verificando"` (la unidad ya no está activa pero el temporizador todavía no confirmó el resultado), `"ok"` o `"error"`. `request.atrasada` en `true` significa que una aprobación lleva más de 3 minutos sin que el temporizador la haya tomado — señal de que algo no anda bien en el servidor.
+
+### Forzar una comprobación contra GitHub
+
+```http
+POST /api/update/comprobar
+Authorization: Bearer <token>
+```
+
+Solo superadmin. `400` si la instalación no es nativa.
+
+### Activar/desactivar la comprobación automática (cada 6 h)
+
+```http
+PUT /api/update/config
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"check_enabled": false}
+```
+
+Solo superadmin.
+
+### Aprobar una actualización
+
+```http
+POST /api/update/aprobar
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"scheduled_at": null}
+```
+
+Solo superadmin. `scheduled_at` en `null` (o ausente) equivale a "ahora": queda aprobada y además se dispara al instante el chequeo que la aplica, sin esperar al temporizador. Con una fecha/hora futura (ISO 8601), queda programada — se rechaza con `400` si esa fecha ya pasó (con 30 s de margen, para no rechazar la propia opción "ahora" por la latencia normal de la petición). `400` también si ya hay una actualización en curso.
+
+### Cancelar una aprobación pendiente
+
+```http
+POST /api/update/cancelar
+Authorization: Bearer <token>
+```
+
+Solo superadmin. `400` si la actualización ya está en curso (ya no se puede cancelar).

@@ -122,16 +122,42 @@ def _too_many(detail: str) -> JSONResponse:
     )
 
 
-def check_login_attempts(username: str) -> bool:
-    """Límite por cuenta, invocado desde el endpoint de login.
+def _login_key(username: str) -> str:
+    return f"login-user:{username.strip().lower()}"
+
+
+def login_attempts_exceeded(username: str) -> bool:
+    """Consulta si la cuenta ya superó el límite de intentos FALLIDOS.
+
+    Es una lectura (no registra nada): a diferencia de `_check_rate_limit`,
+    llamar a esto no cuenta como un intento nuevo. Eso es a propósito -ver
+    `record_failed_login`- para que una contraseña correcta nunca quede
+    bloqueada por los intentos fallidos de otro.
+    """
+    now = time.time()
+    window = _requests[_login_key(username)]
+    while window and now - window[0] > WINDOW_SECONDS:
+        window.popleft()
+    return len(window) >= LOGIN_MAX_PER_USER
+
+
+def record_failed_login(username: str) -> None:
+    """Registra un intento fallido contra esta cuenta.
 
     Va en la ruta y no en el middleware porque leer el cuerpo de la petición
     desde un middleware consume el stream y la ruta se queda sin formulario.
-    Rotar la IP de origen no esquiva este límite.
+    Rotar la IP de origen no esquiva este límite: se cuenta por cuenta, no
+    por IP.
 
-    Devuelve True si la cuenta excede el límite.
+    A propósito solo se llama cuando la contraseña es INCORRECTA -ver
+    `login_attempts_exceeded`-: si esto se llamara para toda petición (sin
+    importar si acierta), cualquiera podía tumbar el acceso del admin real
+    mandando unas pocas contraseñas mal escritas contra su usuario, sin
+    necesidad de acertar nunca ni de moverse de IP -una denegación de
+    servicio dirigida y gratis contra una cuenta puntual, distinta de (y más
+    barata que) intentar de verdad adivinar la contraseña-.
     """
-    return _check_rate_limit(f"login-user:{username.strip().lower()}", LOGIN_MAX_PER_USER)
+    _check_rate_limit(_login_key(username), LOGIN_MAX_PER_USER)
 
 
 async def rate_limit_middleware(request: Request, call_next):
