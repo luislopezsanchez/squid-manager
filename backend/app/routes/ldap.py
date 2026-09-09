@@ -80,7 +80,7 @@ async def get_ldap_config(
 async def update_ldap_config(
     data: LdapConfigUpdate,
     db: Session = Depends(get_db),
-    _: Admin = Depends(require_writer),
+    current_admin: Admin = Depends(require_writer),
 ):
     """Actualiza la configuración LDAP."""
     # Mismo motivo que en squid_config.py al revés: Digest solo autentica
@@ -102,11 +102,12 @@ async def update_ldap_config(
             )
 
     config = db.query(LdapConfig).first()
+    bind_password_cambio = bool(data.bind_password and data.bind_password != "***")
     if config:
         config.server_url = data.server_url
         config.bind_dn = data.bind_dn
         # No sobrescribir la contraseña si viene ***
-        if data.bind_password and data.bind_password != "***":
+        if bind_password_cambio:
             config.bind_password = data.bind_password
         config.search_base = data.search_base
         config.user_filter = data.user_filter
@@ -124,6 +125,17 @@ async def update_ldap_config(
             enabled=data.enabled,
         )
         db.add(config)
+    db.flush()
+    # Nunca la bind_password, solo si cambio o no -mismo criterio que el
+    # resto de credenciales de terceros del proyecto.
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="update", entity="ldap_config", entity_id=config.id,
+        new_value=(
+            f"enabled={config.enabled} server_url={config.server_url} bind_dn={config.bind_dn} "
+            f"bind_password={'(cambiada)' if bind_password_cambio else '(sin cambios)'}"
+        ),
+    ))
     db.commit()
 
     # Escribir archivos auxiliares (ldap_helper.conf) y recargar Squid

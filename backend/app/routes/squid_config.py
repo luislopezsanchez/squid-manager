@@ -15,6 +15,7 @@ from app.database import get_db
 from app.i18n import idioma_de_cabecera, traducir
 from app.models.admin import Admin
 from app.models.squid_settings import SquidSetting
+from app.models.audit_log import AuditLog
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_generator import generate_squid_config
 from app.services.squid_service import reload_squid, get_squid_status, restart_squid, write_ldap_aux_files, apply_squid_config
@@ -133,6 +134,7 @@ async def update_setting(
         data.value = validate_value(data.value, field=f"valor de «{data.key}»")
 
     setting = db.query(SquidSetting).filter(SquidSetting.key == data.key).first()
+    valor_anterior = setting.value if setting else None
     if setting:
         setting.value = data.value
         setting.category = data.category
@@ -142,6 +144,12 @@ async def update_setting(
         setting = SquidSetting(key=data.key, value=data.value,
                                 category=data.category, description=data.description)
         db.add(setting)
+    db.flush()
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="update", entity="squid_setting", entity_id=setting.id,
+        old_value=f"{data.key}={valor_anterior}", new_value=f"{data.key}={data.value}",
+    ))
     db.commit()
     mark_dirty()
     return {"status": "ok", "key": data.key, "value": data.value}
@@ -178,11 +186,17 @@ async def apply_config(
     if result["status"] == "error":
         return result
 
+    accion = "reinicio con SSL Bump" if result.get("needs_restart") else "reconfigure"
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="apply", entity="squid_config", new_value=accion,
+    ))
+    db.commit()
+
     if background_tasks:
-        action = "reinicio con SSL Bump" if result.get("needs_restart") else "reconfigure"
         queue_notification(background_tasks, db, "apply",
                            "Cambios aplicados a Squid",
-                           f"El admin {current_admin.username} aplicó cambios ({action}).")
+                           f"El admin {current_admin.username} aplicó cambios ({accion}).")
 
     return result
 
