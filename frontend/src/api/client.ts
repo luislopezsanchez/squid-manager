@@ -199,6 +199,18 @@ export const api = {
   probarEmbeddingsAi: (api_key: string) =>
     request<any>('/ai/probar-embeddings', { method: 'POST', body: JSON.stringify({ api_key }) }),
 
+  // Actualizaciones (solo instalación nativa): comprueba, aprueba/programa
+  // y cancela una actualización contra el repositorio de GitHub del
+  // proyecto. El panel nunca ejecuta nada con privilegios — ver
+  // backend/app/services/update_service.py.
+  getUpdateStatus: () => request<any>('/update/estado'),
+  checkUpdateNow: () => request<any>('/update/comprobar', { method: 'POST' }),
+  approveUpdate: (scheduled_at: string | null) =>
+    request<any>('/update/aprobar', { method: 'POST', body: JSON.stringify({ scheduled_at }) }),
+  cancelUpdate: () => request<any>('/update/cancelar', { method: 'POST' }),
+  updateCheckConfig: (check_enabled: boolean) =>
+    request<any>('/update/config', { method: 'PUT', body: JSON.stringify({ check_enabled }) }),
+
   // Syslog externo (opcional, apagado por defecto)
   getSyslogConfig: () => request<any>('/syslog/config'),
   updateSyslogConfig: (data: any) => request<any>('/syslog/config', { method: 'PUT', body: JSON.stringify(data) }),

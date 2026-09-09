@@ -20,7 +20,7 @@ from app.config import settings
 from app.i18n import idioma_de_cabecera, traducir
 from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
-from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy, kerberos, ai
+from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy, kerberos, ai, update
 from app.middleware import rate_limit_middleware
 
 logging.basicConfig(level=logging.INFO)
@@ -324,6 +324,9 @@ async def lifespan(app: FastAPI):
     from app.services.syslog_service import start_syslog_forwarder
     start_syslog_forwarder()
 
+    from app.services.update_service import start_update_checker
+    start_update_checker()
+
     yield
     logger.info("Deteniendo SquidManager Backend...")
 
@@ -404,6 +407,7 @@ app.include_router(syslog.router, prefix="/api/syslog", tags=["Syslog externo"])
 app.include_router(parent_proxy.router, prefix="/api/parent-proxy", tags=["Proxy padre"])
 app.include_router(kerberos.router, prefix="/api/kerberos", tags=["Kerberos"])
 app.include_router(ai.router, prefix="/api/ai", tags=["Asistente de IA"])
+app.include_router(update.router, prefix="/api/update", tags=["Actualizaciones"])
 
 
 @app.get("/")

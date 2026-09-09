@@ -441,10 +441,54 @@ cat > /etc/sudoers.d/squidmanager <<EOF
 ${APP_USER} ALL=(root) NOPASSWD: ${SQUID_BIN} -f /etc/squid/squid.conf -k reconfigure
 ${APP_USER} ALL=(root) NOPASSWD: ${SQUID_BIN} -k parse -f /etc/squid/squid.conf.candidate
 ${APP_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart squid
+# Actualizaciones (ver docs/actualizaciones.md): el panel NUNCA ejecuta la
+# actualizacion en si, solo puede adelantar CUANDO este script -que decide
+# por su cuenta si corresponde actuar, leyendo el estado que el propio panel
+# dejo- se fija esa condicion. Sin argumentos: no hay forma de pedirle otra
+# cosa distinta de "revisa ahora".
+${APP_USER} ALL=(root) NOPASSWD: /usr/local/lib/squidmanager/autoupdate-check.sh
 EOF
 chmod 440 /etc/sudoers.d/squidmanager
 visudo -cf /etc/sudoers.d/squidmanager >/dev/null || fail "El fichero de sudoers generado no es valido."
-ok "sudoers: 3 ordenes concedidas a $APP_USER"
+ok "sudoers: 4 ordenes concedidas a $APP_USER"
+
+# El script que de verdad aplica la actualizacion (root, invocado por el
+# temporizador de abajo o bajo demanda via la linea de sudoers de arriba).
+# Mismo directorio que build_monthly_index.py: una libreria del sistema, no
+# parte del checkout que git pueda tocar en caliente.
+install -o root -g root -m 700 "$INSTALL_DIR/autoupdate-check.sh" \
+    /usr/local/lib/squidmanager/autoupdate-check.sh
+
+# Temporizador que revisa cada 5 minutos si hay una actualizacion aprobada y
+# ya vencida. Es la unica forma en la que una actualizacion se aplica sola:
+# el panel web jamas ejecuta nada con privilegios (ver la nota de diseno en
+# autoupdate-check.sh y en app/services/update_service.py).
+cat > /etc/systemd/system/squidmanager-autoupdate.service <<'EOF'
+[Unit]
+Description=SquidManager - Comprobar y aplicar actualizacion aprobada
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/squidmanager/autoupdate-check.sh
+EOF
+
+cat > /etc/systemd/system/squidmanager-autoupdate.timer <<'EOF'
+[Unit]
+Description=SquidManager - Revisar actualizaciones pendientes cada 5 minutos
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now squidmanager-autoupdate.timer >/dev/null 2>&1 \
+    || warn "No se pudo activar squidmanager-autoupdate.timer"
+ok "Temporizador de actualizaciones activo (cada 5 min)"
 
 # ============================================
 # 8. Backend

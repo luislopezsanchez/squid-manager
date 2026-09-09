@@ -51,3 +51,8 @@ create_examples.py
 
 # Credenciales del proxy corporativo (install-tras-proxy.sh)
 proxy.conf
+
+# Estado operativo de la comprobación/aplicación de actualizaciones
+# (backend/app/services/update_service.py): no es código ni configuración
+# versionable, es el estado de ESTE despliegue puntual.
+backend/.update_state.json*

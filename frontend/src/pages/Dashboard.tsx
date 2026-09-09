@@ -2,6 +2,7 @@ import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
 import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconDashboard, IconGauge, IconLink } from '../components/Icons'
 import { api, canWrite } from '../api/client'
+import { useToast } from '../components/Toast'
 
 interface TimelinePoint {
   time: string
@@ -234,6 +235,7 @@ export default function Dashboard() {
   const [dirty, setDirty] = useState(false)
   const [applying, setApplying] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const { showToast, ToastContainer } = useToast()
 
   const loadData = () => {
     api.getDashboard().then(setData).catch(console.error).finally(() => setLoading(false))
@@ -246,10 +248,18 @@ export default function Dashboard() {
   const handleApply = async () => {
     setApplying(true)
     try {
-      await api.applyConfig()
-      setDirty(false)
-    } catch (e) {
-      console.error(e)
+      const result = await api.applyConfig()
+      if (result.status === 'ok') {
+        setDirty(false)
+      } else {
+        // El backend rechazó el cambio (config inválida, DNS que no responde,
+        // etc.) sin aplicar nada: "pending" sigue en true, así que había que
+        // decir por qué en vez de solo volver a mostrar el mismo aviso sin
+        // explicación -era exactamente lo que hacía este botón antes-.
+        showToast(result.message, 'warning')
+      }
+    } catch (e: any) {
+      showToast(e.message, 'error')
     } finally {
       setApplying(false)
     }
@@ -321,6 +331,7 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 md:p-7">
+      <ToastContainer />
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold" style={{ color: '#0A2C48' }}>{traducir("Dashboard")}</h1>

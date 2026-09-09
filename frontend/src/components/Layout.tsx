@@ -16,6 +16,7 @@ export default function Layout() {
   const [applying, setApplying] = useState(false)
   const [pending, setPending] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
+  const [version, setVersion] = useState<{ version: string; update_available: boolean } | null>(null)
 
   const readOnly = !canWrite()
 
@@ -23,14 +24,26 @@ export default function Layout() {
     api.getPending().then(r => setPending(r.dirty)).catch(() => {})
   }
 
+  const checkVersion = () => {
+    api.getUpdateStatus()
+      .then(r => setVersion({ version: r.version_actual, update_available: !!r.check?.update_available }))
+      .catch(() => {})
+  }
+
   useEffect(() => {
     checkPending()
+    checkVersion()
     const interval = setInterval(checkPending, 5000)
+    // La comprobación real contra GitHub la hace el backend cada 6 h; acá
+    // solo se relee el estado ya calculado, así que alcanza con sondear
+    // bastante menos seguido.
+    const intervalVersion = setInterval(checkVersion, 5 * 60 * 1000)
     // Refresco inmediato cuando una pantalla guarda un cambio que requiere
     // Aplicar, en vez de esperar hasta 5s a que llegue el próximo sondeo.
     window.addEventListener('squidmanager:cambio-pendiente', checkPending)
     return () => {
       clearInterval(interval)
+      clearInterval(intervalVersion)
       window.removeEventListener('squidmanager:cambio-pendiente', checkPending)
     }
   }, [])
@@ -150,6 +163,24 @@ export default function Layout() {
             <span className="text-[10.5px] font-semibold uppercase tracking-[.1em] text-brand-300">{traducir("Proxy")}</span>
           </div>
         </div>
+
+        {/* Versión + aviso de actualización disponible */}
+        {version && (
+          <NavLink
+            to="/actualizaciones"
+            className="relative mx-4 mb-3 flex items-center justify-between px-2.5 py-1.5 rounded-lg
+                       text-[11px] font-medium text-[#B9D2E0]/75 hover:bg-white/[.07] hover:text-white transition"
+            title={traducir("Ver actualizaciones")}
+          >
+            <span className="font-mono">v{version.version}</span>
+            <span className="relative">
+              <IconBell className={`w-[15px] h-[15px] ${version.update_available ? 'text-brand-300' : 'opacity-50'}`} />
+              {version.update_available && (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-warn ring-2 ring-[#0f2f4a]" />
+              )}
+            </span>
+          </NavLink>
+        )}
 
         {/* Navegación */}
         <nav className="relative flex-1 px-3 pb-3">

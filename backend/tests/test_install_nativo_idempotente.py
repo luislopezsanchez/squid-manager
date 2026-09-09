@@ -102,5 +102,9 @@ def test_arranque_final_reinicia_de_verdad_no_solo_enable_now():
     contenido = _script()
     assert "systemctl restart squid " in contenido
     assert "systemctl restart squidmanager " in contenido
-    assert "systemctl enable --now squid" not in contenido
-    assert "systemctl enable --now squidmanager" not in contenido
+    # Con el espacio final a propósito: "squidmanager-autoupdate.timer" (otra
+    # unidad, sin el problema que esto protege -no es un proceso persistente
+    # que pueda quedarse corriendo código viejo, se invoca fresco desde disco
+    # en cada tic-) no debe hacer fallar esto por coincidir el prefijo.
+    assert "systemctl enable --now squid " not in contenido
+    assert "systemctl enable --now squidmanager " not in contenido
