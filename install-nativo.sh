@@ -134,6 +134,30 @@ apt-get install -y -qq "${PAQUETES[@]}" >/dev/null || fail "No se pudieron insta
 # IA para buscar en la documentacion por significado, no solo por palabra
 # exacta -sin esto la extension no existe y esa funcion no puede activarse-.
 PG_MAJOR="$(sudo -u postgres psql -tAc 'SHOW server_version;' | cut -d. -f1 | tr -d '[:space:]')"
+
+# En Debian, el paquete de pgvector NO esta en los repos propios de la
+# distribucion -recien entro al archivo de Debian a partir de trixie
+# (Debian 13); en bookworm (Debian 12) no existe bajo ningun nombre-, asi
+# que "apt-get install postgresql-${PG_MAJOR}-pgvector" siempre falla ahi
+# con "Unable to locate package", aunque el resto de la instalacion haya
+# ido bien. Bug real reportado por un usuario en Debian 12: la doc promete
+# soporte para Debian 12 (ver README) pero el script nunca agregaba el
+# repositorio que ese paquete necesita en esa distro.
+# En Ubuntu no hace falta nada de esto: postgresql-${PG_MAJOR}-pgvector ya
+# esta en el repo "universe" de la propia distro (verificado en 22.04 y
+# 24.04), asi que ahi no se toca ningun apt source.
+if [ "${ID:-}" = "debian" ] && [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
+    info "Debian no trae pgvector en sus propios repos; agregando el repositorio oficial de PostgreSQL (PGDG) solo para ese paquete."
+    apt-get install -y -qq curl gnupg >/dev/null 2>&1 || true
+    install -d /usr/share/keyrings
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
+        || fail "No se pudo importar la clave del repositorio de PostgreSQL (PGDG)."
+    echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list
+    apt-get update -qq
+fi
+
 apt-get install -y -qq "postgresql-${PG_MAJOR}-pgvector" >/dev/null \
     || fail "No se pudo instalar postgresql-${PG_MAJOR}-pgvector."
 ok "Paquetes instalados"
