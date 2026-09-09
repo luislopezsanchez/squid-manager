@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconDashboard, IconGauge, IconLink } from '../components/Icons'
 import { api, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
+import { formatBytes, formatRate, formatNumber } from '../utils/format'
 
 interface TimelinePoint {
   time: string
@@ -55,25 +56,6 @@ interface DashboardData {
     time: string; ip: string; user: string; method: string
     domain: string; status: number; bytes: number; denied: boolean
   }[]
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
-function formatRate(bytesPerSec: number): string {
-  if (bytesPerSec === 0) return '0 B/s'
-  return formatBytes(bytesPerSec) + '/s'
-}
-
-function formatNumber(n: number): string {
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
-  return n.toString()
 }
 
 /**

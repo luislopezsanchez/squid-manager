@@ -253,6 +253,13 @@ export const api = {
   getTraffic: (seconds = 60) => request<any>(`/panel/traffic?seconds=${seconds}`),
   getTimeline: (seconds = 60, interval = 5) => request<any>(`/panel/timeline?seconds=${seconds}&interval=${interval}`),
   getConnections: (limit = 20) => request<any>(`/panel/connections?limit=${limit}`),
+  // Mismos endpoints que ya alimentan las tarjetas "Top" del dashboard
+  // (con limit=10, fijo) -aca con el limit que pida quien llama, para la
+  // pagina de "Top 20 con graficos".
+  getTopUsers: (limit = 20) => request<any>(`/panel/top-users?limit=${limit}`),
+  getTopDomains: (limit = 20, denied = false) =>
+    request<any>(`/panel/top-domains?limit=${limit}&denied=${denied}`),
+  getTopBlockedUsers: (limit = 20) => request<any>(`/panel/top-blocked-users?limit=${limit}`),
 
   // Admins
   listAdmins: () => request<any>('/admins/'),

@@ -164,9 +164,9 @@ export default function Layout() {
       id: 'reportes',
       titulo: traducir("Reportes y estadísticas"),
       items: [
+        { to: '/reportes/top20', label: traducir("Top 20"), Icon: IconGauge },
         { to: '/reportes/cache', label: traducir("Estadísticas de caché"), Icon: IconArchive },
-        // Top 20 con graficos y cuotas por usuario/grupo se suman aca
-        // cuando existan.
+        // Cuotas por usuario/grupo se suma aca cuando exista.
       ],
     },
     {
