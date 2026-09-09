@@ -15,24 +15,27 @@ type Item = { to: string; label: string; Icon: (p: { className?: string }) => JS
 // abierto/cerrado) no puede depender de eso.
 type Grupo = { id: string; titulo: string; items: Item[] }
 
-// Que grupos quedan colapsados entre sesiones, por admin -en el navegador
-// de cada uno, no en el backend: es una preferencia de pantalla, no un
-// dato que valga la pena sincronizar entre dispositivos.
-const CLAVE_COLAPSADOS = 'squidmanager:menu-colapsado'
+// Que grupo queda abierto entre sesiones, por admin -en el navegador de
+// cada uno, no en el backend: es una preferencia de pantalla, no un dato
+// que valga la pena sincronizar entre dispositivos. Acordeon exclusivo -a
+// pedido del usuario tras probarlo en vivo: con varios grupos abiertos a
+// la vez el menu seguia siendo largo. Se guarda como "cual esta abierto"
+// (o null si estan todos cerrados), no un set de colapsados: abrir uno
+// cierra los demas por diseño, no por accidente.
+const CLAVE_ABIERTO = 'squidmanager:menu-abierto'
 
-function leerColapsados(): Set<string> {
+function leerAbierto(): string | null {
   try {
-    const guardado = localStorage.getItem(CLAVE_COLAPSADOS)
-    return new Set(guardado ? JSON.parse(guardado) : [])
+    return localStorage.getItem(CLAVE_ABIERTO)
   } catch {
-    return new Set()
+    return null
   }
 }
 
 export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [colapsados, setColapsados] = useState<Set<string>>(leerColapsados)
+  const [grupoManual, setGrupoManual] = useState<string | null>(leerAbierto)
   const [applying, setApplying] = useState(false)
   const [pending, setPending] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
@@ -199,35 +202,31 @@ export default function Layout() {
     },
   ].filter(g => g.items.length > 0)
 
-  // El grupo que contiene la pagina actual siempre se muestra abierto,
-  // sin importar lo que diga la preferencia guardada -entrar a una pagina
-  // y no ver su propio item resaltado en el menu seria confuso.
   const grupoActivoId = grupos.find(g => g.items.some(it => it.to === '/'
     ? location.pathname === '/'
     : location.pathname.startsWith(it.to)))?.id
 
-  const grupoAbierto = (id: string) => id === grupoActivoId || !colapsados.has(id)
+  // Acordeon exclusivo: como mucho un grupo abierto a la vez, para que el
+  // menu no vuelva a crecer aunque haya 5 secciones. Mientras el admin no
+  // haya tocado nada (grupoManual === null, primera carga sin preferencia
+  // guardada) se abre solo el grupo de la pagina en la que esta parado.
+  // En cuanto hace clic en un encabezado, esa eleccion manda del todo -
+  // incluso pudiendo dejar TODO cerrado ('' guardado a proposito, no
+  // null-, que el usuario pidio explicitamente poder hacer- y ya no se
+  // fuerza a abrir el grupo activo solo por estar navegando ahi: es el
+  // comportamiento esperado de un acordeon normal, no una excepcion.
+  const grupoAbierto = (id: string) =>
+    grupoManual === null ? id === grupoActivoId : grupoManual === id
 
   const toggleGrupo = (id: string) => {
-    setColapsados(prev => {
-      const next = new Set(prev)
-      // Si el grupo esta abierto SOLO porque es el activo (no por
-      // preferencia propia), togglear tiene que colapsarlo de verdad:
-      // se agrega a colapsados igual, y grupoAbierto() ya prioriza
-      // grupoActivoId por encima de esto -asi que colapsar el grupo activo
-      // desde aca no tiene efecto visible hasta que se navegue a otro lado,
-      // que es el comportamiento esperado (la pagina en la que estas
-      // parado siempre se ve).
-      if (grupoAbierto(id)) next.add(id)
-      else next.delete(id)
-      try {
-        localStorage.setItem(CLAVE_COLAPSADOS, JSON.stringify([...next]))
-      } catch {
-        // localStorage puede fallar (modo privado, cuota) -no es critico,
-        // la preferencia simplemente no sobrevive al reload.
-      }
-      return next
-    })
+    const nuevo = grupoAbierto(id) ? '' : id
+    setGrupoManual(nuevo)
+    try {
+      localStorage.setItem(CLAVE_ABIERTO, nuevo)
+    } catch {
+      // localStorage puede fallar (modo privado, cuota) -no es critico,
+      // la preferencia simplemente no sobrevive al reload.
+    }
   }
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
@@ -314,12 +313,21 @@ export default function Layout() {
                   type="button"
                   onClick={() => toggleGrupo(grupo.id)}
                   aria-expanded={abierto}
-                  className="w-full flex items-center justify-between px-2.5 pt-4 pb-1.5 text-[10px] font-bold
-                             uppercase tracking-[.13em] text-brand-300/65 hover:text-brand-300 transition"
+                  className={[
+                    'w-full flex items-center justify-between px-2.5 py-2 mt-1 rounded-lg',
+                    'text-[11px] font-bold uppercase tracking-[.12em] transition',
+                    // Mismos tokens de color que los items de navegacion (navClass),
+                    // no un tono aparte mas tenue: ahi ya esta probado que se lee
+                    // bien sobre este fondo -el 10px/brand-300/65 anterior se veia
+                    // deslavado, reportado en vivo por el usuario con captura.
+                    abierto
+                      ? 'text-white bg-white/[.10]'
+                      : 'text-[#B9D2E0] hover:bg-white/[.07] hover:text-white',
+                  ].join(' ')}
                 >
                   {grupo.titulo}
                   <IconChevronDown
-                    className={`w-3 h-3 flex-none transition-transform ${abierto ? '' : '-rotate-90'}`}
+                    className={`w-3.5 h-3.5 flex-none transition-transform ${abierto ? 'text-brand-300' : 'opacity-70 -rotate-90'}`}
                   />
                 </button>
                 {abierto && (
