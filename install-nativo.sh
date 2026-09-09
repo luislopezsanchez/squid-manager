@@ -49,7 +49,7 @@ APP_USER="${APP_USER:-squidmgr}"
 # camino como "el" procedimiento de actualizacion.
 _ENV_PREVIO="$INSTALL_DIR/.env"
 if [ -f "$_ENV_PREVIO" ]; then
-    for _VAR in SECRET_KEY WEB_PORT CORS_ORIGINS TRUSTED_PROXY_HOSTS DEBUG BCRYPT_COST ACCESS_TOKEN_EXPIRE_MINUTES; do
+    for _VAR in SECRET_KEY DATA_KEY WEB_PORT CORS_ORIGINS TRUSTED_PROXY_HOSTS DEBUG BCRYPT_COST ACCESS_TOKEN_EXPIRE_MINUTES; do
         if [ -z "${!_VAR:-}" ]; then
             _VALOR="$(grep -m1 "^${_VAR}=" "$_ENV_PREVIO" 2>/dev/null | cut -d= -f2-)"
             [ -n "$_VALOR" ] && export "$_VAR=$_VALOR"
@@ -567,6 +567,12 @@ python3 -m venv .venv
 ok "Entorno virtual listo"
 
 SECRET_KEY="${SECRET_KEY:-$(openssl rand -hex 32)}"
+# Cifra en reposo las credenciales de terceros (LDAP, SMTP, Telegram, IA,
+# proxy padre, keytab) -deliberadamente una clave DISTINTA de SECRET_KEY,
+# ver la nota en .env.example. Preservada entre actualizaciones por el
+# bucle de arriba, igual que SECRET_KEY: regenerarla dejaria indescifrable
+# cualquier credencial ya cifrada con la anterior.
+DATA_KEY="${DATA_KEY:-$(openssl rand -hex 32)}"
 ADMIN_INITIAL_PASSWORD="${ADMIN_INITIAL_PASSWORD:-$(openssl rand -base64 12 | tr -d '/+=' | cut -c1-14)}"
 ACCESS_TOKEN_EXPIRE_MINUTES="${ACCESS_TOKEN_EXPIRE_MINUTES:-480}"
 BCRYPT_COST="${BCRYPT_COST:-12}"
@@ -579,6 +585,7 @@ DEPLOY_MODE=native
 NATIVE_SQUID_SERVICE=squid
 DATABASE_URL=postgresql+psycopg://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}
 SECRET_KEY=${SECRET_KEY}
+DATA_KEY=${DATA_KEY}
 ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
 ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD}
 BCRYPT_COST=${BCRYPT_COST}

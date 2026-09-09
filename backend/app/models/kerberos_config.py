@@ -10,7 +10,8 @@ invitados) siguen usando usuario/contraseña del panel como hasta ahora.
 """
 
 from app.utils import utcnow
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, LargeBinary
+from app.crypto_service import EncryptedBinary
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from app.database import Base
 
 
@@ -37,7 +38,9 @@ class KerberosConfig(Base):
     # directorio requiere credenciales de administrador de dominio, algo que
     # este panel no debe pedir ni manejar. Se sube ya generado, como el
     # certificado CA del proxy padre.
-    keytab_data = Column(LargeBinary, nullable=True)
+    # Cifrado en reposo con DATA_KEY (ver crypto_service.py -auditoria
+    # 2026-09-09, hallazgo 05-003).
+    keytab_data = Column(EncryptedBinary, nullable=True)
     keytab_filename = Column(String(255), nullable=True)
     keytab_uploaded_at = Column(DateTime, nullable=True)
 
