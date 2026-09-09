@@ -39,7 +39,7 @@ El backend web corre con el mismo usuario restringido de siempre (sin ser
 superusuario de su propia base de datos, y con exactamente 4 líneas fijas de
 `sudoers` — ninguna genérica). Aprobar una actualización, desde el panel, solo
 escribe un archivo de estado (igual de privilegios que guardar cualquier otro
-ajuste). Un temporizador de systemd, corriendo como root cada 5 minutos —o
+ajuste). Un temporizador de systemd, corriendo como root cada minuto —o
 adelantado al toque con la única orden de sudo que existe para esto, sin
 argumentos—, es quien de verdad decide si corresponde actuar y, si es así,
 invoca el mismo script de actualización (`upgrade-nativo.sh`) que ya se usa a

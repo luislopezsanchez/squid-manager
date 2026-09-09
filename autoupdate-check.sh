@@ -1,7 +1,7 @@
 #!/bin/bash
 # Aplica una actualizacion de SquidManager si -y solo si- el panel dejo una
-# aprobada y ya llego su hora. Corre como root (temporizador systemd cada 5
-# minutos, y bajo demanda via la unica linea de sudoers que lo permite),
+# aprobada y ya llego su hora. Corre como root (temporizador systemd cada
+# minuto, y bajo demanda via la unica linea de sudoers que lo permite),
 # nunca a partir de una peticion HTTP directa.
 #
 # Diseno deliberado, no accidental -leer antes de tocar-:

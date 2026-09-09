@@ -9,6 +9,17 @@ import { IconBell, IconSpinner } from '../components/Icons'
 // acciones que pueden terminar reiniciando servicios quedan reservadas —
 // ver la nota de diseño en backend/app/routes/update.py.
 
+// Valor mínimo para el selector de fecha/hora, en el formato que exige un
+// <input type="datetime-local"> ("YYYY-MM-DDTHH:mm", en hora LOCAL del
+// navegador, no UTC) — evita que se pueda ni siquiera elegir un momento ya
+// pasado desde el propio selector, antes de que haga falta el aviso del
+// backend.
+function minDateTimeLocal(): string {
+  const ahora = new Date(Date.now() - Date.now() % 60000) // redondeado al minuto
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())}T${pad(ahora.getHours())}:${pad(ahora.getMinutes())}`
+}
+
 function formatearFecha(iso: string | null): string {
   if (!iso) return '—'
   try {
@@ -109,6 +120,14 @@ export default function Actualizaciones() {
       const iso = paraAhora ? null : (fechaProgramada ? new Date(fechaProgramada).toISOString() : null)
       if (!paraAhora && !iso) {
         showToast(traducir("Elegí una fecha y hora para programarla"), 'warning')
+        setAprobando(false)
+        return
+      }
+      // Mismo margen que el backend (30s): evita el caso frecuente de elegir
+      // "ahora mismo" en el selector y que, para cuando el clic llega al
+      // servidor, ya sea un segundo tarde.
+      if (!paraAhora && iso && new Date(iso).getTime() < Date.now() - 30000) {
+        showToast(traducir("La fecha y hora elegidas ya pasaron — elegí un momento futuro"), 'warning')
         setAprobando(false)
         return
       }
@@ -264,12 +283,23 @@ export default function Actualizaciones() {
               {traducir("Actualización en curso… el panel puede reiniciarse en cualquier momento.")}
             </p>
           ) : hayPendiente ? (
-            <div className="flex items-center gap-3 flex-wrap">
-              <p className="text-sm text-ink-2">
-                {traducir("Programada para")}: <strong>{formatearFecha(request.scheduled_at)}</strong>
-                {' '}({traducir("aprobada por")} {request.requested_by})
-              </p>
-              <button onClick={handleCancelar} className="btn btn-ghost text-sm">{traducir("Cancelar")}</button>
+            <div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <p className="text-sm text-ink-2">
+                  {traducir("Programada para")}: <strong>{formatearFecha(request.scheduled_at)}</strong>
+                  {' '}({traducir("aprobada por")} {request.requested_by})
+                </p>
+                <button onClick={handleCancelar} className="btn btn-ghost text-sm">{traducir("Cancelar")}</button>
+              </div>
+              {request.atrasada ? (
+                <p className="text-xs text-danger mt-2">
+                  {traducir("Ya pasó bastante de la hora programada y todavía no se aplicó — el temporizador que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: systemctl status squidmanager-autoupdate.timer).")}
+                </p>
+              ) : (
+                <p className="text-xs text-ink-3 mt-2">
+                  {traducir("Se revisa una vez por minuto: puede tardar hasta un minuto después de la hora elegida en arrancar.")}
+                </p>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-3 flex-wrap">
@@ -280,6 +310,7 @@ export default function Actualizaciones() {
               <input
                 type="datetime-local"
                 value={fechaProgramada}
+                min={minDateTimeLocal()}
                 onChange={e => setFechaProgramada(e.target.value)}
                 className="input w-auto"
               />

@@ -182,14 +182,33 @@ def _unidad_en_curso() -> bool:
         return False
 
 
+# Si una aprobación sigue esperando bastante más de lo que el temporizador
+# debería tardar en notarla (1 minuto, con margen), algo no anda bien -el
+# temporizador caído, sudoers roto, etc.-. No se cancela sola (podría ser
+# solo un tic lento) pero sí se avisa, en vez de dejar "programada" para
+# siempre sin ninguna pista de que algo falla.
+_MARGEN_DEMORA_SEGUNDOS = 3 * 60
+
+
 def estado_actual() -> dict:
     estado = leer_estado()
     if estado["apply"]["status"] == "running" and not _unidad_en_curso():
-        # El temporizador (cada 5 min) va a terminar de confirmar el
+        # El temporizador (cada 1 min) va a terminar de confirmar el
         # resultado igual, pero si la unidad ya no está activa el dato ya no
         # sirve como "en curso" -mejor decir "verificando" que mentir con un
         # estado viejo mientras se espera el próximo tic.
         estado["apply"] = dict(estado["apply"], status="verificando")
+
+    programado = estado["request"].get("scheduled_at")
+    if estado["request"].get("approved") and programado and estado["apply"]["status"] not in ("running", "verificando"):
+        try:
+            vencido_hace = (utcnow() - datetime.fromisoformat(programado.replace("Z", ""))).total_seconds()
+            estado["request"]["atrasada"] = vencido_hace > _MARGEN_DEMORA_SEGUNDOS
+        except ValueError:
+            estado["request"]["atrasada"] = False
+    else:
+        estado["request"]["atrasada"] = False
+
     return estado
 
 
@@ -244,13 +263,26 @@ def comprobar_actualizacion() -> dict:
     return estado
 
 
+
+# Margen de tolerancia para "en el pasado": "ahora" se calcula en el
+# frontend, viaja por la red y se procesa acá unos milisegundos (a veces
+# uno o dos segundos) más tarde -sin este margen, la propia opción "ahora"
+# se rechazaría a sí misma por llegar ya "vencida"-. Cualquier fecha más
+# vieja que esto sí es un error real del usuario (una fecha pasada de
+# verdad), no un artefacto de la latencia de la petición.
+_TOLERANCIA_PASADO_SEGUNDOS = 30
+
+
 def aprobar_actualizacion(admin_username: str, programado_para: datetime | None) -> dict:
     """Deja aprobada una actualización, para ahora (`programado_para=None`)
 
     o para una fecha/hora futura. Nunca ejecuta nada con privilegios por sí
-    misma: si es "para ahora", además dispara -con el único comando fijo
-    que permite sudoers- el script que confirma la condición y recién ahí
-    actúa.
+    misma: siempre dispara -con el único comando fijo que permite sudoers-
+    el script que confirma la condición y recién ahí actúa; si la fecha es
+    futura, ese disparo inmediato no hace nada todavía (el script vuelve a
+    comprobar por su cuenta), pero evita el peor caso de esperar hasta el
+    próximo tic del temporizador para una hora ya vencida o a punto de
+    cumplirse.
     """
     if not _es_nativo():
         raise UpdateServiceError("La actualización solo está disponible en instalación nativa.")
@@ -260,6 +292,14 @@ def aprobar_actualizacion(admin_username: str, programado_para: datetime | None)
         raise UpdateServiceError("Ya hay una actualización en curso.")
 
     ahora = utcnow()
+    if programado_para is not None:
+        diferencia = (ahora - programado_para).total_seconds()
+        if diferencia > _TOLERANCIA_PASADO_SEGUNDOS:
+            raise UpdateServiceError(
+                "La fecha y hora elegidas ya pasaron. Elegí un momento futuro, o dejalo "
+                "en blanco para aplicar ahora mismo."
+            )
+
     estado["request"] = {
         "approved": True,
         "scheduled_at": _iso(programado_para or ahora),
@@ -268,8 +308,12 @@ def aprobar_actualizacion(admin_username: str, programado_para: datetime | None)
     }
     _escribir_estado(estado)
 
-    if programado_para is None:
-        _disparar_verificacion_inmediata()
+    # Siempre se dispara, sea "ahora" o programada: si programado_para ya
+    # está vencida o muy próxima, esto ahorra hasta 1 minuto de espera del
+    # temporizador; si es una fecha realmente futura, el script confirma
+    # que todavía no corresponde y no hace nada -disparar de más nunca
+    # rompe nada, ver autoupdate-check.sh-.
+    _disparar_verificacion_inmediata()
 
     return estado
 
@@ -286,7 +330,7 @@ def cancelar_actualizacion() -> dict:
 def _disparar_verificacion_inmediata() -> None:
     """Adelanta el chequeo del script privilegiado, en vez de esperar hasta
 
-    5 minutos al próximo tic del temporizador. `sudo -n` (sin pedir
+    1 minuto al próximo tic del temporizador. `sudo -n` (sin pedir
     contraseña interactiva): si la regla de sudoers no está o no coincide
     exactamente, falla rápido en vez de colgarse esperando una contraseña
     que nadie va a escribir.
@@ -301,7 +345,7 @@ def _disparar_verificacion_inmediata() -> None:
         if r.returncode != 0:
             logger.warning(
                 f"No se pudo disparar la actualización inmediata (sudo devolvió {r.returncode}): "
-                f"{r.stderr.strip()}. El temporizador la aplicará de todos modos en los próximos 5 minutos."
+                f"{r.stderr.strip()}. El temporizador la aplicará de todos modos en el próximo minuto."
             )
     except Exception as e:
         logger.warning(f"No se pudo disparar la actualización inmediata: {e}. El temporizador la aplicará igual.")

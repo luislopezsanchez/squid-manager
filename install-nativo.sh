@@ -474,12 +474,12 @@ EOF
 
 cat > /etc/systemd/system/squidmanager-autoupdate.timer <<'EOF'
 [Unit]
-Description=SquidManager - Revisar actualizaciones pendientes cada 5 minutos
+Description=SquidManager - Revisar actualizaciones pendientes cada minuto
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=5min
-AccuracySec=30s
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
 
 [Install]
 WantedBy=timers.target
