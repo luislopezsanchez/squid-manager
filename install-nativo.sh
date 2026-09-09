@@ -124,6 +124,18 @@ PAQUETES=(
     # siquiera tiene sentido en esta instalacion ("reconstruye la imagen").
     apache2-utils
     openssl ca-certificates logrotate cron git curl
+    # sudo: lo usa el propio script mas abajo (crear la base como el usuario
+    # postgres, "visudo -cf" al final) y, en tiempo de ejecucion, el backend
+    # (squidmgr necesita "sudo -n" para las 4 acciones con privilegio -ver
+    # runtime/native_runtime.py-). Las imagenes de Ubuntu Server lo traen de
+    # fabrica, pero un Debian minimo/netinstall NO -bug real, encontrado
+    # instalando en un Debian 12 limpio (172.30.36.88, 2026-09-09): el script
+    # fallaba en "sudo: command not found" en el primer uso, mucho antes de
+    # llegar a la parte que de verdad necesita privilegios-.
+    sudo
+    # gnupg: hace falta para importar la clave del repositorio PGDG mas abajo
+    # (gpg --dearmor), solo relevante en Debian pero barato de tener siempre.
+    gnupg
 )
 info "Paquetes: ${PAQUETES[*]}"
 apt-get install -y -qq "${PAQUETES[@]}" >/dev/null || fail "No se pudieron instalar los paquetes."
@@ -134,6 +146,59 @@ apt-get install -y -qq "${PAQUETES[@]}" >/dev/null || fail "No se pudieron insta
 # IA para buscar en la documentacion por significado, no solo por palabra
 # exacta -sin esto la extension no existe y esa funcion no puede activarse-.
 PG_MAJOR="$(sudo -u postgres psql -tAc 'SHOW server_version;' | cut -d. -f1 | tr -d '[:space:]')"
+
+# En Debian, el paquete de pgvector NO esta en los repos propios de la
+# distribucion -recien entro al archivo de Debian a partir de trixie
+# (Debian 13); en bookworm (Debian 12) no existe bajo ningun nombre-, asi
+# que "apt-get install postgresql-${PG_MAJOR}-pgvector" siempre falla ahi
+# con "Unable to locate package", aunque el resto de la instalacion haya
+# ido bien. Bug real reportado por un usuario en Debian 12: la doc promete
+# soporte para Debian 12 (ver README) pero el script nunca agregaba el
+# repositorio que ese paquete necesita en esa distro.
+# En Ubuntu no hace falta nada de esto: postgresql-${PG_MAJOR}-pgvector ya
+# esta en el repo "universe" de la propia distro (verificado en 22.04 y
+# 24.04), asi que ahi no se toca ningun apt source.
+if [ "${ID:-}" = "debian" ] && [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
+    info "Debian no trae pgvector en sus propios repos; agregando el repositorio oficial de PostgreSQL (PGDG) solo para ese paquete."
+    install -d /usr/share/keyrings
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
+        || fail "No se pudo importar la clave del repositorio de PostgreSQL (PGDG)."
+    echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list
+
+    # Sin esto, PGDG reemplaza silenciosamente el Postgres que ya trae
+    # Debian: sus paquetes llevan un numero de version mayor (Postgres 18
+    # hoy) y, con la prioridad por defecto, apt prefiere ESE en cualquier
+    # instalacion futura de "postgresql" a secas -exactamente lo que hace
+    # este mismo script en cada re-corrida (paso 2, PAQUETES)-. Bug real,
+    # reproducido en 172.30.36.88: una segunda corrida de este script tras
+    # la primera (con el repo PGDG ya agregado) instalo postgresql-18 al
+    # lado del 15 que ya tenia los datos, y el cluster 15 quedo sin
+    # servicio.
+    #
+    # El pineo tiene que ser especifico del metapaquete "postgresql", no
+    # de todo el origen PGDG -bajar la prioridad de TODO el repo (como
+    # sugiere la receta generica de wiki.postgresql.org/wiki/Apt) rompe la
+    # instalacion de postgresql-15-pgvector: su propia dependencia
+    # "postgresql-15" queda marcada como no instalable porque el resolver
+    # de apt no puede reconciliar el pineo bajo con el paquete ya instalado
+    # -reproducido tambien en 172.30.36.88, "E: Unable to correct problems,
+    # you have held broken packages"-. Bloquear solo "postgresql" a secas
+    # evita el salto de version mayor sin tocar nada mas: postgresql-15,
+    # postgresql-client-15 y postgresql-15-pgvector siguen resolviendo
+    # libremente contra PGDG -incluso pueden actualizarse ahi dentro de la
+    # misma version mayor 15, que es seguro-, solo el metapaquete que no
+    # fija version quedas atado a lo que trae Debian.
+    cat > /etc/apt/preferences.d/pgdg.pref <<EOF
+Package: postgresql
+Pin: release o=apt.postgresql.org
+Pin-Priority: -1
+EOF
+
+    apt-get update -qq
+fi
+
 apt-get install -y -qq "postgresql-${PG_MAJOR}-pgvector" >/dev/null \
     || fail "No se pudo instalar postgresql-${PG_MAJOR}-pgvector."
 ok "Paquetes instalados"

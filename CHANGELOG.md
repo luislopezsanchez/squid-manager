@@ -5,6 +5,33 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.23.2] - 2026-09-09
+
+### Corregido
+
+- **Instalación nativa en Debian 12: `[ERROR] No se pudo instalar postgresql-15-pgvector`**. Reportado
+  por un usuario en producción. Causa confirmada contra las fuentes oficiales de cada distro y
+  reproducida en un Debian 12 limpio: pgvector recién entró al archivo propio de Debian a partir de
+  trixie (Debian 13); en bookworm no existe bajo ningún nombre en los repos por defecto — el
+  instalador nunca agregaba el repositorio oficial de PostgreSQL (PGDG), que es donde vive ese
+  paquete en Debian 12. En Ubuntu nunca se notó porque `universe` ya lo trae. `install-nativo.sh`
+  ahora agrega el repo PGDG solo en Debian, solo para ese paquete.
+- **Instalación nativa en Debian 12: `sudo: command not found`**, encontrado validando el fix
+  anterior. Un Debian 12 mínimo/netinstall no trae `sudo` de fábrica (a diferencia de Ubuntu Server);
+  el propio script lo usa desde el principio (crear la base como el usuario `postgres`) y en tiempo
+  de ejecución el backend depende de él. Se agregó a la lista de paquetes requeridos.
+- **Instalación nativa en Debian 12: una actualización posterior reemplazaba Postgres 15 por 18 sin
+  avisar**, encontrado validando la idempotencia del fix del pgvector. Sin pinear la prioridad del
+  repositorio PGDG, este le "gana" al propio de Debian en cualquier instalación futura del
+  metapaquete `postgresql` a secas — exactamente lo que hace este mismo script en cada re-corrida.
+  Se agregó un pineo específico (`Pin-Priority: -1` solo para el metapaquete `postgresql`, no para
+  todo el repositorio) que bloquea el salto de versión mayor sin afectar la instalación de
+  `postgresql-15-pgvector` en sí.
+
+  Los tres validados de punta a punta en un Debian 12 real: instalación desde cero, dos
+  actualizaciones (re-corridas) sucesivas y 397/397 tests, sin ningún salto de versión de Postgres
+  ni pérdida de datos.
+
 ## [0.23.1] - 2026-09-09
 
 ### Corregido
