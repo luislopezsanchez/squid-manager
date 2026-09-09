@@ -175,15 +175,25 @@ if [ "${ID:-}" = "debian" ] && [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
     # reproducido en 172.30.36.88: una segunda corrida de este script tras
     # la primera (con el repo PGDG ya agregado) instalo postgresql-18 al
     # lado del 15 que ya tenia los datos, y el cluster 15 quedo sin
-    # servicio. Es el comportamiento documentado del propio proyecto
-    # PostgreSQL (wiki.postgresql.org/wiki/Apt): bajar la prioridad de PGDG
-    # por debajo de la de Debian (500) para que solo se use cuando se pide
-    # un paquete que EXISTE UNICAMENTE ahi -como postgresql-15-pgvector-,
-    # nunca para "ganarle" a un paquete que Debian ya provee.
+    # servicio.
+    #
+    # El pineo tiene que ser especifico del metapaquete "postgresql", no
+    # de todo el origen PGDG -bajar la prioridad de TODO el repo (como
+    # sugiere la receta generica de wiki.postgresql.org/wiki/Apt) rompe la
+    # instalacion de postgresql-15-pgvector: su propia dependencia
+    # "postgresql-15" queda marcada como no instalable porque el resolver
+    # de apt no puede reconciliar el pineo bajo con el paquete ya instalado
+    # -reproducido tambien en 172.30.36.88, "E: Unable to correct problems,
+    # you have held broken packages"-. Bloquear solo "postgresql" a secas
+    # evita el salto de version mayor sin tocar nada mas: postgresql-15,
+    # postgresql-client-15 y postgresql-15-pgvector siguen resolviendo
+    # libremente contra PGDG -incluso pueden actualizarse ahi dentro de la
+    # misma version mayor 15, que es seguro-, solo el metapaquete que no
+    # fija version quedas atado a lo que trae Debian.
     cat > /etc/apt/preferences.d/pgdg.pref <<EOF
-Package: *
+Package: postgresql
 Pin: release o=apt.postgresql.org
-Pin-Priority: 200
+Pin-Priority: -1
 EOF
 
     apt-get update -qq
