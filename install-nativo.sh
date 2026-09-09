@@ -582,6 +582,16 @@ paso "8. Instalando el backend"
 cd "$INSTALL_DIR/backend"
 python3 -m venv .venv
 .venv/bin/pip install --quiet --upgrade pip
+# python-jose (y sus propias transitivas ecdsa/rsa) se reemplazo por PyJWT
+# -ver requirements.txt-, pero un venv que ya existia de antes de ese cambio
+# lo sigue teniendo instalado: "pip install -r requirements.txt" no
+# desinstala lo que ya no esta en el archivo, solo instala/actualiza lo que
+# si esta. Sin este paso, cada actualizacion de una instalacion existente
+# imprimia una advertencia de conflicto de dependencias que parece un error
+# real (pyasn1 0.6.4 vs lo que python-jose exige) pero no lo es -el import
+# nunca choca porque son paquetes con nombres distintos (jose vs jwt)-;
+# igual, mejor un venv limpio que una advertencia confusa en cada upgrade.
+.venv/bin/pip uninstall -y python-jose ecdsa rsa >/dev/null 2>&1 || true
 .venv/bin/pip install --quiet -r requirements.txt || fail "No se pudieron instalar las dependencias de Python."
 ok "Entorno virtual listo"
 
