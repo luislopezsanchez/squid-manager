@@ -196,6 +196,13 @@ ver la conversación de esa fecha para el detalle completo de cada hallazgo).
 - `pyasn1`/`ecdsa` (transitivas de `python-jose`) siguen con sus CVEs: no alcanzables por el flujo real
   de JWT del proyecto (firma con HS256, no con curvas elípticas ni ASN.1 de certificados), y
   reemplazar `python-jose` es un cambio de más alcance, no incluido en esta tanda.
+
+  **Actualización 2026-09-09**: cerrado en la 0.24.0 — se migró de `python-jose` a `PyJWT` (ver esa
+  sección) y `pyasn1` subió a `0.6.4`. `pip-audit` pasó de 16 avisos en 3 paquetes a **9 avisos en 1
+  solo paquete** (`starlette`, todos en código que este proyecto no usa: `FileResponse`,
+  `StaticFiles`, `HTTPEndpoint` — ver el análisis de alcanzabilidad de la auditoría 2026-09-09,
+  hallazgo 06-001). Próxima revisión: cuando se evalúe subir `fastapi`/`starlette` más allá de
+  0.115.14/0.46.2 (bloqueado desde arriba: rompe el registro de rutas — ver `test_rutas_bloqueables.py`).
 - **`react-router` 6.26.2 → 7.18.3**: cierra las 2 CVEs moderadas por completo (`npm audit
   --omit=dev` → 0 vulnerabilidades). El proyecto solo usa la API declarativa clásica
   (`BrowserRouter`/`Routes`/`Route`/`Navigate`/`NavLink`/`useNavigate`/`Outlet`), que v7 mantiene
