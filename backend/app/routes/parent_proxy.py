@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.admin import Admin
+from app.models.audit_log import AuditLog
 from app.models.parent_proxy import ParentProxy
 from app.models.squid_settings import SquidSetting
 from app.services.auth_service import get_current_admin, require_writer
@@ -159,6 +160,17 @@ async def update_config(
         # Sin usuario no tiene sentido conservar una contraseña suelta.
         config.password = None
 
+    # Nunca se registra la contraseña, solo si cambio o no -mismo criterio que
+    # el resto de credenciales de terceros del proyecto.
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="update", entity="parent_proxy", entity_id=config.id,
+        new_value=(
+            f"enabled={config.enabled} host={config.host} port={config.port} "
+            f"auth_method={config.auth_method} "
+            f"password={'(sin cambios o vacia)' if not (data.password and data.password != MARCADOR) else '(cambiada)'}"
+        ),
+    ))
     db.commit()
     mark_dirty()
 

@@ -112,12 +112,13 @@ export default function Settings() {
                 <div key={key} className="p-4">
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
-                      <label className="block text-sm font-mono font-medium text-ink-2">{key}</label>
+                      <label htmlFor={`setting-${key}`} className="block text-sm font-mono font-medium text-ink-2">{key}</label>
                       {setting.description && <p className="text-xs text-ink-3 mt-0.5">{setting.description}</p>}
                     </div>
                     <div className="flex-1">
                       {ENUM_SETTINGS[key] ? (
                         <select
+                          id={`setting-${key}`}
                           value={setting.value}
                           onChange={e => updateValue(key, e.target.value)}
                           className="w-full px-3 py-1.5 border border-line rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
@@ -128,6 +129,7 @@ export default function Settings() {
                         </select>
                       ) : (
                         <input
+                          id={`setting-${key}`}
                           type="text"
                           value={setting.value}
                           onChange={e => {

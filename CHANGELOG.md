@@ -5,6 +5,79 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.0] - 2026-09-09
+
+Remediación de la auditoría completa del 2026-09-09 (`docs/audits/` no se versiona,
+ver la conversación de esa fecha para el detalle completo de cada hallazgo).
+
+> ⚠️ **Rompe compatibilidad de sesión al desplegar**: la migración de `python-jose`
+> a `PyJWT` (ver más abajo) invalida todas las sesiones activas de cualquier
+> despliegue en el momento en que se aplique — cada admin conectado tiene que
+> volver a iniciar sesión. No afecta datos ni configuración, solo sesiones.
+> Avisar antes de desplegar en producción.
+
+### Agregado
+
+- **Auditoría de `squid_config`, `parent_proxy`, `notifications`, `kerberos`, `ai` y
+  `update`**: estos seis módulos no escribían ninguna entrada en `audit_log` pese a
+  que el README promete «log de todos los cambios». Nunca se registra el valor de
+  un secreto, solo si cambió o no.
+- **Cifrado en reposo de las 7 credenciales de terceros** (`bind_password` de LDAP,
+  `smtp_password`, `telegram_bot_token`, las API keys del asistente de IA, la
+  contraseña del proxy padre, el keytab de Kerberos): antes vivían en texto plano
+  en la base. Nueva `DATA_KEY` en el `.env` (deliberadamente separada de
+  `SECRET_KEY`), generada automáticamente por los dos instaladores y nunca
+  regenerada sola. Migración de doble lectura: una instalación existente sin
+  `DATA_KEY` configurada sigue funcionando en texto plano hasta que se configure y
+  cada campo se vuelva a guardar.
+- **Paginación** en `/api/proxy-users/`, `/api/acls/` y `/api/ldap/users`
+  (`limit`/`offset`, con un `limit` por defecto generoso para no romper a quien ya
+  consume la API sin estos parámetros).
+
+### Corregido
+
+- **El workflow de CI nunca ejecutó un solo test** desde que existe (42 corridas,
+  42 fallidas): invocaba `pytest tests/` en vez de `python -m pytest tests/`.
+- **`.gitignore` no cubría los volcados de `backup-database.sh`**: un `git add -A`
+  en un servidor con backups acumulados los hubiera subido al repo, con hashes
+  bcrypt, contraseñas de servicio y API keys en texto plano.
+- **`install.sh` (Docker) dejaba el `.env` con permisos por defecto**: ahora
+  `chmod 600`, igual que ya hacía `install-nativo.sh`.
+- **Instalación nativa en Debian 12** (ver el detalle en la conversación del
+  2026-09-09): pgvector no está en los repos propios de Debian y el instalador
+  nunca agregaba el repositorio oficial de PostgreSQL; un Debian 12 mínimo no trae
+  `sudo` de fábrica; sin pinear la prioridad del repo PGDG, una actualización
+  posterior reemplazaba Postgres 15 por 18 sin avisar.
+- **Migración de `python-jose` a `PyJWT`**: `python-jose` exige `pyasn1<0.5.0` en
+  su propio metadata de PyPI, lo que dejaba 16 avisos de seguridad de
+  `pyasn1`/`ecdsa` sin poder cerrarse por más que se intentara fijar `pyasn1` a una
+  versión más nueva. `PyJWT` no depende de ninguno de los dos para HS256 (el único
+  algoritmo que usa este proyecto), así que `pyasn1` ya se pudo subir a `0.6.4`
+  también.
+- **`request.url.path` en el rate limit de login** cambiado a `request.scope["path"]`,
+  fuera de la superficie de los avisos de reconstrucción de URL de `starlette`.
+- **N+1 al listar/exportar grupos de usuarios**: una sola consulta agrupada en
+  memoria en vez de una por grupo.
+- **Estado del buffer de red en `/tmp`**: movido a `BACKEND_DIR/.network_state.json`
+  — en el despliegue nativo `/tmp` es compartido con el resto del sistema.
+- **Imagen LXC publicada con claves reales**: no se pudo regenerar (2.99 GB, en un
+  servidor propio sin acceso desde aquí), pero `backups/README.md` ahora pone la
+  rotación de `SECRET_KEY`/`DB_PASS` como el primer paso obligatorio, con un aviso
+  prominente al principio del documento.
+- Documentación: endpoint `POST /api/squid/dns/test` (no estaba documentado),
+  versión de `psycopg` desactualizada en el mensaje de error citado en los 3
+  README, `CONTRIBUTING.md` sin mencionar cómo correr los tests, checklist de
+  etiquetado de versión agregado a `docs/actualizacion.md`.
+- Accesibilidad: 17 de 87 etiquetas de formulario sin asociar a su campo,
+  empezando por las páginas de configuración sensible (LDAP, proxy padre,
+  ajustes de Squid) — el resto queda para una próxima tanda.
+- `docker-compose.yml`: `mem_limit` en `backend` (512m) y `squid` (1g); imágenes
+  base fijadas (`node:20.18-slim`, `nginx:1.27-alpine`,
+  `docker-socket-proxy:0.3`) y `npm ci` en vez de `npm install`; el volumen
+  completo del proyecto montado en el backend queda registrado como riesgo
+  aceptado, con su porqué.
+- Cuatro etiquetas de git que faltaban: `v0.22.0`, `v0.23.0`, `v0.23.1`, `v0.23.2`.
+
 ## [0.23.2] - 2026-09-09
 
 ### Corregido
@@ -123,6 +196,13 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 - `pyasn1`/`ecdsa` (transitivas de `python-jose`) siguen con sus CVEs: no alcanzables por el flujo real
   de JWT del proyecto (firma con HS256, no con curvas elípticas ni ASN.1 de certificados), y
   reemplazar `python-jose` es un cambio de más alcance, no incluido en esta tanda.
+
+  **Actualización 2026-09-09**: cerrado en la 0.24.0 — se migró de `python-jose` a `PyJWT` (ver esa
+  sección) y `pyasn1` subió a `0.6.4`. `pip-audit` pasó de 16 avisos en 3 paquetes a **9 avisos en 1
+  solo paquete** (`starlette`, todos en código que este proyecto no usa: `FileResponse`,
+  `StaticFiles`, `HTTPEndpoint` — ver el análisis de alcanzabilidad de la auditoría 2026-09-09,
+  hallazgo 06-001). Próxima revisión: cuando se evalúe subir `fastapi`/`starlette` más allá de
+  0.115.14/0.46.2 (bloqueado desde arriba: rompe el registro de rutas — ver `test_rutas_bloqueables.py`).
 - **`react-router` 6.26.2 → 7.18.3**: cierra las 2 CVEs moderadas por completo (`npm audit
   --omit=dev` → 0 vulnerabilidades). El proyecto solo usa la API declarativa clásica
   (`BrowserRouter`/`Routes`/`Route`/`Navigate`/`NavLink`/`useNavigate`/`Outlet`), que v7 mantiene

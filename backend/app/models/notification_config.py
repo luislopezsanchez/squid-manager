@@ -1,6 +1,7 @@
 """Modelo NotificationConfig: configuración de notificaciones (email + Telegram)."""
 
 from app.utils import utcnow
+from app.crypto_service import EncryptedString
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from app.database import Base
 
@@ -14,14 +15,16 @@ class NotificationConfig(Base):
     smtp_host = Column(String(255), nullable=True)
     smtp_port = Column(Integer, default=587, nullable=False)
     smtp_user = Column(String(255), nullable=True)
-    smtp_password = Column(String(255), nullable=True)
+    # Cifradas en reposo con DATA_KEY (ver crypto_service.py -auditoria
+    # 2026-09-09, hallazgo 05-003).
+    smtp_password = Column(EncryptedString, nullable=True)
     smtp_from = Column(String(255), nullable=True)
     smtp_encryption = Column(String(20), default="starttls", nullable=False)  # none, starttls, ssl
     email_recipients = Column(String(500), nullable=True)  # coma-separado
 
     # Telegram
     telegram_enabled = Column(Boolean, default=False, nullable=False)
-    telegram_bot_token = Column(String(255), nullable=True)
+    telegram_bot_token = Column(EncryptedString, nullable=True)
     telegram_chat_id = Column(String(100), nullable=True)
 
     # Qué eventos notificar

@@ -307,9 +307,10 @@ export default function DelayPools() {
                   <div className="grid grid-cols-2 gap-4">
                     {/* Restauración */}
                     <div>
-                      <label className="block text-xs font-medium text-ink-2 mb-1">{traducir("Velocidad de restauración")}</label>
+                      <label htmlFor={`delay-restore-${level.key}`} className="block text-xs font-medium text-ink-2 mb-1">{traducir("Velocidad de restauración")}</label>
                       <div className="flex gap-2">
                         <input
+                          id={`delay-restore-${level.key}`}
                           type="number"
                           min="1"
                           step="0.1"
@@ -329,9 +330,10 @@ export default function DelayPools() {
                     </div>
                     {/* Límite */}
                     <div>
-                      <label className="block text-xs font-medium text-ink-2 mb-1">{traducir("Límite máximo")}</label>
+                      <label htmlFor={`delay-limit-${level.key}`} className="block text-xs font-medium text-ink-2 mb-1">{traducir("Límite máximo")}</label>
                       <div className="flex gap-2">
                         <input
+                          id={`delay-limit-${level.key}`}
                           type="number"
                           min="1"
                           step="0.1"
@@ -364,16 +366,16 @@ export default function DelayPools() {
           {/* ACL y descripción */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="field-label block mb-1.5">{traducir("ACL asociada (opcional)")}</label>
-              <select value={form.acl_name} onChange={e => setForm({ ...form, acl_name: e.target.value })}
+              <label htmlFor="delaypool-acl" className="field-label block mb-1.5">{traducir("ACL asociada (opcional)")}</label>
+              <select id="delaypool-acl" value={form.acl_name} onChange={e => setForm({ ...form, acl_name: e.target.value })}
                 className="input">
                 <option value="">{traducir("Sin ACL (aplica a todos)")}</option>
                 {acls.map((a: any) => <option key={a.id} value={a.name}>{a.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
-              <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+              <label htmlFor="delaypool-description" className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
+              <input id="delaypool-description" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
                 placeholder={traducir("ej: Limitar a 64KB/s para red local")} className="input" />
             </div>
           </div>

@@ -1,7 +1,6 @@
 #!/bin/bash
 # Restaura un backup creado por backup-database.sh. Complementario a
-# propósito: un backup nunca restaurado no es un backup -ver
-# docs/audits, hallazgo 07-001-.
+# propósito: un backup nunca restaurado no es un backup.
 #
 # Uso: ./restore-database.sh backups/squidmanager_20260908_120000.sql.gz
 #

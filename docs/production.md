@@ -58,6 +58,23 @@ make status     # Estado + uso de recursos
 
 ---
 
+## Límites de recursos (Docker)
+
+`docker-compose.yml` fija `mem_limit` en `backend` (512m) y `squid` (1g) — un
+`cache_mem` mal puesto desde el panel, o una reindexación del asistente de
+IA, pueden pedir mucha más RAM de la que el host tiene; con el límite, el
+OOM killer se lleva solo ese contenedor en vez de arrastrar a PostgreSQL con
+él. Si alguno se reinicia solo bajo carga real (no al arrancar), es señal de
+que el límite quedó corto para ese hardware — subilo antes que quitarlo, y
+en el caso de Squid revisá primero `cache_mem`/`cache_dir` en
+**Configuración**, que es la causa más probable.
+
+Hardware mínimo recomendado: 2 GB de RAM con swap habilitado (el build del
+frontend puede fallar por falta de memoria con 1 GB sin swap — ver el README
+para el mensaje exacto de ese error).
+
+---
+
 ## Seguridad en producción
 
 ### 1. Contraseña del admin

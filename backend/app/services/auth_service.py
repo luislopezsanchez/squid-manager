@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from jose import JWTError, jwt
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -74,7 +74,7 @@ async def get_current_admin(
         issued_at = payload.get("iat")
         if username is None:
             raise credentials_exception
-    except JWTError:
+    except jwt.PyJWTError:
         raise credentials_exception
 
     admin = db.query(Admin).filter(Admin.username == username).first()

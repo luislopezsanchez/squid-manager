@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.admin import Admin
+from app.models.audit_log import AuditLog
 from app.models.kerberos_config import KerberosConfig
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_state import mark_dirty
@@ -92,6 +93,11 @@ async def update_config(
     config.enabled = data.enabled
     config.realm = realm.upper() if realm else None
     config.proxy_fqdn = proxy_fqdn.lower() if proxy_fqdn else None
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="update", entity="kerberos_config", entity_id=config.id,
+        new_value=f"enabled={config.enabled} realm={config.realm} proxy_fqdn={config.proxy_fqdn}",
+    ))
     db.commit()
     mark_dirty()
 
@@ -210,6 +216,13 @@ async def upload_keytab(
     config.keytab_data = data
     config.keytab_filename = file.filename
     config.keytab_uploaded_at = utcnow()
+    # Nunca el contenido del keytab -es una credencial de la cuenta de equipo
+    # del AD del cliente-, solo el nombre de archivo y el tamaño.
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="update", entity="kerberos_keytab", entity_id=config.id,
+        new_value=f"keytab subido: {file.filename} ({len(data)} bytes)",
+    ))
     db.commit()
     mark_dirty()
 
@@ -224,9 +237,15 @@ async def delete_keytab(
 ):
     """Quita el keytab actual. Kerberos deja de ofrecerse al aplicar cambios."""
     config = _obtener_o_crear(db)
+    nombre_anterior = config.keytab_filename
     config.keytab_data = None
     config.keytab_filename = None
     config.keytab_uploaded_at = None
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="delete", entity="kerberos_keytab", entity_id=config.id,
+        old_value=f"keytab: {nombre_anterior}",
+    ))
     db.commit()
     mark_dirty()
     return {"status": "ok"}

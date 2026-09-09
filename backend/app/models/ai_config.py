@@ -6,6 +6,7 @@ canal no hace nada -ni un byte sale del servidor hacia ningun proveedor-.
 """
 
 from app.utils import utcnow
+from app.crypto_service import EncryptedString
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from app.database import Base
 
@@ -18,12 +19,14 @@ class AiConfig(Base):
     # gemini | ollama_cloud. Cada proveedor tiene su propio adaptador en
     # ai_service.py; agregar uno nuevo no toca esta tabla.
     provider = Column(String(30), default="gemini", nullable=False)
-    api_key = Column(String(500), nullable=True)
+    # Cifradas en reposo con DATA_KEY (ver crypto_service.py -auditoria
+    # 2026-09-09, hallazgo 05-003).
+    api_key = Column(EncryptedString, nullable=True)
     # Los embeddings (búsqueda semántica) siempre son de Jina AI, sea cual
     # sea el proveedor elegido para responder -ver la nota al principio de
     # ai_service.py sobre por qué Jina y no el `provider` de arriba-, así
     # que siempre necesitan su propia key, independiente de `api_key`.
-    embedding_api_key = Column(String(500), nullable=True)
+    embedding_api_key = Column(EncryptedString, nullable=True)
     # Modelo de generacion (responde la pregunta) y de embeddings (para la
     # busqueda semantica al indexar/consultar la documentacion) -son
     # necesidades distintas y no todos los proveedores usan el mismo modelo

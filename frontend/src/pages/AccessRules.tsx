@@ -123,22 +123,22 @@ export default function AccessRules() {
           <h3 className="font-medium text-ink mb-4">{editingId ? traducir('Editar Regla') : traducir('Nueva Regla de Acceso')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="field-label block mb-1.5">{traducir("Acción")}</label>
-              <select value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}
+              <label htmlFor="rule-action" className="field-label block mb-1.5">{traducir("Acción")}</label>
+              <select id="rule-action" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}
                 className="input">
                 <option value="allow">{traducir("allow (Permitir)")}</option>
                 <option value="deny">{traducir("deny (Denegar)")}</option>
               </select>
             </div>
             <div>
-              <label className="field-label block mb-1.5">{traducir("Orden")}</label>
-              <input type="number" value={form.order} onChange={e => setForm({ ...form, order: parseInt(e.target.value) })}
+              <label htmlFor="rule-order" className="field-label block mb-1.5">{traducir("Orden")}</label>
+              <input id="rule-order" type="number" value={form.order} onChange={e => setForm({ ...form, order: parseInt(e.target.value) })}
                 className="input" />
             </div>
           </div>
           <div className="mt-4">
-            <label className="field-label block mb-1.5">{traducir("ACLs (separadas por espacio)")}</label>
-            <input type="text" value={form.acl_names} onChange={e => setForm({ ...form, acl_names: e.target.value })}
+            <label htmlFor="rule-acl-names" className="field-label block mb-1.5">{traducir("ACLs (separadas por espacio)")}</label>
+            <input id="rule-acl-names" type="text" value={form.acl_names} onChange={e => setForm({ ...form, acl_names: e.target.value })}
               placeholder={traducir("ej: localnet authenticated")} className="input font-mono text-sm" required />
             <div className="mt-2 flex flex-wrap gap-2">
               {allAclNames.map(name => (
@@ -163,8 +163,8 @@ export default function AccessRules() {
             </div>
           </div>
           <div className="mt-4">
-            <label className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
-            <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+            <label htmlFor="rule-description" className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
+            <input id="rule-description" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
               placeholder={traducir("ej: Permitir acceso a red local autenticada")} className="input" />
           </div>
           {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}

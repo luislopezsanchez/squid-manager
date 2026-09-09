@@ -5,12 +5,26 @@ alembic==1.13.3
 psycopg[binary]==3.2.13
 pydantic==2.9.2
 pydantic-settings==2.5.2
-python-jose[cryptography]==3.4.0
+# PyJWT, no python-jose: python-jose exige "pyasn1<0.5.0,>=0.4.1" segun su
+# propio metadata en PyPI, lo que dejaba 16 avisos de seguridad sin poder
+# cerrarse (pyasn1/ecdsa, ver la nota junto a pyasn1 mas abajo -auditoria
+# 2026-09-09, hallazgo 06-001, recomendacion 3). PyJWT no depende de
+# pyasn1 ni ecdsa para HS256 (el unico algoritmo que usa este proyecto),
+# asi que los saca del arbol de dependencias por completo.
+PyJWT==2.13.0
 bcrypt==4.2.1  # se usa directamente: passlib 1.7.4 no soporta bcrypt >= 4.1
 jinja2==3.1.6
 python-multipart==0.0.31
 httpx==0.27.2
 docker==7.1.0
 ldap3==2.9.1
+# Entraba como transitiva de ldap3, sin pin propio, en 0.4.8 -con 5 avisos
+# de DoS de decodificacion conocidos. No se podia subir mientras se usara
+# python-jose (exigia "pyasn1<0.5.0,>=0.4.1" segun su propio metadata en
+# PyPI); con PyJWT en vez de python-jose (ver la nota junto a PyJWT mas
+# arriba) esa cota ya no aplica, y ldap3 solo pide ">=0.4.6" -sin tope
+# superior- asi que 0.6.4 es instalable sin conflictos (auditoria
+# 2026-09-09, hallazgo 06-001, recomendacion 2, ahora si aplicable).
+pyasn1==0.6.4
 pgvector==0.5.0
 pytest==9.0.3

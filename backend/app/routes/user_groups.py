@@ -95,10 +95,20 @@ async def list_groups(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """Lista todos los grupos con sus miembros."""
+    """Lista todos los grupos con sus miembros.
+
+    Una sola consulta de miembros, agrupada en memoria por group_id, en vez
+    de una consulta por grupo -el numero de grupos es chico por naturaleza,
+    pero el patron N+1 crece si alguien lo copia a una entidad con mas filas
+    (auditoria 2026-09-09, hallazgo 09-002).
+    """
+    grupos = db.query(UserGroup).order_by(UserGroup.name).all()
+    miembros_por_grupo: dict[int, list[str]] = {}
+    for m in db.query(UserGroupMember).order_by(UserGroupMember.username).all():
+        miembros_por_grupo.setdefault(m.group_id, []).append(m.username)
     return [
-        _to_response(g, _members(db, g.id))
-        for g in db.query(UserGroup).order_by(UserGroup.name).all()
+        _to_response(g, miembros_por_grupo.get(g.id, []))
+        for g in grupos
     ]
 
 

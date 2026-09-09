@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.admin import Admin
+from app.models.audit_log import AuditLog
 from app.models.ai_config import AiConfig
 from app.models.doc_chunk import DocChunk
 from app.services.auth_service import get_current_admin, require_writer
@@ -92,11 +93,13 @@ async def update_config(
         raise HTTPException(400, detail=f"provider debe ser uno de: {', '.join(_PROVEEDORES_VALIDOS)}")
 
     config = _obtener_o_crear(db)
+    api_key_cambio = bool(data.api_key and data.api_key != "***")
+    embedding_key_cambio = bool(data.embedding_api_key and data.embedding_api_key != "***")
     config.enabled = data.enabled
     config.provider = data.provider
-    if data.api_key and data.api_key != "***":
+    if api_key_cambio:
         config.api_key = data.api_key
-    if data.embedding_api_key and data.embedding_api_key != "***":
+    if embedding_key_cambio:
         config.embedding_api_key = data.embedding_api_key
     config.chat_model = data.chat_model
     config.embedding_model = data.embedding_model
@@ -109,6 +112,16 @@ async def update_config(
             detail="Hace falta la API key de Jina AI para poder buscar en la documentación.",
         )
 
+    # Nunca las API keys, solo si cambiaron.
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="update", entity="ai_config", entity_id=config.id,
+        new_value=(
+            f"enabled={config.enabled} provider={config.provider} chat_model={config.chat_model} "
+            f"api_key={'(cambiada)' if api_key_cambio else '(sin cambios)'} "
+            f"embedding_api_key={'(cambiada)' if embedding_key_cambio else '(sin cambios)'}"
+        ),
+    ))
     db.commit()
     return {"status": "ok", "message": "Configuración del asistente guardada"}
 

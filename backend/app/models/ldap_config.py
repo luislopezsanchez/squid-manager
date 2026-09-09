@@ -1,6 +1,7 @@
 """Modelo LdapConfig: configuración LDAP/Active Directory."""
 
 from app.utils import utcnow
+from app.crypto_service import EncryptedString
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from app.database import Base
 
@@ -11,7 +12,10 @@ class LdapConfig(Base):
     id = Column(Integer, primary_key=True, default=1)
     server_url = Column(String(255), nullable=False)  # ldap://host:389
     bind_dn = Column(String(255), nullable=False)     # cn=admin,dc=...
-    bind_password = Column(String(255), nullable=False)
+    # Cifrada en reposo con DATA_KEY (ver crypto_service.py) -antes en texto
+    # plano, quien obtuviera un volcado de la base se la llevaba sin romper
+    # nada (auditoria 2026-09-09, hallazgo 05-003).
+    bind_password = Column(EncryptedString, nullable=False)
     search_base = Column(String(255), nullable=False)  # ou=users,dc=...
     user_filter = Column(String(255), nullable=False, default="(uid=%s)")
     # Filtro para "traer TODOS los usuarios" al sincronizar. Es distinto de

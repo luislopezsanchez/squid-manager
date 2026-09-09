@@ -6,6 +6,7 @@ puede desplegar en esas redes.
 """
 
 from app.utils import utcnow
+from app.crypto_service import EncryptedString
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
 from app.database import Base
 
@@ -25,7 +26,9 @@ class ParentProxy(Base):
     # piden suelen usar autenticación básica, que es la única que Squid sabe
     # presentar a un padre.
     username = Column(String(255), nullable=True)
-    password = Column(String(255), nullable=True)
+    # Cifrada en reposo con DATA_KEY (ver crypto_service.py -auditoria
+    # 2026-09-09, hallazgo 05-003).
+    password = Column(EncryptedString, nullable=True)
 
     # 'fixed' (por defecto): cache_peer login=user:pass, la unica forma nativa
     # de Squid de presentar credenciales propias a un padre, y solo sabe

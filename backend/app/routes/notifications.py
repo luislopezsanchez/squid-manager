@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.admin import Admin
+from app.models.audit_log import AuditLog
 from app.models.notification_config import NotificationConfig
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.notification_service import test_email, test_telegram, send_email, send_telegram
@@ -90,10 +91,12 @@ async def get_config(
 async def update_config(
     data: NotificationConfigIn,
     db: Session = Depends(get_db),
-    _: Admin = Depends(require_writer),
+    current_admin: Admin = Depends(require_writer),
 ):
     """Actualizar configuración de notificaciones."""
     config = _get_or_create_config(db)
+    smtp_password_cambio = bool(data.smtp_password)
+    telegram_token_cambio = bool(data.telegram_bot_token)
 
     config.email_enabled = data.email_enabled
     config.smtp_host = data.smtp_host
@@ -116,6 +119,16 @@ async def update_config(
     config.notify_on_rule_change = data.notify_on_rule_change
     config.notify_on_security_alert = data.notify_on_security_alert
 
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="update", entity="notification_config", entity_id=config.id,
+        new_value=(
+            f"email_enabled={config.email_enabled} smtp_host={config.smtp_host} "
+            f"smtp_password={'(cambiada)' if smtp_password_cambio else '(sin cambios)'} "
+            f"telegram_enabled={config.telegram_enabled} "
+            f"telegram_bot_token={'(cambiado)' if telegram_token_cambio else '(sin cambios)'}"
+        ),
+    ))
     db.commit()
     return {"status": "ok", "message": "Configuración de notificaciones guardada"}
 

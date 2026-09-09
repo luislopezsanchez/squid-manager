@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.admin import Admin
+from app.models.audit_log import AuditLog
 from app.models.update_config import UpdateConfig
 from app.services.auth_service import get_current_admin, require_superadmin
 from app.services.update_service import (
@@ -102,6 +103,7 @@ async def put_config(
 @router.post("/aprobar")
 async def post_aprobar(
     data: AprobarIn,
+    db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_superadmin),
 ):
     """Aprueba la actualización disponible: para ahora (sin `scheduled_at`)
@@ -115,15 +117,31 @@ async def post_aprobar(
         estado = await run_in_threadpool(aprobar_actualizacion, current_admin.username, programado)
     except UpdateServiceError as e:
         raise HTTPException(400, detail=str(e))
+    # Es la accion de mayor alcance que puede pedir el panel -termina en un
+    # reinicio de servicios con codigo nuevo-: queda registrada igual que
+    # cualquier otro cambio de configuracion.
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="apply", entity="update",
+        new_value=f"aprobada, programada_para={programado or 'ahora'}",
+    ))
+    db.commit()
     return estado
 
 
 @router.post("/cancelar")
 async def post_cancelar(
-    _: Admin = Depends(require_superadmin),
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_superadmin),
 ):
     try:
         estado = await run_in_threadpool(cancelar_actualizacion)
     except UpdateServiceError as e:
         raise HTTPException(400, detail=str(e))
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="delete", entity="update",
+        old_value="actualizacion programada cancelada",
+    ))
+    db.commit()
     return estado

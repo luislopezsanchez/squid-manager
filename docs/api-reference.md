@@ -94,9 +94,11 @@ Authorization: Bearer <token>
 
 ### Listar usuarios
 ```http
-GET /api/proxy-users/
+GET /api/proxy-users/?limit=1000&offset=0
 Authorization: Bearer <token>
 ```
+
+`limit` (1-5000, por defecto 1000) y `offset` (por defecto 0) son opcionales.
 
 **Respuesta:**
 ```json
@@ -251,9 +253,11 @@ Aplica la configuración y purga la caché de credenciales, ya que quitar a algu
 
 ### Listar ACLs
 ```http
-GET /api/acls/
+GET /api/acls/?limit=1000&offset=0
 Authorization: Bearer <token>
 ```
+
+`limit` (1-5000, por defecto 1000) y `offset` (por defecto 0) son opcionales.
 
 ### ACLs sin usar
 ```http
@@ -461,6 +465,27 @@ Content-Type: application/json
 }
 ```
 
+### Probar servidores DNS
+```http
+POST /api/squid/dns/test
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "servers": "8.8.8.8, 1.1.1.1"
+}
+```
+
+Comprueba que los servidores DNS respondan de verdad **sin llegar a guardarlos ni aplicarlos** — permite verificar antes, en vez de descubrir que no responden recién cuando ya nadie puede navegar. Una lista vacía es válida: significa que Squid usará la resolución del sistema.
+
+**Respuesta:**
+```json
+{
+  "ok": true,
+  "message": "Los 2 servidores responden correctamente."
+}
+```
+
 ### Aplicar cambios a Squid
 ```http
 POST /api/squid/apply
@@ -612,9 +637,11 @@ Importa usuarios del directorio (búsqueda paginada, 500 por página) filtrando 
 
 ### Listar usuarios LDAP sincronizados
 ```http
-GET /api/ldap/users
+GET /api/ldap/users?limit=1000&offset=0
 Authorization: Bearer <token>
 ```
+
+`limit` (1-5000, por defecto 1000) y `offset` (por defecto 0) son opcionales.
 
 ### Habilitar/deshabilitar un usuario LDAP
 ```http

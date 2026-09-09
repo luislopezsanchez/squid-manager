@@ -163,8 +163,8 @@ function PasswordModal({ username, onClose, onSetPassword, onGenerate }: {
 
         {mode === 'manual' && (
           <form onSubmit={handleManualSubmit}>
-            <label className="field-label block mb-1.5 mt-4">{traducir("Contraseña nueva")}</label>
-            <input type="text" value={manualPassword} onChange={e => setManualPassword(e.target.value)}
+            <label htmlFor="proxyuser-new-password" className="field-label block mb-1.5 mt-4">{traducir("Contraseña nueva")}</label>
+            <input id="proxyuser-new-password" type="text" value={manualPassword} onChange={e => setManualPassword(e.target.value)}
               className="input font-mono" minLength={8} required autoFocus
               placeholder={traducir("Al menos 8 caracteres")} />
             {err && <div className="mt-3 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{err}</div>}
@@ -359,8 +359,9 @@ export default function ProxyUsers() {
         <form onSubmit={handleCreate} className="card p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="field-label block mb-1.5">{traducir("Usuario")}</label>
+              <label htmlFor="proxyuser-username" className="field-label block mb-1.5">{traducir("Usuario")}</label>
               <input
+                id="proxyuser-username"
                 type="text" value={newUser.username}
                 onChange={e => setNewUser({ ...newUser, username: e.target.value })}
                 className="input"
@@ -368,8 +369,9 @@ export default function ProxyUsers() {
               />
             </div>
             <div>
-              <label className="field-label block mb-1.5">{traducir("Contraseña")}</label>
+              <label htmlFor="proxyuser-password" className="field-label block mb-1.5">{traducir("Contraseña")}</label>
               <input
+                id="proxyuser-password"
                 type="password" value={newUser.password}
                 onChange={e => setNewUser({ ...newUser, password: e.target.value })}
                 className="input"

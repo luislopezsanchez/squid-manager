@@ -69,6 +69,13 @@ async def export_backup(
     Incluye grupos, miembros y allow-list de LDAP: sin ellos, restaurar dejaba
     reglas apuntando a grupos inexistentes y la configuración no era válida.
     """
+    # Una sola consulta de miembros, agrupada en memoria por group_id, en vez
+    # de una consulta por grupo (auditoria 2026-09-09, hallazgo 09-002 -mismo
+    # patron en user_groups.py).
+    miembros_por_grupo: dict[int, list[str]] = {}
+    for m in db.query(UserGroupMember).order_by(UserGroupMember.username).all():
+        miembros_por_grupo.setdefault(m.group_id, []).append(m.username)
+
     backup = {
         "metadata": {
             "platform": "SquidManager",
@@ -104,10 +111,7 @@ async def export_backup(
             {
                 "name": g.name,
                 "description": g.description,
-                "members": [
-                    m.username
-                    for m in db.query(UserGroupMember).filter(UserGroupMember.group_id == g.id).all()
-                ],
+                "members": miembros_por_grupo.get(g.id, []),
             }
             for g in db.query(UserGroup).order_by(UserGroup.name).all()
         ],

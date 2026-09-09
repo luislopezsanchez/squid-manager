@@ -1,5 +1,14 @@
 # Backups de despliegue — Proxmox LXC
 
+> ⚠️ **Esta imagen trae las claves reales de la instalación con la que se
+> creó** (`SECRET_KEY` y `DB_PASS` — ver la sección "Qué trae adentro"). Nada
+> en el arranque las regenera solas: es el **primer** paso a hacer después de
+> restaurar, antes de cualquier otra cosa — ver
+> ["Regenerar `SECRET_KEY` y `DB_PASS`"](#1-regenerar-secret_key-y-db_pass--esto-sí-hay-que-acordarse-solo)
+> más abajo. Sin ese paso, cualquiera que haya descargado esta misma imagen
+> —ahora o dentro de un año— tiene una puerta de entrada al panel que ningún
+> cambio de contraseña cierra.
+
 Backups completos de un contenedor LXC de Proxmox con SquidManager ya
 desplegado y funcionando: útil para no tener que compilar Squid desde cero
 (10-15 minutos, o más en hardware modesto) ni resolver problemas de red al
@@ -69,23 +78,19 @@ arrancar, y entrá al panel en `http://<IP-del-contenedor>:3000`.
 
 Este backup es una instalación real, no una plantilla en blanco. Si lo vas a
 usar más allá de una prueba rápida y descartable, hay que hacer esto **antes**
-de dejarlo accesible desde la red:
+de dejarlo accesible desde la red — en este orden, no en el orden en que
+aparecen en el menú del panel:
 
-### 1. Cambiar la contraseña de `admin`
+### 1. Regenerar `SECRET_KEY` y `DB_PASS` — esto hay que acordarse solo
 
-Al entrar por primera vez el panel va a pedir cambiarla — es un paso
-obligatorio del propio sistema, no hay que olvidarse de hacerlo, pero tampoco
-hay forma de saltearlo.
-
-### 2. Regenerar `SECRET_KEY` y `DB_PASS` — esto sí hay que acordarse solo
-
-A diferencia de la contraseña de `admin`, **nada fuerza este cambio**. Y es el
-paso más importante de los dos: `SECRET_KEY` firma las sesiones del panel.
-Cualquiera que tenga el valor que trae este backup puede fabricarse una
-sesión válida como `admin` sin pasar por el login —sin usuario, sin
-contraseña, sin que el cambio del paso 1 lo proteja de nada—, porque nunca se
-autentica: arma el token directamente. `DB_PASS` es la contraseña de la base
-de datos por detrás del panel.
+Este es el paso que de verdad importa, y va **primero** porque nada del
+sistema lo fuerza ni lo recuerda —a diferencia del cambio de contraseña del
+paso 2, que el propio panel exige—. `SECRET_KEY` firma las sesiones del
+panel: cualquiera que tenga el valor que trae este backup puede fabricarse
+una sesión válida como `admin` sin pasar por el login —sin usuario, sin
+contraseña, sin que el cambio de contraseña del paso 2 lo proteja de nada—,
+porque nunca se autentica: arma el token directamente. `DB_PASS` es la
+contraseña de la base de datos por detrás del panel.
 
 Entrá al contenedor y editá el `.env`:
 
@@ -115,6 +120,13 @@ docker compose up -d
 **Sin este paso, cualquiera que haya descargado este backup —ahora o dentro
 de un año— tiene una puerta de entrada al panel que ningún cambio de
 contraseña cierra.**
+
+### 2. Cambiar la contraseña de `admin`
+
+Al entrar por primera vez el panel va a pedir cambiarla — es un paso
+obligatorio del propio sistema, no hay que olvidarse de hacerlo, pero tampoco
+hay forma de saltearlo. Por eso va segundo: es el que ya está cubierto por
+diseño, no el que necesita este documento para no perderse.
 
 ## Puertos que quedan publicados al arrancar
 

@@ -131,15 +131,15 @@ export default function Kerberos() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="field-label block mb-1.5">{traducir("Realm")}</label>
-            <input type="text" value={config.realm} onChange={e => setConfig({ ...config, realm: e.target.value })}
+            <label htmlFor="kerberos-realm" className="field-label block mb-1.5">{traducir("Realm")}</label>
+            <input id="kerberos-realm" type="text" value={config.realm} onChange={e => setConfig({ ...config, realm: e.target.value })}
               disabled={!config.enabled}
               placeholder="EMPRESA.COM" className="input font-mono text-sm disabled:opacity-50 disabled:bg-brand-50" />
             <p className="text-xs text-ink-3 mt-1">{traducir("El dominio Kerberos, normalmente el dominio de Active Directory en mayúsculas.")}</p>
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("FQDN del proxy")}</label>
-            <input type="text" value={config.proxy_fqdn} onChange={e => setConfig({ ...config, proxy_fqdn: e.target.value })}
+            <label htmlFor="kerberos-fqdn" className="field-label block mb-1.5">{traducir("FQDN del proxy")}</label>
+            <input id="kerberos-fqdn" type="text" value={config.proxy_fqdn} onChange={e => setConfig({ ...config, proxy_fqdn: e.target.value })}
               disabled={!config.enabled}
               placeholder="proxy.empresa.com" className="input font-mono text-sm disabled:opacity-50 disabled:bg-brand-50" />
             <p className="text-xs text-ink-3 mt-1">{traducir("Debe resolver por DNS a este proxy y coincidir con el SPN del keytab (HTTP/fqdn).")}</p>

@@ -195,20 +195,20 @@ export default function HistoricalLogs() {
           <div className="card p-4 mb-4">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
               <div>
-                <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Usuario")}</label>
-                <input type="text" value={fUser} placeholder={traducir("ej: jperez")}
+                <label htmlFor="hist-filter-user" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Usuario")}</label>
+                <input id="hist-filter-user" type="text" value={fUser} placeholder={traducir("ej: jperez")}
                   onChange={e => { setFUser(e.target.value); setOffset(0) }}
                   className="input text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Estado HTTP")}</label>
-                <input type="text" value={fStatus} placeholder="403"
+                <label htmlFor="hist-filter-status" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Estado HTTP")}</label>
+                <input id="hist-filter-status" type="text" value={fStatus} placeholder="403"
                   onChange={e => { setFStatus(e.target.value.replace(/\D/g, '')); setOffset(0) }}
                   className="input text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Dominio")}</label>
-                <input type="text" value={fDomain} placeholder={traducir("ej: youtube.com")}
+                <label htmlFor="hist-filter-domain" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Dominio")}</label>
+                <input id="hist-filter-domain" type="text" value={fDomain} placeholder={traducir("ej: youtube.com")}
                   onChange={e => { setFDomain(e.target.value); setOffset(0) }}
                   className="input text-sm" />
               </div>

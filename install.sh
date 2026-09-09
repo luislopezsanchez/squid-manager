@@ -157,7 +157,13 @@ if [[ ! -f ".env" ]]; then
     DB_PASS=$(openssl rand -hex 16 2>/dev/null || head -c 32 /dev/urandom | tr -dc 'a-f0-9')
     sed -i "s|DB_PASS=.*|DB_PASS=$DB_PASS|" .env
 
-    ok ".env creado con SECRET_KEY y DB_PASS aleatorias"
+    # DATA_KEY: cifra en reposo las credenciales de terceros (LDAP, SMTP,
+    # Telegram, IA, proxy padre, keytab). Deliberadamente una clave DISTINTA
+    # de SECRET_KEY -ver la nota en .env.example.
+    DATA_KEY=$(openssl rand -hex 32 2>/dev/null || head -c 64 /dev/urandom | tr -dc 'a-f0-9')
+    sed -i "s|DATA_KEY=.*|DATA_KEY=$DATA_KEY|" .env
+
+    ok ".env creado con SECRET_KEY, DATA_KEY y DB_PASS aleatorias"
 else
     # Un .env que viene de una versión anterior puede traer la clave de
     # ejemplo, con la que cualquiera puede firmarse un token de admin.
@@ -173,6 +179,19 @@ else
         warn "  2) ALTER USER squid WITH PASSWORD '...' en PostgreSQL"
         warn "  3) docker compose up -d"
     fi
+    # DATA_KEY nunca se REGENERA si ya tiene un valor -a diferencia de
+    # SECRET_KEY, hacerlo dejaria indescifrable cualquier credencial ya
+    # cifrada con la clave anterior. Solo se agrega si falta del todo (un
+    # .env de antes de que existiera esta variable) o esta vacia.
+    if ! grep -qE '^DATA_KEY=' .env; then
+        NEW_DATA_KEY=$(openssl rand -hex 32)
+        printf '\n# Cifra en reposo las credenciales de terceros (ver .env.example)\nDATA_KEY=%s\n' "$NEW_DATA_KEY" >> .env
+        ok "DATA_KEY agregada (instalación anterior a que existiera esta variable)."
+    elif grep -qE '^DATA_KEY=$' .env; then
+        NEW_DATA_KEY=$(openssl rand -hex 32)
+        sed -i "s|^DATA_KEY=.*|DATA_KEY=$NEW_DATA_KEY|" .env
+        ok "DATA_KEY generada."
+    fi
     ok ".env ya existe. Manteniendo el resto de la configuración."
 fi
 
@@ -185,6 +204,19 @@ if grep -qE '^PROJECT_DIR=' .env; then
 else
     printf '\n# Ruta absoluta del proyecto (la usa el backend para invocar Compose)\nPROJECT_DIR=%s\n' "$INSTALL_DIR" >> .env
 fi
+
+# El .env lleva SECRET_KEY (firma los JWT del panel) y DB_PASS en texto
+# plano. Sin esto quedaba con los permisos por defecto de la umask del
+# proceso -tipicamente 0644 con root-, legible por cualquier cuenta local
+# sin privilegios: con la SECRET_KEY, cualquiera puede fabricarse un token
+# de superadmin sin pasar por el login, y ni un cambio de contraseña del
+# admin ni el limite de intentos lo detectan. El instalador nativo
+# (install-nativo.sh) ya hacia esto desde el principio; era un olvido de
+# este, no una decision (auditoria 2026-09-09, hallazgo 05-001). Se aplica
+# siempre, tambien sobre un .env que ya existia de una instalacion previa
+# sin este chmod.
+chmod 600 .env
+ok "Permisos de .env restringidos (600)"
 ok "PROJECT_DIR apunta a $INSTALL_DIR"
 
 # ============================================

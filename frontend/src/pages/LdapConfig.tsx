@@ -126,8 +126,9 @@ export default function LdapConfig() {
             para el tipo de directorio elegido — no se guarda como tal, y los
             campos se pueden seguir editando a mano después. */}
         <div className="mb-4">
-          <label className="field-label block mb-1.5">{traducir("Tipo de directorio")}</label>
+          <label htmlFor="ldap-directory-type" className="field-label block mb-1.5">{traducir("Tipo de directorio")}</label>
           <select
+            id="ldap-directory-type"
             className="input md:w-80"
             defaultValue=""
             onChange={e => {
@@ -144,36 +145,36 @@ export default function LdapConfig() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="field-label block mb-1.5">{traducir("URL del servidor")}</label>
-            <input type="text" value={config.server_url} onChange={e => setConfig({ ...config, server_url: e.target.value })}
+            <label htmlFor="ldap-server-url" className="field-label block mb-1.5">{traducir("URL del servidor")}</label>
+            <input id="ldap-server-url" type="text" value={config.server_url} onChange={e => setConfig({ ...config, server_url: e.target.value })}
               placeholder={traducir("ldap://servidor.domain.com:389")} className="input font-mono text-sm" />
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Bind DN")}</label>
-            <input type="text" value={config.bind_dn} onChange={e => setConfig({ ...config, bind_dn: e.target.value })}
+            <label htmlFor="ldap-bind-dn" className="field-label block mb-1.5">{traducir("Bind DN")}</label>
+            <input id="ldap-bind-dn" type="text" value={config.bind_dn} onChange={e => setConfig({ ...config, bind_dn: e.target.value })}
               placeholder="cn=admin,dc=domain,dc=com" className="input font-mono text-sm" />
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Contraseña Bind")}</label>
-            <input type="password" value={config.bind_password === '***' ? '' : config.bind_password}
+            <label htmlFor="ldap-bind-password" className="field-label block mb-1.5">{traducir("Contraseña Bind")}</label>
+            <input id="ldap-bind-password" type="password" value={config.bind_password === '***' ? '' : config.bind_password}
               onChange={e => setConfig({ ...config, bind_password: e.target.value })}
               placeholder={config.bind_password === '***' ? traducir('•••••••• (guardada)') : traducir('Contraseña')}
               className="input" />
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Search Base")}</label>
-            <input type="text" value={config.search_base} onChange={e => setConfig({ ...config, search_base: e.target.value })}
+            <label htmlFor="ldap-search-base" className="field-label block mb-1.5">{traducir("Search Base")}</label>
+            <input id="ldap-search-base" type="text" value={config.search_base} onChange={e => setConfig({ ...config, search_base: e.target.value })}
               placeholder="ou=users,dc=domain,dc=com" className="input font-mono text-sm" />
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Filtro de usuario (login)")}</label>
-            <input type="text" value={config.user_filter} onChange={e => setConfig({ ...config, user_filter: e.target.value })}
+            <label htmlFor="ldap-user-filter" className="field-label block mb-1.5">{traducir("Filtro de usuario (login)")}</label>
+            <input id="ldap-user-filter" type="text" value={config.user_filter} onChange={e => setConfig({ ...config, user_filter: e.target.value })}
               placeholder="(uid=%s)" className="input font-mono text-sm" />
             <p className="text-xs text-ink-3 mt-1">{traducir("Busca a UN usuario por su nombre al iniciar sesión.")}</p>
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Filtro de sincronización")}</label>
-            <input type="text" value={config.sync_filter} onChange={e => setConfig({ ...config, sync_filter: e.target.value })}
+            <label htmlFor="ldap-sync-filter" className="field-label block mb-1.5">{traducir("Filtro de sincronización")}</label>
+            <input id="ldap-sync-filter" type="text" value={config.sync_filter} onChange={e => setConfig({ ...config, sync_filter: e.target.value })}
               placeholder="(objectClass=person)" className="input font-mono text-sm" />
             <p className="text-xs text-ink-3 mt-1">{traducir("Busca a TODOS los usuarios al pulsar \"Sincronizar con AD\". Antes estaba fijo a Active Directory: contra otro directorio no encontraba a nadie, sin avisar.")}</p>
           </div>
@@ -193,13 +194,13 @@ export default function LdapConfig() {
         <p className="text-sm text-ink-3 mb-4">{traducir("Introduce un usuario LDAP y su contraseña para verificar que la autenticación funciona")}</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="field-label block mb-1.5">{traducir("Usuario de prueba")}</label>
-            <input type="text" value={testUser.username} onChange={e => setTestUser({ ...testUser, username: e.target.value })}
+            <label htmlFor="ldap-test-username" className="field-label block mb-1.5">{traducir("Usuario de prueba")}</label>
+            <input id="ldap-test-username" type="text" value={testUser.username} onChange={e => setTestUser({ ...testUser, username: e.target.value })}
               placeholder="usuario.ldap" className="input" />
           </div>
           <div>
-            <label className="field-label block mb-1.5">{traducir("Contraseña de prueba")}</label>
-            <input type="password" value={testUser.password} onChange={e => setTestUser({ ...testUser, password: e.target.value })}
+            <label htmlFor="ldap-test-password" className="field-label block mb-1.5">{traducir("Contraseña de prueba")}</label>
+            <input id="ldap-test-password" type="password" value={testUser.password} onChange={e => setTestUser({ ...testUser, password: e.target.value })}
               placeholder="••••••••" className="input" />
           </div>
         </div>

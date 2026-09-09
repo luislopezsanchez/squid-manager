@@ -139,21 +139,21 @@ export default function Notifications() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Servidor SMTP")}</label>
-                <input type="text" value={config.smtp_host || ''} placeholder="smtp.gmail.com"
+                <label htmlFor="smtp-host" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Servidor SMTP")}</label>
+                <input id="smtp-host" type="text" value={config.smtp_host || ''} placeholder="smtp.gmail.com"
                   onChange={e => setConfig({ ...config, smtp_host: e.target.value })}
                   className="input text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Puerto")}</label>
-                <input type="number" value={config.smtp_port}
+                <label htmlFor="smtp-port" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Puerto")}</label>
+                <input id="smtp-port" type="number" value={config.smtp_port}
                   onChange={e => setConfig({ ...config, smtp_port: Number(e.target.value) })}
                   className="input text-sm" />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Método de cifrado / seguridad de conexión")}</label>
-              <select value={config.smtp_encryption}
+              <label htmlFor="smtp-encryption" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Método de cifrado / seguridad de conexión")}</label>
+              <select id="smtp-encryption" value={config.smtp_encryption}
                 onChange={e => setConfig({ ...config, smtp_encryption: e.target.value })}
                 className="input text-sm bg-white">
                 <option value="starttls">{traducir("STARTTLS (puerto 587 — Gmail, Outlook, la mayoría)")}</option>
@@ -164,29 +164,29 @@ export default function Notifications() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Usuario SMTP")}</label>
-                <input type="text" value={config.smtp_user || ''}
+                <label htmlFor="smtp-user" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Usuario SMTP")}</label>
+                <input id="smtp-user" type="text" value={config.smtp_user || ''}
                   onChange={e => setConfig({ ...config, smtp_user: e.target.value })}
                   className="input text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-ink-3 mb-1">
+                <label htmlFor="smtp-password" className="block text-xs font-medium text-ink-3 mb-1">
                   Contraseña SMTP {config.smtp_password_set && <span className="text-ok">{traducir("(guardada)")}</span>}
                 </label>
-                <input type="password" value={smtpPassword} placeholder={config.smtp_password_set ? '••••••••' : traducir('Nueva contraseña')}
+                <input id="smtp-password" type="password" value={smtpPassword} placeholder={config.smtp_password_set ? '••••••••' : traducir('Nueva contraseña')}
                   onChange={e => setSmtpPassword(e.target.value)}
                   className="input text-sm" />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Remitente (From)")}</label>
-              <input type="text" value={config.smtp_from || ''} placeholder={traducir("notificaciones@empresa.com")}
+              <label htmlFor="smtp-from" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Remitente (From)")}</label>
+              <input id="smtp-from" type="text" value={config.smtp_from || ''} placeholder={traducir("notificaciones@empresa.com")}
                 onChange={e => setConfig({ ...config, smtp_from: e.target.value })}
                 className="input text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Destinatarios (separados por coma)")}</label>
-              <input type="text" value={config.email_recipients || ''} placeholder={traducir("admin1@empresa.com, admin2@empresa.com")}
+              <label htmlFor="email-recipients" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Destinatarios (separados por coma)")}</label>
+              <input id="email-recipients" type="text" value={config.email_recipients || ''} placeholder={traducir("admin1@empresa.com, admin2@empresa.com")}
                 onChange={e => setConfig({ ...config, email_recipients: e.target.value })}
                 className="input text-sm" />
             </div>
@@ -215,16 +215,16 @@ export default function Notifications() {
         {config.telegram_enabled && (
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-medium text-ink-3 mb-1">
+              <label htmlFor="telegram-token" className="block text-xs font-medium text-ink-3 mb-1">
                 Bot Token {config.telegram_bot_token_set && <span className="text-ok">{traducir("(guardado)")}</span>}
               </label>
-              <input type="password" value={telegramToken} placeholder={config.telegram_bot_token_set ? '••••••••' : traducir('Nuevo token')}
+              <input id="telegram-token" type="password" value={telegramToken} placeholder={config.telegram_bot_token_set ? '••••••••' : traducir('Nuevo token')}
                 onChange={e => setTelegramToken(e.target.value)}
                 className="input text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-ink-3 mb-1">{traducir("Chat ID")}</label>
-              <input type="text" value={config.telegram_chat_id || ''} placeholder="123456789"
+              <label htmlFor="telegram-chat-id" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Chat ID")}</label>
+              <input id="telegram-chat-id" type="text" value={config.telegram_chat_id || ''} placeholder="123456789"
                 onChange={e => setConfig({ ...config, telegram_chat_id: e.target.value })}
                 className="input text-sm" />
             </div>

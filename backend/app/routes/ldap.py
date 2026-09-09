@@ -2,7 +2,7 @@
 
 import subprocess
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pydantic import BaseModel
@@ -80,7 +80,7 @@ async def get_ldap_config(
 async def update_ldap_config(
     data: LdapConfigUpdate,
     db: Session = Depends(get_db),
-    _: Admin = Depends(require_writer),
+    current_admin: Admin = Depends(require_writer),
 ):
     """Actualiza la configuración LDAP."""
     # Mismo motivo que en squid_config.py al revés: Digest solo autentica
@@ -102,11 +102,12 @@ async def update_ldap_config(
             )
 
     config = db.query(LdapConfig).first()
+    bind_password_cambio = bool(data.bind_password and data.bind_password != "***")
     if config:
         config.server_url = data.server_url
         config.bind_dn = data.bind_dn
         # No sobrescribir la contraseña si viene ***
-        if data.bind_password and data.bind_password != "***":
+        if bind_password_cambio:
             config.bind_password = data.bind_password
         config.search_base = data.search_base
         config.user_filter = data.user_filter
@@ -124,6 +125,17 @@ async def update_ldap_config(
             enabled=data.enabled,
         )
         db.add(config)
+    db.flush()
+    # Nunca la bind_password, solo si cambio o no -mismo criterio que el
+    # resto de credenciales de terceros del proyecto.
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="update", entity="ldap_config", entity_id=config.id,
+        new_value=(
+            f"enabled={config.enabled} server_url={config.server_url} bind_dn={config.bind_dn} "
+            f"bind_password={'(cambiada)' if bind_password_cambio else '(sin cambios)'}"
+        ),
+    ))
     db.commit()
 
     # Escribir archivos auxiliares (ldap_helper.conf) y recargar Squid
@@ -263,11 +275,23 @@ def _sync_ldap_files(db: Session):
 
 @router.get("/users", response_model=list[LdapUserResponse])
 async def list_ldap_users(
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """Lista los usuarios LDAP sincronizados (allow-list)."""
-    return db.query(LdapUser).order_by(LdapUser.username).all()
+    """Lista los usuarios LDAP sincronizados (allow-list), paginados.
+
+    POST /sync (que puebla esta tabla) se describe como "sincronizacion
+    paginada" contra el AD: en un directorio corporativo mediano son miles
+    de entradas. limit por defecto en 1000 -generoso, para no romper a los
+    consumidores actuales- pero ya no "todos sin tope" (auditoria
+    2026-09-09, hallazgo 09-001).
+    """
+    return (
+        db.query(LdapUser).order_by(LdapUser.username)
+        .offset(offset).limit(limit).all()
+    )
 
 
 @router.post("/sync")

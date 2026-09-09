@@ -6,7 +6,7 @@ import secrets
 import string
 import subprocess
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -128,12 +128,24 @@ def _sync_passwd(db: Session):
 
 @router.get("/", response_model=list[ProxyUserResponse])
 async def list_proxy_users(
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """Lista todos los usuarios del proxy."""
+    """Lista los usuarios del proxy, paginados.
+
+    limit por defecto en 1000 -generoso a proposito, para no romper a los
+    consumidores actuales de la API que no mandan estos parametros- pero
+    ya no "todos sin tope": con miles de usuarios (auditoria 2026-09-09,
+    hallazgo 09-001) la respuesta sin paginar tarda y el frontend renderiza
+    de mas.
+    """
     active_ids = {u.id for u in active_proxy_users(db)}
-    users = db.query(ProxyUser).order_by(ProxyUser.username).all()
+    users = (
+        db.query(ProxyUser).order_by(ProxyUser.username)
+        .offset(offset).limit(limit).all()
+    )
     # `active` distingue «habilitado» de «puede navegar ahora»: un usuario
     # habilitado pero caducado no puede.
     for u in users:

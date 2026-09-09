@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 horas
 
+    # Clave para cifrar en reposo las credenciales de terceros guardadas en
+    # la base (bind_password de LDAP, smtp_password, telegram_bot_token, las
+    # API keys del asistente de IA, la contraseña del proxy padre, el keytab
+    # de Kerberos -ver crypto_service.py). Deliberadamente separada de
+    # SECRET_KEY: rotar la firma de los JWT (invalida sesiones) no debería
+    # obligar a re-cifrar toda la configuración, y viceversa (auditoría
+    # 2026-09-09, hallazgo 05-003). Vacía = sin cifrar -compatibilidad con
+    # instalaciones existentes hasta que se configure; ver crypto_service.py
+    # para el comportamiento exacto en ese caso.
+    DATA_KEY: str = ""
+
     # Orígenes permitidos por CORS. El frontend se sirve desde el mismo origen
     # a través de nginx, así que por defecto no se permite ninguno externo.
     CORS_ORIGINS: str = ""
@@ -66,7 +77,7 @@ class Settings(BaseSettings):
     # nada la sincronizaba con las otras dos versiones que declara el
     # proyecto (aquí y en frontend/package.json). Al subir la versión, las
     # tres deben moverse juntas y etiquetarse en git — ver docs/actualizacion.md.
-    APP_VERSION: str = "0.23.2"
+    APP_VERSION: str = "0.24.0"
     DEBUG: bool = False
 
     @property
