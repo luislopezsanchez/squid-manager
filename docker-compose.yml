@@ -50,7 +50,11 @@ services:
   # todo exigiria un demonio aparte fuera del backend con una API propia y
   # minima -un rediseno mas grande, pendiente como mejora futura.
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:latest
+    # Version fija, no ":latest": esta imagen es la que decide que llamadas a
+    # la API de Docker se permiten -un cambio de comportamiento aguas arriba
+    # podria abrir o cerrar capacidades sin que nadie lo pida, y sin quedar
+    # registrado en ningun commit (auditoria 2026-09-09, hallazgo 06-002).
+    image: tecnativa/docker-socket-proxy:0.3
     container_name: squidmgr-docker-proxy
     restart: unless-stopped
     environment:

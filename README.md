@@ -162,7 +162,7 @@ Los requisitos dependen del modo de despliegue.
 > esa versión (`pydantic-core` ni siquiera compila desde código fuente: su
 > toolchain de Rust —PyO3 0.22— no soporta Python 3.14). El paso 8 del
 > instalador falla con `ERROR: Could not find a version that satisfies the
-> requirement psycopg-binary==3.2.3`. Usa Ubuntu 24.04 o Debian 12 hasta que
+> requirement psycopg-binary==3.2.13`. Usa Ubuntu 24.04 o Debian 12 hasta que
 > el ecosistema Python se ponga al día.
 
 ### Hardware mínimo

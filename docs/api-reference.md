@@ -461,6 +461,27 @@ Content-Type: application/json
 }
 ```
 
+### Probar servidores DNS
+```http
+POST /api/squid/dns/test
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "servers": "8.8.8.8, 1.1.1.1"
+}
+```
+
+Comprueba que los servidores DNS respondan de verdad **sin llegar a guardarlos ni aplicarlos** — permite verificar antes, en vez de descubrir que no responden recién cuando ya nadie puede navegar. Una lista vacía es válida: significa que Squid usará la resolución del sistema.
+
+**Respuesta:**
+```json
+{
+  "ok": true,
+  "message": "Los 2 servidores responden correctamente."
+}
+```
+
 ### Aplicar cambios a Squid
 ```http
 POST /api/squid/apply

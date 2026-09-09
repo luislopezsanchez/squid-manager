@@ -43,7 +43,15 @@ jobs:
           # pero Settings() exige la variable desde que se le quitó el
           # default con pinta de credencial real (ver backend/app/config.py).
           DATABASE_URL: postgresql+psycopg://test:test@localhost/test_no_se_usa
-        run: pytest tests/ -q
+        # "python -m pytest", no "pytest" a secas: el script de consola no
+        # agrega el directorio actual a sys.path, y como backend/tests/ no
+        # tiene __init__.py, pytest terminaba insertando "backend/tests" en
+        # sys.path en vez de "backend" -asi "import app" nunca resolvia-.
+        # Bug real: las 42 corridas de este workflow desde que existe
+        # fallaron por esto, sin ejecutar un solo test (auditoria
+        # 2026-09-09, hallazgo 13-001). "python -m pytest" si agrega el
+        # directorio actual, que es lo que hace que "import app" funcione.
+        run: python -m pytest tests/ -q
 
       - name: Auditoría de dependencias (informativo)
         working-directory: backend

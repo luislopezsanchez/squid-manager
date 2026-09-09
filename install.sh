@@ -185,6 +185,19 @@ if grep -qE '^PROJECT_DIR=' .env; then
 else
     printf '\n# Ruta absoluta del proyecto (la usa el backend para invocar Compose)\nPROJECT_DIR=%s\n' "$INSTALL_DIR" >> .env
 fi
+
+# El .env lleva SECRET_KEY (firma los JWT del panel) y DB_PASS en texto
+# plano. Sin esto quedaba con los permisos por defecto de la umask del
+# proceso -tipicamente 0644 con root-, legible por cualquier cuenta local
+# sin privilegios: con la SECRET_KEY, cualquiera puede fabricarse un token
+# de superadmin sin pasar por el login, y ni un cambio de contraseña del
+# admin ni el limite de intentos lo detectan. El instalador nativo
+# (install-nativo.sh) ya hacia esto desde el principio; era un olvido de
+# este, no una decision (auditoria 2026-09-09, hallazgo 05-001). Se aplica
+# siempre, tambien sobre un .env que ya existia de una instalacion previa
+# sin este chmod.
+chmod 600 .env
+ok "Permisos de .env restringidos (600)"
 ok "PROJECT_DIR apunta a $INSTALL_DIR"
 
 # ============================================

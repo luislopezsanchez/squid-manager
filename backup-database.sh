@@ -7,7 +7,7 @@
 # (solo Docker, sin rotación: los .sql se acumulaban para siempre) y en modo
 # nativo no había ninguno programado -solo el paso manual de
 # docs/actualizacion.md antes de actualizar-. Ninguno de los dos tenía
-# evidencia de haberse restaurado nunca (ver docs/audits, hallazgo 07-001).
+# evidencia de haberse restaurado nunca.
 #
 # Uso: correrlo a mano, o vía cron (ver docs/production.md, sección
 # "Backup automático"). Pensado para invocarse SIEMPRE desde el directorio

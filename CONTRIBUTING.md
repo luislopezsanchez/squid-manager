@@ -90,7 +90,12 @@ docker compose up -d frontend
 
 1. Crea un branch: `git checkout -b feature/mi-feature`
 2. Haz tus cambios
-3. Testea: `docker compose up -d` y prueba manualmente
+3. Testea:
+   - Backend: `cd backend && python -m pytest tests/ -q` (no hace falta base de
+     datos: `conftest.py` fija `DATABASE_URL` y los tests usan FakeDB/mocks).
+     Con `pytest` a secas, sin el `python -m`, falla al importar `app` — usa
+     siempre la forma de arriba.
+   - Prueba manual: `docker compose up -d` y probar en el navegador.
 4. Commit: `git commit -m "feat: descripción del cambio"`
 5. Push: `git push origin feature/mi-feature`
 6. Abre un Pull Request en GitHub

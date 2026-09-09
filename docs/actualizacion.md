@@ -335,6 +335,10 @@ nativo).
 cd /ruta/a/squid-manager && git log --oneline -10
 ```
 
+> Si la versión que buscas está etiquetada (`git tag --sort=-v:refname`),
+> usa la etiqueta como `<commit>` en vez de buscar el hash a mano —
+> `git checkout v0.23.2` en lugar de `git checkout dbb5694`.
+
 ```bash
 # Docker
 git checkout <commit> && docker compose up -d --build
@@ -402,3 +406,18 @@ Eso guarda toda la configuración. Los volúmenes de Squid (certificado CA,
 caché) no se incluyen; el certificado se puede descargar aparte desde el panel,
 en **Certificado CA**, y conviene tenerlo guardado porque si se pierde hay que
 reinstalarlo en todos los clientes.
+
+---
+
+## Para quien publica una versión nueva
+
+Las tres fuentes de versión (`backend/app/config.py`, `frontend/package.json`
+y `CHANGELOG.md`) tienen que moverse juntas, y el commit que las mueve se
+etiqueta en git — sin la etiqueta no hay forma de hacer `git diff
+v0.22.0..v0.23.0` para saber qué entró en una versión concreta, ni de volver a
+una versión publicada con un identificador estable (ver la sección de arriba).
+
+```bash
+git tag -a vX.Y.Z <commit-del-changelog> -m "SquidManager X.Y.Z - <resumen corto>"
+git push --tags
+```

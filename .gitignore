@@ -49,6 +49,16 @@ create_examples.py
 .env.bak*
 .env.*.bak
 
+# Volcados de base generados por backup-database.sh -escriben dentro de
+# backups/, que SI esta versionado (backups/README.md). Sin esto, un "git
+# add -A" en un servidor con backups acumulados subiria hashes bcrypt de
+# admins/usuarios, la bind_password de LDAP, tokens de Telegram, API keys
+# del asistente de IA y el keytab de Kerberos (auditoria 2026-09-09,
+# hallazgo 11-001).
+backups/*.sql
+backups/*.sql.gz
+backups/*.dump
+
 # Credenciales del proxy corporativo (install-tras-proxy.sh)
 proxy.conf
 
