@@ -1,6 +1,6 @@
 # API Reference — SquidManager
 
-La API tiene 18 routers y 96 endpoints.
+La API tiene 19 routers y 101 endpoints.
 
 ## Idioma de las respuestas
 
@@ -1285,3 +1285,80 @@ Cualquier admin puede preguntar, incluida una cuenta de solo lectura: es una con
 ```
 
 `fuentes` son los fragmentos de documentación que se usaron para armar la respuesta — sirve para verificar de dónde salió, no es una alucinación sin base.
+
+---
+
+## Actualizaciones
+
+Comprueba si hay una versión nueva de SquidManager en GitHub y permite aprobarla —de inmediato o programada— sin salir del panel. Solo instalación nativa. El panel nunca ejecuta la actualización en sí: solo puede aprobarla; quién la aplica de verdad y con qué permisos está explicado en [docs/actualizaciones-automaticas.md](actualizaciones-automaticas.md).
+
+### Ver el estado
+
+```http
+GET /api/update/estado
+Authorization: Bearer <token>
+```
+
+Cualquier admin puede consultarlo, incluida una cuenta de solo lectura.
+
+```json
+{
+  "es_nativo": true,
+  "version_actual": "0.23.0",
+  "check_enabled": true,
+  "check": {
+    "last_checked_at": "2026-09-09T12:00:00Z",
+    "local_commit": "abc1234",
+    "remote_commit": "def5678",
+    "update_available": true,
+    "commits": [{"sha": "def5678", "message": "fix: ..."}],
+    "last_check_error": null
+  },
+  "request": {"approved": false, "scheduled_at": null, "requested_by": null, "requested_at": null, "atrasada": false},
+  "apply": {"status": null, "started_at": null, "finished_at": null, "commit": null, "log_tail": null}
+}
+```
+
+`apply.status` es `null`, `"running"`, `"verificando"` (la unidad ya no está activa pero el temporizador todavía no confirmó el resultado), `"ok"` o `"error"`. `request.atrasada` en `true` significa que una aprobación lleva más de 3 minutos sin que el temporizador la haya tomado — señal de que algo no anda bien en el servidor.
+
+### Forzar una comprobación contra GitHub
+
+```http
+POST /api/update/comprobar
+Authorization: Bearer <token>
+```
+
+Solo superadmin. `400` si la instalación no es nativa.
+
+### Activar/desactivar la comprobación automática (cada 6 h)
+
+```http
+PUT /api/update/config
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"check_enabled": false}
+```
+
+Solo superadmin.
+
+### Aprobar una actualización
+
+```http
+POST /api/update/aprobar
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"scheduled_at": null}
+```
+
+Solo superadmin. `scheduled_at` en `null` (o ausente) equivale a "ahora": queda aprobada y además se dispara al instante el chequeo que la aplica, sin esperar al temporizador. Con una fecha/hora futura (ISO 8601), queda programada — se rechaza con `400` si esa fecha ya pasó (con 30 s de margen, para no rechazar la propia opción "ahora" por la latencia normal de la petición). `400` también si ya hay una actualización en curso.
+
+### Cancelar una aprobación pendiente
+
+```http
+POST /api/update/cancelar
+Authorization: Bearer <token>
+```
+
+Solo superadmin. `400` si la actualización ya está en curso (ya no se puede cancelar).

@@ -5,6 +5,27 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.23.0] - 2026-09-09
+
+### Agregado
+
+- **Actualizaciones desde el propio panel** (instalación nativa): comprueba contra la API pública de
+  GitHub si hay una versión nueva, muestra los commits de diferencia, y permite aprobarla —de
+  inmediato o programada para una fecha y hora— sin entrar por SSH. El panel web **nunca** ejecuta la
+  actualización en sí ni gana ningún permiso nuevo: solo puede aprobarla (escribir un archivo de
+  estado, mismo nivel de privilegio que guardar cualquier otro ajuste). Un temporizador de systemd que
+  ya corría como root, con exactamente una línea nueva y fija de `sudoers` (sin argumentos variables),
+  es quien decide si corresponde actuar y aplica el mismo `upgrade-nativo.sh` que ya se usaba a mano,
+  en una unidad aparte para sobrevivir al propio reinicio del panel. Revisa cada minuto; aprobar
+  "ahora" adelanta ese chequeo en vez de esperar. Avisa con un botón de recargar, en cualquier página,
+  en cuanto el commit servido cambia. Ver `docs/actualizaciones-automaticas.md`.
+
+### Corregido
+
+- El botón "Aplicar ahora" del aviso del Dashboard no mostraba el motivo cuando Squid rechazaba la
+  configuración (DNS que no responde, etc.) — reintentaba en silencio en vez de explicar por qué,
+  a diferencia del botón de la barra lateral, que sí lo hacía.
+
 ## [0.22.0] - 2026-09-08
 
 ### Agregado

@@ -673,7 +673,7 @@ publicado — es el que responde en el puerto del panel.
 | GET | `/api/logs/access` | Consultar el access.log |
 | GET | `/api/audit/` | Listar log de auditoría |
 
-Son 18 routers con 96 endpoints en total. Para la documentación completa, ver [docs/api-reference.md](docs/api-reference.md).
+Son 19 routers con 101 endpoints en total. Para la documentación completa, ver [docs/api-reference.md](docs/api-reference.md).
 
 ---
 
@@ -741,7 +741,7 @@ squid-manager/
 │   ├── instalacion-tras-proxy.md  # Instalar detrás de un proxy corporativo
 │   ├── idiomas.md              # Arquitectura de traducciones del proyecto
 │   ├── production.md           # Guía de despliegue en producción
-│   ├── api-reference.md        # Documentación de la API (18 routers, 96 endpoints)
+│   ├── api-reference.md        # Documentación de la API (19 routers, 101 endpoints)
 │   └── project-log.md          # Bitácora del proyecto
 │
 └── examples/                   # Ejemplos y configs
