@@ -88,6 +88,15 @@ services:
       dockerfile: Dockerfile
     container_name: squidmgr-backend
     restart: unless-stopped
+    # Limite conservador: una reindexacion del asistente de IA (llamadas a
+    # Jina por cada fragmento de la documentacion) es lo mas pesado que corre
+    # aca. Sin limite, un pico se lleva la RAM del host y arrastra a
+    # PostgreSQL con el; con el limite, el OOM killer se lleva SOLO este
+    # contenedor (auditoria 2026-09-09, hallazgo 12-001). Ver
+    # docs/production.md para el hardware minimo recomendado; si el panel
+    # empieza a reiniciarse solo bajo carga real, subir este valor antes que
+    # quitarlo.
+    mem_limit: 512m
     depends_on:
       db:
         condition: service_healthy
@@ -125,6 +134,19 @@ services:
       # graba su directorio de trabajo en las etiquetas del contenedor: si el
       # backend lo viera en otra ruta, cada `docker compose up -d` lanzado a
       # mano detectaría una diferencia y recrearía Squid sin necesidad.
+      #
+      # Riesgo aceptado (auditoría 2026-09-09, hallazgo 11-002): este
+      # volumen incluye el .env con SECRET_KEY y DB_PASS, montado con
+      # permiso de escritura -cualquier ejecución de código en el backend
+      # puede leerlo entero, lo que reduce el valor de correr como usuario
+      # sin privilegios frente a este vector concreto. Decisión deliberada:
+      # el backend necesita ejecutar `docker compose up -d squid` con el
+      # mismo working_dir que grabó Compose y mantener PROXY_PORT
+      # sincronizado. Cerrarlo del todo exige el "demonio aparte con API
+      # mínima" que ya se menciona como mejora futura más abajo (mismo
+      # rediseño que resolvería el límite que queda con el socket-proxy) —
+      # ahí, montar solo docker-compose.yml y .env en :ro en vez del árbol
+      # entero.
       - ${PROJECT_DIR:-/opt/squid-manager}:${PROJECT_DIR:-/opt/squid-manager}
     # El puerto 8000 NO se publica: el frontend habla con el backend por la red
     # interna. Exponerlo dejaba la API accesible sin pasar por nginx.
@@ -148,6 +170,13 @@ services:
       dockerfile: Dockerfile
     container_name: squidmgr-proxy
     restart: unless-stopped
+    # Limite conservador: un cache_mem mal puesto desde el panel puede pedir
+    # mucha mas RAM de la que el host tiene (auditoria 2026-09-09, hallazgo
+    # 12-001). Ver docs/production.md; si el proxy se reinicia solo con
+    # trafico real, subir este valor antes que quitarlo -y revisar
+    # cache_mem/cache_dir en Configuracion primero, que es la causa mas
+    # probable.
+    mem_limit: 1g
     depends_on:
       backend:
         condition: service_started
