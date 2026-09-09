@@ -52,7 +52,16 @@ if [ -f "$_ENV_PREVIO" ]; then
     for _VAR in SECRET_KEY DATA_KEY WEB_PORT CORS_ORIGINS TRUSTED_PROXY_HOSTS DEBUG BCRYPT_COST ACCESS_TOKEN_EXPIRE_MINUTES; do
         if [ -z "${!_VAR:-}" ]; then
             _VALOR="$(grep -m1 "^${_VAR}=" "$_ENV_PREVIO" 2>/dev/null | cut -d= -f2-)"
-            [ -n "$_VALOR" ] && export "$_VAR=$_VALOR"
+            # "|| true" al final: con `set -e` activo, si $_VALOR esta vacio
+            # (variable ausente del .env previo -exactamente lo que pasa con
+            # DATA_KEY en cualquier instalacion de antes de que existiera esa
+            # variable) el "[ -n ... ] && export ..." completo devuelve
+            # fallo, y sin este "|| true" abortaba el script entero ANTES de
+            # imprimir un solo mensaje. Bug real, encontrado corriendo el
+            # upgrade de verdad sobre una instalacion existente sin DATA_KEY
+            # (172.30.36.63, 2026-09-09): el script moria en silencio, sin
+            # ningun error visible, justo despues del backup.
+            [ -n "$_VALOR" ] && export "$_VAR=$_VALOR" || true
         fi
     done
     # DB_PASS no se guarda como linea propia: vive embebida en DATABASE_URL
@@ -62,7 +71,10 @@ if [ -f "$_ENV_PREVIO" ]; then
     # valor nuevo), es churn de un secreto sin motivo real.
     if [ -z "${DB_PASS:-}" ]; then
         _DB_PASS_PREVIA="$(grep -m1 '^DATABASE_URL=' "$_ENV_PREVIO" 2>/dev/null | sed -E 's#.*://[^:]+:([^@]+)@.*#\1#')"
-        [ -n "$_DB_PASS_PREVIA" ] && export "DB_PASS=$_DB_PASS_PREVIA"
+        # Mismo motivo del "|| true" de arriba: sin esto, un .env previo sin
+        # DATABASE_URL (no debería pasar, pero defensivo es gratis) abortaria
+        # el script entero en silencio en vez de seguir y generar una nueva.
+        [ -n "$_DB_PASS_PREVIA" ] && export "DB_PASS=$_DB_PASS_PREVIA" || true
     fi
 fi
 
