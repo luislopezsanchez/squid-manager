@@ -11,6 +11,8 @@ quedaría a cero. Un panel a cero con el proxy funcionando ya nos costó una
 avería silenciosa una vez.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.services import metrics_service
@@ -138,3 +140,69 @@ def test_las_metricas_entienden_el_formato_nativo(monkeypatch):
     assert datos["mem_limit"] == 0
     assert datos["host_mem"] == 4028432 * 1024
     assert datos["cpu_usec"] == 12345678
+
+
+# ---------------------------------------------------------------------------
+# Cache Manager de Squid (mgr:info, mgr:storedir)
+# ---------------------------------------------------------------------------
+def test_docker_pide_el_reporte_dentro_del_contenedor_no_por_red(monkeypatch):
+    """La IP de origen de una peticion desde OTRO contenedor no matchea el
+
+    ACL "localhost" del squid.conf generado -por eso se ejecuta wget DENTRO
+    del propio contenedor de Squid (loopback interno), no una peticion HTTP
+    desde el backend. El puerto que se le pasa (el publicado, elegido por
+    el admin) se ignora a proposito: adentro del contenedor Squid siempre
+    escucha en INTERNAL_SQUID_PORT."""
+    runtime = DockerRuntime()
+    contenedor_falso = MagicMock()
+    contenedor_falso.status = "running"
+    contenedor_falso.exec_run.return_value = MagicMock(exit_code=0, output=b"Squid Object Cache: Version 6.14\n")
+    monkeypatch.setattr(runtime, "_container", lambda: (contenedor_falso, ""))
+
+    ok, salida = runtime.cache_manager_report("info", port="9999")
+
+    assert ok
+    assert "6.14" in salida
+    comando = contenedor_falso.exec_run.call_args[0][0]
+    assert f"127.0.0.1:{INTERNAL_SQUID_PORT}" in comando[-1]
+    assert "9999" not in " ".join(comando)  # el puerto publicado NO se usa
+
+
+def test_docker_container_parado_no_intenta_exec(monkeypatch):
+    runtime = DockerRuntime()
+    contenedor_falso = MagicMock()
+    contenedor_falso.status = "exited"
+    monkeypatch.setattr(runtime, "_container", lambda: (contenedor_falso, ""))
+
+    ok, mensaje = runtime.cache_manager_report("info", port="3128")
+
+    assert not ok
+    assert "en ejecucion" in mensaje
+    contenedor_falso.exec_run.assert_not_called()
+
+
+def test_nativo_pide_el_reporte_por_http_directo(monkeypatch):
+    """Backend y Squid comparten host: no hace falta nada especial."""
+    class RespuestaFalsa:
+        text = "Squid Object Cache: Version 6.14\n"
+
+        def raise_for_status(self):
+            pass
+
+    llamadas = {}
+
+    def get_falso(url, headers=None, timeout=None):
+        llamadas["url"] = url
+        llamadas["headers"] = headers
+        return RespuestaFalsa()
+
+    import app.services.runtime.native_runtime as native_runtime_mod
+    monkeypatch.setattr(native_runtime_mod.httpx, "get", get_falso)
+
+    runtime = NativeRuntime()
+    ok, salida = runtime.cache_manager_report("storedir", port="3128")
+
+    assert ok
+    assert "6.14" in salida
+    assert llamadas["url"] == "http://127.0.0.1:3128/squid-internal-mgr/storedir"
+    assert llamadas["headers"] == {"Host": "localhost"}

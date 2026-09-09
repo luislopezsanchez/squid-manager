@@ -1,6 +1,6 @@
 # API Reference — SquidManager
 
-La API tiene 19 routers y 101 endpoints.
+La API tiene 20 routers y 102 endpoints.
 
 ## Idioma de las respuestas
 
@@ -1389,3 +1389,53 @@ Authorization: Bearer <token>
 ```
 
 Solo superadmin. `400` si la actualización ya está en curso (ya no se puede cancelar).
+
+## Estadísticas de caché
+
+### Ver estadísticas
+
+```http
+GET /api/cache-manager/stats
+Authorization: Bearer <token>
+```
+
+Cualquier admin (es de solo lectura). Lee y parsea el Cache Manager de Squid
+(`mgr:info` + `mgr:storedir`) — nunca un reporte arbitrario: solo estos dos,
+fijos en el backend. En modo Docker la consulta se hace dentro del propio
+contenedor de Squid (no por red desde el backend), para no tener que abrir el
+Cache Manager a la red interna de Docker.
+
+**Respuesta:**
+```json
+{
+  "info": {
+    "version": "6.14",
+    "uptime_segundos": 5258.8,
+    "hits_peticiones_5min": 0.0,
+    "hits_peticiones_60min": 0.0,
+    "hits_bytes_5min": 100.0,
+    "hits_bytes_60min": 100.0,
+    "hits_memoria_5min": 0.0,
+    "hits_memoria_60min": 0.0,
+    "hits_disco_5min": 0.0,
+    "hits_disco_60min": 0.0,
+    "swap_size_kb": 8.0,
+    "swap_capacidad_pct": 0.0,
+    "mem_size_kb": 216.0,
+    "objeto_medio_kb": 4.0,
+    "ratio_fallos": 0.0,
+    "clientes_activos": 1,
+    "peticiones_recibidas": 4
+  },
+  "storedir": {
+    "entradas": 55,
+    "tamano_maximo_kb": 2097152.0,
+    "tamano_actual_kb": 8.0,
+    "capacidad_pct": 0.0
+  },
+  "errores": []
+}
+```
+
+Si Squid no responde, `info` o `storedir` quedan en `null` y el motivo aparece
+en `errores` — el que sí respondió no se pierde por el que falló.

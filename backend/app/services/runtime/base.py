@@ -85,6 +85,20 @@ class ProxyRuntime:
         """
         return True, "sin estado externo que sincronizar"
 
+    def cache_manager_report(self, report: str, port: str) -> tuple[bool, str]:
+        """Reporte del Cache Manager de Squid ('info', 'storedir', ...), en crudo.
+
+        Squid lo expone por HTTP normal en su propio puerto de proxy
+        (/squid-internal-mgr/<report>), protegido en el squid.conf generado
+        con "http_access allow localhost manager" -en modo nativo eso alcanza
+        sin tocar nada, porque el backend corre en el mismo host. En modo
+        Docker NO alcanza: el backend esta en otro contenedor, y su IP de
+        origen no matchea el ACL "localhost" de Squid -ensanchar esa regla a
+        la red interna de Docker seria abrir un permiso nuevo, justo lo que
+        se evito a proposito, ver DockerRuntime.cache_manager_report.
+        """
+        raise NotImplementedError
+
     def listen_port(self, desired_port: str) -> str:
         """Puerto que hay que escribir en la directiva `http_port`.
 

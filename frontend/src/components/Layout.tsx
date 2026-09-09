@@ -164,8 +164,9 @@ export default function Layout() {
       id: 'reportes',
       titulo: traducir("Reportes y estadísticas"),
       items: [
-        // Top 20 con graficos, estadisticas de cache (Cache Manager de
-        // Squid) y cuotas por usuario/grupo se suman aca cuando existan.
+        { to: '/reportes/cache', label: traducir("Estadísticas de caché"), Icon: IconArchive },
+        // Top 20 con graficos y cuotas por usuario/grupo se suman aca
+        // cuando existan.
       ],
     },
     {

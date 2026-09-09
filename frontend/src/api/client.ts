@@ -211,6 +211,9 @@ export const api = {
   updateCheckConfig: (check_enabled: boolean) =>
     request<any>('/update/config', { method: 'PUT', body: JSON.stringify({ check_enabled }) }),
 
+  // Estadisticas de cache (Cache Manager de Squid: mgr:info + mgr:storedir).
+  getCacheStats: () => request<any>('/cache-manager/stats'),
+
   // Syslog externo (opcional, apagado por defecto)
   getSyslogConfig: () => request<any>('/syslog/config'),
   updateSyslogConfig: (data: any) => request<any>('/syslog/config', { method: 'PUT', body: JSON.stringify(data) }),

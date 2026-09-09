@@ -23,6 +23,7 @@ import ParentProxy from './pages/ParentProxy'
 import Groups from './pages/Groups'
 import Asistente from './pages/Asistente'
 import Actualizaciones from './pages/Actualizaciones'
+import CacheStats from './pages/CacheStats'
 import ChangePassword from './pages/ChangePassword'
 import Layout from './components/Layout'
 import { getToken, isSuperadmin } from './api/client'
@@ -70,6 +71,7 @@ function App() {
           <Route path="groups" element={<Groups />} />
           <Route path="admins" element={isSuperadmin() ? <Admins /> : <Navigate to="/" />} />
           <Route path="actualizaciones" element={<Actualizaciones />} />
+          <Route path="reportes/cache" element={<CacheStats />} />
         </Route>
       </Routes>
     </BrowserRouter>

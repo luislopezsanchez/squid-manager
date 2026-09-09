@@ -266,6 +266,30 @@ class DockerRuntime(ProxyRuntime):
             "utf-8", errors="replace"
         )
 
+    def cache_manager_report(self, report: str, port: str) -> tuple[bool, str]:
+        # "port" (el que el ADMIN eligio en el panel) se ignora a proposito:
+        # es el puerto PUBLICADO hacia fuera, no el que Squid escucha DENTRO
+        # del contenedor -ver INTERNAL_SQUID_PORT, mismo criterio que
+        # listen_port(). La peticion se hace con wget DENTRO del propio
+        # contenedor de Squid (loopback interno, ya en la imagen) en vez de
+        # por la red desde el backend: la IP de origen de una peticion desde
+        # otro contenedor no matchea el ACL "localhost" del squid.conf
+        # generado, y ensanchar ese ACL a la red interna de Docker seria
+        # abrir un permiso nuevo -se evito a proposito.
+        container, err = self._container()
+        if not container:
+            return False, err
+        if container.status != "running":
+            return False, "El contenedor de Squid no esta en ejecucion"
+        resultado = container.exec_run([
+            "wget", "-qO-", "--timeout=10",
+            f"http://127.0.0.1:{INTERNAL_SQUID_PORT}/squid-internal-mgr/{report}",
+        ])
+        salida = resultado.output.decode("utf-8", errors="replace") if resultado.output else ""
+        if resultado.exit_code != 0:
+            return False, f"wget dentro del contenedor de Squid fallo: {salida or resultado.exit_code}"
+        return True, salida
+
     def verify_port(self, expected_port: str) -> tuple[bool, str]:
         """Comprueba que Docker publica de verdad el puerto que Squid escucha."""
         container, err = self._container()

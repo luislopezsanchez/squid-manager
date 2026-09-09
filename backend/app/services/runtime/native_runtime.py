@@ -24,6 +24,8 @@ import shutil
 import subprocess
 import time
 
+import httpx
+
 from app.config import settings
 
 from .base import ProxyRuntime
@@ -191,6 +193,20 @@ class NativeRuntime(ProxyRuntime):
         # El puerto solo vive en el squid.conf, que se acaba de escribir: no
         # hay una segunda copia que pueda quedar desincronizada.
         return True, "el puerto vive solo en el squid.conf"
+
+    def cache_manager_report(self, report: str, port: str) -> tuple[bool, str]:
+        # Backend y Squid comparten host: el ACL "localhost" del squid.conf
+        # generado ya lo permite tal cual, sin tocar nada.
+        try:
+            r = httpx.get(
+                f"http://127.0.0.1:{port}/squid-internal-mgr/{report}",
+                headers={"Host": "localhost"},
+                timeout=10,
+            )
+            r.raise_for_status()
+            return True, r.text
+        except httpx.HTTPError as e:
+            return False, f"No se pudo consultar el Cache Manager de Squid: {e}"
 
     def reconfigure(self) -> tuple[bool, str]:
         if not self.squid:
