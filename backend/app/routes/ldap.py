@@ -2,7 +2,7 @@
 
 import subprocess
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pydantic import BaseModel
@@ -275,11 +275,23 @@ def _sync_ldap_files(db: Session):
 
 @router.get("/users", response_model=list[LdapUserResponse])
 async def list_ldap_users(
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """Lista los usuarios LDAP sincronizados (allow-list)."""
-    return db.query(LdapUser).order_by(LdapUser.username).all()
+    """Lista los usuarios LDAP sincronizados (allow-list), paginados.
+
+    POST /sync (que puebla esta tabla) se describe como "sincronizacion
+    paginada" contra el AD: en un directorio corporativo mediano son miles
+    de entradas. limit por defecto en 1000 -generoso, para no romper a los
+    consumidores actuales- pero ya no "todos sin tope" (auditoria
+    2026-09-09, hallazgo 09-001).
+    """
+    return (
+        db.query(LdapUser).order_by(LdapUser.username)
+        .offset(offset).limit(limit).all()
+    )
 
 
 @router.post("/sync")

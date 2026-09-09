@@ -1,6 +1,6 @@
 """Rutas de gestión de ACLs."""
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -44,11 +44,21 @@ async def _leer_archivo_subido(file: UploadFile) -> bytes:
 
 @router.get("/", response_model=list[AclResponse])
 async def list_acls(
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """Lista todas las ACLs."""
-    return db.query(Acl).order_by(Acl.name).all()
+    """Lista las ACLs, paginadas.
+
+    limit por defecto en 1000 -generoso, para no romper a los consumidores
+    actuales de la API que no mandan estos parametros- (auditoria
+    2026-09-09, hallazgo 09-001).
+    """
+    return (
+        db.query(Acl).order_by(Acl.name)
+        .offset(offset).limit(limit).all()
+    )
 
 
 @router.get("/unused", response_model=list[str])

@@ -94,9 +94,11 @@ Authorization: Bearer <token>
 
 ### Listar usuarios
 ```http
-GET /api/proxy-users/
+GET /api/proxy-users/?limit=1000&offset=0
 Authorization: Bearer <token>
 ```
+
+`limit` (1-5000, por defecto 1000) y `offset` (por defecto 0) son opcionales.
 
 **Respuesta:**
 ```json
@@ -251,9 +253,11 @@ Aplica la configuración y purga la caché de credenciales, ya que quitar a algu
 
 ### Listar ACLs
 ```http
-GET /api/acls/
+GET /api/acls/?limit=1000&offset=0
 Authorization: Bearer <token>
 ```
+
+`limit` (1-5000, por defecto 1000) y `offset` (por defecto 0) son opcionales.
 
 ### ACLs sin usar
 ```http
@@ -633,9 +637,11 @@ Importa usuarios del directorio (búsqueda paginada, 500 por página) filtrando 
 
 ### Listar usuarios LDAP sincronizados
 ```http
-GET /api/ldap/users
+GET /api/ldap/users?limit=1000&offset=0
 Authorization: Bearer <token>
 ```
+
+`limit` (1-5000, por defecto 1000) y `offset` (por defecto 0) son opcionales.
 
 ### Habilitar/deshabilitar un usuario LDAP
 ```http
