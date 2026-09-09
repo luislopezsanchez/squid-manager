@@ -297,7 +297,7 @@ export default function Layout() {
         <nav className="relative flex-1 px-3 pb-3">
           {/* Asistente: fijo, fuera de los grupos colapsables -uso frecuente,
               no encaja en ningun grupo de tarea. */}
-          <NavLink to={asistente.to} className={navClass + ' mb-2'}>
+          <NavLink to={asistente.to} className={(p) => `${navClass(p)} mb-2`}>
             {({ isActive }) => (
               <>
                 <asistente.Icon className={`w-[18px] h-[18px] flex-none ${isActive ? 'text-brand-300' : 'opacity-85'}`} />
