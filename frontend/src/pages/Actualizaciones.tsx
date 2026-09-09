@@ -24,30 +24,66 @@ export default function Actualizaciones() {
   const [comprobando, setComprobando] = useState(false)
   const [aprobando, setAprobando] = useState(false)
   const [fechaProgramada, setFechaProgramada] = useState('')
+  const [actualizacionLista, setActualizacionLista] = useState(false)
   const { showToast, ToastContainer } = useToast()
   const puedeEscribir = isSuperadmin()
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Commit que estaba instalado la primera vez que esta pestaña vio un ciclo
+  // de actualización activo -se fija una sola vez, con useState (no una
+  // ref) justamente para que comparar contra él en el efecto de abajo
+  // dispare un re-render de forma normal y predecible, sin depender de
+  // ningún supuesto sobre el orden de ejecución dentro de un setInterval-.
+  // Más confiable que fiarse de apply.status: ese archivo de estado puede
+  // perderse a mitad de camino (visto en vivo: el propio upgrade hace un
+  // git clean antes de que la protección nueva del .gitignore llegue a
+  // estar en el checkout), pero el commit que /health reporta no miente.
+  const [commitVigilado, setCommitVigilado] = useState<string | null>(null)
 
   const cargar = () => api.getUpdateStatus().then(setEstado).catch(() => showToast(traducir("Error al cargar el estado de actualizaciones"), 'error'))
+
+  // Sondeo silencioso: no muestra error si el backend no responde -es
+  // exactamente lo esperable mientras el servicio se está reiniciando a
+  // mitad de una actualización real-.
+  const cargarSilencioso = () => api.getUpdateStatus().then(setEstado).catch(() => {})
 
   useEffect(() => {
     cargar().finally(() => setLoading(false))
   }, [])
 
-  // Mientras haya una actualización en curso, se sondea seguido para que la
-  // pantalla se actualice sola sin que haya que recargar a mano.
+  const enCurso = estado?.apply?.status === 'running' || estado?.apply?.status === 'verificando'
+  const yaVencida = !!(estado?.request?.approved && estado?.request?.scheduled_at
+    && new Date(estado.request.scheduled_at).getTime() <= Date.now())
+  const vigilando = enCurso || yaVencida
+
+  // Efecto 1: mientras haya un ciclo activo, recordar contra qué commit
+  // comparar (una sola vez) y sondear seguido para refrescar `estado`.
   useEffect(() => {
-    const enCurso = estado?.apply?.status === 'running' || estado?.apply?.status === 'verificando'
-    if (enCurso && !pollRef.current) {
-      pollRef.current = setInterval(cargar, 5000)
-    } else if (!enCurso && pollRef.current) {
+    if (vigilando && commitVigilado === null && estado?.check?.local_commit) {
+      setCommitVigilado(estado.check.local_commit)
+    }
+    if (vigilando && !pollRef.current) {
+      pollRef.current = setInterval(cargarSilencioso, 4000)
+    } else if (!vigilando && pollRef.current) {
       clearInterval(pollRef.current)
       pollRef.current = null
     }
     return () => {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }
-  }, [estado?.apply?.status])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vigilando])
+
+  // Efecto 2: separado a propósito -reacciona a CUALQUIER cambio de
+  // `estado.check.local_commit` contra lo que se venía vigilando, sin
+  // importar si vino de este sondeo, de "Comprobar ahora" o de otra
+  // pestaña-. Nada de lógica de timing manual: es una comparación de
+  // valores en cada render, la forma más simple de que no falle.
+  useEffect(() => {
+    if (commitVigilado && estado?.check?.local_commit && estado.check.local_commit !== commitVigilado) {
+      setActualizacionLista(true)
+      setCommitVigilado(null)
+    }
+  }, [estado?.check?.local_commit, commitVigilado])
 
   const handleComprobar = async () => {
     setComprobando(true)
@@ -76,6 +112,11 @@ export default function Actualizaciones() {
         setAprobando(false)
         return
       }
+      // Se recuerda ACÁ, no solo en el efecto de sondeo: si el ciclo se
+      // dispara "para ahora", el archivo de estado puede pasar de
+      // aprobada -> en curso -> listo entre dos renders sin que el efecto
+      // llegue a ver el estado intermedio.
+      if (!commitVigilado) setCommitVigilado(estado?.check?.local_commit ?? null)
       const r = await api.approveUpdate(iso)
       setEstado((prev: any) => ({ ...prev, ...r }))
       showToast(
@@ -115,7 +156,6 @@ export default function Actualizaciones() {
 
   const { check, request, apply } = estado
   const hayPendiente = request?.approved
-  const enCurso = apply?.status === 'running' || apply?.status === 'verificando'
 
   return (
     <div className="p-6 md:p-7">
@@ -124,6 +164,25 @@ export default function Actualizaciones() {
       <p className="text-sm text-ink-3 mb-6">
         {traducir("Comprueba si hay una versión nueva de SquidManager publicada en GitHub y permite aprobarla — para aplicar de inmediato o programada — sin salir del panel.")}
       </p>
+
+      {actualizacionLista && (
+        <div className="card p-4 mb-6 flex items-center gap-3 border" style={{ borderColor: 'var(--ok)', background: 'var(--ok-soft)' }}>
+          <span className="stat-icon stat-icon-ok flex-none"><IconBell /></span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--ok)' }}>{traducir("Actualización aplicada")}</p>
+            <p className="text-xs text-ink-2">
+              {traducir("El servidor ya está corriendo la versión nueva, pero esta pestaña sigue mostrando la anterior. Recargá para ver los cambios.")}
+            </p>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="flex-none px-4 py-2 rounded-lg text-sm font-bold text-white transition"
+            style={{ background: 'var(--ok)' }}
+          >
+            {traducir("Recargar página")}
+          </button>
+        </div>
+      )}
 
       {!estado.es_nativo && (
         <div className="card p-4 mb-6 note-warn">
