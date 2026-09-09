@@ -124,6 +124,18 @@ PAQUETES=(
     # siquiera tiene sentido en esta instalacion ("reconstruye la imagen").
     apache2-utils
     openssl ca-certificates logrotate cron git curl
+    # sudo: lo usa el propio script mas abajo (crear la base como el usuario
+    # postgres, "visudo -cf" al final) y, en tiempo de ejecucion, el backend
+    # (squidmgr necesita "sudo -n" para las 4 acciones con privilegio -ver
+    # runtime/native_runtime.py-). Las imagenes de Ubuntu Server lo traen de
+    # fabrica, pero un Debian minimo/netinstall NO -bug real, encontrado
+    # instalando en un Debian 12 limpio (172.30.36.88, 2026-09-09): el script
+    # fallaba en "sudo: command not found" en el primer uso, mucho antes de
+    # llegar a la parte que de verdad necesita privilegios-.
+    sudo
+    # gnupg: hace falta para importar la clave del repositorio PGDG mas abajo
+    # (gpg --dearmor), solo relevante en Debian pero barato de tener siempre.
+    gnupg
 )
 info "Paquetes: ${PAQUETES[*]}"
 apt-get install -y -qq "${PAQUETES[@]}" >/dev/null || fail "No se pudieron instalar los paquetes."
@@ -148,7 +160,6 @@ PG_MAJOR="$(sudo -u postgres psql -tAc 'SHOW server_version;' | cut -d. -f1 | tr
 # 24.04), asi que ahi no se toca ningun apt source.
 if [ "${ID:-}" = "debian" ] && [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
     info "Debian no trae pgvector en sus propios repos; agregando el repositorio oficial de PostgreSQL (PGDG) solo para ese paquete."
-    apt-get install -y -qq curl gnupg >/dev/null 2>&1 || true
     install -d /usr/share/keyrings
     curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
