@@ -5,6 +5,23 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.23.1] - 2026-09-09
+
+### Corregido
+
+- **Reindexación de la documentación del Asistente de IA**: se perdía todo el progreso si el
+  corpus tardaba más que el `proxy_read_timeout` de nginx (120s) en indexarse por completo, porque
+  todo se guardaba en una única transacción al final. Ahora cada archivo se confirma en la base por
+  separado, y el timeout de nginx sube a 300s. También se agregó un candado para que dos
+  reindexaciones simultáneas (dos pestañas, dos administradores) no se pisen entre sí.
+- **Pregunta en vivo del Asistente de IA sin aviso claro cuando el proveedor falla**: si el
+  proveedor devolvía un error transitorio (429 por límite de cuota agotado, 503 por alta demanda),
+  el sistema reintentaba hasta 3 veces con esperas de hasta 60s cada una —hasta 3 minutos de espera
+  silenciosa antes de mostrar cualquier mensaje—. La reindexación de fondo mantiene esos reintentos
+  (tiene sentido insistir sin nadie mirando la pantalla), pero una pregunta en vivo ahora reintenta
+  una sola vez y avisa enseguida, con un mensaje que indica el motivo real (cuota agotada o
+  proveedor saturado) en vez del texto crudo del proveedor.
+
 ## [0.23.0] - 2026-09-09
 
 ### Agregado

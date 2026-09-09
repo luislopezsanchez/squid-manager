@@ -601,7 +601,14 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 120s;
+        # 300s, no 120s: reindexar la documentacion del Asistente de IA hace
+        # una llamada real a Jina por fragmento (~200 con el corpus actual),
+        # y con el limite de velocidad de Jina (100/min) mas los reintentos
+        # ante un 429/503 puede superar los 120s. Con el timeout corto, nginx
+        # cortaba la conexion a mitad de camino sin ningun error visible -la
+        # peticion del navegador simplemente se interrumpia- mientras el
+        # backend seguia trabajando de fondo. Visto en vivo, 172.30.36.33.
+        proxy_read_timeout 300s;
     }
 
     location /assets/ {
