@@ -12,6 +12,15 @@ pydantic-settings==2.5.2
 # pyasn1 ni ecdsa para HS256 (el unico algoritmo que usa este proyecto),
 # asi que los saca del arbol de dependencias por completo.
 PyJWT==2.13.0
+# La usa directamente app/crypto_service.py (Fernet, cifrado en reposo de
+# las credenciales de terceros). Antes llegaba sin pin propio, arrastrada
+# como transitiva de "python-jose[cryptography]"; al migrar a PyJWT (que
+# no la necesita para HS256) dejo de instalarse sola, y sin esta linea
+# "import cryptography.fernet" fallaba con ModuleNotFoundError en un venv
+# limpio -no se noto en las VMs de prueba porque ya la tenian instalada
+# como residuo de antes de la migracion, y solo salio a la luz en el CI,
+# que si arranca de un venv realmente limpio.
+cryptography==50.0.1
 bcrypt==4.2.1  # se usa directamente: passlib 1.7.4 no soporta bcrypt >= 4.1
 jinja2==3.1.6
 python-multipart==0.0.31
