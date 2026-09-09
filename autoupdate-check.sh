@@ -114,7 +114,14 @@ if [ "$ESTADO_APPLY" = "running" ]; then
     fi
 
     CODIGO="$(systemctl show "$UNIDAD" -p ExecMainStatus --value 2>/dev/null || echo 1)"
-    COLA="$(journalctl -u "$UNIDAD" --no-pager -n 40 -o cat 2>/dev/null | tail -c 4000 | sed "s/'/ /g")"
+    # journalctl a veces mete una linea de ruido propia ("Failed to open
+    # /run/systemd/transient/....service: No such file or directory") si la
+    # unidad transient (--collect) ya se autolimpio para el momento en que
+    # esto corre -no es parte del log real de la actualizacion, es un aviso
+    # de journalctl sobre si misma-. Se descarta explicitamente.
+    COLA="$(journalctl -u "$UNIDAD" --no-pager -n 40 -o cat 2>/dev/null \
+        | grep -v 'Failed to open /run/systemd/transient' \
+        | tail -c 4000 | sed "s/'/ /g")"
     COMMIT_FINAL="$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo "")"
 
     if [ "$CODIGO" = "0" ]; then
