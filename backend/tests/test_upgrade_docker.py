@@ -118,3 +118,19 @@ def test_declara_el_directorio_como_safe_antes_de_cualquier_git():
     assert pos_safe < pos_primer_git
     # idempotente: solo agrega si no estaba
     assert "--get-all safe.directory" in contenido
+
+
+def test_aborta_si_no_es_una_instalacion_docker_antes_de_tocar_nada():
+    """El path /opt/squid-manager es el default de los dos modos: correr el
+    script equivocado es un error facil. Sin este chequeo, hacia el backup y
+    el `git reset --hard` -mutando el checkout- y recien moria en el paso 3
+    con "docker: command not found". La comprobacion (DEPLOY_MODE=native o
+    'docker' ausente) tiene que estar ANTES del backup y del git."""
+    contenido = _script()
+    assert 'DEPLOY_MODE' in contenido and 'native' in contenido
+    assert "command -v docker" in contenido
+    pos_check = contenido.index("command -v docker")
+    pos_backup = contenido.index("=== 1. Backup")
+    pos_git = contenido.index("git reset --hard --quiet")
+    assert pos_check < pos_backup < pos_git
+    assert "upgrade-nativo.sh" in contenido

@@ -63,6 +63,18 @@ BRANCH="${BRANCH:-main}"
 [ -d "$INSTALL_DIR/.git" ] || fail "No hay una instalacion de SquidManager en $INSTALL_DIR (o no es un checkout git). Corre este script desde el directorio donde esta instalado SquidManager, o pasa la ruta con INSTALL_DIR=/tu/ruta. Para instalar desde cero usa install-nativo.sh, no este script."
 [ -x "$INSTALL_DIR/install-nativo.sh" ] || fail "$INSTALL_DIR/install-nativo.sh no existe o no es ejecutable; no se puede completar la actualizacion."
 
+# Comprobacion de modo ANTES de tocar nada (backup, git reset): el path
+# /opt/squid-manager es el default de LOS DOS modos, asi que correr el que
+# no toca es un error facil. Simetrico a la comprobacion de upgrade-docker.sh.
+_MODO="$(sed -n 's/^DEPLOY_MODE=//p' "$INSTALL_DIR/.env" 2>/dev/null | head -1 | tr -d '[:space:]' | tr 'A-Z' 'a-z')"
+if [ "$_MODO" = "docker" ]; then
+    fail "El .env dice DEPLOY_MODE=docker: esta es una instalacion con Docker. Usa upgrade-docker.sh, no este script."
+fi
+if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^squidmgr-'; then
+    fail "Hay contenedores 'squidmgr-*' corriendo: esto parece una instalacion con Docker. Usa upgrade-docker.sh (para en su caso con 'docker compose down' si esta convirtiendo a nativo)."
+fi
+command -v systemctl >/dev/null 2>&1 || fail "No hay 'systemctl': una instalacion nativa se gobierna con systemd. Revisa que sea el modo correcto."
+
 cd "$INSTALL_DIR"
 
 paso "1. Backup antes de actualizar"

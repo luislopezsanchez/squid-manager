@@ -138,6 +138,21 @@ def test_termina_invocando_install_nativo_de_la_version_destino():
     assert 'bash "$INSTALL_DIR/install-nativo.sh"' in contenido
 
 
+def test_aborta_si_no_es_una_instalacion_nativa_antes_de_tocar_nada():
+    """Simetrico a upgrade-docker.sh: si el .env dice DEPLOY_MODE=docker, o
+    hay contenedores squidmgr-* corriendo, o no hay systemctl, esto no es una
+    instalacion nativa y hay que abortar ANTES del backup y del git reset."""
+    contenido = _script()
+    assert "DEPLOY_MODE" in contenido
+    assert '"$_MODO" = "docker"' in contenido
+    assert "squidmgr-" in contenido
+    pos_check = contenido.index('"$_MODO" = "docker"')
+    pos_backup = contenido.index('paso "1. Backup')
+    pos_git = contenido.index("git reset --hard --quiet")
+    assert pos_check < pos_backup < pos_git
+    assert "upgrade-docker.sh" in contenido
+
+
 def test_verifica_el_commit_servido_de_verdad_y_reintenta_si_no_coincide():
     """install-nativo.sh ya confirma que /health responde, pero eso no
     confirma que sea el commit que se acaba de dejar en el checkout -visto

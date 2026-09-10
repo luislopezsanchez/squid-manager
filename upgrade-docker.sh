@@ -29,6 +29,30 @@ if [ -f "$PROJECT_DIR/.env" ]; then
 fi
 WEB_PORT="${WEB_PORT:-3000}"
 
+# Comprobacion de modo ANTES de tocar nada (backup, git reset): el path
+# /opt/squid-manager es el default de LOS DOS modos, y los dos scripts se
+# recomiendan en la doc, asi que correr el que no toca es un error facil.
+# Sin este chequeo, el script hacia el backup y el `git reset --hard`
+# -mutando el checkout- y recien moria en el paso 3 con un
+# "docker: command not found" que no explica nada.
+_MODO="$(printf '%s' "${DEPLOY_MODE:-}" | tr -d '[:space:]' | tr 'A-Z' 'a-z')"
+if [ "$_MODO" = "native" ]; then
+    echo "ERROR: el .env dice DEPLOY_MODE=native. Esta es una instalacion nativa" >&2
+    echo "       (sin Docker). Usa upgrade-nativo.sh, no este script." >&2
+    exit 1
+fi
+if ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: no se encontro el comando 'docker'. Si esta es una instalacion" >&2
+    echo "       nativa (sin Docker), usa upgrade-nativo.sh. Si es Docker, revisa" >&2
+    echo "       que 'docker' este en el PATH del usuario que corre este script." >&2
+    exit 1
+fi
+if ! docker compose version >/dev/null 2>&1; then
+    echo "ERROR: 'docker compose' (plugin v2) no esta disponible. Este script lo" >&2
+    echo "       necesita para reconstruir los contenedores." >&2
+    exit 1
+fi
+
 echo "=== 1. Backup antes de actualizar ==="
 if [ -x "$PROJECT_DIR/backup-database.sh" ]; then
     "$PROJECT_DIR/backup-database.sh" || echo "AVISO: el backup fallo; se continua igual, pero revisa el motivo antes de confiar en el upgrade."

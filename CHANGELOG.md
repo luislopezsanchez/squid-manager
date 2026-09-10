@@ -5,6 +5,28 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.4] - 2026-09-10
+
+### Corregido
+
+- **`upgrade-docker.sh` y `upgrade-nativo.sh` no comprobaban que estuvieran
+  corriendo en el modo correcto.** El path `/opt/squid-manager` es el default
+  de los dos modos de despliegue, y los dos scripts se recomiendan en la doc,
+  así que correr el que no toca es un error fácil. `upgrade-docker.sh` en una
+  instalación nativa hacía el backup y el `git reset --hard` —mutando el
+  checkout— y recién moría en el paso 3 con `docker: command not found`, un
+  error que no explica nada. Encontrado en un despliegue real. Ahora los dos
+  scripts comprueban, **antes de tocar nada**:
+  - `upgrade-docker.sh`: aborta si el `.env` dice `DEPLOY_MODE=native`, si no
+    hay comando `docker`, o si falta el plugin `docker compose` v2 —apuntando
+    a `upgrade-nativo.sh`—.
+  - `upgrade-nativo.sh`: aborta si el `.env` dice `DEPLOY_MODE=docker`, si hay
+    contenedores `squidmgr-*` corriendo, o si no hay `systemctl` —apuntando a
+    `upgrade-docker.sh`—.
+
+  Verificado en vivo (172.30.36.42): los cuatro casos abortan con un mensaje
+  claro y **sin haber creado ningún backup ni tocado el checkout**.
+
 ## [0.24.3] - 2026-09-10
 
 ### Corregido — documentación
