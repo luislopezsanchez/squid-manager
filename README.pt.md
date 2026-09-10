@@ -180,7 +180,10 @@ Os requisitos dependem do modo de implantação.
 > Debian 12 até que o ecossistema Python se atualize.
 
 ### Hardware mínimo
-- **CPU:** 2 núcleos (4 recomendado; com Docker o Squid é compilado ao construir a imagem)
+- **CPU:** 2 núcleos recomendado (4 para a primeira build). Com 1 núcleo a
+  build do Squid a partir do código-fonte e a do frontend são bem mais
+  lentas, mas não há um limite rígido verificado; já instalado, o painel e o
+  Squid pedem pouca CPU.
 - **RAM:** 2 GB (4 GB recomendado). Funciona com 1 GB em testes, mas
   **é preciso swap ≥ 1 GB**: o build do frontend (`npm run build`) pode
   esgotar a RAM e ser morto por OOM numa máquina sem swap.

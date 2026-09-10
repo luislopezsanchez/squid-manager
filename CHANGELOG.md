@@ -5,6 +5,33 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.3] - 2026-09-10
+
+### Corregido — documentación
+
+- **`docs/proxy-padre.md` contradecía lo que el producto hace desde la 0.22.0.**
+  Decía «Squid solo sabe presentar autenticación básica a un padre» y «Squid no
+  puede autenticarse contra un padre con NTLM ni Kerberos», cuando el método
+  `passthru` (RFC: reenvía las credenciales del usuario final) llega justo a un
+  padre que exige Digest/NTLM/Negotiate. Reescritas las secciones «Las cuatro
+  piezas → 1», «Configuración paso a paso → En el hijo» y «Limitaciones» para
+  cubrir `fixed` vs `passthru` y la restricción de `passthru` (incompatible con
+  que el hijo autentique a sus propios clientes). Es la guía que se lee para
+  ese escenario, y la que indexa el asistente de IA.
+- **`backend/app/services/parent_proxy_service.py`**: el docstring y el mensaje
+  del botón «Probar conexión» ante un padre con NTLM/Digest decían «no se
+  resuelve aquí» sin mencionar `passthru`. Ahora apuntan al método correcto.
+- **`docs/actualizacion.md`**: el camino manual de actualización en Docker
+  (`git pull`) pegaba contra el mismo `detected dubious ownership` que se
+  corrigió en `upgrade-docker.sh` —el `entrypoint.sh` del backend le cambia el
+  dueño al directorio del proyecto—; agregado el `git config --global --add
+  safe.directory` y el `REINDEX DATABASE` que el script hace solo. Y una nota
+  sobre volver a una versión anterior a la 0.22.0 en nativo: `alembic` falla al
+  importar si se recreó el `.venv` sin `pgvector`.
+- **README (3 idiomas)**: el requisito de «2 núcleos» se presentaba como piso,
+  sin haberse probado con 1. Reformulado como recomendación, aclarando que con
+  1 núcleo las builds son más lentas pero no hay límite duro comprobado.
+
 ## [0.24.2] - 2026-09-10
 
 ### Corregido

@@ -237,8 +237,22 @@ docker exec squidmgr-db psql -U "$DB_USER" -d "$DB_NAME" -c "CREATE EXTENSION IF
 Desde el directorio de la instalación:
 
 ```bash
-cd /ruta/a/squid-manager && git pull && docker compose up -d --build
+cd /ruta/a/squid-manager
+git config --global --add safe.directory "$(pwd)"   # ver nota abajo
+sudo git pull && sudo docker compose up -d --build
+docker compose exec -T db psql -U "$DB_USER" -d "$DB_NAME" -c 'REINDEX DATABASE "'"$DB_NAME"'";'
 ```
+
+**`git config --global --add safe.directory`**: el `entrypoint.sh` del
+backend le pone al directorio del proyecto el dueño del usuario sin
+privilegios (uid 999) en cada arranque, y git 2.35.2+ se niega a operar
+sobre un repo cuyo dueño no es quien corre git (`detected dubious
+ownership`). `upgrade-docker.sh` lo hace solo; a mano hay que declararlo una
+vez.
+
+**El `REINDEX DATABASE`**: solo una vez, al pasar de una instalación
+anterior a la 0.21.0 (imagen `postgres:16-alpine`). Ver la explicación
+completa más arriba, en «Reindexado de la base».
 
 **El `--build` no es opcional.** Sin él, Docker reutiliza las imágenes que ya
 tiene y el código nuevo no llega a ejecutarse, aunque el `git pull` haya ido
@@ -418,6 +432,15 @@ git checkout <commit> && cd backend && .venv/bin/pip install -q -r requirements.
 > Haz copia de seguridad antes:
 > - Docker: `docker exec squidmgr-db pg_dump -U squid squidmanager > copia.sql`
 > - Nativo: `sudo -u postgres pg_dump squidmanager > copia.sql`
+
+> **Volver a una versión anterior a la 0.22.0 en modo nativo:** la migración
+> `0014_ai_assistant.py` importa `pgvector` a nivel de módulo, y Alembic lee
+> **todas** las migraciones de `versions/` para cualquier comando (incluido
+> `downgrade`). Si recreaste el `.venv` con las dependencias viejas —que no
+> traen `pgvector`—, cualquier `alembic` falla al importar. Solución: no
+> recrees el `.venv`, o instalá `pgvector` a mano antes del downgrade
+> (`.venv/bin/pip install pgvector`). En Docker no pasa: la imagen se
+> reconstruye entera con el `requirements.txt` de la versión a la que volvés.
 
 ---
 

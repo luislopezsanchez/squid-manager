@@ -166,7 +166,10 @@ Los requisitos dependen del modo de despliegue.
 > el ecosistema Python se ponga al día.
 
 ### Hardware mínimo
-- **CPU:** 2 núcleos (4 recomendado; con Docker se compila Squid al construir la imagen)
+- **CPU:** 2 núcleos recomendado (4 para la primera build). Con 1 núcleo el
+  build de Squid desde código fuente y el del frontend son mucho más lentos
+  pero no hay un límite duro comprobado; en régimen, ya instalado, el panel
+  y Squid piden poca CPU.
 - **RAM:** 2 GB (4 GB recomendado). Con 1 GB probado funciona, pero **hace
   falta swap ≥ 1 GB**: el build del frontend (`npm run build`) puede agotar
   la RAM y morir con OOM en una máquina sin swap.

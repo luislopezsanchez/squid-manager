@@ -13,11 +13,16 @@ una forma distinta y el mensaje debe decir cuál es:
   - El padre pide un método de autenticación que Squid no sabe presentar.
   - El padre responde y deja pasar.
 
-Ese tercer caso merece atención: Squid solo sabe autenticarse contra un padre
-con autenticación básica. Si el proxy corporativo exige NTLM o Kerberos —
-habitual cuando está integrado con Active Directory— no hay campo que rellenar
-que lo resuelva, y conviene decirlo antes de que alguien pierda una tarde
-probando usuarios y contraseñas.
+Ese tercer caso merece atención. Con el método `fixed` (usuario y contraseña
+de servicio), Squid solo puede presentar **Basic** al padre: `cache_peer
+login=user:pass` no sabe hacer otra cosa. Si el padre exige Digest, NTLM o
+Negotiate —habitual cuando está integrado con Active Directory—, el único
+camino es el método `passthru` (`login=PASSTHRU connection-auth=on`), que
+reenvía tal cual las credenciales del usuario final, a costa de que este
+Squid NO autentique a sus propios clientes (ver
+validar_auth_method_compatible). Este `probar_padre` prueba siempre con
+Basic, así que un `407` con un método no-Basic no significa "imposible":
+significa "no con `fixed`, probá `passthru`". Ver docs/proxy-padre.md.
 """
 
 import base64
@@ -255,9 +260,11 @@ def probar_padre(
         if metodos and not soportado:
             return False, (
                 f"El proxy padre exige autenticación {'/'.join(metodos).upper()}, "
-                f"que Squid no sabe presentar a un padre (solo admite Basic). "
-                f"Haría falta un intermediario que traduzca la autenticación; "
-                f"no se resuelve con usuario y contraseña aquí."
+                f"que no se puede presentar con un usuario y contraseña de "
+                f"servicio (método «fijo»). Para llegar a un padre así, usá el "
+                f"método «passthru» (reenvía las credenciales del usuario "
+                f"final), que requiere desactivar la autenticación local de "
+                f"este Squid. Ver docs/proxy-padre.md."
             )
         if not username:
             return False, (
