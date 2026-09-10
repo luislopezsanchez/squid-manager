@@ -5,6 +5,37 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.5] - 2026-09-10
+
+### Corregido
+
+- **`upgrade-docker.sh` y `upgrade-nativo.sh` no sobrevivían a un corte de
+  SSH.** Corridos como `ssh host "bash upgrade-docker.sh"`, un corte de la
+  conexión durante el build de Squid (10+ min) manda `SIGHUP` y mata el
+  script a mitad: el `git reset` ya aplicado pero los contenedores sin
+  recrear (o `install-nativo.sh` a medio correr), el código en disco por
+  delante de lo que corre y sin una señal clara de qué pasó. Incidente real
+  en un servidor de producción (Docker: build hecho, contenedores viejos
+  todavía sirviendo) y reproducido en una VM de prueba (`Remote side
+  unexpectedly closed network connection`). Ahora, **antes** del backup y del
+  `git reset`, el script se re-lanza desligado de la terminal (`setsid`, con
+  toda la salida a `upgrade-<modo>-<fecha>.log`) y la invocación original sale
+  enseguida indicando el log y cómo seguirlo con `tail -f`. Guardas:
+  `SQUIDMGR_UPGRADE_DETACHED` (evita el re-lanzamiento infinito) y
+  `SQUIDMGR_UPGRADE_FOREGROUND=1` como opt-out para `tmux`/`screen` o consola
+  local. Si falta `setsid`, se corre en primer plano como antes.
+- **El log de un upgrade desligado no decía si había terminado bien.** Los dos
+  scripts terminan ahora con una línea inequívoca —`ACTUALIZACION COMPLETADA`
+  o `LA ACTUALIZACION NO TERMINO BIEN`— y salen con código distinto de 0 si la
+  verificación final falla.
+- **`upgrade-docker.sh` verificaba `/health` contra `localhost:$WEB_PORT` del
+  host.** Ese puerto puede estar detrás de un proxy inverso (aaPanel, nginx) o
+  incluso ocupado por otro servicio —visto en un servidor real donde `:3000`
+  era Grafana—, y además `/health` redirige a `/login` para peticiones que no
+  vienen de localhost desde la 0.24.x. Ahora la comprobación se hace **desde
+  dentro del contenedor `backend`**, donde la respuesta es el JSON con la
+  versión.
+
 ## [0.24.4] - 2026-09-10
 
 ### Corregido

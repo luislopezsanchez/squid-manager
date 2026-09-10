@@ -75,6 +75,32 @@ if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/n
 fi
 command -v systemctl >/dev/null 2>&1 || fail "No hay 'systemctl': una instalacion nativa se gobierna con systemd. Revisa que sea el modo correcto."
 
+# --- Blindaje contra corte de SSH --------------------------------------------
+# La recompilacion de Squid (install-nativo.sh, paso de build) tarda 10+ min.
+# Corrido como `ssh host "bash upgrade-nativo.sh"`, si la conexion se cae el
+# script recibe SIGHUP y muere a mitad: git YA actualizado, install-nativo.sh
+# a medio correr -paquetes puestos, migraciones quiza aplicadas, servicio
+# NO reiniciado o reiniciado sobre un build incompleto-. El checkout en disco
+# queda por delante de lo que corre y sin una senal clara de que fallo. Caso
+# real: un upgrade Docker en produccion quedo asi, y en una VM de prueba el
+# script murio con "Remote side unexpectedly closed network connection".
+# Para evitarlo el script se re-lanza desligado de la terminal (setsid,
+# salida a un log) y esta primera invocacion sale enseguida diciendo como
+# seguirlo. Opt-out: SQUIDMGR_UPGRADE_FOREGROUND=1 (util en tmux/screen o en
+# consola local, donde no hay riesgo de corte).
+if [ -z "${SQUIDMGR_UPGRADE_DETACHED:-}" ] && [ -z "${SQUIDMGR_UPGRADE_FOREGROUND:-}" ] \
+        && command -v setsid >/dev/null 2>&1; then
+    _LOG="$INSTALL_DIR/upgrade-nativo-$(date +%Y%m%d_%H%M%S).log"
+    echo "La actualizacion corre en SEGUNDO PLANO para sobrevivir a un corte de SSH."
+    echo "  Log:    $_LOG"
+    echo "  Seguir: tail -f \"$_LOG\""
+    echo "  Al terminar, el log dice si quedo OK. Primer plano: SQUIDMGR_UPGRADE_FOREGROUND=1 sudo -E bash \"$0\""
+    SQUIDMGR_UPGRADE_DETACHED=1 setsid bash "$0" "$@" >"$_LOG" 2>&1 </dev/null &
+    echo "  PID:    $!"
+    exit 0
+fi
+# ---------------------------------------------------------------------------
+
 cd "$INSTALL_DIR"
 
 paso "1. Backup antes de actualizar"
@@ -151,8 +177,21 @@ if [ "$COMMIT_SERVIDO" != "$COMMIT_ESPERADO" ]; then
     COMMIT_SERVIDO="$(curl -fsS -m 10 "http://127.0.0.1:${WEB_PORT}/health" 2>/dev/null | grep -oE '"commit":\s*"[^"]*"' | grep -oE '[0-9a-f]{7,}' || echo "")"
 fi
 
+echo
 if [ "$COMMIT_SERVIDO" = "$COMMIT_ESPERADO" ]; then
     ok "El panel confirma que esta sirviendo $COMMIT_SERVIDO."
+    echo
+    echo "=================================================="
+    echo " ACTUALIZACION COMPLETADA (rama $BRANCH, $COMMIT_ESPERADO)"
+    echo "=================================================="
+    echo " El navegador puede seguir mostrando la version anterior por cache:"
+    echo " forza recarga (Ctrl+Shift+R) y volve a iniciar sesion."
 else
     warn "El panel sigue reportando '$COMMIT_SERVIDO' en vez de '$COMMIT_ESPERADO' despues de reintentar. Revisa a mano: systemctl restart squidmanager && curl http://127.0.0.1:${WEB_PORT}/health"
+    echo
+    echo "=================================================="
+    echo " LA ACTUALIZACION NO TERMINO BIEN"
+    echo "=================================================="
+    echo " Revisa: journalctl -u squidmanager -n 50"
+    exit 1
 fi

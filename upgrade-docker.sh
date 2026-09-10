@@ -53,6 +53,30 @@ if ! docker compose version >/dev/null 2>&1; then
     exit 1
 fi
 
+# --- Blindaje contra corte de SSH ----------------------------------------
+# El build de Squid tarda 10+ min. Corrido como `ssh host "bash
+# upgrade-docker.sh"`, si la conexion se cae el script recibe SIGHUP y
+# muere a mitad: git YA actualizado, imagenes a medio construir,
+# contenedores SIN recrear -> el panel sigue sirviendo la version vieja (o
+# un 502) y el codigo en disco queda por delante de lo que corre. Caso
+# real, visto en un servidor de produccion y reproducido en una VM de
+# prueba. Para evitarlo, el script se re-lanza desligado de la terminal
+# (setsid, salida a un log) y esta primera invocacion sale enseguida
+# diciendo como seguirlo. Opt-out: SQUIDMGR_UPGRADE_FOREGROUND=1 (util en
+# tmux/screen o en consola local, donde no hay riesgo de corte).
+if [ -z "${SQUIDMGR_UPGRADE_DETACHED:-}" ] && [ -z "${SQUIDMGR_UPGRADE_FOREGROUND:-}" ] \
+        && command -v setsid >/dev/null 2>&1; then
+    _LOG="$PROJECT_DIR/upgrade-docker-$(date +%Y%m%d_%H%M%S).log"
+    echo "La actualizacion corre en SEGUNDO PLANO para sobrevivir a un corte de SSH."
+    echo "  Log:    $_LOG"
+    echo "  Seguir: tail -f \"$_LOG\""
+    echo "  Al terminar, el log dice si quedo OK. Primer plano: SQUIDMGR_UPGRADE_FOREGROUND=1 sudo -E bash \"$0\""
+    SQUIDMGR_UPGRADE_DETACHED=1 setsid bash "$0" "$@" >"$_LOG" 2>&1 </dev/null &
+    echo "  PID:    $!"
+    exit 0
+fi
+# ----------------------------------------------------------------------
+
 echo "=== 1. Backup antes de actualizar ==="
 if [ -x "$PROJECT_DIR/backup-database.sh" ]; then
     "$PROJECT_DIR/backup-database.sh" || echo "AVISO: el backup fallo; se continua igual, pero revisa el motivo antes de confiar en el upgrade."
@@ -125,14 +149,34 @@ fi
 
 echo
 echo "=== 5. Verificando ==="
-# Unos segundos de margen: el backend puede tardar un poco en aplicar
-# migraciones y quedar listo para responder despues de un rebuild.
-sleep 5
-if curl -fs "http://localhost:${WEB_PORT}/health" >/dev/null 2>&1; then
-    echo "OK: el panel responde."
-    curl -s "http://localhost:${WEB_PORT}/health"
+# Se comprueba el backend DESDE DENTRO del contenedor, no en
+# localhost:$WEB_PORT del host: ese puerto puede estar detras de un proxy
+# inverso (aaPanel, nginx del host) o incluso ocupado por otro servicio
+# -visto en un servidor real donde :3000 era Grafana-, y ademas /health
+# redirige a /login para peticiones que no vienen de localhost desde
+# 0.24.x. Dentro del contenedor la respuesta es el JSON con la version.
+_ESPERADO="$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo '')"
+_HEALTH=""
+for _ in $(seq 1 20); do
+    _HEALTH="$(docker compose exec -T backend sh -c 'curl -fsS http://127.0.0.1:8000/health' 2>/dev/null || true)"
+    [ -n "$_HEALTH" ] && break
+    sleep 3
+done
+
+echo
+if [ -n "$_HEALTH" ]; then
+    echo "OK: el backend responde -> $_HEALTH"
     echo
+    echo "=================================================="
+    echo " ACTUALIZACION COMPLETADA (rama $BRANCH, $_ESPERADO)"
+    echo "=================================================="
+    echo " El navegador puede seguir mostrando la version anterior por cache:"
+    echo " forza recarga (Ctrl+Shift+R) y volve a iniciar sesion."
 else
-    echo "AVISO: el panel no respondio en http://localhost:${WEB_PORT}/health."
-    echo "Revisa 'docker compose logs backend' antes de dar la actualizacion por buena."
+    echo "AVISO: el backend no respondio dentro del contenedor."
+    echo "=================================================="
+    echo " LA ACTUALIZACION NO TERMINO BIEN"
+    echo "=================================================="
+    echo " Revisa: docker compose logs backend"
+    exit 1
 fi

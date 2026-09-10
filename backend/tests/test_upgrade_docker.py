@@ -120,6 +120,36 @@ def test_declara_el_directorio_como_safe_antes_de_cualquier_git():
     assert "--get-all safe.directory" in contenido
 
 
+def test_se_desliga_de_la_terminal_para_sobrevivir_a_un_corte_de_ssh():
+    """El build de Squid tarda 10+ min. Corrido como `ssh host "bash
+    upgrade-docker.sh"`, un corte de SSH manda SIGHUP y el script muere a
+    mitad: git ya actualizado, contenedores sin recrear -visto en produccion
+    (Contabo) y reproducido en una VM (172.30.36.42, "Remote side
+    unexpectedly closed network connection")-. El script se re-lanza con
+    setsid, salida a un log, y la primera invocacion sale enseguida. El
+    re-lanzamiento va ANTES del backup y del git reset (no tiene sentido
+    empezar a mutar el checkout en el proceso que va a morir con la terminal),
+    y detras de las guardas SQUIDMGR_UPGRADE_DETACHED (ya desligado) y
+    SQUIDMGR_UPGRADE_FOREGROUND (opt-out para tmux/consola local)."""
+    contenido = _script()
+    assert "setsid" in contenido
+    assert "SQUIDMGR_UPGRADE_DETACHED" in contenido
+    assert "SQUIDMGR_UPGRADE_FOREGROUND" in contenido
+    pos_detach = contenido.index("setsid bash")
+    pos_backup = contenido.index("=== 1. Backup")
+    pos_git = contenido.index("git reset --hard --quiet")
+    assert pos_detach < pos_backup < pos_git
+
+
+def test_el_log_dice_si_la_actualizacion_termino_bien_o_mal():
+    """Corriendo desligado, el unico rastro es el log: tiene que terminar con
+    una linea inequivoca de OK o de FALLO, y salir con codigo != 0 si algo
+    del final no cuadra, para que un `tail` del log no deje la duda."""
+    contenido = _script()
+    assert "ACTUALIZACION COMPLETADA" in contenido
+    assert "LA ACTUALIZACION NO TERMINO BIEN" in contenido
+
+
 def test_aborta_si_no_es_una_instalacion_docker_antes_de_tocar_nada():
     """El path /opt/squid-manager es el default de los dos modos: correr el
     script equivocado es un error facil. Sin este chequeo, hacia el backup y

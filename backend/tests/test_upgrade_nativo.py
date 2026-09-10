@@ -153,6 +153,32 @@ def test_aborta_si_no_es_una_instalacion_nativa_antes_de_tocar_nada():
     assert "upgrade-docker.sh" in contenido
 
 
+def test_se_desliga_de_la_terminal_para_sobrevivir_a_un_corte_de_ssh():
+    """La recompilacion de Squid tarda 10+ min. Un corte de SSH manda SIGHUP
+    y mata el script a mitad de install-nativo.sh: paquetes puestos,
+    migraciones quiza aplicadas, servicio sin reiniciar -mismo patron del
+    incidente Docker en produccion-. El script se re-lanza con setsid a un
+    log ANTES del backup y del git reset, detras de las guardas
+    SQUIDMGR_UPGRADE_DETACHED / SQUIDMGR_UPGRADE_FOREGROUND."""
+    contenido = _script()
+    assert "setsid" in contenido
+    assert "SQUIDMGR_UPGRADE_DETACHED" in contenido
+    assert "SQUIDMGR_UPGRADE_FOREGROUND" in contenido
+    pos_detach = contenido.index("setsid bash")
+    pos_backup = contenido.index('paso "1. Backup')
+    pos_git = contenido.index("git reset --hard --quiet")
+    assert pos_detach < pos_backup < pos_git
+
+
+def test_el_log_dice_si_la_actualizacion_termino_bien_o_mal():
+    """Corriendo desligado el unico rastro es el log: termina con una linea
+    inequivoca de OK o de FALLO y sale con codigo != 0 si el commit servido
+    no coincide con el esperado."""
+    contenido = _script()
+    assert "ACTUALIZACION COMPLETADA" in contenido
+    assert "LA ACTUALIZACION NO TERMINO BIEN" in contenido
+
+
 def test_verifica_el_commit_servido_de_verdad_y_reintenta_si_no_coincide():
     """install-nativo.sh ya confirma que /health responde, pero eso no
     confirma que sea el commit que se acaba de dejar en el checkout -visto
