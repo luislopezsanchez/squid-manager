@@ -73,6 +73,45 @@ def test_en_nativo_no_hay_segunda_copia_del_puerto_que_sincronizar():
 
 
 # ---------------------------------------------------------------------------
+# project_dir() no debe reventar si la ruta no es accesible
+# ---------------------------------------------------------------------------
+def test_project_dir_devuelve_none_si_el_compose_no_es_accesible(monkeypatch):
+    """Si el proyecto se clonó dentro de /root (700), el usuario sin
+    privilegios del contenedor (uid 999) no puede atravesar la ruta y
+    `Path.is_file()` lanza PermissionError -no se lo traga como sí hace con
+    ENOENT-. Antes eso tumbaba `apply_squid_config` entero y el proxy se
+    quedaba en el arranque provisional sin un error claro (172.30.36.42,
+    2026-09-10). Ahora se degrada a "no disponible": el reconfigure por el
+    SDK no necesita esta ruta.
+    """
+    from pathlib import Path
+
+    from app.services.runtime import docker_runtime
+
+    monkeypatch.setenv("PROJECT_DIR", "/root/squid-manager")
+
+    def is_file_denegado(self):
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(Path, "is_file", is_file_denegado)
+
+    assert docker_runtime.project_dir() is None  # no lanza
+
+
+def test_project_dir_none_no_lanza_al_sincronizar_el_puerto(monkeypatch):
+    """La consecuencia práctica: con project_dir() == None, sync_env_port
+    devuelve un (False, motivo) legible en vez de propagar la excepción, y
+    el arranque puede seguir hasta el `squid -k reconfigure`."""
+    from app.services.runtime import docker_runtime
+
+    monkeypatch.setattr(docker_runtime, "project_dir", lambda: None)
+
+    ok, msg = docker_runtime.sync_env_port("3128")
+    assert ok is False
+    assert "PROJECT_DIR" in msg
+
+
+# ---------------------------------------------------------------------------
 # Lectura de puertos en escucha (sin depender de ss ni netstat)
 # ---------------------------------------------------------------------------
 def test_detecta_los_puertos_en_escucha(tmp_path):

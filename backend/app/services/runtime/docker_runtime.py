@@ -60,7 +60,27 @@ def project_dir() -> Path | None:
     if not raw:
         return None
     base = Path(raw)
-    return base if (base / "docker-compose.yml").is_file() else None
+    # `is_file()` NO se traga un EACCES: si algun directorio de la ruta no
+    # tiene permiso de acceso para el usuario sin privilegios con el que
+    # corre el backend (uid 999) -el caso tipico es haber clonado el
+    # proyecto dentro de /root, que es 700-, esto lanzaba PermissionError y
+    # tumbaba el `apply_squid_config` entero: el proxy se quedaba en el
+    # arranque provisional (solo localhost) sin ningun error claro.
+    # Confirmado en vivo (172.30.36.42, 2026-09-10). Se degrada a "no
+    # disponible": el reconfigure de Squid por el SDK no necesita esta ruta,
+    # solo la sincronizacion del .env al cambiar el puerto -que ya avisa
+    # aparte de que no pudo-. install.sh, por su lado, rechaza desde 0.24.6
+    # una ruta de instalacion que el backend no pueda alcanzar.
+    try:
+        existe = (base / "docker-compose.yml").is_file()
+    except OSError as e:
+        logger.warning(
+            f"No se puede acceder a {base}/docker-compose.yml ({e}). "
+            "PROJECT_DIR queda como no disponible: revisa que el usuario del "
+            "contenedor pueda atravesar toda la ruta (no clones en /root)."
+        )
+        return None
+    return base if existe else None
 
 
 def compose_cmd() -> list[str] | None:

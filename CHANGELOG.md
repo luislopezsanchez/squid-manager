@@ -5,6 +5,43 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.6] - 2026-09-10
+
+### Corregido
+
+- **Instalación Docker bajo `/root`: el panel arrancaba pero no configuraba
+  Squid.** Si el proyecto se clona dentro de `/root` (o cualquier ruta sin
+  permiso de traversía para «otros»), el usuario sin privilegios con el que
+  corre el backend en su contenedor (uid 999) no puede leer
+  `docker-compose.yml` a través del bind-mount. `project_dir()` propagaba el
+  `PermissionError` y tumbaba `apply_squid_config` entero: el proxy se quedaba
+  en el arranque provisional —solo `localhost`, responde `403` sin
+  credenciales en vez del `407` esperado— sin ningún error claro; en el log
+  del backend solo quedaba un `INFO`. Detectado probando una instalación desde
+  cero en `main` (172.30.36.42, 2026-09-10). Ahora:
+  - `project_dir()` degrada a «no disponible» (con un `WARNING` explicativo) en
+    vez de lanzar. El `squid -k reconfigure` por el SDK de Docker no necesita
+    esa ruta, así que la configuración **sí se aplica** y el proxy pasa a
+    exigir autenticación (`407`). Lo único que no funciona con la ruta
+    inaccesible es sincronizar el `.env` al **cambiar el puerto** desde el
+    panel, y eso ya avisa por separado.
+  - `install.sh` comprueba **antes de levantar nada** que la ruta de
+    instalación es accesible para ese usuario y, si no lo es, se detiene con
+    instrucciones (mover a `/opt/squid-manager`, o `chmod o+x` del directorio
+    que lo impide).
+- **`install.sh` no declaraba el proyecto como `safe.directory` de git.** Tras
+  instalar, un `git` manual en el directorio fallaba con `detected dubious
+  ownership` (el entrypoint del backend hace `chown` a uid 999 y el admin
+  corre git como root). Ahora se declara en la instalación, idempotente, igual
+  que ya hacían los `upgrade-*.sh`.
+
+### Documentación
+
+- `docs/installation.md`: aviso de no clonar en `/root`, y lista del **ruido
+  esperado durante la build** (el `mv /etc/resolv.conf … Device or resource
+  busy`, los helpers de Squid `found but cannot be built`, `Translation is
+  disabled`, `pip as root`) para no confundirlo con errores.
+
 ## [0.24.5] - 2026-09-10
 
 ### Corregido
