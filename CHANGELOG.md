@@ -5,6 +5,20 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.2] - 2026-09-10
+
+### Corregido
+
+- **`upgrade-docker.sh` y `upgrade-nativo.sh` abortaban con `detected dubious
+  ownership`** en el paso 2 (git). git 2.35.2+ se niega a operar sobre un repo
+  cuyo dueño no es quien corre git, y en Docker eso es lo normal, no la
+  excepción: `entrypoint.sh` del backend hace `chown` del directorio del
+  proyecto al usuario sin privilegios (uid 999) en cada arranque, y el script se
+  corre como root. Los dos scripts ahora declaran el directorio como
+  `safe.directory` de git antes del primer comando git, de forma idempotente
+  (solo lo agregan si no estaba). Encontrado en un despliegue real
+  (`/www/dk_project/dk_app/squid-manager`).
+
 ## [0.24.1] - 2026-09-10
 
 Correcciones al camino de actualización, encontradas probando en vivo el upgrade

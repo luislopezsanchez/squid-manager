@@ -73,6 +73,15 @@ else
 fi
 
 paso "2. Trayendo el codigo nuevo (rama $BRANCH)"
+# git 2.35.2+ se niega a operar sobre un repo cuyo dueno no es quien corre
+# git ("detected dubious ownership"). Pasa cuando el checkout lo hizo un
+# usuario de despliegue (o el propio APP_USER) y este script se corre como
+# root, o al reves. Se declara el directorio como confiable antes de tocar
+# nada -install-nativo.sh, que se invoca despues, hereda esta config del
+# mismo usuario-. Idempotente: solo se agrega si no estaba.
+git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$INSTALL_DIR" \
+    || git config --global --add safe.directory "$INSTALL_DIR"
+
 # Mismo mecanismo, y el mismo bug real de fondo, que en upgrade-docker.sh:
 # `git checkout` se niega a cambiar de rama si eso pisaria una modificacion
 # local -aunque el `reset --hard` de abajo la fuera a descartar de todas

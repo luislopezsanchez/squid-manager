@@ -104,3 +104,17 @@ def test_se_ubica_por_el_directorio_del_script_no_una_ruta_fija():
     deriva del directorio donde vive el script, salvo override explicito."""
     contenido = _script()
     assert 'PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"' in contenido
+
+
+def test_declara_el_directorio_como_safe_antes_de_cualquier_git():
+    """git 2.35.2+ aborta con "detected dubious ownership" si el dueno del
+    repo no es quien corre git -en Docker es LO NORMAL: entrypoint.sh del
+    backend hace chown a uid 999 y el script se corre como root-. Hay que
+    declararlo safe ANTES del primer comando git, e idempotente."""
+    contenido = _script()
+    assert "safe.directory" in contenido
+    pos_safe = contenido.index("safe.directory")
+    pos_primer_git = contenido.index("git checkout --quiet -- .")
+    assert pos_safe < pos_primer_git
+    # idempotente: solo agrega si no estaba
+    assert "--get-all safe.directory" in contenido

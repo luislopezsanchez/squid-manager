@@ -38,6 +38,15 @@ fi
 
 echo
 echo "=== 2. Trayendo el codigo nuevo (rama $BRANCH) ==="
+# git 2.35.2+ se niega a operar sobre un repo cuyo dueno no es quien corre
+# git ("detected dubious ownership"), y en Docker eso es LO NORMAL, no la
+# excepcion: entrypoint.sh del backend le hace chown de este directorio al
+# usuario sin privilegios (uid 999) en cada arranque, y este script se corre
+# como root (sudo). Se declara el directorio como confiable antes de tocar
+# nada. Idempotente: solo se agrega si no estaba.
+git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$PROJECT_DIR" \
+    || git config --global --add safe.directory "$PROJECT_DIR"
+
 # Se descarta cualquier cambio local ANTES de cambiar de rama, no despues:
 # `git checkout` se niega a cambiar de rama si eso pisaria una modificacion
 # local (aunque el `reset --hard` de mas abajo la iba a descartar de todas
