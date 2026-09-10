@@ -49,10 +49,18 @@ warn()  { echo -e "${YELLOW}[AVISO]${NC} $1"; }
 fail()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 paso()  { echo; echo -e "${BLUE}=== $1 ===${NC}"; }
 
-INSTALL_DIR="${INSTALL_DIR:-/opt/squid-manager}"
+# Mismo criterio que upgrade-docker.sh con PROJECT_DIR: si no se pasa
+# INSTALL_DIR explicito por variable de entorno, se usa el directorio donde
+# vive ESTE script -no una ruta fija-. No todas las instalaciones estan en
+# /opt/squid-manager: la forma documentada de correr esto (bajar el script
+# dentro del directorio de la instalacion y `sudo bash upgrade-nativo.sh`
+# ahi) hace que el directorio del script sea siempre la ruta correcta. El
+# chequeo de mas abajo ($INSTALL_DIR/.git) aborta con un mensaje claro si
+# aun asi no es un checkout de SquidManager.
+INSTALL_DIR="${INSTALL_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 BRANCH="${BRANCH:-main}"
 
-[ -d "$INSTALL_DIR/.git" ] || fail "No hay una instalacion en $INSTALL_DIR (o no es un checkout git). Para instalar desde cero usa install-nativo.sh, no este script."
+[ -d "$INSTALL_DIR/.git" ] || fail "No hay una instalacion de SquidManager en $INSTALL_DIR (o no es un checkout git). Corre este script desde el directorio donde esta instalado SquidManager, o pasa la ruta con INSTALL_DIR=/tu/ruta. Para instalar desde cero usa install-nativo.sh, no este script."
 [ -x "$INSTALL_DIR/install-nativo.sh" ] || fail "$INSTALL_DIR/install-nativo.sh no existe o no es ejecutable; no se puede completar la actualizacion."
 
 cd "$INSTALL_DIR"

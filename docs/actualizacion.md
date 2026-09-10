@@ -17,10 +17,14 @@ instalador, pensado para bajarse fresco cada vez —nunca la copia que ya
 tenés en `/opt/squid-manager`—:
 
 ```bash
-cd /opt/squid-manager
+cd /ruta/a/tu/squid-manager   # el directorio donde está instalado, sea cual sea
 wget -O upgrade-nativo.sh https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/upgrade-nativo.sh
-sudo BRANCH=pruebas bash upgrade-nativo.sh   # o BRANCH=main, según tu caso
+sudo BRANCH=main bash upgrade-nativo.sh   # o la rama que corresponda
 ```
+
+El script trabaja sobre **el directorio donde lo corras**, no sobre una
+ruta fija: si tu instalación no está en `/opt/squid-manager`, no hace falta
+pasar nada extra, alcanza con bajarlo y correrlo ahí dentro.
 
 Con esto, en una sola corrida:
 
@@ -69,6 +73,28 @@ Si preferís no correr el script, el equivalente manual —y lo que hace falta
 revisar caso por caso si un futuro cambio toca algo que el instalador no
 cubre— es:
 
+**Antes de nada, la extensión `pgvector`.** Desde la versión 0.22.0 hay una
+migración de base de datos que ejecuta `CREATE EXTENSION vector`, y eso exige
+ser **superusuario de Postgres** —el rol de la aplicación (`squid`) no lo es,
+a propósito—. Si el `systemctl restart` de más abajo llega a las migraciones
+sin la extensión ya creada, el backend se queda **en bucle de reinicio** con
+`permission denied to create extension "vector"`. Se prepara una sola vez,
+como `postgres`:
+
+```bash
+PG_MAJOR=$(sudo -u postgres psql -tAc 'SHOW server_version;' | cut -d. -f1)
+sudo apt-get install -y "postgresql-$PG_MAJOR-pgvector"
+sudo -u postgres psql -d squidmanager -c "CREATE EXTENSION IF NOT EXISTS vector"
+```
+
+`upgrade-nativo.sh` hace exactamente esto por vos (por eso es el camino
+recomendado). Y si ya corriste el `restart` y el backend quedó caído: este
+mismo bloque, seguido de otro `sudo systemctl restart squidmanager`, lo
+levanta —la migración 0014 es transaccional, no dejó nada a medias, se
+quedó en la revisión anterior—.
+
+Hecho eso, el resto:
+
 ```bash
 cd /opt/squid-manager
 sudo git pull
@@ -76,6 +102,10 @@ sudo backend/.venv/bin/pip install -q -r backend/requirements.txt
 cd frontend && sudo npm install --silent && sudo npm run build
 sudo systemctl restart squidmanager
 ```
+
+(En modo nativo la base la crea `install-nativo.sh` con locale `C`, que no
+tiene el problema de reordenamiento de índices que sí afecta a Docker —ver
+la sección de Docker más abajo—, así que acá no hay que reindexar nada.)
 
 **El `npm run build` no es opcional**, y es el equivalente exacto del `--build`
 de Docker: nginx sirve los ficheros ya compilados de `frontend/dist`, así que
@@ -164,7 +194,30 @@ backup que no actualizar—), trae el código nuevo con el mismo mecanismo
 seguro que en modo nativo (descarta cambios locales antes de cambiar de
 rama, para que un `git checkout` no aborte el script entero por una
 modificación sin commitear), reconstruye con `docker compose up -d
---build` y verifica que `/health` responda al final.
+--build`, **reconstruye los índices de la base** (ver abajo) y verifica que
+`/health` responda al final. Trabaja sobre el directorio donde lo corras,
+no sobre una ruta fija.
+
+**Reindexado de la base, una sola vez.** Hasta la 0.21.0 la imagen de
+Postgres era `postgres:16-alpine` (musl); desde la 0.22.0 es
+`pgvector/pgvector:pg16` (glibc, necesaria para el Asistente de IA). musl no
+registra versión de *collation*, así que al cambiar de imagen Postgres **no
+emite ningún warning**, pero el orden con el que compara texto sí cambia:
+los índices B-tree de columnas de texto —incluido el `UNIQUE` de
+`proxy_users.username`— quedan ordenados con el criterio viejo y son
+lógicamente inconsistentes (un `SELECT ... WHERE username = X` por índice
+puede no encontrar la fila; el `UNIQUE` puede dejar pasar un duplicado).
+`upgrade-docker.sh` corre `REINDEX DATABASE` después del `up -d` para
+arreglarlo —es rápido (los índices de este esquema son chicos) e
+idempotente—. Si actualizás a mano, hacelo vos:
+
+```bash
+docker compose exec -T db psql -U "$DB_USER" -d "$DB_NAME" -c 'REINDEX DATABASE "'"$DB_NAME"'";'
+```
+
+Las instalaciones nuevas ya no tienen este problema: el `docker-compose.yml`
+crea la base con locale `C.UTF-8`, que no tiene versión de *collation* y es
+inmune a cualquier cambio futuro de imagen o de libc.
 
 **Si esta instalación es de antes del Asistente de IA**, en teoría hace
 falta crear la extensión `vector` a mano en el volumen de Postgres ya

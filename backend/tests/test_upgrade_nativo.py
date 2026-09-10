@@ -110,6 +110,16 @@ def test_exige_una_instalacion_existente():
     assert '[ -d "$INSTALL_DIR/.git" ]' in contenido
 
 
+def test_se_ubica_por_el_directorio_del_script_no_una_ruta_fija():
+    """Muchas instalaciones no estan en /opt/squid-manager. Igual que
+    upgrade-docker.sh con PROJECT_DIR, INSTALL_DIR se deriva del directorio
+    donde vive ESTE script cuando no se pasa uno explicito -no puede quedar
+    /opt/squid-manager como unico default-."""
+    contenido = _script()
+    assert 'INSTALL_DIR="${INSTALL_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"' in contenido
+    assert 'INSTALL_DIR="${INSTALL_DIR:-/opt/squid-manager}"' not in contenido
+
+
 def test_termina_invocando_install_nativo_de_la_version_destino():
     contenido = _script()
     assert 'bash "$INSTALL_DIR/install-nativo.sh"' in contenido

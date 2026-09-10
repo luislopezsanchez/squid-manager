@@ -5,6 +5,44 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.1] - 2026-09-10
+
+Correcciones al camino de actualización, encontradas probando en vivo el upgrade
+de una instalación 0.21.0 real a `main` (172.30.36.42), en Docker y en nativo.
+
+### Corregido
+
+- **Los índices de texto quedaban lógicamente corruptos al actualizar en Docker.**
+  Hasta la 0.21.0 la imagen de Postgres era `postgres:16-alpine` (musl), que
+  inicializa la base con `en_US.utf8` **sin registrar versión de *collation***.
+  Desde la 0.22.0 la imagen es `pgvector/pgvector:pg16` (glibc). Al cambiar de
+  imagen, Postgres **no emite ningún warning** —no hay versión previa que
+  comparar— pero el orden con el que compara texto sí cambia: los índices B-tree
+  de columnas de texto (entre ellos el `UNIQUE` de `proxy_users.username`)
+  quedaban ordenados con el criterio viejo. Confirmado con `amcheck`:
+  `item order invariant violated`. Consecuencia: un `SELECT ... WHERE username =
+  X` por índice podía no encontrar la fila, y el `UNIQUE` podía dejar pasar un
+  duplicado. `upgrade-docker.sh` ahora corre `REINDEX DATABASE` después de
+  levantar los contenedores (rápido, idempotente, no-fatal si falla).
+- **`docker-compose.yml` inicializa la base con `--locale=C.UTF-8`**: orden de
+  texto por byte (como `--lc-collate=C` que ya usa `install-nativo.sh` en modo
+  nativo) con ctype UTF-8, y **sin versión de *collation***. Una instalación
+  nueva creada así es inmune a cualquier cambio futuro de imagen de Postgres o
+  de libc. Solo afecta a un volumen que se inicializa de cero; los existentes
+  los cubre el `REINDEX` de arriba.
+- **`upgrade-nativo.sh` asumía `/opt/squid-manager`.** No todas las
+  instalaciones están ahí. Ahora deriva `INSTALL_DIR` del directorio donde vive
+  el propio script (igual que `upgrade-docker.sh` con `PROJECT_DIR`), salvo
+  override explícito por variable de entorno. Verificado corriéndolo desde una
+  ruta no estándar, por ruta absoluta y con override.
+- **`docs/actualizacion.md`**: el camino manual de actualización nativa no
+  advertía que la extensión `pgvector` hay que crearla como superusuario
+  **antes** del `systemctl restart` —si no, la migración 0014 deja el backend en
+  bucle de reinicio con `permission denied to create extension "vector"`—.
+  Agregado como paso obligatorio, con el comando exacto y la receta de
+  recuperación. Y el comando recomendado apuntaba a `BRANCH=pruebas` en vez de
+  `BRANCH=main`.
+
 ## [0.24.0] - 2026-09-09
 
 Remediación de la auditoría completa del 2026-09-09 (`docs/audits/` no se versiona,

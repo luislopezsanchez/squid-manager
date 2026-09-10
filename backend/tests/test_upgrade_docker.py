@@ -73,3 +73,34 @@ def test_build_no_es_opcional():
 def test_verifica_health_al_final():
     contenido = _script()
     assert "/health" in contenido
+
+
+def test_reindexa_la_base_despues_del_cambio_de_imagen_de_postgres():
+    """Hasta 0.21.0 la imagen era postgres:16-alpine (musl, que no registra
+    version de collation); desde 0.22.0 es pgvector/pgvector:pg16 (glibc).
+    Al cambiar de imagen Postgres NO avisa, pero el orden de comparacion de
+    texto cambia y los indices btree de texto -entre ellos el UNIQUE de
+    proxy_users.username- quedan logicamente corruptos (confirmado con
+    amcheck en vivo, 172.30.36.42, 2026-09-10). REINDEX los reconstruye, y
+    tiene que correr DESPUES de levantar los contenedores y ANTES de dar el
+    upgrade por bueno."""
+    contenido = _script()
+    assert "REINDEX DATABASE" in contenido
+    pos_up = contenido.index("docker compose up -d --build")
+    pos_reindex = contenido.index("REINDEX DATABASE")
+    pos_health = contenido.index("/health")
+    assert pos_up < pos_reindex < pos_health
+
+
+def test_el_reindex_no_es_fatal_si_falla():
+    """Un REINDEX que no corre (base inaccesible, permisos) no debe abortar
+    el upgrade entero bajo set -e: se avisa como hacerlo a mano y se sigue."""
+    contenido = _script()
+    assert "no se pudieron reconstruir los indices" in contenido.lower()
+
+
+def test_se_ubica_por_el_directorio_del_script_no_una_ruta_fija():
+    """Muchas instalaciones no estan en /opt/squid-manager: PROJECT_DIR se
+    deriva del directorio donde vive el script, salvo override explicito."""
+    contenido = _script()
+    assert 'PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"' in contenido

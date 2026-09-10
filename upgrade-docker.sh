@@ -1,7 +1,13 @@
 #!/bin/bash
-# Actualiza una instalacion Docker de SquidManager: backup previo del la
+# Actualiza una instalacion Docker de SquidManager: backup previo de la
 # base de datos, trae el codigo nuevo de forma segura, reconstruye y
-# levanta los contenedores, y verifica que el panel responda al final.
+# levanta los contenedores, reconstruye los indices de la base (necesario
+# por el cambio de imagen de Postgres, ver el paso 4) y verifica que el
+# panel responda al final.
+#
+# Se corre desde el directorio de la instalacion (no una ruta fija): usa el
+# directorio donde vive ESTE script como PROJECT_DIR, salvo que se pase uno
+# explicito por variable de entorno.
 #
 # Complementario a install-nativo.sh (que ya es seguro de re-ejecutar como
 # forma de actualizar en modo nativo, ver docs/actualizacion.md): en Docker
@@ -53,7 +59,39 @@ echo "=== 3. Reconstruyendo y levantando los contenedores ==="
 docker compose up -d --build
 
 echo
-echo "=== 4. Verificando ==="
+echo "=== 4. Reconstruyendo los indices de la base ==="
+# Hasta 0.21.0 la imagen de Postgres era postgres:16-alpine (musl); desde
+# 0.22.0 es pgvector/pgvector:pg16 (glibc). musl NO registra version de
+# collation, asi que al cambiar de imagen Postgres NO avisa de nada -no hay
+# version previa que comparar-, pero el ORDEN con el que compara texto SI
+# cambia: los indices btree de columnas de texto (entre ellos el UNIQUE de
+# proxy_users.username) quedan fisicamente ordenados con el criterio viejo
+# y son logicamente corruptos -un lookup por indice puede no encontrar una
+# fila, el UNIQUE puede dejar pasar un duplicado-. REINDEX los reconstruye
+# con el criterio actual. Es rapido (los indices de este esquema son
+# chicos) e idempotente: en una instalacion que no lo necesita -una nueva
+# creada ya con locale C.UTF-8, o una ya reindexada- es un no-op barato. No
+# es fatal si falla: se avisa como hacerlo a mano.
+DB_USER="${DB_USER:-squid}"
+DB_NAME="${DB_NAME:-squidmanager}"
+_db_lista=0
+for _ in $(seq 1 30); do
+    if docker compose exec -T db pg_isready -U "$DB_USER" >/dev/null 2>&1; then
+        _db_lista=1
+        break
+    fi
+    sleep 2
+done
+if [ "$_db_lista" = "1" ] && docker compose exec -T db \
+        psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -qc "REINDEX DATABASE \"$DB_NAME\";" >/dev/null 2>&1; then
+    echo "OK: indices reconstruidos."
+else
+    echo "AVISO: no se pudieron reconstruir los indices automaticamente. Hazlo a mano:"
+    echo "  docker compose exec -T db psql -U $DB_USER -d $DB_NAME -c 'REINDEX DATABASE \"$DB_NAME\";'"
+fi
+
+echo
+echo "=== 5. Verificando ==="
 # Unos segundos de margen: el backend puede tardar un poco en aplicar
 # migraciones y quedar listo para responder despues de un rebuild.
 sleep 5

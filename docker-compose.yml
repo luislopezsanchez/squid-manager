@@ -14,6 +14,24 @@ services:
       POSTGRES_DB: ${DB_NAME:-squidmanager}
       POSTGRES_USER: ${DB_USER:-squid}
       POSTGRES_PASSWORD: ${DB_PASS:?Define DB_PASS en el .env}
+      # Locale C.UTF-8 al inicializar la base: orden de texto por byte (como
+      # --lc-collate=C que usa install-nativo.sh en modo nativo), pero ctype
+      # UTF-8 (upper/lower y clases de caracteres funcionan con acentos).
+      #
+      # Motivo: las versiones anteriores traian postgres:16-alpine, que
+      # inicializaba en_US.utf8 bajo musl -y musl NO registra version de
+      # collation-. Al pasar a pgvector/pgvector:pg16 (glibc), el ORDEN de
+      # los indices btree de texto cambia y Postgres NO avisa (no hay
+      # version previa que comparar): los indices quedan logicamente
+      # corruptos -confirmado con amcheck: "item order invariant violated"
+      # en el UNIQUE de proxy_users.username-. C.UTF-8 no tiene version de
+      # collation, asi que una base creada asi es inmune a cualquier cambio
+      # futuro de imagen o de libc.
+      #
+      # Solo afecta a un volumen que se inicializa DE CERO. Un volumen que ya
+      # existe conserva su locale -para esos, upgrade-docker.sh hace REINDEX
+      # una sola vez, ver el script y docs/actualizacion.md-.
+      POSTGRES_INITDB_ARGS: "--locale=C.UTF-8"
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Postgres corre todo lo que hay acá como superusuario, una sola vez,
