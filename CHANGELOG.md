@@ -5,6 +5,23 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.7] - 2026-09-10
+
+### Corregido
+
+- **Una instalación que ya había quedado «pegada» por el fallo de 0.24.5 no se
+  recuperaba sola al actualizar a 0.24.6.** Aquel fallo (`project_dir()` bajo
+  `/root`) escribía el `squid.conf` definitivo en disco y moría **antes** del
+  `squid -k reconfigure`. Al rearrancar, el backend veía el marcador de
+  «configuración generada» en el fichero y concluía que no había nada que
+  hacer —pero Squid seguía con la provisional en memoria (solo `localhost`,
+  `403` sin credenciales)—. Verificado en vivo actualizando 172.30.36.42 a
+  0.24.6: los contenedores quedaban sanos y en 0.24.6, pero el proxy seguía en
+  `403`. Ahora, cuando el `squid.conf` en disco ya es el definitivo, el
+  arranque **fuerza igualmente un `reconfigure`** (idempotente y barato) para
+  garantizar que el proceso corre lo que hay en disco. Con esto, actualizar a
+  esta versión desatasca esas instalaciones sin ningún paso manual.
+
 ## [0.24.6] - 2026-09-10
 
 ### Corregido
