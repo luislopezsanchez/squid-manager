@@ -499,7 +499,13 @@ es_config_de_fabrica() {
 # con algo ajeno a esta instalacion. Si ya lo tiene nuestro propio Squid
 # (una reinstalacion sobre el mismo puerto) no es un conflicto.
 if command -v ss >/dev/null 2>&1; then
-    _titular_puerto_proxy="$(ss -Htlnp "( sport = :${PROXY_PORT} )" 2>/dev/null | grep -oP 'users:\(\("\K[^"]+' | head -1)"
+    # "|| true": con `pipefail`, que el puerto este LIBRE (grep sin match,
+    # el caso normal y esperado en la inmensa mayoria de instalaciones) hace
+    # que grep devuelva 1 y aborte el script ENTERO en silencio por el 'set
+    # -e' de mas arriba -bug real, encontrado probando esto mismo en vivo
+    # (209.126.86.242, 2026-09-13): con el puerto de Squid libre, la
+    # instalacion se cortaba aca sin ningun mensaje de error.
+    _titular_puerto_proxy="$(ss -Htlnp "( sport = :${PROXY_PORT} )" 2>/dev/null | grep -oP 'users:\(\("\K[^"]+' | head -1 || true)"
     if [ -n "$_titular_puerto_proxy" ] && [ "$_titular_puerto_proxy" != "squid" ]; then
         fail "El puerto ${PROXY_PORT} ya esta en uso por otro proceso en este servidor ('$_titular_puerto_proxy', no relacionado con SquidManager -revisa con: ss -tlnp | grep :${PROXY_PORT}). Elige otro puerto libre, por ejemplo: PROXY_PORT=3129 BRANCH=$BRANCH bash $0"
     fi
@@ -740,7 +746,10 @@ ok "Panel compilado en $INSTALL_DIR/frontend/dist"
 # el mismo puerto), no es un conflicto: seguir sirviendo el mismo puerto en
 # un reload es justamente lo esperado.
 if command -v ss >/dev/null 2>&1; then
-    _titular_puerto="$(ss -Htlnp "( sport = :${WEB_PORT} )" 2>/dev/null | grep -oP 'users:\(\("\K[^"]+' | head -1)"
+    # "|| true": mismo motivo que en el chequeo de PROXY_PORT mas arriba -
+    # con el puerto LIBRE (el caso normal), grep sin match aborta el script
+    # entero en silencio por 'pipefail' + 'set -e', sin este escape.
+    _titular_puerto="$(ss -Htlnp "( sport = :${WEB_PORT} )" 2>/dev/null | grep -oP 'users:\(\("\K[^"]+' | head -1 || true)"
     if [ -n "$_titular_puerto" ] && [ "$_titular_puerto" != "nginx" ]; then
         fail "El puerto ${WEB_PORT} ya esta en uso por otro proceso en este servidor ('$_titular_puerto', no relacionado con SquidManager -revisa con: ss -tlnp | grep :${WEB_PORT}). Elige otro puerto libre, por ejemplo: WEB_PORT=3001 BRANCH=$BRANCH bash $0"
     fi
