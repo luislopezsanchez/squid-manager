@@ -17,6 +17,11 @@ Cada uno se activa por separado, y cada uno tiene su propio botón de prueba -an
 ## Qué eventos avisan
 
 Cada tipo de evento se activa o desactiva por separado: aplicar cambios, cambios de usuarios, cambios de ACLs, cambios de reglas de acceso, y alertas de seguridad (por ejemplo, varios inicios de sesión fallidos seguidos). No hace falta activarlos todos -conviene elegir los que de verdad importa saber en el momento, y dejar el resto para revisar en Auditoría cuando haga falta.
+
+## Ejemplo
+
+- **Email**: destinatarios \`red@miempresa.com, seguridad@miempresa.com\` (varios, separados por coma), con "Alertas de seguridad" y "Aplicar cambios" activados.
+- **Telegram**: bot token (se pega una sola vez, no se vuelve a mostrar) y chat ID \`-1001234567890\` (el ID de un grupo/canal, no un usuario individual, para que el aviso lo vea todo el equipo).
 `.trim(),
   en: `
 ## What this is for
@@ -33,6 +38,11 @@ Each one is turned on separately, and each has its own test button -before relyi
 ## Which events notify
 
 Each event type is turned on or off separately: applying changes, user changes, ACL changes, access rule changes, and security alerts (for example, several failed logins in a row). There's no need to enable all of them -it's better to pick the ones that genuinely matter to know about right away, and leave the rest to review in Audit when needed.
+
+## Example
+
+- **Email**: recipients \`network@mycompany.com, security@mycompany.com\` (several, comma-separated), with "Security alerts" and "Apply changes" enabled.
+- **Telegram**: bot token (pasted once, never shown again) and chat ID \`-1001234567890\` (a group/channel ID, not an individual user, so the whole team sees the alert).
 `.trim(),
   pt: `
 ## Para que serve
@@ -49,5 +59,10 @@ Cada um é ativado separadamente, e cada um tem seu próprio botão de teste -an
 ## Quais eventos avisam
 
 Cada tipo de evento é ativado ou desativado separadamente: aplicar alterações, mudanças de usuários, mudanças de ACLs, mudanças de regras de acesso, e alertas de segurança (por exemplo, vários logins malsucedidos seguidos). Não é preciso ativar todos -o melhor é escolher os que realmente importa saber na hora, e deixar o resto para revisar em Auditoria quando precisar.
+
+## Exemplo
+
+- **E-mail**: destinatários \`rede@minhaempresa.com, seguranca@minhaempresa.com\` (vários, separados por vírgula), com "Alertas de segurança" e "Aplicar alterações" ativados.
+- **Telegram**: token do bot (colado uma única vez, não é mostrado de novo) e chat ID \`-1001234567890\` (o ID de um grupo/canal, não de um usuário individual, para que o aviso seja visto por toda a equipe).
 `.trim(),
 }

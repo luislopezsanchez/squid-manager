@@ -16,6 +16,10 @@ Se agregan por nombre de usuario, con autocompletado que combina usuarios locale
 Un grupo puede marcarse para que su tráfico HTTPS **no se descifre** (no pase por SSL Bump), aunque el resto de la red sí lo tenga activado. Pensado para excepciones legítimas -por ejemplo, dispositivos que no aceptan el certificado del proxy, o tráfico donde descifrar generaría más problemas que beneficios.
 
 Importante: esto exime del descifrado, **no** de las reglas de bloqueo por dominio -si el grupo tiene un sitio bloqueado, sigue bloqueado igual, solo que Squid lo hace mirando el SNI (el nombre de dominio que viaja sin cifrar en el saludo TLS) en vez de la URL completa.
+
+## Ejemplo
+
+Un grupo \`gerencia\`, descripción "Directorio y gerentes de área", con los miembros \`jrodriguez\`, \`mgomez\`, \`acastro\`. Ese nombre (\`gerencia\`) es después el que se usa en **Reglas de acceso** para eximirlos de una restricción, por ejemplo \`allow gerencia\` antes de una regla \`deny\` más general.
 `.trim(),
   en: `
 ## What this is for
@@ -31,6 +35,10 @@ Added by username, with autocomplete that combines local and LDAP users. The sam
 A group can be marked so its HTTPS traffic **isn't decrypted** (doesn't go through SSL Bump), even if the rest of the network has it enabled. Meant for legitimate exceptions -for example, devices that don't accept the proxy's certificate, or traffic where decrypting would cause more problems than it solves.
 
 Important: this exempts from decryption, **not** from domain-blocking rules -if the group has a site blocked, it stays blocked, just that Squid checks it by looking at the SNI (the domain name that travels unencrypted in the TLS handshake) instead of the full URL.
+
+## Example
+
+A group \`management\`, description "Directors and area managers", with members \`jrodriguez\`, \`mgomez\`, \`acastro\`. That name (\`management\`) is then what's used in **Access rules** to exempt them from a restriction, for example \`allow management\` before a more general \`deny\` rule.
 `.trim(),
   pt: `
 ## Para que serve
@@ -46,5 +54,9 @@ São adicionados pelo nome de usuário, com autocompletar que combina usuários 
 Um grupo pode ser marcado para que seu tráfego HTTPS **não seja descriptografado** (não passe pelo SSL Bump), mesmo que o resto da rede tenha isso ativado. Pensado para exceções legítimas -por exemplo, dispositivos que não aceitam o certificado do proxy, ou tráfego onde descriptografar geraria mais problemas do que benefícios.
 
 Importante: isso isenta da descriptografia, **não** das regras de bloqueio por domínio -se o grupo tem um site bloqueado, ele continua bloqueado, só que o Squid verifica olhando o SNI (o nome de domínio que viaja sem criptografia no handshake TLS) em vez da URL completa.
+
+## Exemplo
+
+Um grupo \`gerencia\`, descrição "Diretoria e gerentes de área", com os membros \`jrodriguez\`, \`mgomez\`, \`acastro\`. Esse nome (\`gerencia\`) é depois o usado em **Regras de acesso** para isentá-los de uma restrição, por exemplo \`allow gerencia\` antes de uma regra \`deny\` mais geral.
 `.trim(),
 }

@@ -25,6 +25,10 @@ Se puede generar una automáticamente o establecer una propia. Una vez generada,
 ## Vencimiento
 
 Un usuario local puede tener fecha de vencimiento: pasada esa fecha, deja de poder autenticarse aunque siga marcado como habilitado -pensado para accesos temporales (un contratista, un invitado) sin tener que acordarse de deshabilitarlo a mano.
+
+## Ejemplo
+
+Crear el usuario \`contratista_web\`, generar una contraseña automática, y ponerle vencimiento a 30 días -pasado ese plazo, deja de poder navegar sin que nadie tenga que acordarse de desactivarlo.
 `.trim(),
   en: `
 ## What this is for
@@ -49,6 +53,10 @@ It can be generated automatically or set manually. Once generated, **it has to b
 ## Expiration
 
 A local user can have an expiration date: past that date, they stop being able to authenticate even if still marked as enabled -meant for temporary access (a contractor, a guest) without having to remember to disable it by hand.
+
+## Example
+
+Create the user \`web_contractor\`, generate an automatic password, and set it to expire in 30 days -past that date, they stop being able to browse without anyone having to remember to disable them.
 `.trim(),
   pt: `
 ## Para que serve
@@ -73,5 +81,9 @@ Pode ser gerada automaticamente ou definida manualmente. Uma vez gerada, **preci
 ## Vencimento
 
 Um usuário local pode ter data de vencimento: passada essa data, ele deixa de conseguir se autenticar mesmo continuando marcado como habilitado -pensado para acessos temporários (um prestador, um convidado) sem precisar lembrar de desabilitá-lo manualmente.
+
+## Exemplo
+
+Criar o usuário \`prestador_web\`, gerar uma senha automática, e definir vencimento em 30 dias -passado esse prazo, ele deixa de conseguir navegar sem que ninguém precise lembrar de desativá-lo.
 `.trim(),
 }

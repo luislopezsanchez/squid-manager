@@ -25,6 +25,14 @@ Una lista de dominios que se excluyen del padre y salen directo -típicamente, s
 ## Certificado del padre
 
 Si el proxy padre también intercepta HTTPS con su propio certificado, hay que cargar ese certificado (formato PEM) para que este Squid confíe en él -sin esto, el tráfico HTTPS a través del padre fallaría por certificado no confiable.
+
+## Ejemplo de configuración
+
+- Host: \`proxy-central.miempresa.local\`
+- Puerto: \`8080\`
+- Modo de credenciales: \`Fijas\`, usuario \`squidmanager-sucursal-norte\`
+- No intentar nunca la salida directa: activado
+- Dominios de salida directa: \`.miempresa.local intranet.miempresa.local\` (los servicios internos que el padre no necesita ver)
 `.trim(),
   en: `
 ## What this is for
@@ -49,6 +57,14 @@ A list of domains excluded from the parent that go out directly -typically inter
 ## Parent's certificate
 
 If the parent proxy also intercepts HTTPS with its own certificate, that certificate (PEM format) needs to be uploaded so this Squid trusts it -without it, HTTPS traffic through the parent would fail with an untrusted certificate error.
+
+## Example configuration
+
+- Host: \`central-proxy.mycompany.local\`
+- Port: \`8080\`
+- Credentials mode: \`Fixed\`, username \`squidmanager-north-branch\`
+- Never attempt direct exit: enabled
+- Direct-exit domains: \`.mycompany.local intranet.mycompany.local\` (the internal services the parent doesn't need to see)
 `.trim(),
   pt: `
 ## Para que serve
@@ -73,5 +89,13 @@ Uma lista de domínios excluídos do pai que saem direto -tipicamente, serviços
 ## Certificado do pai
 
 Se o proxy pai também intercepta HTTPS com seu próprio certificado, esse certificado (formato PEM) precisa ser carregado para que este Squid confie nele -sem isso, o tráfego HTTPS através do pai falharia por certificado não confiável.
+
+## Exemplo de configuração
+
+- Host: \`proxy-central.minhaempresa.local\`
+- Porta: \`8080\`
+- Modo de credenciais: \`Fixas\`, usuário \`squidmanager-filial-norte\`
+- Nunca tentar a saída direta: ativado
+- Domínios de saída direta: \`.minhaempresa.local intranet.minhaempresa.local\` (os serviços internos que o pai não precisa ver)
 `.trim(),
 }

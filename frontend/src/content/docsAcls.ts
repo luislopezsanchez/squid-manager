@@ -15,6 +15,23 @@ Una ACL (Access Control List) es una condición con nombre -un rango de IPs, una
 
 El modo **"Agregar a lo que ya había"** suma los dominios nuevos a los que ya tenía esa ACL, sin duplicar; **"Reemplazar toda la lista"** descarta lo anterior.
 
+## Tipos de ACL disponibles, con ejemplo
+
+- **IP de origen (src)** — de dónde viene el cliente. Ej: \`192.168.1.0/24\`.
+- **IP de destino (dst)** — a qué IP se dirige la petición. Ej: \`10.0.0.0/8\`.
+- **Dominio de destino (dstdomain)** — a qué dominio. El punto inicial incluye subdominios. Ej: \`.facebook.com\` (coincide con facebook.com, www.facebook.com, m.facebook.com...).
+- **Regex de dominio (dstdom_regex)** — para patrones que una lista de dominios sueltos no puede expresar. Ej: \`\\.social\\.\` (cualquier dominio que tenga ".social." en el medio).
+- **Regex de URL (url_regex)** — sobre la URL completa, no solo el dominio. Ej: \`\\.mp4$\` (cualquier URL que termine en .mp4, sin importar el dominio).
+- **Regex de path URL (urlpath_regex)** — como el anterior, pero ignorando el dominio y los parámetros de query. Ej: \`/download/\`.
+- **Puerto destino (port)** — uno o varios puertos, separados por espacio. Ej: \`443 80\`.
+- **Protocolo (proto)** — Ej: \`HTTP FTP\`.
+- **Método HTTP (method)** — Ej: \`GET POST\` (para permitir solo lectura, por ejemplo, se excluiría POST/PUT/DELETE).
+- **Horario (time)** — día(s) y rango horario. Ej: \`M-F 09:00-17:00\` (lunes a viernes, horario laboral).
+- **Usuario autenticado (proxy_auth)** — Ej: \`REQUIRED\` (cualquier usuario autenticado, sin importar cuál) o una lista de usuarios puntuales.
+- **Conexiones máximas (maxconn)** — tope de conexiones simultáneas por cliente. Ej: \`10\`.
+- **User-Agent (browser)** — según lo que declara el navegador/app. Ej: \`Chrome\` (poco confiable como control de seguridad: cualquiera puede falsificar su User-Agent, útil más bien para reportes).
+- **MIME type de respuesta (rep_mime_type)** — según el tipo de contenido que devuelve el servidor. Ej: \`video/\` (cualquier respuesta cuyo tipo empiece con "video/").
+
 ## Qué esperar con una lista muy grande (cientos de miles o millones de dominios)
 
 - **Cargar el archivo** es rápido (segundos, incluso con varios millones de líneas): se valida cada línea y se escribe una sola vez.
@@ -34,6 +51,23 @@ An ACL (Access Control List) is a named condition -an IP range, a list of domain
 
 **"Add to what was already there"** merges the new domains into the ones the ACL already had, without duplicating; **"Replace the whole list"** discards the previous content.
 
+## Available ACL types, with an example
+
+- **Source IP (src)** — where the client connects from. E.g.: \`192.168.1.0/24\`.
+- **Destination IP (dst)** — which IP the request targets. E.g.: \`10.0.0.0/8\`.
+- **Destination domain (dstdomain)** — which domain. The leading dot includes subdomains. E.g.: \`.facebook.com\` (matches facebook.com, www.facebook.com, m.facebook.com...).
+- **Domain regex (dstdom_regex)** — for patterns a plain domain list can't express. E.g.: \`\\.social\\.\` (any domain with ".social." in the middle).
+- **URL regex (url_regex)** — against the full URL, not just the domain. E.g.: \`\\.mp4$\` (any URL ending in .mp4, regardless of domain).
+- **URL path regex (urlpath_regex)** — like the above, but ignoring the domain and query parameters. E.g.: \`/download/\`.
+- **Destination port (port)** — one or more ports, space-separated. E.g.: \`443 80\`.
+- **Protocol (proto)** — E.g.: \`HTTP FTP\`.
+- **HTTP method (method)** — E.g.: \`GET POST\` (to allow read-only, for instance, POST/PUT/DELETE would be excluded).
+- **Time window (time)** — day(s) and time range. E.g.: \`M-F 09:00-17:00\` (Monday to Friday, business hours).
+- **Authenticated user (proxy_auth)** — E.g.: \`REQUIRED\` (any authenticated user, whoever it is) or a list of specific usernames.
+- **Max connections (maxconn)** — cap on simultaneous connections per client. E.g.: \`10\`.
+- **User-Agent (browser)** — based on what the browser/app declares. E.g.: \`Chrome\` (not reliable as a security control: anyone can spoof their User-Agent, more useful for reporting).
+- **Response MIME type (rep_mime_type)** — based on the content type the server returns. E.g.: \`video/\` (any response whose type starts with "video/").
+
 ## What to expect with a very large list (hundreds of thousands or millions of domains)
 
 - **Uploading the file** is fast (seconds, even with several million lines): each line is validated and it's written once.
@@ -52,6 +86,23 @@ Uma ACL (Access Control List) é uma condição com nome -uma faixa de IPs, uma 
 **Carregar domínios**: um arquivo de texto é enviado (um domínio por linha). Pensado para blocklists grandes -de centenas a milhões de domínios- tipicamente baixadas de um provedor externo. Abaixo de 200 domínios, o upload é salvo como uma ACL normal; acima disso, é salvo como **ACL de arquivo**: o conteúdo não vive no banco de dados, vive em um arquivo no servidor, e o Squid o lê diretamente de lá. Uma ACL de arquivo não se edita manualmente -faz sentido reenviar o arquivo atualizado com o mesmo nome para substituí-la, não editar domínio por domínio.
 
 O modo **"Adicionar ao que já havia"** soma os domínios novos aos que a ACL já tinha, sem duplicar; **"Substituir toda a lista"** descarta o conteúdo anterior.
+
+## Tipos de ACL disponíveis, com exemplo
+
+- **IP de origem (src)** — de onde vem o cliente. Ex: \`192.168.1.0/24\`.
+- **IP de destino (dst)** — para qual IP vai a requisição. Ex: \`10.0.0.0/8\`.
+- **Domínio de destino (dstdomain)** — para qual domínio. O ponto inicial inclui subdomínios. Ex: \`.facebook.com\` (corresponde a facebook.com, www.facebook.com, m.facebook.com...).
+- **Regex de domínio (dstdom_regex)** — para padrões que uma lista de domínios simples não consegue expressar. Ex: \`\\.social\\.\` (qualquer domínio que tenha ".social." no meio).
+- **Regex de URL (url_regex)** — sobre a URL completa, não só o domínio. Ex: \`\\.mp4$\` (qualquer URL que termine em .mp4, não importa o domínio).
+- **Regex de path da URL (urlpath_regex)** — como o anterior, mas ignorando o domínio e os parâmetros de query. Ex: \`/download/\`.
+- **Porta de destino (port)** — uma ou várias portas, separadas por espaço. Ex: \`443 80\`.
+- **Protocolo (proto)** — Ex: \`HTTP FTP\`.
+- **Método HTTP (method)** — Ex: \`GET POST\` (para permitir só leitura, por exemplo, excluiria POST/PUT/DELETE).
+- **Horário (time)** — dia(s) e faixa de horário. Ex: \`M-F 09:00-17:00\` (segunda a sexta, horário comercial).
+- **Usuário autenticado (proxy_auth)** — Ex: \`REQUIRED\` (qualquer usuário autenticado, não importa qual) ou uma lista de usuários específicos.
+- **Conexões máximas (maxconn)** — teto de conexões simultâneas por cliente. Ex: \`10\`.
+- **User-Agent (browser)** — conforme o que o navegador/app declara. Ex: \`Chrome\` (pouco confiável como controle de segurança: qualquer um pode falsificar seu User-Agent, mais útil para relatórios).
+- **Tipo MIME de resposta (rep_mime_type)** — conforme o tipo de conteúdo que o servidor devolve. Ex: \`video/\` (qualquer resposta cujo tipo comece com "video/").
 
 ## O que esperar com uma lista muito grande (centenas de milhares ou milhões de domínios)
 

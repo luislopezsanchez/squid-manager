@@ -11,6 +11,17 @@ Conecta SquidManager a un directorio (Active Directory u OpenLDAP) para que los 
 
 Servidor, DN de bind (la cuenta de servicio que hace las búsquedas), base de búsqueda, y dos filtros LDAP: uno para autenticar un login puntual (\`user_filter\`, con \`%s\` como marcador del nombre de usuario) y otro para la sincronización masiva (\`sync_filter\`, qué objetos del directorio cuentan como "usuario"). Hay valores de partida según el tipo de directorio (AD, OpenLDAP, inetOrgPerson), pero son solo un punto de partida -los campos son texto libre por si el esquema real es distinto.
 
+**Ejemplo para Active Directory:**
+- Servidor: \`ldap://dc01.miempresa.local:389\`
+- DN de bind: \`CN=svc-squidmanager,OU=ServiceAccounts,DC=miempresa,DC=local\`
+- Base de búsqueda: \`OU=Usuarios,DC=miempresa,DC=local\`
+- Filtro de login: \`(sAMAccountName=%s)\` (el preset de AD)
+- Filtro de sincronización: \`(&(objectCategory=person)(objectClass=user))\`
+
+**Ejemplo para OpenLDAP:**
+- Filtro de login: \`(uid=%s)\`
+- Filtro de sincronización: \`(objectClass=posixAccount)\`
+
 ## Probar antes de sincronizar
 
 Con un usuario y contraseña reales del directorio, el botón de prueba confirma que el bind funciona, que el filtro de login encuentra a ese usuario, y que la contraseña es correcta -sin esto, un error de configuración (una base de búsqueda mal escrita, por ejemplo) recién se notaría cuando un usuario real no pudiera navegar.
@@ -28,6 +39,17 @@ Connects SquidManager to a directory (Active Directory or OpenLDAP) so proxy use
 
 Server, bind DN (the service account that does the lookups), search base, and two LDAP filters: one for authenticating a single login (\`user_filter\`, with \`%s\` as the username placeholder) and another for the bulk sync (\`sync_filter\`, which directory objects count as a "user"). There are starting presets by directory type (AD, OpenLDAP, inetOrgPerson), but they're just a starting point -the fields are free text in case the real schema is different.
 
+**Example for Active Directory:**
+- Server: \`ldap://dc01.mycompany.local:389\`
+- Bind DN: \`CN=svc-squidmanager,OU=ServiceAccounts,DC=mycompany,DC=local\`
+- Search base: \`OU=Users,DC=mycompany,DC=local\`
+- Login filter: \`(sAMAccountName=%s)\` (the AD preset)
+- Sync filter: \`(&(objectCategory=person)(objectClass=user))\`
+
+**Example for OpenLDAP:**
+- Login filter: \`(uid=%s)\`
+- Sync filter: \`(objectClass=posixAccount)\`
+
 ## Test before syncing
 
 With a real username and password from the directory, the test button confirms the bind works, the login filter finds that user, and the password is correct -without this, a configuration error (a mistyped search base, for example) would only show up when a real user couldn't browse.
@@ -44,6 +66,17 @@ Conecta o SquidManager a um diretório (Active Directory ou OpenLDAP) para que o
 ## Configuração
 
 Servidor, DN de bind (a conta de serviço que faz as buscas), base de busca, e dois filtros LDAP: um para autenticar um login pontual (\`user_filter\`, com \`%s\` como marcador do nome de usuário) e outro para a sincronização em massa (\`sync_filter\`, quais objetos do diretório contam como "usuário"). Há valores de partida conforme o tipo de diretório (AD, OpenLDAP, inetOrgPerson), mas são só um ponto de partida -os campos são texto livre caso o esquema real seja diferente.
+
+**Exemplo para Active Directory:**
+- Servidor: \`ldap://dc01.minhaempresa.local:389\`
+- DN de bind: \`CN=svc-squidmanager,OU=ServiceAccounts,DC=minhaempresa,DC=local\`
+- Base de busca: \`OU=Usuarios,DC=minhaempresa,DC=local\`
+- Filtro de login: \`(sAMAccountName=%s)\` (o preset do AD)
+- Filtro de sincronização: \`(&(objectCategory=person)(objectClass=user))\`
+
+**Exemplo para OpenLDAP:**
+- Filtro de login: \`(uid=%s)\`
+- Filtro de sincronização: \`(objectClass=posixAccount)\`
 
 ## Testar antes de sincronizar
 

@@ -18,6 +18,15 @@ Una regla puede citar varias ACLs a la vez (por ejemplo, un grupo de usuarios y 
 ## Qué pasa con el tráfico HTTPS
 
 Una regla que cita una ACL de dominio se duplica automáticamente por dentro para aplicar también sobre el nombre de dominio que viaja en el saludo TLS (SNI) -sin eso, bloquear un dominio solo afectaría al tráfico HTTP sin cifrar, y hoy casi todo es HTTPS. Esto es automático, no hay que crear una regla aparte para HTTPS.
+
+## Campos de una regla, con ejemplo
+
+- **Acción**: \`allow\` o \`deny\`.
+- **ACLs**: uno o más nombres, separados por espacio. Ej: \`horario_laboral gerencia\` (ambas tienen que cumplirse). Con \`!\` invierte: \`!redes_sociales_bloqueadas\` significa "que NO sea esa ACL".
+- **Orden**: posición en la lista; se cambia arrastrando, no escribiendo un número a mano.
+- **Descripción**: texto libre para dejar constancia del motivo -no lo usa Squid, es solo para quien administre después (incluido vos mismo, en seis meses).
+
+**Ejemplo completo**: una regla \`deny\` con ACLs \`redes_sociales_bloqueadas !gerencia\` -bloquea el acceso a la ACL "redes_sociales_bloqueadas" para todos MENOS el grupo "gerencia".
 `.trim(),
   en: `
 ## What this is for
@@ -35,6 +44,15 @@ A rule can cite several ACLs at once (for example, a user group and a time windo
 ## What happens with HTTPS traffic
 
 A rule that cites a domain ACL is automatically duplicated internally to also apply to the domain name that travels in the TLS handshake (SNI) -without that, blocking a domain would only affect unencrypted HTTP traffic, and today almost everything is HTTPS. This is automatic; there's no need to create a separate rule for HTTPS.
+
+## A rule's fields, with an example
+
+- **Action**: \`allow\` or \`deny\`.
+- **ACLs**: one or more names, space-separated. E.g.: \`business_hours management\` (both have to match). Prefix with \`!\` to invert: \`!blocked_social_media\` means "NOT this ACL".
+- **Order**: position in the list; changed by dragging, not by typing a number.
+- **Description**: free text to record the reason -Squid doesn't use it, it's only for whoever administers it later (including yourself, six months from now).
+
+**Full example**: a \`deny\` rule with ACLs \`blocked_social_media !management\` -blocks access to the "blocked_social_media" ACL for everyone EXCEPT the "management" group.
 `.trim(),
   pt: `
 ## Para que serve
@@ -52,5 +70,14 @@ Uma regra pode citar várias ACLs ao mesmo tempo (por exemplo, um grupo de usuá
 ## O que acontece com o tráfego HTTPS
 
 Uma regra que cita uma ACL de domínio é duplicada automaticamente por dentro para também se aplicar sobre o nome de domínio que viaja no handshake TLS (SNI) -sem isso, bloquear um domínio só afetaria o tráfego HTTP sem criptografia, e hoje quase tudo é HTTPS. Isso é automático, não é preciso criar uma regra separada para HTTPS.
+
+## Campos de uma regra, com exemplo
+
+- **Ação**: \`allow\` ou \`deny\`.
+- **ACLs**: um ou mais nomes, separados por espaço. Ex: \`horario_comercial gerencia\` (as duas precisam ser satisfeitas). Com \`!\` inverte: \`!redes_sociais_bloqueadas\` significa "que NÃO seja essa ACL".
+- **Ordem**: posição na lista; muda arrastando, não digitando um número manualmente.
+- **Descrição**: texto livre para registrar o motivo -o Squid não usa isso, é só para quem administrar depois (incluindo você mesmo, daqui a seis meses).
+
+**Exemplo completo**: uma regra \`deny\` com ACLs \`redes_sociais_bloqueadas !gerencia\` -bloqueia o acesso à ACL "redes_sociais_bloqueadas" para todos MENOS o grupo "gerencia".
 `.trim(),
 }

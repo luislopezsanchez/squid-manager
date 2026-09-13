@@ -16,6 +16,10 @@ Quién puede entrar **al panel** de SquidManager -no confundir con **Usuarios** 
 ## Qué pasa al crear uno
 
 Se define usuario, contraseña, email opcional y rol. A diferencia de un usuario del proxy, acá no hay generación automática de contraseña con "guardala ahora" -la define quien crea la cuenta.
+
+## Ejemplo
+
+Un administrador \`soporte_ti\`, rol \`Solo lectura\`, email \`soporte@miempresa.com\` -para que el equipo de soporte pueda revisar Registros y Auditoría ante un reclamo, sin poder tocar ninguna ACL ni regla por error.
 `.trim(),
   en: `
 ## What this is for
@@ -31,6 +35,10 @@ Who can log into the SquidManager **panel** -not to be confused with **Users** (
 ## What happens when creating one
 
 Username, password, optional email and role are set. Unlike a proxy user, there's no auto-generated password with a "save it now" step here -whoever creates the account sets it.
+
+## Example
+
+An admin \`it_support\`, role \`Read only\`, email \`support@mycompany.com\` -so the support team can check Logs and Audit for a complaint, without being able to touch any ACL or rule by mistake.
 `.trim(),
   pt: `
 ## Para que serve
@@ -46,5 +54,9 @@ Quem pode entrar **no painel** do SquidManager -não confundir com **Usuários**
 ## O que acontece ao criar um
 
 Define-se usuário, senha, e-mail opcional e papel. Diferente de um usuário do proxy, aqui não há geração automática de senha com um passo de "salve agora" -quem cria a conta a define.
+
+## Exemplo
+
+Um administrador \`suporte_ti\`, papel \`Somente leitura\`, e-mail \`suporte@minhaempresa.com\` -para que a equipe de suporte possa revisar Registros e Auditoria diante de uma reclamação, sem poder mexer em nenhuma ACL ou regra por engano.
 `.trim(),
 }

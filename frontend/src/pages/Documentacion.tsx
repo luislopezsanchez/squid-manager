@@ -26,6 +26,7 @@ import { DOC_CERTIFICADO } from '../content/docsCertificado'
 import { DOC_CONFIGURACION } from '../content/docsConfiguracion'
 import { DOC_BACKUP_MIGRACION } from '../content/docsBackupMigracion'
 import { DOC_ADMINISTRADORES } from '../content/docsAdministradores'
+import { DOC_SMTP } from '../content/docsSmtp'
 
 type Articulo = { slug: string; titulo: string; listo: boolean; contenido?: Record<'es' | 'en' | 'pt', string> }
 type Grupo = { id: string; titulo: string; Icon: (p: { className?: string }) => JSX.Element; articulos: Articulo[] }
@@ -78,6 +79,7 @@ const GRUPOS: Grupo[] = [
     articulos: [
       { slug: 'certificado', titulo: traducir('Certificado'), listo: true, contenido: DOC_CERTIFICADO },
       { slug: 'configuracion', titulo: traducir('Configuración'), listo: true, contenido: DOC_CONFIGURACION },
+      { slug: 'smtp', titulo: traducir('SMTP'), listo: true, contenido: DOC_SMTP },
       { slug: 'backup-y-migracion', titulo: traducir('Backup y migración'), listo: true, contenido: DOC_BACKUP_MIGRACION },
       { slug: 'administradores', titulo: traducir('Administradores'), listo: true, contenido: DOC_ADMINISTRADORES },
     ],

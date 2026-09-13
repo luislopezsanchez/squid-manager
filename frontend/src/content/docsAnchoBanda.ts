@@ -26,6 +26,14 @@ Cada nivel tiene dos números: **restore** (a qué velocidad se "rellena" el bal
 ## A qué tráfico aplica
 
 Un delay pool se asocia opcionalmente a una ACL: sin ACL, aplica a todo; con una ACL (por ejemplo, un grupo o una lista de dominios de streaming), el límite solo rige para ese tráfico puntual.
+
+## Ejemplo concreto
+
+Una **Clase 2** asociada a la ACL \`streaming_video\`, con:
+- Global: restore \`5 MB/s\`, límite \`10 MB/s\` (el conjunto de todo el streaming nunca supera los 5 MB/s sostenidos, con ráfagas de hasta 10 MB/s).
+- Por usuario: restore \`512 KB/s\`, límite \`1 MB/s\` (cada persona individual queda tope en medio megabyte por segundo sostenido).
+
+Con esto, ver un video de a uno anda bien, pero diez personas mirando streaming a la vez no saturan el enlace completo -cada una cede lugar a las demás dentro del límite global.
 `.trim(),
   en: `
 ## What this is for
@@ -51,6 +59,14 @@ Each level has two numbers: **restore** (how fast the bucket of available bytes 
 ## What traffic it applies to
 
 A delay pool is optionally tied to an ACL: without an ACL, it applies to everything; with one (for example, a group or a list of streaming domains), the limit only governs that specific traffic.
+
+## Concrete example
+
+A **Class 2** pool tied to the \`video_streaming\` ACL, with:
+- Global: restore \`5 MB/s\`, limit \`10 MB/s\` (all streaming combined never sustains more than 5 MB/s, with bursts up to 10 MB/s).
+- Per user: restore \`512 KB/s\`, limit \`1 MB/s\` (each individual person is capped at half a megabyte per second sustained).
+
+With this, watching a video alone works fine, but ten people streaming at once don't saturate the whole link -each one yields room to the others within the global cap.
 `.trim(),
   pt: `
 ## Para que serve
@@ -76,5 +92,13 @@ Cada nível tem dois números: **restore** (a que velocidade o "balde" de bytes 
 ## A que tráfego se aplica
 
 Um delay pool é opcionalmente associado a uma ACL: sem ACL, se aplica a tudo; com uma (por exemplo, um grupo ou uma lista de domínios de streaming), o limite vale só para esse tráfego específico.
+
+## Exemplo concreto
+
+Uma **Classe 2** associada à ACL \`streaming_video\`, com:
+- Global: restore \`5 MB/s\`, limite \`10 MB/s\` (todo o streaming junto nunca ultrapassa 5 MB/s sustentados, com rajadas de até 10 MB/s).
+- Por usuário: restore \`512 KB/s\`, limite \`1 MB/s\` (cada pessoa individual fica limitada a meio megabyte por segundo sustentado).
+
+Com isso, assistir a um vídeo sozinho funciona bem, mas dez pessoas assistindo streaming ao mesmo tempo não saturam o link inteiro -cada uma cede espaço para as outras dentro do limite global.
 `.trim(),
 }

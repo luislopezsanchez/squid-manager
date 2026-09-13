@@ -15,6 +15,8 @@ Servidor y puerto de destino, protocolo (UDP o TCP), facility (la categoría est
 
 **UDP vs. TCP**: UDP es más simple pero no confirma entrega -si el destino no está escuchando, el mensaje se pierde en silencio. TCP, si falla la conexión, reintenta en el siguiente lote.
 
+**Ejemplo de configuración**: servidor \`10.0.5.20\`, puerto \`514\` (el estándar de syslog), protocolo \`UDP\`, facility \`local0\` (para poder filtrar del lado del SIEM justo el tráfico de este proxy y no mezclarlo con otros sistemas que también mandan syslog), formato \`RFC 5424\` si el SIEM lo soporta -trae fecha en ISO 8601, más fácil de parsear que el formato clásico.
+
 ## Probar
 
 Antes de confiar en el reenvío, el botón de prueba manda un mensaje de ejemplo con la configuración actual (guardada o no) y confirma si llegó -sin esto, un typo en la IP del destino recién se notaría cuando alguien fuera a buscar un log que nunca llegó.
@@ -32,6 +34,8 @@ Destination server and port, protocol (UDP or TCP), facility (the standard syslo
 
 **UDP vs. TCP**: UDP is simpler but doesn't confirm delivery -if the destination isn't listening, the message is silently lost. TCP retries on the next batch if the connection fails.
 
+**Example configuration**: server \`10.0.5.20\`, port \`514\` (the syslog standard), protocol \`UDP\`, facility \`local0\` (so the SIEM side can filter exactly this proxy's traffic without mixing it with other systems that also send syslog), format \`RFC 5424\` if the SIEM supports it -it carries an ISO 8601 date, easier to parse than the classic format.
+
 ## Test
 
 Before relying on the forwarding, the test button sends a sample message with the current configuration (saved or not) and confirms whether it arrived -without this, a typo in the destination IP would only show up when someone went looking for a log that never arrived.
@@ -48,6 +52,8 @@ Reenvia cada linha do \`access.log\` para um SIEM ou ferramenta de auditoria ext
 Servidor e porta de destino, protocolo (UDP ou TCP), facility (a categoria padrão do syslog, para filtrar do lado receptor) e formato da mensagem (RFC 3164, o clássico e mais compatível, ou RFC 5424, estruturado e com data ISO).
 
 **UDP vs. TCP**: UDP é mais simples mas não confirma entrega -se o destino não estiver escutando, a mensagem se perde silenciosamente. TCP, se a conexão falhar, tenta de novo no próximo lote.
+
+**Exemplo de configuração**: servidor \`10.0.5.20\`, porta \`514\` (o padrão do syslog), protocolo \`UDP\`, facility \`local0\` (para poder filtrar do lado do SIEM justo o tráfego deste proxy sem misturar com outros sistemas que também enviam syslog), formato \`RFC 5424\` se o SIEM suportar -traz data em ISO 8601, mais fácil de interpretar que o formato clássico.
 
 ## Testar
 
