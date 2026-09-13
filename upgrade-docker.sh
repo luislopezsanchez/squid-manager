@@ -108,6 +108,27 @@ git checkout --quiet "$BRANCH"
 git reset --hard --quiet "origin/$BRANCH"
 echo "Codigo actualizado a $(git log --oneline -1)"
 
+# El `git reset --hard` de arriba acaba de sobrescribir ESTE MISMO archivo en
+# disco si el upgrade trae cambios en upgrade-docker.sh -exactamente lo que
+# paso al probar 0.24.4 -> 73fbc04 en vivo (172.126.86.242, 2026-09-13): el
+# paso 5 de mas abajo seguia mostrando el mensaje y la logica de ANTES del
+# pull (sin el reintento contra el backend, comprobando localhost:$WEB_PORT
+# en vez de dentro del contenedor), aunque el checkout ya estuviera al dia -
+# mismo bug de fondo que motivo separar install-nativo.sh de
+# upgrade-nativo.sh (ver el comentario largo al principio de ese script):
+# bash ya cargo el codigo VIEJO en memoria y sigue con el durante el resto de
+# la corrida, aunque los archivos de disco -este script incluido- ya
+# cambiaron por debajo. Se evita relanzando como proceso NUEVO, que si lee
+# el archivo ya actualizado -nunca "source", para no heredar el bash viejo-.
+# SQUIDMGR_UPGRADE_REEXEC corta la recursion: la segunda pasada repite el
+# backup y el pull (rapido y sin efecto porque ya estan al dia) pero no
+# vuelve a relanzarse.
+if [ -z "${SQUIDMGR_UPGRADE_REEXEC:-}" ]; then
+    echo
+    echo "Continuando con el codigo ya actualizado (proceso nuevo)..."
+    SQUIDMGR_UPGRADE_REEXEC=1 exec bash "$PROJECT_DIR/upgrade-docker.sh"
+fi
+
 echo
 echo "=== 3. Reconstruyendo y levantando los contenedores ==="
 # --build no es opcional: sin el, Docker reutiliza las imagenes que ya
