@@ -137,7 +137,8 @@ PAQUETES=(
     postgresql
     python3 python3-venv python3-pip python3-bcrypt python3-ldap3
     nginx
-    nodejs npm
+    # nodejs/npm NO van aca a proposito -ver por que justo debajo del
+    # apt-get install de este array, junto al chequeo de version de Node.
     # apache2-utils trae htpasswd, que es con lo que el panel genera el hash de
     # cada usuario del proxy. Sin el, crear un usuario falla y el mensaje ni
     # siquiera tiene sentido en esta instalacion ("reconstruye la imagen").
@@ -238,12 +239,33 @@ for BIN in htpasswd openssl; do
 done
 ok "Herramientas del panel disponibles (htpasswd, openssl)"
 
+# nodejs/npm quedaron fuera del PAQUETES de arriba a proposito: el nodejs
+# de Ubuntu/Debian declara "Conflicts: npm" contra CUALQUIER nodejs que no
+# venga de su propio repo -NodeSource, nvm, un tarball manual-, y al
+# revés tambien. Metidos en el mismo lote atomico que todo lo demas, un
+# Node ya instalado por otra via (aunque sea mas nuevo y perfectamente
+# valido) tumbaba la instalacion ENTERA con "Unable to correct problems,
+# you have held broken packages" -bug real, encontrado en un servidor con
+# Node 22 de NodeSource ya instalado para otro servicio del mismo host
+# (209.126.86.242, 2026-09-13)-, sin llegar siquiera a este chequeo de
+# version que ya sabia que ese Node de sobra alcanzaba.
 NODE_MAJOR="$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1 || echo 0)"
-if [ "${NODE_MAJOR:-0}" -lt 18 ]; then
-    warn "Node ${NODE_MAJOR} es demasiado antiguo para compilar el panel; instalando Node 20."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1 \
-        || fail "No se pudo anadir el repositorio de Node 20."
-    apt-get install -y -qq nodejs >/dev/null || fail "No se pudo instalar Node 20."
+if [ "${NODE_MAJOR:-0}" -ge 18 ] && command -v npm >/dev/null 2>&1; then
+    ok "Node $(node -v) ya instalado ($(command -v node)); se usa tal cual, sin tocar paquetes."
+else
+    # Intento normal por el repo de la distro -es lo que ya cubria el caso
+    # comun (Ubuntu 24.04 trae Node 18.19 de fabrica)-, tolerando que
+    # falle (por ejemplo, por el mismo tipo de conflicto de arriba con un
+    # nodejs residual de otro origen que no llegaba a cumplir la version
+    # minima) para caer al repositorio de NodeSource en vez de abortar.
+    apt-get install -y -qq nodejs npm >/dev/null 2>&1 || true
+    NODE_MAJOR="$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1 || echo 0)"
+    if [ "${NODE_MAJOR:-0}" -lt 18 ]; then
+        warn "Node ${NODE_MAJOR:-ausente} es demasiado antiguo o no se pudo instalar desde el repo de la distro; instalando Node 20 desde NodeSource."
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1 \
+            || fail "No se pudo anadir el repositorio de Node 20."
+        apt-get install -y -qq nodejs >/dev/null || fail "No se pudo instalar Node 20."
+    fi
 fi
 ok "Node $(node -v)"
 
