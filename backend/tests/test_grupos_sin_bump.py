@@ -73,6 +73,12 @@ class _Consulta:
     def order_by(self, *_):
         return self
 
+    def options(self, *_, **__):
+        # No-op: config_generator usa defer(Acl.value) para no traer el
+        # contenido de una ACL de archivo; este doble ya guarda los objetos
+        # completos en memoria, así que no hay nada que diferir.
+        return self
+
     def all(self):
         return list(self._items)
 

@@ -1,4 +1,13 @@
-fastapi==0.115.14
+# fastapi==0.115.14 traia starlette 0.46.2 sin pin propio, con 14 CVEs
+# conocidos (incluido CVE-2026-48710: validacion de Host ausente, puede
+# habilitar bypass de autorizacion cuando esta depende del path
+# reconstruido). Subir fastapi solo no alcanzaba -su rango de compatibilidad
+# ("starlette<0.51.0,>=0.40.0") sigue aceptando la 0.46.2 vulnerable- asi
+# que starlette se fija aparte, por encima de todas las versiones con fix
+# conocidas (auditoria 2026-09-13, hallazgo 06-001). Suite completa (435
+# tests) y arranque real verificados con esta combinacion antes de fijarla.
+fastapi==0.136.0
+starlette==1.6.0
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.35
 alembic==1.13.3

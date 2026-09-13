@@ -152,6 +152,26 @@ Icono corregido y validado contra el bundle desplegado; formatos de exportación
 
 ---
 
+## Fase 7: Auditoría integral del proyecto (COMPLETADA)
+
+### Objetivo
+Cerrar una sesión larga de trabajo (externalización de ACLs a archivo, rediseño de menú/Documentación/Panorama, auditoría completa de i18n frontend+backend, instalación limpia y upgrade real verificados de punta a punta) con una auditoría de aptitud objetiva de todo el proyecto, no solo de lo tocado en la sesión.
+
+### Acciones realizadas
+- Auditoría completa (`skill` `project-audit`, modo `full`) sobre `pruebas @ 4d06a8d` (recién fusionada con `main`, trayendo 7 commits de fixes -v0.24.1 a v0.24.7- que `pruebas` no tenía).
+- Verificado ejecutando, no solo leyendo: suite de tests backend (`pytest`), estado real del CI en GitHub Actions, `pip-audit`/`npm audit`, búsqueda de secretos en árbol e historial, CRLF en scripts, reversibilidad de las 23 migraciones.
+- **Hallazgo principal**: la suite de tests está rota (60/434 fallando) por dos cambios de esta misma sesión (Fase 1 de externalización de ACLs) que no se probaron contra `pytest` antes de subirse -los dobles de prueba (`_FakeQuery` y similares, duplicados en 6 archivos) no soportan `.options()` ni `.commit()`, agregados a `config_generator.py`/`squid_service.py`. Confirmado también por el propio CI de GitHub (`run #90`, `conclusion: failure`).
+- Segundo hallazgo: `fastapi==0.115.14` fija una `starlette` con 14 CVEs conocidos.
+- Informe completo en `docs/audits/2026-09-13-audit-full.md`, ledger de hallazgos en `docs/audits/findings.md`.
+
+### Verificación
+Cada afirmación del informe lleva su comando y su salida real (no se asumió nada): la suite se corrió en la VM real (Python 3.12.3), el estado del CI se confirmó contra la API de GitHub (no solo local), y el ciclo instalación-limpia→upgrade se había verificado en vivo inmediatamente antes de esta auditoría.
+
+### Veredicto
+**NO APTO** — por regla explícita (suite de tests fallando), independientemente de que el sistema funcione correctamente en la práctica. Sin hallazgos Críticos. Plan de acción de 5 puntos en el informe, el primero (arreglar los dobles de prueba) de esfuerzo bajo.
+
+---
+
 ## Riesgos activos
 
 | Riesgo | Estado |

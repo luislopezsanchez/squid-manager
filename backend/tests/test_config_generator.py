@@ -95,6 +95,12 @@ class FakeDB:
         def order_by(self, *args):
             return self
 
+        def options(self, *args, **kwargs):
+            # No-op: config_generator usa defer(Acl.value) para no traer el
+            # contenido de una ACL de archivo; este doble ya guarda los
+            # objetos completos en memoria, así que no hay nada que diferir.
+            return self
+
         def first(self):
             return self._items[0] if self._items else None
 

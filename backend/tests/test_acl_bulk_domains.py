@@ -80,7 +80,34 @@ def test_acl_sni_file_tampoco_emite_el_valor_inline():
     duplica dstdomain/dstdom_regex para HTTPS con su propio 'acl sni_...',
     y ese bloque tenía su PROPIA referencia directa a acl.value -sin pasar
     por el cambio de 'file'-, así que una blocklist grande igual terminaba
-    entera en una línea, ahora en el bloque SNI en vez del principal."""
+    entera en una línea, ahora en el bloque SNI en vez del principal.
+
+    La ACL tiene que estar referenciada en una regla: desde que
+    config_generator solo declara sni_<nombre> para las ACLs de dominio que
+    alguna regla usa de verdad (ver domain_acls_used, evita que Squid
+    parsee dos veces una lista de archivo sin uso), una ACL suelta sin
+    regla ya no emite ningún bloque SNI -ver test_acl_sin_regla_no_emite_sni
+    más abajo, que cubre justo ese otro caso."""
+    from test_config_generator import FakeDB, FakeSetting, FakeAcl, FakeRule
+    from app.services.config_generator import generate_squid_config
+
+    config = generate_squid_config(FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("blocklist", "dstdomain", "ads1.com\nads2.com", source="file")],
+        rules=[FakeRule("deny", "blocklist", 0)],
+    ))
+    assert 'acl sni_blocklist ssl::server_name "/etc/squid/acl_lists/blocklist.txt"' in config
+    assert "ads1.com" not in config
+    assert "ads2.com" not in config
+
+
+def test_acl_sin_regla_no_emite_sni():
+    """Complemento del test de arriba: una ACL de dominio que existe pero
+    que ninguna regla usa todavía no necesita su variante SNI -declararla
+    igual le haría a Squid parsear el archivo de la ACL una segunda vez
+    para nada (confirmado en pruebas reales: con una ACL de ~5.9M dominios
+    sin usar, quitar esta declaración sobrante cortó el tiempo de
+    `squid -k parse` a menos de la mitad)."""
     from test_config_generator import FakeDB, FakeSetting, FakeAcl
     from app.services.config_generator import generate_squid_config
 
@@ -88,9 +115,7 @@ def test_acl_sni_file_tampoco_emite_el_valor_inline():
         settings=[FakeSetting("http_port", "3128", "network")],
         acls=[FakeAcl("blocklist", "dstdomain", "ads1.com\nads2.com", source="file")],
     ))
-    assert 'acl sni_blocklist ssl::server_name "/etc/squid/acl_lists/blocklist.txt"' in config
-    assert "ads1.com" not in config
-    assert "ads2.com" not in config
+    assert "sni_blocklist" not in config
 
 
 def test_acl_inline_sigue_igual_que_siempre():
@@ -120,6 +145,13 @@ class _FakeQuery:
     def filter(self, *a, **k):
         return self
 
+    def options(self, *a, **k):
+        # No-op: build_acl_list_files no usa defer() sobre esta consulta,
+        # pero otros callers de Acl sí (ver config_generator.py) y este doble
+        # se reusa como si fuera cualquier Session -aceptar la llamada sin
+        # romper es más realista que forzar a cada test a saber si aplica.
+        return self
+
     def all(self):
         return self._items
 
@@ -130,6 +162,12 @@ class _FakeDBAcls:
 
     def query(self, model):
         return _FakeQuery(self._acls)
+
+    def commit(self):
+        # No-op: build_acl_list_files hace commit() al migrar una ACL vieja
+        # (value -> archivo, ver squid_service.py). Este doble no persiste
+        # nada de verdad, así que no hay nada que confirmar.
+        pass
 
 
 def test_build_acl_list_files_escribe_un_dominio_por_linea(tmp_path, monkeypatch):
