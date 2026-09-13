@@ -494,6 +494,17 @@ es_config_de_fabrica() {
     return 1
 }
 
+# Mismo chequeo y mismo motivo que el de WEB_PORT mas abajo (ver ese
+# comentario): en un servidor compartido, PROXY_PORT tambien puede chocar
+# con algo ajeno a esta instalacion. Si ya lo tiene nuestro propio Squid
+# (una reinstalacion sobre el mismo puerto) no es un conflicto.
+if command -v ss >/dev/null 2>&1; then
+    _titular_puerto_proxy="$(ss -Htlnp "( sport = :${PROXY_PORT} )" 2>/dev/null | grep -oP 'users:\(\("\K[^"]+' | head -1)"
+    if [ -n "$_titular_puerto_proxy" ] && [ "$_titular_puerto_proxy" != "squid" ]; then
+        fail "El puerto ${PROXY_PORT} ya esta en uso por otro proceso en este servidor ('$_titular_puerto_proxy', no relacionado con SquidManager -revisa con: ss -tlnp | grep :${PROXY_PORT}). Elige otro puerto libre, por ejemplo: PROXY_PORT=3129 BRANCH=$BRANCH bash $0"
+    fi
+fi
+
 if es_config_de_fabrica; then
     cat > /etc/squid/squid.conf <<EOF
 # SquidManager - Configuracion inicial temporal
@@ -715,6 +726,25 @@ npm install --silent --no-audit --no-fund >/dev/null 2>&1 || fail "npm install f
 npm run build >/dev/null 2>&1 || fail "La compilacion del frontend fallo."
 [ -f dist/index.html ] || fail "La compilacion no genero dist/index.html."
 ok "Panel compilado en $INSTALL_DIR/frontend/dist"
+
+# En un servidor compartido (con otros servicios en el mismo host, no solo
+# SquidManager) el WEB_PORT por defecto puede chocar con algo que no tiene
+# nada que ver con esta instalacion -bug real, encontrado en vivo
+# (209.126.86.242, 2026-09-13): el puerto 3000 ya lo ocupaba un contenedor
+# de Grafana ajeno por completo. Sin este chequeo, la instalacion llegaba
+# hasta el ultimo paso (10) dando todo lo anterior por bueno, y recien ahi
+# nginx quedaba en estado "failed" con un bind() a mitad de un log que hay
+# que ir a buscar -en vez de parar aca, antes de tocar nada de nginx, con
+# un mensaje que dice exactamente que puerto elegir en su lugar. Si el
+# puerto ya lo tiene NUESTRO propio nginx (una reinstalacion/upgrade sobre
+# el mismo puerto), no es un conflicto: seguir sirviendo el mismo puerto en
+# un reload es justamente lo esperado.
+if command -v ss >/dev/null 2>&1; then
+    _titular_puerto="$(ss -Htlnp "( sport = :${WEB_PORT} )" 2>/dev/null | grep -oP 'users:\(\("\K[^"]+' | head -1)"
+    if [ -n "$_titular_puerto" ] && [ "$_titular_puerto" != "nginx" ]; then
+        fail "El puerto ${WEB_PORT} ya esta en uso por otro proceso en este servidor ('$_titular_puerto', no relacionado con SquidManager -revisa con: ss -tlnp | grep :${WEB_PORT}). Elige otro puerto libre, por ejemplo: WEB_PORT=3001 BRANCH=$BRANCH bash $0"
+    fi
+fi
 
 # nginx sirve los estaticos y hace de pasarela hacia la API, igual que en el
 # modo Docker: el backend nunca se expone directamente.
