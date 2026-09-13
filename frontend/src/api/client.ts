@@ -214,6 +214,11 @@ export const api = {
   // Estadisticas de cache (Cache Manager de Squid: mgr:info + mgr:storedir).
   getCacheStats: () => request<any>('/cache-manager/stats'),
 
+  // Contacto (Ayuda > Contacto): reporta un error o sugerencia sobre
+  // SquidManager mismo al soporte del producto.
+  sendContact: (data: { categoria: string; mensaje: string; email_respuesta?: string }) =>
+    request<any>('/contact', { method: 'POST', body: JSON.stringify(data) }),
+
   // Syslog externo (opcional, apagado por defecto)
   getSyslogConfig: () => request<any>('/syslog/config'),
   updateSyslogConfig: (data: any) => request<any>('/syslog/config', { method: 'PUT', body: JSON.stringify(data) }),
@@ -256,10 +261,40 @@ export const api = {
   // Mismos endpoints que ya alimentan las tarjetas "Top" del dashboard
   // (con limit=10, fijo) -aca con el limit que pida quien llama, para la
   // pagina de "Actividad de red".
-  getTopUsers: (limit = 20) => request<any>(`/panel/top-users?limit=${limit}`),
-  getTopDomains: (limit = 20, denied = false) =>
-    request<any>(`/panel/top-domains?limit=${limit}&denied=${denied}`),
-  getTopBlockedUsers: (limit = 20) => request<any>(`/panel/top-blocked-users?limit=${limit}`),
+  getTopUsers: (limit = 20, ventana?: string, sortBy?: 'bytes' | 'requests') =>
+    request<any>(`/panel/top-users?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}${sortBy ? `&sort_by=${sortBy}` : ''}`),
+  getTopDomains: (limit = 20, denied = false, ventana?: string) =>
+    request<any>(`/panel/top-domains?limit=${limit}&denied=${denied}${ventana ? `&ventana=${ventana}` : ''}`),
+  getTopBlockedUsers: (limit = 20, ventana?: string) =>
+    request<any>(`/panel/top-blocked-users?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}`),
+  getTotalesActividad: (ventana?: string) =>
+    request<any>(`/panel/totales-actividad${ventana ? `?ventana=${ventana}` : ''}`),
+  actividadExportPdfUrl: (ventana?: string) =>
+    `${API_BASE}/panel/actividad/export-pdf${ventana ? `?ventana=${ventana}` : ''}`,
+  getVolumenPorPeriodo: (ventana?: string) =>
+    request<{ granularidad: 'minuto' | 'hora' | 'dia'; puntos: { timestamp: number; bytes: number; requests: number }[] }>(
+      `/panel/volumen-por-periodo${ventana ? `?ventana=${ventana}` : ''}`
+    ),
+  getTendenciaTrafico: (params: { user?: string; domain?: string; ventana?: string; buckets?: number }) => {
+    const qs = new URLSearchParams()
+    if (params.user) qs.set('user', params.user)
+    if (params.domain) qs.set('domain', params.domain)
+    if (params.ventana) qs.set('ventana', params.ventana)
+    qs.set('buckets', String(params.buckets || 20))
+    return request<any>(`/panel/tendencia-trafico?${qs.toString()}`)
+  },
+  getDetalle: (params: { user?: string; domain?: string; ventana?: string; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params.user) qs.set('user', params.user)
+    if (params.domain) qs.set('domain', params.domain)
+    if (params.ventana) qs.set('ventana', params.ventana)
+    qs.set('limit', String(params.limit || 50))
+    return request<any>(`/panel/detalle?${qs.toString()}`)
+  },
+  getLatencia: (limit = 10, ventana?: string) =>
+    request<any>(`/panel/latencia?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}`),
+  getHttpErrors: (limit = 10, ventana?: string) =>
+    request<any>(`/panel/errores-http?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}`),
 
   // Admins
   listAdmins: () => request<any>('/admins/'),
@@ -360,6 +395,11 @@ export const api = {
   updateNotificationConfig: (data: any) => request<any>('/notifications/config', { method: 'PUT', body: JSON.stringify(data) }),
   testEmail: (data: any) => request<any>('/notifications/test-email', { method: 'POST', body: JSON.stringify(data) }),
   testTelegram: (data: any) => request<any>('/notifications/test-telegram', { method: 'POST', body: JSON.stringify(data) }),
+
+  // SMTP (Sistema > SMTP): servidor de correo compartido por Notificaciones y Contacto.
+  getSmtpConfig: () => request<any>('/smtp/config'),
+  updateSmtpConfig: (data: any) => request<any>('/smtp/config', { method: 'PUT', body: JSON.stringify(data) }),
+  testSmtp: (data: any) => request<any>('/smtp/test', { method: 'POST', body: JSON.stringify(data) }),
 
   // Session management
   resetPassword: (id: number) => request<any>(`/proxy-users/${id}/reset-password`, { method: 'POST' }),

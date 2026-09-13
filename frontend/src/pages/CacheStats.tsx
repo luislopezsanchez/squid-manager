@@ -43,6 +43,18 @@ function formatPct(v: number | null | undefined): string {
   return v === null || v === undefined ? '—' : `${v.toFixed(1)}%`
 }
 
+// Color segun que tan sano es un % de aciertos -antes las 4 tarjetas
+// usaban siempre el mismo azul fijo, sin importar si el valor era bueno o
+// malo: un 0% de aciertos se veia igual que un 100%. Umbrales orientativos,
+// no una alarma formal (no hay "aciertos esperados" configurable por sitio):
+// sirven para que el ojo vaya directo a lo que amerita mirar dos veces.
+function colorAciertos(pct: number | null | undefined): string {
+  if (pct === null || pct === undefined) return '#5F6B7A'
+  if (pct >= 60) return 'var(--ok)'
+  if (pct >= 30) return 'var(--warn)'
+  return 'var(--danger)'
+}
+
 function formatUptime(segundos: number | null | undefined): string {
   if (!segundos) return '—'
   const dias = Math.floor(segundos / 86400)
@@ -96,7 +108,7 @@ export default function CacheStats() {
 
   return (
     <div className="p-6 md:p-8">
-      <h1 className="text-2xl font-bold text-ink mb-1">{traducir("Estadísticas de caché")}</h1>
+      <h1 className="text-2xl font-bold text-ink mb-1">{traducir("Estado del caché")}</h1>
       <p className="text-sm text-ink-3 mb-6">
         {traducir("Lo que el propio Squid reporta sobre su caché -Cache Manager-, no una estimación calculada aparte.")}
       </p>
@@ -124,14 +136,14 @@ export default function CacheStats() {
               titulo={traducir("Aciertos por bytes (60 min)")}
               valor={formatPct(info?.hits_bytes_60min)}
               Icon={IconGauge}
-              color="#0B497C"
+              color={colorAciertos(info?.hits_bytes_60min)}
               detalle={traducir("5 min: {v}", { v: formatPct(info?.hits_bytes_5min) })}
             />
             <Tarjeta
               titulo={traducir("Aciertos por petición (60 min)")}
               valor={formatPct(info?.hits_peticiones_60min)}
               Icon={IconDashboard}
-              color="#2E93BC"
+              color={colorAciertos(info?.hits_peticiones_60min)}
               detalle={traducir("Memoria {m} · Disco {d}", {
                 m: formatPct(info?.hits_memoria_60min), d: formatPct(info?.hits_disco_60min),
               })}
@@ -174,7 +186,7 @@ export default function CacheStats() {
                 <span className="font-medium tabular">{info?.peticiones_recibidas ?? '—'}</span>
               </div>
               <div className="flex justify-between border-b border-line-soft pb-2">
-                <span className="text-ink-3">{traducir("Ratio de fallos")}</span>
+                <span className="text-ink-3">{traducir("Ratio de fallos (0 a 1, no es %)")}</span>
                 <span className="font-medium tabular">{info?.ratio_fallos != null ? info.ratio_fallos.toFixed(2) : '—'}</span>
               </div>
               <div className="flex justify-between border-b border-line-soft pb-2">

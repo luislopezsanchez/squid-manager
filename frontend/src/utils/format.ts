@@ -20,3 +20,8 @@ export function formatNumber(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
   return n.toString()
 }
+
+export function formatMs(ms: number): string {
+  if (ms >= 1000) return (ms / 1000).toFixed(1) + ' s'
+  return Math.round(ms) + ' ms'
+}

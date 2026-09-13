@@ -17,6 +17,8 @@ from app.models.kerberos_config import KerberosConfig
 from app.models.ai_config import AiConfig
 from app.models.doc_chunk import DocChunk
 from app.models.update_config import UpdateConfig
+from app.models.contact_message import ContactMessage
+from app.models.smtp_config import SmtpConfig
 
 __all__ = [
     "Admin",
@@ -37,4 +39,6 @@ __all__ = [
     "AiConfig",
     "DocChunk",
     "UpdateConfig",
+    "ContactMessage",
+    "SmtpConfig",
 ]

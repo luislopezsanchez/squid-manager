@@ -6,14 +6,17 @@ import {
   IconDashboard, IconUsers, IconTag, IconRules, IconGauge, IconLink, IconGroups,
   IconSettings, IconLock, IconAudit, IconBackup, IconLogs, IconBell, IconShield, IconSend,
   IconBolt, IconKey, IconLogout, IconSpinner, IconEye, IconGlobe, IconAssistant, IconArchive,
-  IconChevronDown,
+  IconChevronDown, IconActivity, IconTool, IconInfo, IconFile, IconMail, IconRefresh,
 } from './Icons'
 
 type Item = { to: string; label: string; Icon: (p: { className?: string }) => JSX.Element }
 // id estable, independiente del titulo traducido: el titulo cambia segun
 // el idioma, pero la clave que se guarda en localStorage (que grupo quedo
 // abierto/cerrado) no puede depender de eso.
-type Grupo = { id: string; titulo: string; items: Item[] }
+// Icon del grupo: distinto del icono de sus items (no se repite ninguno),
+// para que se reconozca la seccion de un vistazo incluso cerrada -antes
+// el encabezado no tenia icono, solo texto en mayusculas.
+type Grupo = { id: string; titulo: string; Icon: (p: { className?: string }) => JSX.Element; items: Item[] }
 
 // Que grupo queda abierto entre sesiones, por admin -en el navegador de
 // cada uno, no en el backend: es una preferencia de pantalla, no un dato
@@ -136,10 +139,12 @@ export default function Layout() {
     }
   }
 
-  // Asistente vive fuera de los grupos colapsables: es de uso frecuente y
-  // conceptualmente distinto (ayuda, no monitoreo/politica/sistema) -antes
-  // estaba enterrado dentro de "Vigilancia", lo cual no tenia sentido.
-  const asistente: Item = { to: '/asistente', label: traducir("Asistente"), Icon: IconAssistant }
+  // Dashboard vive fuera de los grupos colapsables: es lo primero que ve
+  // el admin al loguearse, tiene que estar a un clic sin abrir nada -antes
+  // ese lugar fijo lo ocupaba Asistente, que ahora pasa a vivir dentro del
+  // grupo "Ayuda" (uso frecuente pero no es lo que se espera ver de
+  // entrada al abrir el panel).
+  const dashboard: Item = { to: '/', label: traducir("Dashboard"), Icon: IconDashboard }
 
   // Reorganizado en 5 grupos en vez de 3 (2026-09-09): "Sistema" habia
   // crecido a 9 items, dificil de escanear, y no habia ningun lugar para
@@ -153,8 +158,8 @@ export default function Layout() {
     {
       id: 'vigilancia',
       titulo: traducir("Vigilancia"),
+      Icon: IconEye,
       items: [
-        { to: '/', label: traducir("Dashboard"), Icon: IconDashboard },
         { to: '/logs', label: traducir("Registros"), Icon: IconLogs },
         { to: '/logs-historico', label: traducir("Histórico"), Icon: IconArchive },
         { to: '/audit', label: traducir("Auditoría"), Icon: IconAudit },
@@ -162,16 +167,21 @@ export default function Layout() {
     },
     {
       id: 'reportes',
-      titulo: traducir("Reportes y estadísticas"),
+      titulo: traducir("Análisis"),
+      Icon: IconActivity,
       items: [
         { to: '/reportes/actividad', label: traducir("Actividad de red"), Icon: IconGauge },
-        { to: '/reportes/cache', label: traducir("Estadísticas de caché"), Icon: IconArchive },
+        { to: '/reportes/cache', label: traducir("Estado del caché"), Icon: IconArchive },
+        { to: '/reportes/rendimiento', label: traducir("Latencia y errores"), Icon: IconRefresh },
+        { to: '/reportes/tendencias', label: traducir("Tendencias"), Icon: IconActivity },
+        { to: '/reportes/panorama', label: traducir("Panorama"), Icon: IconDashboard },
         // Cuotas por usuario/grupo se suma aca cuando exista.
       ],
     },
     {
       id: 'politicas',
-      titulo: traducir("Políticas"),
+      titulo: traducir("Gestión"),
+      Icon: IconShield,
       items: [
         { to: '/users', label: traducir("Usuarios"), Icon: IconUsers },
         { to: '/groups', label: traducir("Grupos"), Icon: IconGroups },
@@ -183,6 +193,7 @@ export default function Layout() {
     {
       id: 'integraciones',
       titulo: traducir("Integraciones"),
+      Icon: IconGlobe,
       items: [
         { to: '/ldap', label: 'LDAP', Icon: IconLink },
         { to: '/kerberos', label: 'Kerberos', Icon: IconKey },
@@ -194,11 +205,23 @@ export default function Layout() {
     {
       id: 'sistema',
       titulo: traducir("Sistema"),
+      Icon: IconTool,
       items: [
         { to: '/certificate', label: traducir("Certificado"), Icon: IconLock },
         { to: '/settings', label: traducir("Configuración"), Icon: IconSettings },
+        { to: '/smtp', label: traducir("SMTP"), Icon: IconMail },
         { to: '/backup', label: traducir("Backup y migración"), Icon: IconBackup },
         ...(isSuperadmin() ? [{ to: '/admins', label: traducir("Administradores"), Icon: IconShield }] : []),
+      ],
+    },
+    {
+      id: 'ayuda',
+      titulo: traducir("Ayuda"),
+      Icon: IconInfo,
+      items: [
+        { to: '/asistente', label: traducir("Asistente AI"), Icon: IconAssistant },
+        { to: '/documentacion', label: traducir("Documentación"), Icon: IconFile },
+        { to: '/contacto', label: traducir("Contacto"), Icon: IconMail },
       ],
     },
   ].filter(g => g.items.length > 0)
@@ -232,7 +255,7 @@ export default function Layout() {
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
     [
-      'flex items-center gap-3 px-2.5 py-2 rounded-lg text-[14px] transition',
+      'flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-[15.5px] transition',
       isActive
         ? 'text-white font-semibold bg-white/[.14] ring-1 ring-inset ring-brand-300/25'
         : 'text-[#B9D2E0] font-medium hover:bg-white/[.07] hover:text-white',
@@ -259,8 +282,8 @@ export default function Layout() {
           }}
         />
 
-        {/* Marca */}
-        <div className="relative flex items-center gap-3 px-4 pt-5 pb-4">
+        {/* Marca: lleva al Dashboard, como es esperable en cualquier panel. */}
+        <NavLink to="/" className="relative flex items-center gap-3 px-4 pt-5 pb-4">
           <img
             src="/brand/logo-128.png"
             alt=""
@@ -273,7 +296,7 @@ export default function Layout() {
             <span className="text-[17px] font-extrabold text-white tracking-tight">{traducir("SquidManager")}</span>
             <span className="text-[10.5px] font-semibold uppercase tracking-[.1em] text-brand-300">{traducir("Proxy")}</span>
           </div>
-        </div>
+        </NavLink>
 
         {/* Versión + aviso de actualización disponible */}
         {version && (
@@ -295,13 +318,13 @@ export default function Layout() {
 
         {/* Navegación */}
         <nav className="relative flex-1 px-3 pb-3">
-          {/* Asistente: fijo, fuera de los grupos colapsables -uso frecuente,
-              no encaja en ningun grupo de tarea. */}
-          <NavLink to={asistente.to} className={(p) => `${navClass(p)} mb-2`}>
+          {/* Dashboard: fijo, fuera de los grupos colapsables -es lo primero
+              que se espera ver al entrar, tiene que estar a un clic. */}
+          <NavLink to={dashboard.to} end className={(p) => `${navClass(p)} mb-2`}>
             {({ isActive }) => (
               <>
-                <asistente.Icon className={`w-[18px] h-[18px] flex-none ${isActive ? 'text-brand-300' : 'opacity-85'}`} />
-                {asistente.label}
+                <dashboard.Icon className={`w-[21px] h-[21px] flex-none ${isActive ? 'text-brand-300' : 'opacity-85'}`} />
+                {dashboard.label}
               </>
             )}
           </NavLink>
@@ -309,35 +332,38 @@ export default function Layout() {
           {grupos.map(grupo => {
             const abierto = grupoAbierto(grupo.id)
             return (
-              <div key={grupo.id}>
+              <div key={grupo.id} className="mt-3 first:mt-1">
+                {/* Encabezado: etiqueta de seccion, no un boton mas -sin caja
+                    de fondo, con icono propio y una linea divisoria fina en
+                    vez del bg-white/[.10] solido de antes (que se leia igual
+                    que un item mas de la lista, mismo tamano de caja). */}
                 <button
                   type="button"
                   onClick={() => toggleGrupo(grupo.id)}
                   aria-expanded={abierto}
                   className={[
-                    'w-full flex items-center justify-between px-2.5 py-2 mt-1 rounded-lg',
-                    'text-[11px] font-bold uppercase tracking-[.12em] transition',
-                    // Mismos tokens de color que los items de navegacion (navClass),
-                    // no un tono aparte mas tenue: ahi ya esta probado que se lee
-                    // bien sobre este fondo -el 10px/brand-300/65 anterior se veia
-                    // deslavado, reportado en vivo por el usuario con captura.
+                    'w-full flex items-center gap-2 px-2.5 pb-1.5 border-b',
+                    'text-[12px] font-medium uppercase tracking-[.12em] transition',
                     abierto
-                      ? 'text-white bg-white/[.10]'
-                      : 'text-[#B9D2E0] hover:bg-white/[.07] hover:text-white',
+                      ? 'text-white border-white/[.14]'
+                      : 'text-[#8FB3C9] border-white/[.08] hover:text-white',
                   ].join(' ')}
                 >
-                  {grupo.titulo}
+                  <grupo.Icon className={`w-[15px] h-[15px] flex-none ${abierto ? 'text-brand-300' : 'opacity-80'}`} />
+                  <span className="flex-1 text-left">{grupo.titulo}</span>
                   <IconChevronDown
                     className={`w-3.5 h-3.5 flex-none transition-transform ${abierto ? 'text-brand-300' : 'opacity-70 -rotate-90'}`}
                   />
                 </button>
                 {abierto && (
-                  <div className="flex flex-col gap-0.5">
+                  // Sangria + guia vertical: conecta visualmente los items con
+                  // su encabezado, en vez de agruparlos solo por proximidad.
+                  <div className="flex flex-col gap-0.5 mt-1.5 ml-[9px] pl-3 border-l border-white/[.10]">
                     {grupo.items.map(({ to, label, Icon }) => (
                       <NavLink key={to} to={to} end={to === '/'} className={navClass}>
                         {({ isActive }) => (
                           <>
-                            <Icon className={`w-[18px] h-[18px] flex-none ${isActive ? 'text-brand-300' : 'opacity-85'}`} />
+                            <Icon className={`w-[21px] h-[21px] flex-none ${isActive ? 'text-brand-300' : 'opacity-85'}`} />
                             {label}
                           </>
                         )}
@@ -389,14 +415,14 @@ export default function Layout() {
             {/* Selector de idioma. Cambiarlo recarga la pagina: los textos se
                 resuelven al cargar el modulo, asi que es la unica forma de que
                 toda la interfaz quede coherente de una vez. */}
-            <label className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13.5px] font-medium
+            <label className="flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-[15px] font-medium
                               text-[#B9D2E0] hover:bg-white/[.07] hover:text-white transition cursor-pointer">
-              <IconGlobe className="w-[17px] h-[17px] flex-none opacity-85" />
+              <IconGlobe className="w-[19px] h-[19px] flex-none opacity-85" />
               <select
                 aria-label={traducir("Idioma")}
                 value={idiomaActual()}
                 onChange={e => cambiarIdioma(e.target.value as Idioma)}
-                className="bg-transparent border-0 outline-none cursor-pointer w-full text-[13.5px]"
+                className="bg-transparent border-0 outline-none cursor-pointer w-full text-[15px]"
               >
                 {IDIOMAS.map(i => (
                   <option key={i.codigo} value={i.codigo} className="text-ink">
@@ -407,16 +433,16 @@ export default function Layout() {
             </label>
             <NavLink
               to="/cambiar-contrasena"
-              className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13.5px] font-medium
+              className="flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-[15px] font-medium
                          text-[#B9D2E0] hover:bg-white/[.07] hover:text-white transition"
             >
-              <IconKey className="w-[17px] h-[17px] flex-none opacity-85" />{traducir("Cambiar contraseña")}</NavLink>
+              <IconKey className="w-[19px] h-[19px] flex-none opacity-85" />{traducir("Cambiar contraseña")}</NavLink>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13.5px] font-medium
+              className="flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-[15px] font-medium
                          text-[#B9D2E0] hover:bg-danger/25 hover:text-white transition text-left"
             >
-              <IconLogout className="w-[17px] h-[17px] flex-none opacity-85" />{traducir("Cerrar sesión")}</button>
+              <IconLogout className="w-[19px] h-[19px] flex-none opacity-85" />{traducir("Cerrar sesión")}</button>
           </div>
         </div>
       </aside>

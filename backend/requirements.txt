@@ -37,3 +37,8 @@ ldap3==2.9.1
 pyasn1==0.6.4
 pgvector==0.5.0
 pytest==9.0.3
+# Genera el PDF de "Actividad de red" (app/services/pdf_report_service.py).
+# Puro Python, sin dependencias de sistema (Cairo/Pango/GTK) -a diferencia
+# de weasyprint, no hace falta tocar install-nativo.sh para instalar nada
+# a nivel SO en una instalacion nativa.
+reportlab==4.2.5

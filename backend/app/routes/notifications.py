@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.admin import Admin
 from app.models.audit_log import AuditLog
 from app.models.notification_config import NotificationConfig
+from app.models.smtp_config import SmtpConfig
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.notification_service import test_email, test_telegram, send_email, send_telegram
 
@@ -16,12 +17,6 @@ router = APIRouter()
 
 class NotificationConfigIn(BaseModel):
     email_enabled: bool = False
-    smtp_host: str | None = None
-    smtp_port: int = 587
-    smtp_user: str | None = None
-    smtp_password: str | None = None
-    smtp_from: str | None = None
-    smtp_encryption: str = "starttls"  # none, starttls, ssl
     email_recipients: str | None = None
 
     telegram_enabled: bool = False
@@ -36,12 +31,9 @@ class NotificationConfigIn(BaseModel):
 
 
 class TestEmailIn(BaseModel):
-    smtp_host: str
-    smtp_port: int = 587
-    smtp_user: str | None = None
-    smtp_password: str | None = None
-    smtp_from: str | None = None
-    smtp_encryption: str = "starttls"
+    # El servidor SMTP se usa de la config ya guardada en Sistema > SMTP
+    # -acá solo se prueba a qué destinatario llega, sin volver a pedir host
+    # ni contraseña.
     email_recipients: str
 
 
@@ -69,12 +61,6 @@ async def get_config(
     config = _get_or_create_config(db)
     return {
         "email_enabled": config.email_enabled,
-        "smtp_host": config.smtp_host,
-        "smtp_port": config.smtp_port,
-        "smtp_user": config.smtp_user,
-        "smtp_password_set": bool(config.smtp_password),
-        "smtp_from": config.smtp_from,
-        "smtp_encryption": config.smtp_encryption or "starttls",
         "email_recipients": config.email_recipients,
         "telegram_enabled": config.telegram_enabled,
         "telegram_bot_token_set": bool(config.telegram_bot_token),
@@ -95,17 +81,9 @@ async def update_config(
 ):
     """Actualizar configuración de notificaciones."""
     config = _get_or_create_config(db)
-    smtp_password_cambio = bool(data.smtp_password)
     telegram_token_cambio = bool(data.telegram_bot_token)
 
     config.email_enabled = data.email_enabled
-    config.smtp_host = data.smtp_host
-    config.smtp_port = data.smtp_port
-    config.smtp_user = data.smtp_user
-    if data.smtp_password is not None and data.smtp_password != "":
-        config.smtp_password = data.smtp_password
-    config.smtp_from = data.smtp_from
-    config.smtp_encryption = data.smtp_encryption
     config.email_recipients = data.email_recipients
 
     config.telegram_enabled = data.telegram_enabled
@@ -123,8 +101,7 @@ async def update_config(
         admin_id=current_admin.id, admin_username=current_admin.username,
         action="update", entity="notification_config", entity_id=config.id,
         new_value=(
-            f"email_enabled={config.email_enabled} smtp_host={config.smtp_host} "
-            f"smtp_password={'(cambiada)' if smtp_password_cambio else '(sin cambios)'} "
+            f"email_enabled={config.email_enabled} "
             f"telegram_enabled={config.telegram_enabled} "
             f"telegram_bot_token={'(cambiado)' if telegram_token_cambio else '(sin cambios)'}"
         ),
@@ -136,24 +113,26 @@ async def update_config(
 @router.post("/test-email")
 async def test_email_endpoint(
     data: TestEmailIn,
+    db: Session = Depends(get_db),
     _: Admin = Depends(require_writer),
 ):
-    """Enviar email de prueba usando los datos del formulario (no la config guardada).
+    """Enviar email de prueba al destinatario indicado, usando el servidor
+    SMTP ya guardado en Sistema > SMTP (no hay campos SMTP en este formulario
+    desde que el servidor se separó a su propia sección -ver SmtpConfig)."""
+    smtp = db.query(SmtpConfig).first()
+    if not smtp or not smtp.smtp_host:
+        return {"ok": False, "message": "No hay un servidor SMTP configurado en Sistema > SMTP"}
 
-    Acepta los datos SMTP en el body para probar la configuración actual del formulario,
-    sin necesidad de guardar primero.
-    """
-    # Construir un objeto temporal con los datos recibidos
     class _TmpConfig:
         email_enabled = True
 
     tmp = _TmpConfig()
-    tmp.smtp_host = data.smtp_host
-    tmp.smtp_port = data.smtp_port
-    tmp.smtp_user = data.smtp_user
-    tmp.smtp_password = data.smtp_password
-    tmp.smtp_from = data.smtp_from
-    tmp.smtp_encryption = data.smtp_encryption
+    tmp.smtp_host = smtp.smtp_host
+    tmp.smtp_port = smtp.smtp_port
+    tmp.smtp_user = smtp.smtp_user
+    tmp.smtp_password = smtp.smtp_password
+    tmp.smtp_from = smtp.smtp_from
+    tmp.smtp_encryption = smtp.smtp_encryption
     tmp.email_recipients = data.email_recipients
 
     return test_email(tmp)

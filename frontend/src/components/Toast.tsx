@@ -18,15 +18,24 @@ const ESTILOS = {
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([])
 
+  const cerrar = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
   const showToast = useCallback(
     (msg: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
       const id = Date.now() + Math.random()
       setToasts(prev => [...prev, { id, msg, type }])
-      setTimeout(() => {
-        setToasts(prev => prev.filter(t => t.id !== id))
-      }, 5000)
+      // Error y warning se quedan hasta que el usuario los cierra a proposito
+      // -un fallo real (ej. SMTP mal autenticado) que desaparece solo a los
+      // 5s da la falsa impresion de que "no paso nada", reportado en vivo
+      // por el usuario probando el envio de correo. Exito/info si se
+      // autodescartan, ahi no hay nada que el usuario deba leer con calma.
+      if (type === 'success' || type === 'info') {
+        setTimeout(() => cerrar(id), 5000)
+      }
     },
-    [],
+    [cerrar],
   )
 
   const ToastContainer = () => (
@@ -43,7 +52,10 @@ export function useToast() {
             <span className={`stat-icon flex-none ${tono}`}>
               <Icono />
             </span>
-            <p className="text-[13.5px] text-ink-2 leading-snug pt-1">{t.msg}</p>
+            <p className="text-[13.5px] text-ink-2 leading-snug pt-1 flex-1">{t.msg}</p>
+            <button onClick={() => cerrar(t.id)} aria-label="Cerrar" className="flex-none text-ink-3 hover:text-ink pt-1">
+              <IconClose className="w-3.5 h-3.5" />
+            </button>
           </div>
         )
       })}

@@ -320,6 +320,15 @@ def _parse_log_line(line: str) -> dict | None:
         "domain": domain,
         "user": m.group(9) if m.group(9) != "-" else None,
         "denied": int(m.group(5)) in (401, 403, 407) or "DENIED" in m.group(4),
+        # El propio SquidManager le pega a Squid para leer el Cache Manager
+        # (ver cache_manager_service.py) -esa peticion queda igual en
+        # access.log que cualquier otra, y sin marcarla aparte ensuciaba
+        # "Sitios visitados"/"Top usuarios" con su propio trafico interno
+        # (ej. "squidmanager-<hash>:3128" apareciendo como si fuera un sitio
+        # que alguien visito). Se detecta por el path, no por client_ip: en
+        # Docker el origen es otro contenedor, no localhost, asi que filtrar
+        # por IP no lo hubiera atajado en ese modo.
+        "interno": "squid-internal-mgr" in url,
     }
 
 
@@ -394,7 +403,12 @@ def _read_last_n_lines(n: int = 1000) -> list[dict]:
     entries = []
     for line in iter_lines_reverse(ACCESS_LOG_PATH, max_lines=n * 3):
         entry = _parse_log_line(line)
-        if entry:
+        # El propio trafico interno de SquidManager (Cache Manager, ver
+        # "interno" en _parse_log_line) se descarta aca -las metricas y
+        # rankings de este modulo son sobre trafico real, no sobre el panel
+        # consultandose a si mismo. log_service.py (Registros) no filtra
+        # esto: ahi si interesa ver todo lo que Squid proceso de verdad.
+        if entry and not entry["interno"]:
             entries.append(entry)
         if len(entries) >= n:
             break
@@ -402,16 +416,24 @@ def _read_last_n_lines(n: int = 1000) -> list[dict]:
     return entries
 
 
-def _read_recent_logs(seconds: int = 60) -> list[dict]:
-    """Entradas de los últimos `seconds` segundos."""
+def _read_recent_logs(seconds: int = 60, max_lines: int = 50_000) -> list[dict]:
+    """Entradas de los últimos `seconds` segundos.
+
+    `max_lines` es el mismo tope de seguridad que ya usa log_service para
+    cualquier lectura por ventana de tiempo: en un proxy con muchísimo
+    tráfico, una ventana grande (7 días) podría en teoría necesitar escanear
+    más lineas de las que conviene leer en una sola petición del panel -se
+    sube el tope segun la ventana pedida (ver _read_window), no de forma
+    ilimitada.
+    """
     from app.services.log_service import iter_lines_reverse
 
     now = time.time()
     cutoff = now - seconds
     entries = []
-    for line in iter_lines_reverse(ACCESS_LOG_PATH, max_lines=50_000):
+    for line in iter_lines_reverse(ACCESS_LOG_PATH, max_lines=max_lines):
         entry = _parse_log_line(line)
-        if not entry:
+        if not entry or entry["interno"]:  # ver nota en _read_last_n_lines
             continue
         # El fichero se recorre hacia atrás: al pasar el corte, lo que queda
         # es todavía más antiguo.
@@ -420,6 +442,24 @@ def _read_recent_logs(seconds: int = 60) -> list[dict]:
         entries.append(entry)
     entries.reverse()
     return entries
+
+
+# Ventanas de tiempo que ofrece el filtro global de Actividad de red. `None`
+# es el comportamiento historico (ultimas 1000 peticiones, sin importar
+# cuando ocurrieron) -se mantiene como opcion para no romper get_dashboard()
+# ni ningun otro llamador que no pase ventana.
+VENTANAS_SEGUNDOS = {"1h": 3600, "24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400}
+
+
+def _read_window(seconds: int | None) -> list[dict]:
+    """Últimas 1000 peticiones (sin filtro) o todas las de una ventana de
+    tiempo real -ver VENTANAS_SEGUNDOS. El tope de escaneo sube con la
+    ventana: 7 días de un proxy con mucho trafico puede tener mas de 50.000
+    lineas antes de llegar al corte real."""
+    if seconds is None:
+        return _read_last_n_lines(1000)
+    tope = 50_000 if seconds <= 3600 else 150_000 if seconds <= 86400 else 400_000
+    return _read_recent_logs(seconds, max_lines=tope)
 
 
 # ============================================
@@ -549,21 +589,75 @@ def get_system_metrics() -> dict:
     return metrics
 
 
-def get_top_users(limit: int = 10) -> list[dict]:
-    entries = _read_last_n_lines(1000)
+def get_top_users(limit: int = 10, seconds: int | None = None, sort_by: str = "bytes") -> list[dict]:
+    """Top usuarios por bytes o por cantidad de peticiones -no son lo mismo:
+    pocas peticiones pueden pesar mucho (una descarga grande) y muchas
+    peticiones pueden pesar poco (navegación normal). Antes se pedia siempre
+    "top por bytes" y el toggle Datos/Peticiones del frontend solo cambiaba
+    que numero mostrar, sin volver a ordenar -el ranking quedaba fijo por
+    bytes aunque se mirara "por peticiones", y ademas un usuario con muchas
+    peticiones pero pocos bytes podia quedar afuera del top directamente.
+    Reportado en vivo por el usuario, 2026-09-12.
+    """
+    entries = _read_window(seconds)
     user_bytes = defaultdict(int)
     user_requests = defaultdict(int)
     for e in entries:
         if e["user"]:
             user_bytes[e["user"]] += e["bytes"]
             user_requests[e["user"]] += 1
+
+    metrica = user_requests if sort_by == "requests" else user_bytes
     return [
-        {"user": u, "bytes": b, "requests": user_requests[u]}
-        for u, b in sorted(user_bytes.items(), key=lambda x: x[1], reverse=True)[:limit]
+        {"user": u, "bytes": user_bytes[u], "requests": user_requests[u]}
+        for u, _ in sorted(metrica.items(), key=lambda x: x[1], reverse=True)[:limit]
     ]
 
 
-def get_top_blocked_users(limit: int = 10, db=None) -> dict:
+def get_totales_actividad(seconds: int | None = None) -> dict:
+    """Totales reales (todos los usuarios/dominios, no solo el top N) para
+    la ventana pedida -Actividad de red los usa para el % de concentración
+    y el "Total" junto al anillo: antes ese número sumaba solo las filas del
+    top 10 visible, y con más de 10 usuarios/dominios reales el "Total"
+    mostrado no era el total de verdad. Reportado en vivo por el usuario,
+    2026-09-12.
+    """
+    entries = _read_window(seconds)
+
+    usuarios_bytes = usuarios_requests = 0
+    usuarios_vistos: set[str] = set()
+    dominios_requests = dominios_bytes = 0
+    dominios_vistos: set[str] = set()
+    dominios_bloqueados_requests = 0
+    dominios_bloqueados_vistos: set[str] = set()
+    bloqueos_totales = 0
+
+    for e in entries:
+        if e["user"]:
+            usuarios_bytes += e["bytes"]
+            usuarios_requests += 1
+            usuarios_vistos.add(e["user"])
+        if e["domain"]:
+            dominios_requests += 1
+            dominios_bytes += e["bytes"]
+            dominios_vistos.add(e["domain"])
+        if e["denied"]:
+            bloqueos_totales += 1
+            if e["domain"]:
+                dominios_bloqueados_requests += 1
+                dominios_bloqueados_vistos.add(e["domain"])
+
+    return {
+        "usuarios": {"count": len(usuarios_vistos), "bytes": usuarios_bytes, "requests": usuarios_requests},
+        "dominios": {"count": len(dominios_vistos), "requests": dominios_requests, "bytes": dominios_bytes},
+        "dominios_bloqueados": {"count": len(dominios_bloqueados_vistos), "requests": dominios_bloqueados_requests},
+        # Igual al total de get_top_blocked_users (con_usuario + anonimos),
+        # pero sin necesitar cruzar contra la BD -acá solo hace falta el numero.
+        "usuarios_bloqueados_requests": bloqueos_totales,
+    }
+
+
+def get_top_blocked_users(limit: int = 10, db=None, seconds: int | None = None) -> dict:
     """Usuarios con mas peticiones denegadas: quien choca mas con la politica.
 
     Complementa a "top sitios bloqueados", que dice que se bloquea pero no
@@ -580,7 +674,7 @@ def get_top_blocked_users(limit: int = 10, db=None) -> dict:
     usuario para que la diferencia con "top sitios bloqueados" no se lea
     como un fallo de esta tarjeta.
     """
-    denegadas = [e for e in _read_last_n_lines(1000) if e["denied"]]
+    denegadas = [e for e in _read_window(seconds) if e["denied"]]
     con_usuario = [e for e in denegadas if e["user"]]
     conteo = Counter(e["user"] for e in con_usuario)
     top = conteo.most_common(limit)
@@ -617,8 +711,8 @@ def get_top_blocked_users(limit: int = 10, db=None) -> dict:
     }
 
 
-def get_top_domains(limit: int = 10, denied_only: bool = False) -> list[dict]:
-    entries = _read_last_n_lines(1000)
+def get_top_domains(limit: int = 10, denied_only: bool = False, seconds: int | None = None) -> list[dict]:
+    entries = _read_window(seconds)
     if denied_only:
         entries = [e for e in entries if e["denied"]]
     domain_count = Counter(e["domain"] for e in entries if e["domain"])
@@ -630,6 +724,62 @@ def get_top_domains(limit: int = 10, denied_only: bool = False) -> list[dict]:
         {"domain": d, "requests": c, "bytes": domain_bytes[d]}
         for d, c in domain_count.most_common(limit)
     ]
+
+
+def get_latencia(limit: int = 10, seconds: int | None = None) -> dict:
+    """Latencia general y por dominio, sobre la ventana pedida (ver _read_window).
+
+    CONNECT (túneles HTTPS) se excluye tanto del promedio general (ver
+    _resumen_latencia) como de la latencia por dominio: ahí `elapsed_ms`
+    mide cuánto duró la conexión abierta, no cuánto tardó en responder.
+    """
+    entries = _read_window(seconds)
+    resumen = _resumen_latencia(entries)
+
+    por_dominio: dict[str, list[int]] = defaultdict(list)
+    for e in entries:
+        if e["method"] != "CONNECT" and e["domain"]:
+            por_dominio[e["domain"]].append(e["elapsed_ms"])
+
+    # Solo dominios con una muestra mínima: un único pedido lento no dice
+    # nada sobre "el sitio es lento", puede ser ruido de una sola petición.
+    MUESTRA_MINIMA = 3
+    dominios = [
+        {"domain": d, "avg_ms": round(sum(v) / len(v)), "samples": len(v)}
+        for d, v in por_dominio.items() if len(v) >= MUESTRA_MINIMA
+    ]
+    dominios.sort(key=lambda x: x["avg_ms"], reverse=True)
+
+    return {**resumen, "domains": dominios[:limit]}
+
+
+def get_http_errors(limit: int = 10, seconds: int | None = None) -> dict:
+    """Códigos de error HTTP más frecuentes y qué dominios los generan.
+
+    No cuenta 401/403/407: ya están cubiertos por "Sitios/usuarios
+    bloqueados" -contarlos acá duplicaría el mismo dato bajo otro nombre.
+    Esto es para fallos reales del lado del servidor/red (502, 504, 500...)
+    o recursos que no existen (404): la señal de "algo está roto", no de
+    política de acceso.
+
+    "total" ya es el total REAL (todos los errores de la ventana, no solo
+    los de los dominios/codigos que entran en el top `limit`) -a diferencia
+    del "Total" que tenia Actividad de Red antes de corregirlo, acá nunca
+    hubo ese bug: se cuenta sobre `errores` completo, no sobre el top
+    recortado.
+    """
+    entries = _read_window(seconds)
+    CODIGOS_POLITICA = (401, 403, 407)
+    errores = [e for e in entries if e["status"] >= 400 and e["status"] not in CODIGOS_POLITICA]
+
+    por_codigo = Counter(e["status"] for e in errores)
+    por_dominio = Counter(e["domain"] for e in errores if e["domain"])
+
+    return {
+        "total": len(errores),
+        "by_code": [{"code": c, "count": n} for c, n in por_codigo.most_common(limit)],
+        "by_domain": [{"domain": d, "count": n} for d, n in por_dominio.most_common(limit)],
+    }
 
 
 def get_recent_connections(limit: int = 20) -> list[dict]:
@@ -648,6 +798,129 @@ def get_recent_connections(limit: int = 20) -> list[dict]:
         }
         for e in reversed(recent)
     ]
+
+
+def get_detalle(user: str | None = None, domain: str | None = None, seconds: int | None = None, limit: int = 50) -> list[dict]:
+    """Detalle de peticiones de un usuario o dominio puntual (drill-down).
+
+    Complementa a los rankings (top usuarios/dominios): ahi solo se ve el
+    numero agregado, aca se ve QUE URLs concretas explican ese numero -la
+    pregunta que sigue naturalmente a "quien consume mas" o "que se
+    bloquea mas". Requiere exactamente uno de `user`/`domain`, no los dos:
+    cruzarlos no aporta mas que filtrar por uno solo, y complica la firma
+    para el caso de uso real (clic en UNA fila de UN ranking).
+    """
+    entries = _read_window(seconds)
+    if user:
+        entries = [e for e in entries if e["user"] == user]
+    if domain:
+        entries = [e for e in entries if e["domain"] == domain]
+
+    entries = entries[-limit:]
+    return [
+        {
+            "time": datetime.fromtimestamp(e["timestamp"]).strftime("%Y-%m-%d %H:%M:%S"),
+            "user": e["user"] or "-",
+            "domain": e["domain"],
+            "method": e["method"],
+            "status": e["status"],
+            "bytes": e["bytes"],
+            "elapsed_ms": e["elapsed_ms"],
+            "denied": e["denied"],
+        }
+        for e in reversed(entries)
+    ]
+
+
+def get_tendencia_trafico(user: str | None = None, domain: str | None = None, seconds: int | None = None, buckets: int = 20) -> dict:
+    """Evolución en el tiempo (bytes y peticiones) de un usuario o dominio
+    puntual, para el gráfico de Tendencias.
+
+    Requiere exactamente uno de `user`/`domain` -mismo criterio que
+    get_detalle(). En vez de "baldes" de tamaño fijo (ej. "cada hora"), se
+    reparte el rango real de timestamps encontrado (del mas viejo al mas
+    nuevo) en `buckets` partes iguales: funciona igual de bien con una
+    ventana de 7 dias que con "ultimas 1000 peticiones" -que no tiene una
+    duracion fija, puede ser 20 minutos o 3 dias segun cuanto trafico haya-,
+    sin tener que adivinar el tamaño de balde "correcto" para cada caso.
+    """
+    entries = _read_window(seconds)
+    if user:
+        entries = [e for e in entries if e["user"] == user]
+    if domain:
+        entries = [e for e in entries if e["domain"] == domain]
+
+    if not entries:
+        return {"points": [], "user": user, "domain": domain}
+
+    ts_min = entries[0]["timestamp"]
+    ts_max = entries[-1]["timestamp"]
+    span = max(ts_max - ts_min, 1)
+    ancho = span / buckets
+
+    grupos = [{"bytes": 0, "requests": 0} for _ in range(buckets)]
+    for e in entries:
+        idx = min(int((e["timestamp"] - ts_min) / ancho), buckets - 1)
+        grupos[idx]["bytes"] += e["bytes"]
+        grupos[idx]["requests"] += 1
+
+    puntos = [
+        {
+            "timestamp": ts_min + ancho * (i + 0.5),
+            "bytes": g["bytes"],
+            "requests": g["requests"],
+        }
+        for i, g in enumerate(grupos)
+    ]
+    return {"points": puntos, "user": user, "domain": domain}
+
+
+def get_volumen_por_periodo(seconds: int | None = None) -> dict:
+    """Volumen de tráfico agrupado en baldes que se adaptan a la ventana
+    elegida -antes esto vivía en dos funciones separadas ("por día de la
+    semana", que siempre mostraba 7 barras fijas sin importar la ventana, y
+    "volumen diario", que agrupaba por día calendario). El problema con la
+    primera: elegir "30 días" no cambiaba la FORMA del gráfico, solo sumaba
+    más datos a las mismas 7 barras de siempre -confuso, porque el usuario
+    esperaba ver 30 barras distintas.
+
+    Ahora la granularidad del balde depende de qué tan larga es la ventana,
+    para que el gráfico realmente cambie de forma según lo elegido:
+      - ventana <= 1h: baldes de 5 minutos (~12 puntos)
+      - ventana <= 24h: baldes de 1 hora (~24 puntos)
+      - ventana mayor (7d, 30d) o sin ventana (recientes): un balde por día
+        calendario -esto absorbe lo que antes era get_volumen_diario.
+
+    Se devuelve también la granularidad usada, para que el frontend sepa
+    cómo formatear las etiquetas del eje X y del tooltip (hora vs fecha).
+    """
+    entries = _read_window(seconds)
+    if not entries:
+        return {"granularidad": "dia", "puntos": []}
+
+    if seconds is not None and seconds <= 3600:
+        granularidad = "minuto"
+        ancho = 300
+    elif seconds is not None and seconds <= 86400:
+        granularidad = "hora"
+        ancho = 3600
+    else:
+        granularidad = "dia"
+        ancho = None
+
+    grupos: dict[float, dict] = {}
+    for e in entries:
+        if granularidad == "dia":
+            dt = datetime.fromtimestamp(e["timestamp"]).replace(hour=0, minute=0, second=0, microsecond=0)
+            clave = dt.timestamp()
+        else:
+            clave = (int(e["timestamp"]) // ancho) * ancho
+        g = grupos.setdefault(clave, {"timestamp": clave, "bytes": 0, "requests": 0})
+        g["bytes"] += e["bytes"]
+        g["requests"] += 1
+
+    puntos = [grupos[k] for k in sorted(grupos.keys())]
+    return {"granularidad": granularidad, "puntos": puntos}
 
 
 def get_dashboard(db=None) -> dict:

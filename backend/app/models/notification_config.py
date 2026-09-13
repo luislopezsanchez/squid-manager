@@ -10,16 +10,9 @@ class NotificationConfig(Base):
     __tablename__ = "notification_config"
 
     id = Column(Integer, primary_key=True, default=1)
-    # Email
+    # Email: el "cómo" (servidor SMTP) vive en SmtpConfig, compartido con
+    # Contacto -acá solo queda el "cuándo/a quién" de las alertas.
     email_enabled = Column(Boolean, default=False, nullable=False)
-    smtp_host = Column(String(255), nullable=True)
-    smtp_port = Column(Integer, default=587, nullable=False)
-    smtp_user = Column(String(255), nullable=True)
-    # Cifradas en reposo con DATA_KEY (ver crypto_service.py -auditoria
-    # 2026-09-09, hallazgo 05-003).
-    smtp_password = Column(EncryptedString, nullable=True)
-    smtp_from = Column(String(255), nullable=True)
-    smtp_encryption = Column(String(20), default="starttls", nullable=False)  # none, starttls, ssl
     email_recipients = Column(String(500), nullable=True)  # coma-separado
 
     # Telegram

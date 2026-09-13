@@ -1,16 +1,11 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 
 interface NotifConfig {
   email_enabled: boolean
-  smtp_host: string | null
-  smtp_port: number
-  smtp_user: string | null
-  smtp_password_set: boolean
-  smtp_from: string | null
-  smtp_encryption: string
   email_recipients: string | null
   telegram_enabled: boolean
   telegram_bot_token_set: boolean
@@ -26,7 +21,6 @@ export default function Notifications() {
   const [config, setConfig] = useState<NotifConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [smtpPassword, setSmtpPassword] = useState('')
   const [telegramToken, setTelegramToken] = useState('')
   const [testingEmail, setTestingEmail] = useState(false)
   const [testingTelegram, setTestingTelegram] = useState(false)
@@ -42,12 +36,6 @@ export default function Notifications() {
     try {
       const payload: any = {
         email_enabled: config.email_enabled,
-        smtp_host: config.smtp_host,
-        smtp_port: config.smtp_port,
-        smtp_user: config.smtp_user,
-        smtp_password: smtpPassword || undefined,
-        smtp_from: config.smtp_from,
-        smtp_encryption: config.smtp_encryption,
         email_recipients: config.email_recipients,
         telegram_enabled: config.telegram_enabled,
         telegram_bot_token: telegramToken || undefined,
@@ -60,7 +48,6 @@ export default function Notifications() {
       }
       await api.updateNotificationConfig(payload)
       showToast(traducir("Configuración guardada correctamente"), 'success')
-      setSmtpPassword('')
       setTelegramToken('')
       // Recargar config para actualizar los indicadores "(guardado)"
       const refreshed = await api.getNotificationConfig()
@@ -74,21 +61,11 @@ export default function Notifications() {
 
   const testEmail = async () => {
     if (!config) return
-    // Validar campos mínimos
-    if (!config.smtp_host) { showToast(traducir("Falta el servidor SMTP (host)"), 'error'); return }
     if (!config.email_recipients) { showToast(traducir("Falta el destinatario (email)"), 'error'); return }
 
     setTestingEmail(true)
     try {
-      const r = await api.testEmail({
-        smtp_host: config.smtp_host,
-        smtp_port: config.smtp_port,
-        smtp_user: config.smtp_user,
-        smtp_password: smtpPassword || undefined,
-        smtp_from: config.smtp_from,
-        smtp_encryption: config.smtp_encryption,
-        email_recipients: config.email_recipients,
-      })
+      const r = await api.testEmail({ email_recipients: config.email_recipients })
       showToast(r.message, r.ok ? 'success' : 'error')
     } catch (e: any) {
       showToast(e.message, 'error')
@@ -137,53 +114,10 @@ export default function Notifications() {
         </div>
         {config.email_enabled && (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="smtp-host" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Servidor SMTP")}</label>
-                <input id="smtp-host" type="text" value={config.smtp_host || ''} placeholder="smtp.gmail.com"
-                  onChange={e => setConfig({ ...config, smtp_host: e.target.value })}
-                  className="input text-sm" />
-              </div>
-              <div>
-                <label htmlFor="smtp-port" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Puerto")}</label>
-                <input id="smtp-port" type="number" value={config.smtp_port}
-                  onChange={e => setConfig({ ...config, smtp_port: Number(e.target.value) })}
-                  className="input text-sm" />
-              </div>
-            </div>
-            <div>
-              <label htmlFor="smtp-encryption" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Método de cifrado / seguridad de conexión")}</label>
-              <select id="smtp-encryption" value={config.smtp_encryption}
-                onChange={e => setConfig({ ...config, smtp_encryption: e.target.value })}
-                className="input text-sm bg-white">
-                <option value="starttls">{traducir("STARTTLS (puerto 587 — Gmail, Outlook, la mayoría)")}</option>
-                <option value="ssl">{traducir("SSL/TLS implícito (puerto 465 — algunos servicios)")}</option>
-                <option value="none">{traducir("Sin cifrado (servidores internos)")}</option>
-              </select>
-              <p className="text-xs text-ink-3 mt-1">{traducir("La mayoría de servicios usan STARTTLS en el puerto 587. Si tu servicio pide SSL/TLS, elige \"SSL/TLS implícito\" (puerto 465).")}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="smtp-user" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Usuario SMTP")}</label>
-                <input id="smtp-user" type="text" value={config.smtp_user || ''}
-                  onChange={e => setConfig({ ...config, smtp_user: e.target.value })}
-                  className="input text-sm" />
-              </div>
-              <div>
-                <label htmlFor="smtp-password" className="block text-xs font-medium text-ink-3 mb-1">
-                  Contraseña SMTP {config.smtp_password_set && <span className="text-ok">{traducir("(guardada)")}</span>}
-                </label>
-                <input id="smtp-password" type="password" value={smtpPassword} placeholder={config.smtp_password_set ? '••••••••' : traducir('Nueva contraseña')}
-                  onChange={e => setSmtpPassword(e.target.value)}
-                  className="input text-sm" />
-              </div>
-            </div>
-            <div>
-              <label htmlFor="smtp-from" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Remitente (From)")}</label>
-              <input id="smtp-from" type="text" value={config.smtp_from || ''} placeholder={traducir("notificaciones@empresa.com")}
-                onChange={e => setConfig({ ...config, smtp_from: e.target.value })}
-                className="input text-sm" />
-            </div>
+            <p className="text-xs text-ink-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              {traducir("El servidor SMTP se configura una sola vez para todo SquidManager en")}{' '}
+              <Link to="/smtp" className="text-brand-700 font-medium underline">{traducir("Sistema > SMTP")}</Link>.
+            </p>
             <div>
               <label htmlFor="email-recipients" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Destinatarios (separados por coma)")}</label>
               <input id="email-recipients" type="text" value={config.email_recipients || ''} placeholder={traducir("admin1@empresa.com, admin2@empresa.com")}
@@ -195,7 +129,7 @@ export default function Notifications() {
                 className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#48B3D0' }}>
                 {testingEmail ? traducir('Enviando…') : traducir('Enviar correo de prueba')}
               </button>
-              <span className="text-xs text-ink-3">{traducir("Prueba con los datos actuales del formulario (no hace falta guardar antes)")}</span>
+              <span className="text-xs text-ink-3">{traducir("Usa el servidor SMTP ya guardado en Sistema > SMTP")}</span>
             </div>
           </div>
         )}

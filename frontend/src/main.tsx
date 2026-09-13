@@ -18,13 +18,19 @@ import Admins from './pages/Admins'
 import LogsViewer from './pages/LogsViewer'
 import HistoricalLogs from './pages/HistoricalLogs'
 import Notifications from './pages/Notifications'
+import Smtp from './pages/Smtp'
 import SyslogConfig from './pages/SyslogConfig'
 import ParentProxy from './pages/ParentProxy'
 import Groups from './pages/Groups'
 import Asistente from './pages/Asistente'
+import Documentacion from './pages/Documentacion'
+import Contacto from './pages/Contacto'
 import Actualizaciones from './pages/Actualizaciones'
 import CacheStats from './pages/CacheStats'
 import ActividadRed from './pages/ActividadRed'
+import RendimientoErrores from './pages/RendimientoErrores'
+import Tendencias from './pages/Tendencias'
+import Panorama from './pages/Panorama'
 import ChangePassword from './pages/ChangePassword'
 import Layout from './components/Layout'
 import { getToken, isSuperadmin } from './api/client'
@@ -60,6 +66,8 @@ function App() {
           <Route path="ldap" element={<LdapConfig />} />
           <Route path="kerberos" element={<Kerberos />} />
           <Route path="asistente" element={<Asistente />} />
+          <Route path="documentacion" element={<Documentacion />} />
+          <Route path="contacto" element={<Contacto />} />
           <Route path="settings" element={<Settings />} />
           <Route path="certificate" element={<CertificadoCA />} />
           <Route path="audit" element={<AuditLog />} />
@@ -67,6 +75,7 @@ function App() {
           <Route path="logs" element={<LogsViewer />} />
           <Route path="logs-historico" element={<HistoricalLogs />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="smtp" element={<Smtp />} />
           <Route path="syslog" element={<SyslogConfig />} />
           <Route path="parent-proxy" element={<ParentProxy />} />
           <Route path="groups" element={<Groups />} />
@@ -74,6 +83,9 @@ function App() {
           <Route path="actualizaciones" element={<Actualizaciones />} />
           <Route path="reportes/cache" element={<CacheStats />} />
           <Route path="reportes/actividad" element={<ActividadRed />} />
+          <Route path="reportes/rendimiento" element={<RendimientoErrores />} />
+          <Route path="reportes/tendencias" element={<Tendencias />} />
+          <Route path="reportes/panorama" element={<Panorama />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -20,7 +20,7 @@ from app.config import settings
 from app.i18n import idioma_de_cabecera, traducir
 from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
-from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy, kerberos, ai, update, cache_manager
+from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy, kerberos, ai, update, cache_manager, contact, smtp
 from app.middleware import rate_limit_middleware
 
 logging.basicConfig(level=logging.INFO)
@@ -409,6 +409,8 @@ app.include_router(kerberos.router, prefix="/api/kerberos", tags=["Kerberos"])
 app.include_router(ai.router, prefix="/api/ai", tags=["Asistente de IA"])
 app.include_router(update.router, prefix="/api/update", tags=["Actualizaciones"])
 app.include_router(cache_manager.router, prefix="/api/cache-manager", tags=["Estadísticas de caché"])
+app.include_router(contact.router, prefix="/api/contact", tags=["Contacto"])
+app.include_router(smtp.router, prefix="/api/smtp", tags=["SMTP"])
 
 
 @app.get("/")
