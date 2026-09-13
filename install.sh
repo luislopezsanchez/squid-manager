@@ -111,6 +111,24 @@ if [[ -d "$INSTALL_DIR/.git" ]]; then
         fail "Revisa tus cambios locales (git status) y vuelve a ejecutar el instalador."
     fi
     git pull origin main
+
+    # El pull de arriba acaba de sobrescribir este mismo install.sh EN DISCO
+    # si $0 es (o es una copia de) $INSTALL_DIR/install.sh -el caso tipico
+    # de re-ejecutarlo sobre un clon existente para actualizar-. Bash ya
+    # cargo en memoria la version VIEJA de todo lo que sigue (permisos,
+    # .env, docker compose build/up), y seguiria con esa logica vieja
+    # aunque los archivos ya cambiaron por debajo -mismo bug de fondo
+    # encontrado y corregido en install-nativo.sh/upgrade-docker.sh (ver
+    # sus comentarios). Se relanza como proceso nuevo para leer el
+    # instalador ya actualizado. SQUIDMGR_INSTALL_REEXEC corta la
+    # recursion: la segunda pasada repite este mismo pull (rapido y sin
+    # efecto, ya esta al dia) pero no vuelve a relanzarse.
+    if [[ -z "${SQUIDMGR_INSTALL_REEXEC:-}" ]]; then
+        info "Continuando con el código ya actualizado (proceso nuevo)..."
+        export SQUIDMGR_INSTALL_REEXEC=1
+        export INSTALL_DIR
+        exec bash "$INSTALL_DIR/install.sh"
+    fi
 else
     info "Clonando SquidManager a $INSTALL_DIR..."
     git clone https://github.com/luislopezsanchez/squid-manager.git "$INSTALL_DIR"

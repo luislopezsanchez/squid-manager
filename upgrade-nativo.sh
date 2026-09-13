@@ -24,12 +24,16 @@
 # punta y sin salto de version del propio script por medio, todo funciono
 # como se espera -asi se aislo que el bug era ese, y no otro-.
 #
-# Este script evita el problema por diseno: NUNCA se modifica a si mismo.
-# El "git checkout/reset" de aqui abajo actua sobre INSTALL_DIR, pero quien
-# ejecuta esos comandos es ESTE proceso, que no cambia bajo sus propios
-# pies. Una vez que el checkout esta al dia, se invoca -como proceso
-# nuevo, nunca "source"- el install-nativo.sh que quedo ahi: en ese
-# momento ya es 100% la version destino, sin ambiguedad posible.
+# Este script SI puede sufrir el mismo problema que install-nativo.sh -vive
+# dentro de INSTALL_DIR igual que el, y el "git reset --hard" de aqui abajo
+# lo sobrescribe en disco a el tambien si upgrade-nativo.sh cambio entre la
+# version instalada y la destino-. La suposicion original ("es corto, no
+# pasa nada") no es segura: probado de forma aislada, sobrescribir un script
+# a mitad de su propia ejecucion puede directamente CORTAR el resto de la
+# corrida sin ningun error, no solo dejarlo con logica vieja. Por eso, igual
+# que install-nativo.sh e upgrade-docker.sh, se relanza como proceso nuevo
+# (nunca "source") justo despues del reset, antes de invocar install-nativo.sh:
+# esta corrida SI se relanza una vez, no de por vida por "diseno".
 #
 # Aun asi, el paso final de este script vuelve a comprobar el commit que
 # /health reporta de verdad, y reintenta un reinicio si no coincide: en
@@ -130,6 +134,18 @@ git clean -fdq
 git fetch --all --quiet
 git checkout --quiet "$BRANCH"
 git reset --hard --quiet "origin/$BRANCH"
+
+# Ver el comentario largo al principio del archivo: el reset de arriba
+# puede haber sobrescrito ESTE MISMO script en disco. Relanzar como
+# proceso nuevo antes de seguir (purgar pycache, invocar install-nativo.sh,
+# verificar) para no arriesgarse a que bash siga con lo que ya tenia
+# cargado en memoria. SQUIDMGR_UPGRADE_REEXEC corta la recursion.
+if [ -z "${SQUIDMGR_UPGRADE_REEXEC:-}" ]; then
+    echo "Continuando con el codigo ya actualizado (proceso nuevo)..."
+    export SQUIDMGR_UPGRADE_REEXEC=1
+    export INSTALL_DIR BRANCH
+    exec bash "$INSTALL_DIR/upgrade-nativo.sh"
+fi
 
 # __pycache__ esta en .gitignore, asi que "git clean -fd" (que respeta el
 # .gitignore a proposito, para no llevarse .env ni node_modules/) nunca lo

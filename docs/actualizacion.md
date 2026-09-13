@@ -44,23 +44,19 @@ Con esto, en una sola corrida:
   dependencias de Python, recompila el frontend, y reinicia el servicio de
   verdad (no solo si estaba caído).
 
-**Por qué un script aparte, y no alcanza con volver a correr
-`install-nativo.sh` directamente** —que sigue siendo seguro de re-ejecutar
-sobre una instalación que ya existe, y es lo que `upgrade-nativo.sh` invoca
-por dentro—: ese script hace su propio `git checkout`/`reset` sobre sí
-mismo como parte de la actualización. Si la versión ya instalada difiere de
-la versión destino en la lógica de esa misma sección —como pasó al pasar de
-una versión sin este mecanismo a una con él—, bash sigue ejecutando en
-memoria el código VIEJO durante el resto de la corrida mientras los
-archivos de disco, el propio script incluido, ya cambiaron por debajo: el
-fix de `git checkout`, la instalación de `pgvector` y el reinicio de
-servicios pueden no llegar a aplicarse, sin ningún error que lo delate.
-Bug real, encontrado y aislado probando el upgrade en vivo. `upgrade-nativo.sh`
-lo evita por diseño —nunca se modifica a sí mismo— y de paso resuelve
-también el reinicio: **`systemctl enable --now` no reinicia un servicio que
-ya está activo**, así que sin este cambio el código podía quedar
-actualizado en disco mientras el proceso seguía corriendo la versión
-anterior.
+**Por qué un script aparte, si `install-nativo.sh` también es seguro de
+re-ejecutar directamente** (ambos hacen su propio `git checkout`/`reset`
+sobre sí mismos como parte de la actualización, y desde 2026-09-13 los dos
+se relanzan como proceso nuevo justo después de ese reset —nunca siguen
+ejecutando en memoria la versión de antes del pull, el bug real que
+motivó este mecanismo, encontrado y aislado probando el upgrade en vivo—):
+`upgrade-nativo.sh` suma, además, el backup automático de la base antes de
+tocar nada, y un paso final que vuelve a comprobar el commit que `/health`
+reporta de verdad y reintenta un reinicio si no coincide —**`systemctl
+enable --now` no reinicia un servicio que ya está activo**, así que sin
+ese chequeo el código podía quedar actualizado en disco mientras el
+proceso seguía corriendo la versión anterior—. Por eso sigue siendo la
+vía recomendada, aunque ya no sea la única segura.
 
 **Qué NO toca**: tu `.env` (`SECRET_KEY`, contraseña de la base, puerto del
 panel, orígenes CORS...) se preserva tal cual —se lee del `.env` existente

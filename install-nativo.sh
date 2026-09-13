@@ -288,6 +288,28 @@ if [ -d "$INSTALL_DIR/.git" ]; then
     git -C "$INSTALL_DIR" fetch --all --quiet
     git -C "$INSTALL_DIR" checkout --quiet "$BRANCH"
     git -C "$INSTALL_DIR" reset --hard --quiet "origin/$BRANCH"
+
+    # El reset de arriba acaba de sobrescribir este mismo script EN DISCO si
+    # $0 es (o es una copia de) $INSTALL_DIR/install-nativo.sh -el caso
+    # tipico de re-ejecutarlo directamente sobre una instalacion existente
+    # para actualizar, en vez de pasar por upgrade-nativo.sh-. Bash ya
+    # cargo en memoria la version VIEJA de todo lo que viene despues (pasos
+    # 5 en adelante: pgvector, sudoers, systemd, backend, frontend,
+    # reinicio de servicios), y seguiria ejecutando esa logica vieja aunque
+    # los archivos ya cambiaron por debajo -mismo bug de fondo que motivo
+    # crear upgrade-nativo.sh como script aparte (ver docs/actualizacion.md),
+    # que hasta ahora dependia de invocar SIEMPRE esta copia desde un
+    # proceso nuevo para evitarlo. Relanzando aca mismo, install-nativo.sh
+    # queda seguro de re-ejecutar directamente tambien, no solo a traves de
+    # upgrade-nativo.sh. SQUIDMGR_INSTALL_REEXEC corta la recursion: la
+    # segunda pasada repite este mismo bloque de git (rapido y sin efecto,
+    # ya esta al dia) pero no vuelve a relanzarse.
+    if [ -z "${SQUIDMGR_INSTALL_REEXEC:-}" ]; then
+        info "Continuando con el codigo ya actualizado (proceso nuevo)..."
+        export SQUIDMGR_INSTALL_REEXEC=1
+        export INSTALL_DIR BRANCH
+        exec bash "$INSTALL_DIR/install-nativo.sh"
+    fi
 else
     mkdir -p "$(dirname "$INSTALL_DIR")"
     # Esperar a que el DNS resuelva de verdad, no una cantidad fija de
