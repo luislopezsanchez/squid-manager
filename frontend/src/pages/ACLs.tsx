@@ -8,8 +8,12 @@ interface Acl {
   id: number
   name: string
   type: string
-  value: string
+  // null para una ACL 'file': su contenido vive solo en el archivo del
+  // servidor (puede tener millones de líneas), no viaja por la API. Usar
+  // line_count para mostrar cuántos dominios tiene.
+  value: string | null
   source: string
+  line_count: number | null
   description: string | null
   enabled: boolean
   created_at: string
@@ -258,7 +262,7 @@ export default function ACLs() {
                   </td>
                   <td className="px-6 py-4 font-mono text-sm text-ink-2 max-w-xs truncate">
                     {acl.source === 'file'
-                      ? `${acl.value.split('\n').filter(Boolean).length} ${traducir('dominios')}`
+                      ? `${(acl.line_count ?? 0).toLocaleString()} ${traducir('dominios')}`
                       : acl.value}
                   </td>
                   <td className="px-6 py-4">

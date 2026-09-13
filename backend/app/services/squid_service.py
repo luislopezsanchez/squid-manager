@@ -185,23 +185,60 @@ def write_digest_file(db, realm: str) -> int:
     return len(lines)
 
 
+def hash_domain_list(dominios: list[str]) -> str:
+    """sha256 de una lista de dominios ya normalizada (una línea por
+    dominio, sin vacías), en el mismo formato exacto con el que
+    write_acl_list_file() escribe el archivo. Pública para que
+    acls.bulk_domains pueda calcular el hash de una carga ANTES de decidir
+    si hace falta reescribir el archivo -re-subir exactamente la misma
+    blocklist (por ejemplo, una sincronización diaria contra un proveedor
+    externo que no cambió nada) no debería volver a escribir cientos de MB
+    en disco ni marcar la configuración como pendiente de aplicar."""
+    import hashlib
+
+    h = hashlib.sha256()
+    for linea in dominios:
+        h.update(linea.encode("utf-8"))
+        h.update(b"\n")
+    return h.hexdigest()
+
+
+def write_acl_list_file(name: str, dominios: list[str]) -> tuple[str, int]:
+    """Escribe (o reemplaza) el archivo de una ACL 'file' con esta lista de
+    dominios, uno por línea. Único punto que escribe estos archivos -lo usan
+    tanto la carga masiva (acls.bulk_domains, al recibir un archivo nuevo)
+    como build_acl_list_files (al migrar una ACL vieja que todavía tiene el
+    contenido en `Acl.value`)-, para que el hash que se guarda en la BD
+    siempre se calcule sobre exactamente lo mismo que se escribió.
+
+    Devuelve (content_hash, line_count) para guardar en la fila de la ACL.
+    """
+    ACL_LISTS_DIR.mkdir(parents=True, exist_ok=True)
+    contenido = "\n".join(dominios) + ("\n" if dominios else "")
+    _write_atomic(ACL_LISTS_DIR / f"{name}.txt", contenido, mode=0o644)
+    return hash_domain_list(dominios), len(dominios)
+
+
 def build_acl_list_files(db) -> int:
-    """Escribe un archivo por cada ACL respaldada por archivo (Acl.source ==
-    'file') y borra los que ya no correspondan a ninguna.
+    """Sincroniza /etc/squid/acl_lists/ con las ACLs 'file' de la BD, y
+    borra los archivos que ya no correspondan a ninguna.
 
-    Pensado para listas de dominios grandes (una blocklist de miles de
-    entradas): una ACL así no se escribe inline en squid.conf -sería una
-    sola línea de decenas de miles de caracteres, incómoda de editar y más
-    lenta de parsear en cada reconfigure-, sino como
-    `acl nombre dstdomain "/etc/squid/acl_lists/nombre.txt"`, un dominio por
-    línea. La BD (`Acl.value`) sigue siendo la fuente de verdad; este
-    archivo es solo la forma en la que Squid la lee.
+    Desde la migración 0023, el archivo es la fuente de verdad de una ACL
+    'file': esta función YA NO reescribe nada en el caso normal, solo lo
+    hace cuando hace falta:
 
-    El borrado de sobrantes cubre el caso de una ACL que se eliminó o que
-    volvió a 'inline' (una lista que se redujo por debajo del umbral): sin
-    esto, el archivo viejo se queda ahí para siempre, sin que nada lo
-    referencie -no rompe nada, pero confunde a cualquiera que mire el
-    directorio más adelante-.
+    - `Acl.value` todavía tiene contenido (ACL creada antes de 0023, sin
+      migrar todavía): se escribe el archivo por primera vez con ese
+      contenido, se guarda su hash/conteo, y se limpia `value` -a partir de
+      ahí esa ACL ya quedó en el camino nuevo, para siempre.
+    - El archivo esperado no existe (se borró a mano, o es una instalación
+      restaurada sin sus archivos): se recrea igual que antes, si hay
+      contenido en `value`; si no lo hay tampoco (backup restaurado sin el
+      archivo), se registra un aviso y esa ACL queda sin lista hasta que se
+      vuelva a cargar -mejor que journal vacío en silencio.
+    - Todo lo demás (el caso normal, apply tras apply, sin cambios en la
+      lista) no toca el disco para nada: ni lee ni escribe el archivo, solo
+      compara metadatos ya en memoria.
     """
     from app.models.acl import Acl
 
@@ -209,12 +246,39 @@ def build_acl_list_files(db) -> int:
     acls_de_archivo = db.query(Acl).filter(Acl.source == "file").all()
 
     esperados = set()
+    migradas = 0
     for acl in acls_de_archivo:
         nombre_archivo = f"{acl.name}.txt"
         esperados.add(nombre_archivo)
-        dominios = [d.strip() for d in (acl.value or "").splitlines() if d.strip()]
-        contenido = "\n".join(dominios) + ("\n" if dominios else "")
-        _write_atomic(ACL_LISTS_DIR / nombre_archivo, contenido, mode=0o644)
+        ruta = ACL_LISTS_DIR / nombre_archivo
+
+        if acl.value is not None:
+            # Todavía sin migrar (venía de antes de 0023), o se le volvió a
+            # asignar `value` a mano por algún camino viejo: el contenido de
+            # la BD manda, se escribe y se limpia `value` para no volver a
+            # pasar por aquí la próxima vez.
+            dominios = [d.strip() for d in acl.value.splitlines() if d.strip()]
+            content_hash, line_count = write_acl_list_file(acl.name, dominios)
+            acl.value = None
+            acl.content_hash = content_hash
+            acl.line_count = line_count
+            migradas += 1
+        elif not ruta.exists():
+            # Ya migrada (value en NULL) pero el archivo no está: no hay de
+            # dónde reconstruirla. Se deja constancia en el log en vez de
+            # fallar todo el apply -las demás ACLs sí pueden aplicarse bien.
+            logger.error(
+                f"ACL de archivo '{acl.name}' no tiene contenido en la BD ni "
+                f"el archivo {ruta} existe: quedará sin dominios hasta que se "
+                "vuelva a cargar desde 'Cargar dominios'."
+            )
+        # Si el archivo existe y `value` ya es NULL: nada que hacer, es el
+        # caso normal -el archivo ya es correcto, escrito directamente por
+        # bulk_domains() o por una migración anterior de este mismo bucle.
+
+    if migradas:
+        db.commit()
+        logger.info(f"{migradas} ACL(s) de archivo migrada(s) al nuevo esquema (value -> archivo)")
 
     borrados = 0
     for existente in ACL_LISTS_DIR.glob("*.txt"):

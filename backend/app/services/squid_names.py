@@ -164,7 +164,13 @@ def ensure_not_referenced(db, name: str, action: str = "eliminar") -> None:
 # del archivo que arma build_acl_list_file().
 _DOMINIO_PATTERN = re.compile(r"^\.?[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
 
-MAX_DOMINIOS_POR_CARGA = 200_000  # cortafuegos ante un archivo descomunal por error
+MAX_DOMINIOS_POR_CARGA = 10_000_000  # cortafuegos ante un archivo descomunal por error
+# Subido de 200_000 en la fase de externalización de ACLs (migración 0023):
+# antes, guardar el valor en la BD y reescribirlo en cada apply hacía que
+# cualquier límite más alto fuera contraproducente. Con el archivo en disco
+# como fuente de verdad, el límite real ya no es este número sino cuánta
+# memoria tolera validar la lista en Python (ver validar_lista_dominios) -
+# eso sigue siendo O(n) y todavía no está pensado para streaming.
 
 
 def validar_lista_dominios(lineas: list[str]) -> tuple[list[str], list[str]]:

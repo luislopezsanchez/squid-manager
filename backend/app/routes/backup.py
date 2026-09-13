@@ -6,7 +6,7 @@ from io import StringIO
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, PlainTextResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app.database import get_db
 from app.models.admin import Admin
@@ -87,10 +87,21 @@ async def export_backup(
             {"key": s.key, "value": s.value, "category": s.category, "description": s.description}
             for s in db.query(SquidSetting).all()
         ],
+        # Una ACL 'file' (carga masiva de dominios) puede tener millones de
+        # líneas: incluir su contenido en el backup volvería a convertir un
+        # export de "unos pocos cientos de KB" en uno de cientos de MB -lo
+        # mismo que la migración 0023 evitó en la propia BD. Se exporta
+        # `source`/`line_count` para que quien restaure sepa qué faltó; el
+        # contenido real se vuelve a cargar con "Cargar dominios" después de
+        # restaurar (ver el aviso que arma restore_backup más abajo).
         "acls": [
-            {"name": a.name, "type": a.type, "value": a.value,
-             "description": a.description, "enabled": a.enabled}
-            for a in db.query(Acl).order_by(Acl.id).all()
+            {
+                "name": a.name, "type": a.type,
+                "value": None if a.source == "file" else a.value,
+                "source": a.source, "line_count": a.line_count,
+                "description": a.description, "enabled": a.enabled,
+            }
+            for a in db.query(Acl).options(defer(Acl.value)).order_by(Acl.id).all()
         ],
         "access_rules": [
             {"action": r.action, "acl_names": r.acl_names, "order": r.order,
@@ -217,15 +228,45 @@ async def restore_backup(
     for a in backup.get("acls", []):
         a["name"] = validate_name(a["name"], "ACL")
         a["type"] = validate_acl_type(a["type"])
-        a["value"] = validate_value(a["value"])
-        existing = db.query(Acl).filter(Acl.name == a["name"]).first()
-        if existing:
-            existing.type = a["type"]
-            existing.value = a["value"]
-            existing.description = a.get("description")
-            existing.enabled = a["enabled"]
+        # Un backup hecho después de la migración 0023 no trae el contenido
+        # de una ACL 'file' (ver el export más arriba): se recrea la fila
+        # como 'file' sin dominios, y hay que volver a cargarlos a mano.
+        # Un backup viejo (de antes de 0023) no tiene "source" en absoluto:
+        # se trata como 'inline', igual que se comportaba siempre.
+        if a.get("source") == "file":
+            existing = db.query(Acl).filter(Acl.name == a["name"]).first()
+            if existing:
+                existing.type = a["type"]
+                existing.description = a.get("description")
+                existing.enabled = a["enabled"]
+                if existing.source != "file":
+                    existing.source = "file"
+                    existing.value = None
+                    existing.content_hash = None
+                    existing.line_count = a.get("line_count")
+            else:
+                db.add(Acl(
+                    name=a["name"], type=a["type"], value=None, source="file",
+                    line_count=a.get("line_count"),
+                    description=a.get("description"), enabled=a["enabled"],
+                ))
+            results["warnings"].append(
+                f"«{a['name']}» es una ACL de archivo: el backup no incluye sus dominios "
+                f"({a.get('line_count') or 0} antes del backup). Volvé a cargarlos en "
+                "«Cargar dominios» con el mismo nombre."
+            )
         else:
-            db.add(Acl(**a))
+            a["value"] = validate_value(a["value"])
+            existing = db.query(Acl).filter(Acl.name == a["name"]).first()
+            if existing:
+                existing.type = a["type"]
+                existing.value = a["value"]
+                existing.source = "inline"
+                existing.description = a.get("description")
+                existing.enabled = a["enabled"]
+            else:
+                db.add(Acl(name=a["name"], type=a["type"], value=a["value"], source="inline",
+                           description=a.get("description"), enabled=a["enabled"]))
         results["acls"] += 1
 
     # Sin este flush, una ACL nueva (recien anadida arriba con db.add(), sin

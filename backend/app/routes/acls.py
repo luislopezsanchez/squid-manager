@@ -1,7 +1,7 @@
 """Rutas de gestión de ACLs."""
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app.database import get_db
 from app.models.admin import Admin
@@ -25,7 +25,23 @@ router = APIRouter()
 # con miles de dominios es impracticable de editar y más lenta de parsear.
 UMBRAL_ACL_ARCHIVO = 200
 
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # una blocklist de 200k dominios entra holgada
+MAX_UPLOAD_BYTES = 250 * 1024 * 1024  # ver MAX_DOMINIOS_POR_CARGA en squid_names.py
+
+
+def _to_response(acl: Acl) -> AclResponse:
+    """Arma la respuesta sin tocar `acl.value` cuando source == 'file' -ni
+    siquiera para una ACL vieja que todavía no pasó por la migración
+    perezosa (ver squid_service.build_acl_list_files): acceder al atributo
+    dispararía su carga completa (potencialmente millones de líneas) solo
+    para descartarlo en la siguiente línea. `line_count` es lo que el
+    frontend necesita mostrar en su lugar."""
+    return AclResponse(
+        id=acl.id, name=acl.name, type=acl.type,
+        value=None if acl.source == "file" else acl.value,
+        source=acl.source, line_count=acl.line_count,
+        description=acl.description, enabled=acl.enabled,
+        created_at=acl.created_at, updated_at=acl.updated_at,
+    )
 
 
 async def _leer_archivo_subido(file: UploadFile) -> bytes:
@@ -54,11 +70,18 @@ async def list_acls(
     limit por defecto en 1000 -generoso, para no romper a los consumidores
     actuales de la API que no mandan estos parametros- (auditoria
     2026-09-09, hallazgo 09-001).
+
+    defer(Acl.value): sin esto, listar ACLs traía de la BD el contenido
+    completo de cada una -incluidas las 'file', que pueden tener millones
+    de líneas- para descartarlo enseguida en _to_response(). Con listas
+    grandes, esto por sí solo hacía que abrir la página de ACLs tardara
+    varios segundos y moviera cientos de MB por la red hacia el navegador.
     """
-    return (
-        db.query(Acl).order_by(Acl.name)
+    acls = (
+        db.query(Acl).options(defer(Acl.value)).order_by(Acl.name)
         .offset(offset).limit(limit).all()
     )
+    return [_to_response(a) for a in acls]
 
 
 @router.get("/unused", response_model=list[str])
@@ -71,7 +94,8 @@ async def list_unused_acls(
     Una ACL por sí sola no bloquea nada: hasta que una regla de acceso la
     referencia, no tiene ningún efecto sobre el tráfico.
     """
-    return [a.name for a in db.query(Acl).order_by(Acl.name).all() if not find_references(db, a.name)]
+    acls = db.query(Acl).options(defer(Acl.value)).order_by(Acl.name).all()
+    return [a.name for a in acls if not find_references(db, a.name)]
 
 
 @router.post("/", response_model=AclResponse, status_code=201)
@@ -105,7 +129,7 @@ async def create_acl(
         queue_notification(background_tasks, db, "acl_change",
                            "ACL creada",
                            f"El admin {current_admin.username} creó la ACL '{name}' ({acl_type}).")
-    return acl
+    return _to_response(acl)
 
 
 @router.put("/{acl_id}", response_model=AclResponse)
@@ -122,7 +146,17 @@ async def update_acl(
         raise HTTPException(404, detail="ACL no encontrada")
 
     changes = data.model_dump(exclude_unset=True)
-    old_value = f"{acl.name} {acl.type} {acl.value}"
+    # No leer acl.value para una ACL 'file': si todavía no pasó por la
+    # migración perezosa (build_acl_list_files), sigue teniendo el
+    # contenido completo -potencialmente millones de líneas- y este log es
+    # el único motivo por el que se traería aquí, para un cambio que ni
+    # siquiera toca el valor (por ejemplo, activar/desactivar la ACL).
+    def _resumen(a: Acl) -> str:
+        if a.source == "file":
+            return f"{a.name} {a.type} ({a.line_count or 0} dominios, archivo)"
+        return f"{a.name} {a.type} {a.value}"
+
+    old_value = _resumen(acl)
 
     # Una ACL 'file' viene de una carga masiva (backend/app/routes/acls.py
     # bulk-domains): su valor son miles de dominios, uno por línea, y no
@@ -169,7 +203,7 @@ async def update_acl(
     db.add(AuditLog(
         admin_id=current_admin.id, admin_username=current_admin.username,
         action="update", entity="acl", entity_id=acl.id,
-        old_value=old_value, new_value=f"{acl.name} {acl.type} {acl.value}",
+        old_value=old_value, new_value=_resumen(acl),
     ))
     db.commit()
     mark_dirty()
@@ -178,7 +212,7 @@ async def update_acl(
         queue_notification(background_tasks, db, "acl_change",
                            "ACL actualizada",
                            f"El admin {current_admin.username} actualizó la ACL '{acl.name}'.")
-    return acl
+    return _to_response(acl)
 
 
 @router.delete("/{acl_id}", status_code=204)
@@ -257,8 +291,21 @@ async def cargar_dominios_masivo(
     acl = db.query(Acl).filter(Acl.name == name).first()
 
     if acl and modo == "agregar":
+        # El archivo en disco es la fuente de verdad para una ACL 'file'
+        # desde la migración 0023; `acl.value` solo puede tener algo todavía
+        # si esta ACL viene de antes de esa migración y ningún apply la
+        # migró todavía -se cubren los dos casos, prefiriendo el archivo
+        # cuando existe.
         if acl.source == "file":
-            existentes = [d.strip() for d in acl.value.splitlines() if d.strip()]
+            from app.services.squid_service import ACL_LISTS_DIR
+
+            ruta = ACL_LISTS_DIR / f"{acl.name}.txt"
+            if ruta.exists():
+                existentes = [d.strip() for d in ruta.read_text(encoding="utf-8", errors="replace").splitlines() if d.strip()]
+            elif acl.value:
+                existentes = [d.strip() for d in acl.value.splitlines() if d.strip()]
+            else:
+                existentes = []
         else:
             existentes = acl.value.split()
         combinados = list(dict.fromkeys(existentes + dominios_nuevos))  # dedup, conserva orden
@@ -272,22 +319,48 @@ async def cargar_dominios_masivo(
         )
 
     nuevo_source = "file" if len(combinados) > UMBRAL_ACL_ARCHIVO else "inline"
-    # 'inline' sigue exigiendo una sola línea sin saltos (validate_value):
-    # el separador ahí es el espacio, igual que cualquier ACL creada a mano.
-    nuevo_value = "\n".join(combinados) if nuevo_source == "file" else validate_value(" ".join(combinados))
+
+    old_value = None
+    if acl:
+        old_count = acl.line_count if acl.source == "file" else len(acl.value.split())
+        old_value = f"{acl.name} {acl.type} ({old_count} dominios)"
+
+    if nuevo_source == "file":
+        # El archivo se escribe DIRECTO -nunca pasa por `Acl.value`-: es la
+        # diferencia central con el esquema anterior (migración 0023). Con
+        # una lista de millones de dominios, evitar ese viaje de ida y
+        # vuelta por una columna TEXT es lo que hace que la carga y los
+        # applies siguientes sigan siendo rápidos.
+        from app.services.squid_service import write_acl_list_file, hash_domain_list
+
+        nuevo_value = None
+        hash_nuevo = hash_domain_list(combinados)
+        if acl and acl.source == "file" and acl.content_hash == hash_nuevo:
+            # Exactamente la misma lista que ya había (re-subir la misma
+            # blocklist sin cambios, típico de una sincronización
+            # automática): no hay nada que reescribir en disco.
+            content_hash, line_count = acl.content_hash, acl.line_count
+        else:
+            content_hash, line_count = write_acl_list_file(name, combinados)
+    else:
+        # 'inline' sigue exigiendo una sola línea sin saltos (validate_value):
+        # el separador ahí es el espacio, igual que cualquier ACL creada a mano.
+        nuevo_value = validate_value(" ".join(combinados))
+        content_hash, line_count = None, None
 
     accion = "update" if acl else "create"
     if acl:
-        old_value = f"{acl.name} {acl.type} ({len(acl.value.splitlines()) if acl.source == 'file' else len(acl.value.split())} dominios)"
         acl.type = acl_type
         acl.value = nuevo_value
         acl.source = nuevo_source
+        acl.content_hash = content_hash
+        acl.line_count = line_count
         if description is not None:
             acl.description = description
     else:
-        old_value = None
         acl = Acl(
             name=name, type=acl_type, value=nuevo_value, source=nuevo_source,
+            content_hash=content_hash, line_count=line_count,
             description=description or "Cargado desde archivo", enabled=True,
         )
         db.add(acl)
@@ -308,7 +381,7 @@ async def cargar_dominios_masivo(
                            f"El admin {current_admin.username} cargó {len(combinados)} dominios en la ACL '{name}' ({nuevo_source}).")
 
     return {
-        "acl": AclResponse.model_validate(acl).model_dump(mode="json"),
+        "acl": _to_response(acl).model_dump(mode="json"),
         "dominios_importados": len(combinados),
         "dominios_nuevos": len(dominios_nuevos),
         "rechazados": rechazados[:20],

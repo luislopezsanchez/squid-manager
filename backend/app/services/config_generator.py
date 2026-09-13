@@ -7,7 +7,7 @@ ejecuta dentro del contenedor de Squid (en el del backend no hay binario).
 
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app.models.acl import Acl
 from app.models.access_rule import AccessRule
@@ -40,7 +40,17 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), trim_blocks=True)
     template = env.get_template("squid.conf.j2")
 
-    acls = db.query(Acl).filter(Acl.enabled == True).order_by(Acl.name).all()  # noqa: E712
+    # defer(Acl.value): la plantilla solo lee `value` para una ACL 'inline'
+    # (una 'file' referencia el archivo por nombre, nunca su contenido -ver
+    # squid.conf.j2). Sin esto, cada apply traía de la BD el valor completo
+    # de TODAS las ACLs, incluidas las de archivo -donde puede haber
+    # millones de líneas que ni siquiera se usan aquí. Con defer(), acceder
+    # a `.value` de una ACL 'inline' sí dispara su propia consulta (son
+    # pocas y livianas); una 'file' nunca llega a pedirlo.
+    acls = (
+        db.query(Acl).options(defer(Acl.value))
+        .filter(Acl.enabled == True).order_by(Acl.name).all()  # noqa: E712
+    )
     rules = (
         db.query(AccessRule)
         .filter(AccessRule.enabled == True)  # noqa: E712

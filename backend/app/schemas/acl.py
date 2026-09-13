@@ -24,13 +24,18 @@ class AclResponse(BaseModel):
     id: int
     name: str
     type: str
-    value: str
+    # NULL para una ACL 'file': su contenido vive únicamente en
+    # /etc/squid/acl_lists/<name>.txt (ver migración 0023), no se manda por
+    # la API -puede tener millones de líneas. El frontend usa `line_count`
+    # para mostrar cuántos dominios tiene sin necesitar el contenido.
+    value: str | None
     # 'inline' (se edita como cualquier ACL) o 'file' (viene de una carga
     # masiva de dominios; su valor no se edita a mano, se vuelve a subir el
     # archivo). Solo informativo para el frontend, no se acepta en
     # AclCreate/AclUpdate: una ACL 'file' se crea únicamente vía
     # /acls/bulk-domains.
     source: str = "inline"
+    line_count: int | None = None
     description: str | None = None
     enabled: bool
     created_at: datetime
