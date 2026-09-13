@@ -6,9 +6,26 @@ import {
 import { Markdown } from '../components/Markdown'
 import { DOC_ACTIVIDAD_RED } from '../content/docsActividadRed'
 import { DOC_LATENCIA_ERRORES } from '../content/docsLatenciaErrores'
+import { DOC_ESTADO_CACHE } from '../content/docsEstadoCache'
 import { DOC_TENDENCIAS } from '../content/docsTendencias'
 import { DOC_PANORAMA } from '../content/docsPanorama'
 import { DOC_ACLS } from '../content/docsAcls'
+import { DOC_REGISTROS } from '../content/docsRegistros'
+import { DOC_HISTORICO } from '../content/docsHistorico'
+import { DOC_AUDITORIA } from '../content/docsAuditoria'
+import { DOC_USUARIOS } from '../content/docsUsuarios'
+import { DOC_GRUPOS } from '../content/docsGrupos'
+import { DOC_REGLAS_ACCESO } from '../content/docsReglasAcceso'
+import { DOC_ANCHO_BANDA } from '../content/docsAnchoBanda'
+import { DOC_LDAP } from '../content/docsLdap'
+import { DOC_KERBEROS } from '../content/docsKerberos'
+import { DOC_SYSLOG } from '../content/docsSyslog'
+import { DOC_PROXY_PADRE } from '../content/docsProxyPadre'
+import { DOC_NOTIFICACIONES } from '../content/docsNotificaciones'
+import { DOC_CERTIFICADO } from '../content/docsCertificado'
+import { DOC_CONFIGURACION } from '../content/docsConfiguracion'
+import { DOC_BACKUP_MIGRACION } from '../content/docsBackupMigracion'
+import { DOC_ADMINISTRADORES } from '../content/docsAdministradores'
 
 type Articulo = { slug: string; titulo: string; listo: boolean; contenido?: Record<'es' | 'en' | 'pt', string> }
 type Grupo = { id: string; titulo: string; Icon: (p: { className?: string }) => JSX.Element; articulos: Articulo[] }
@@ -21,16 +38,16 @@ const GRUPOS: Grupo[] = [
   {
     id: 'vigilancia', titulo: traducir('Vigilancia'), Icon: IconEye,
     articulos: [
-      { slug: 'registros', titulo: traducir('Registros'), listo: false },
-      { slug: 'historico', titulo: traducir('Histórico'), listo: false },
-      { slug: 'auditoria', titulo: traducir('Auditoría'), listo: false },
+      { slug: 'registros', titulo: traducir('Registros'), listo: true, contenido: DOC_REGISTROS },
+      { slug: 'historico', titulo: traducir('Histórico'), listo: true, contenido: DOC_HISTORICO },
+      { slug: 'auditoria', titulo: traducir('Auditoría'), listo: true, contenido: DOC_AUDITORIA },
     ],
   },
   {
     id: 'analisis', titulo: traducir('Análisis'), Icon: IconActivity,
     articulos: [
       { slug: 'actividad-de-red', titulo: traducir('Actividad de red'), listo: true, contenido: DOC_ACTIVIDAD_RED },
-      { slug: 'estadisticas-de-cache', titulo: traducir('Estado del caché'), listo: false },
+      { slug: 'estadisticas-de-cache', titulo: traducir('Estado del caché'), listo: true, contenido: DOC_ESTADO_CACHE },
       { slug: 'latencia-y-errores', titulo: traducir('Latencia y errores'), listo: true, contenido: DOC_LATENCIA_ERRORES },
       { slug: 'tendencias', titulo: traducir('Tendencias'), listo: true, contenido: DOC_TENDENCIAS },
       { slug: 'panorama', titulo: traducir('Panorama'), listo: true, contenido: DOC_PANORAMA },
@@ -39,30 +56,30 @@ const GRUPOS: Grupo[] = [
   {
     id: 'gestion', titulo: traducir('Gestión'), Icon: IconShield,
     articulos: [
-      { slug: 'usuarios', titulo: traducir('Usuarios'), listo: false },
-      { slug: 'grupos', titulo: traducir('Grupos'), listo: false },
+      { slug: 'usuarios', titulo: traducir('Usuarios'), listo: true, contenido: DOC_USUARIOS },
+      { slug: 'grupos', titulo: traducir('Grupos'), listo: true, contenido: DOC_GRUPOS },
       { slug: 'acls', titulo: traducir('ACLs'), listo: true, contenido: DOC_ACLS },
-      { slug: 'reglas-de-acceso', titulo: traducir('Reglas de acceso'), listo: false },
-      { slug: 'ancho-de-banda', titulo: traducir('Ancho de banda'), listo: false },
+      { slug: 'reglas-de-acceso', titulo: traducir('Reglas de acceso'), listo: true, contenido: DOC_REGLAS_ACCESO },
+      { slug: 'ancho-de-banda', titulo: traducir('Ancho de banda'), listo: true, contenido: DOC_ANCHO_BANDA },
     ],
   },
   {
     id: 'integraciones', titulo: traducir('Integraciones'), Icon: IconGlobe,
     articulos: [
-      { slug: 'ldap', titulo: 'LDAP', listo: false },
-      { slug: 'kerberos', titulo: 'Kerberos', listo: false },
-      { slug: 'syslog-externo', titulo: traducir('Syslog externo'), listo: false },
-      { slug: 'proxy-padre', titulo: traducir('Proxy padre'), listo: false },
-      { slug: 'notificaciones', titulo: traducir('Notificaciones'), listo: false },
+      { slug: 'ldap', titulo: 'LDAP', listo: true, contenido: DOC_LDAP },
+      { slug: 'kerberos', titulo: 'Kerberos', listo: true, contenido: DOC_KERBEROS },
+      { slug: 'syslog-externo', titulo: traducir('Syslog externo'), listo: true, contenido: DOC_SYSLOG },
+      { slug: 'proxy-padre', titulo: traducir('Proxy padre'), listo: true, contenido: DOC_PROXY_PADRE },
+      { slug: 'notificaciones', titulo: traducir('Notificaciones'), listo: true, contenido: DOC_NOTIFICACIONES },
     ],
   },
   {
     id: 'sistema', titulo: traducir('Sistema'), Icon: IconTool,
     articulos: [
-      { slug: 'certificado', titulo: traducir('Certificado'), listo: false },
-      { slug: 'configuracion', titulo: traducir('Configuración'), listo: false },
-      { slug: 'backup-y-migracion', titulo: traducir('Backup y migración'), listo: false },
-      { slug: 'administradores', titulo: traducir('Administradores'), listo: false },
+      { slug: 'certificado', titulo: traducir('Certificado'), listo: true, contenido: DOC_CERTIFICADO },
+      { slug: 'configuracion', titulo: traducir('Configuración'), listo: true, contenido: DOC_CONFIGURACION },
+      { slug: 'backup-y-migracion', titulo: traducir('Backup y migración'), listo: true, contenido: DOC_BACKUP_MIGRACION },
+      { slug: 'administradores', titulo: traducir('Administradores'), listo: true, contenido: DOC_ADMINISTRADORES },
     ],
   },
 ]
