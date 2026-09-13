@@ -8,6 +8,7 @@ import { DOC_ACTIVIDAD_RED } from '../content/docsActividadRed'
 import { DOC_LATENCIA_ERRORES } from '../content/docsLatenciaErrores'
 import { DOC_TENDENCIAS } from '../content/docsTendencias'
 import { DOC_PANORAMA } from '../content/docsPanorama'
+import { DOC_ACLS } from '../content/docsAcls'
 
 type Articulo = { slug: string; titulo: string; listo: boolean; contenido?: Record<'es' | 'en' | 'pt', string> }
 type Grupo = { id: string; titulo: string; Icon: (p: { className?: string }) => JSX.Element; articulos: Articulo[] }
@@ -40,7 +41,7 @@ const GRUPOS: Grupo[] = [
     articulos: [
       { slug: 'usuarios', titulo: traducir('Usuarios'), listo: false },
       { slug: 'grupos', titulo: traducir('Grupos'), listo: false },
-      { slug: 'acls', titulo: traducir('ACLs'), listo: false },
+      { slug: 'acls', titulo: traducir('ACLs'), listo: true, contenido: DOC_ACLS },
       { slug: 'reglas-de-acceso', titulo: traducir('Reglas de acceso'), listo: false },
       { slug: 'ancho-de-banda', titulo: traducir('Ancho de banda'), listo: false },
     ],
