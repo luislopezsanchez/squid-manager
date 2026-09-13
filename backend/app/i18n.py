@@ -140,6 +140,30 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "rfc_format debe ser 'rfc3164' o 'rfc5424'":
             "rfc_format must be 'rfc3164' or 'rfc5424'",
         "Configuración válida": "Valid configuration",
+        "Hace falta una API key para habilitar el asistente": "An API key is required to enable the assistant",
+        "Hace falta la API key de Jina AI para poder buscar en la documentación.":
+            "The Jina AI API key is required to be able to search the documentation.",
+        "Falta la API key a probar": "The API key to test is missing",
+        "Falta la API key de Jina a probar": "The Jina API key to test is missing",
+        "La pregunta no puede estar vacía": "The question cannot be empty",
+        "El asistente de IA no está activado": "The AI assistant is not enabled",
+        "Los parámetros del delay pool no pueden quedar vacíos.": "The delay pool parameters cannot be left empty.",
+        "Para activar Kerberos hacen falta el realm y el FQDN del proxy.":
+            "The realm and the proxy's FQDN are required to enable Kerberos.",
+        "Completa y guarda Realm y FQDN del proxy antes de generar el script.":
+            "Fill in and save the Realm and proxy FQDN before generating the script.",
+        "No se puede habilitar LDAP con Digest activo: Digest solo autentica usuarios locales del proxy. Cambia el esquema de autenticación a Basic en Configuración antes de habilitar LDAP.":
+            "LDAP cannot be enabled with Digest active: Digest only authenticates local proxy users. Change the authentication scheme to Basic in Settings before enabling LDAP.",
+        "Nombre de usuario inválido: usa entre 1 y 64 caracteres, solo letras, números, punto, guion y guion bajo.":
+            "Invalid username: use between 1 and 64 characters, only letters, numbers, dot, hyphen and underscore.",
+        "No se pudieron validar las credenciales": "Could not validate credentials",
+        "Tu cuenta es de solo lectura": "Your account is read-only",
+        "Solo el superadmin puede realizar esta acción": "Only the superadmin can perform this action",
+        "La sesión caducó porque se cambió la contraseña. Vuelve a entrar.":
+            "The session expired because the password was changed. Please log in again.",
+        "El prefijo 'sni_' lo usa SquidManager para las reglas HTTPS. Elige otro nombre.":
+            "The 'sni_' prefix is used by SquidManager for HTTPS rules. Choose another name.",
+        "Hay un '!' sin ACL detrás.": "There's a '!' with no ACL after it.",
     },
     "pt": {
         "ACL no encontrada": "ACL não encontrada",
@@ -262,6 +286,30 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "rfc_format debe ser 'rfc3164' o 'rfc5424'":
             "rfc_format deve ser 'rfc3164' ou 'rfc5424'",
         "Configuración válida": "Configuração válida",
+        "Hace falta una API key para habilitar el asistente": "É necessária uma chave de API para habilitar o assistente",
+        "Hace falta la API key de Jina AI para poder buscar en la documentación.":
+            "É necessária a chave de API da Jina AI para poder buscar na documentação.",
+        "Falta la API key a probar": "Falta a chave de API a testar",
+        "Falta la API key de Jina a probar": "Falta a chave de API da Jina a testar",
+        "La pregunta no puede estar vacía": "A pergunta não pode ficar vazia",
+        "El asistente de IA no está activado": "O assistente de IA não está ativado",
+        "Los parámetros del delay pool no pueden quedar vacíos.": "Os parâmetros do delay pool não podem ficar vazios.",
+        "Para activar Kerberos hacen falta el realm y el FQDN del proxy.":
+            "Para ativar o Kerberos são necessários o realm e o FQDN do proxy.",
+        "Completa y guarda Realm y FQDN del proxy antes de generar el script.":
+            "Preencha e salve o Realm e o FQDN do proxy antes de gerar o script.",
+        "No se puede habilitar LDAP con Digest activo: Digest solo autentica usuarios locales del proxy. Cambia el esquema de autenticación a Basic en Configuración antes de habilitar LDAP.":
+            "Não é possível habilitar o LDAP com o Digest ativo: o Digest só autentica usuários locais do proxy. Mude o esquema de autenticação para Basic em Configurações antes de habilitar o LDAP.",
+        "Nombre de usuario inválido: usa entre 1 y 64 caracteres, solo letras, números, punto, guion y guion bajo.":
+            "Nome de usuário inválido: use entre 1 e 64 caracteres, só letras, números, ponto, hífen e sublinhado.",
+        "No se pudieron validar las credenciales": "Não foi possível validar as credenciais",
+        "Tu cuenta es de solo lectura": "Sua conta é somente leitura",
+        "Solo el superadmin puede realizar esta acción": "Só o superadmin pode realizar esta ação",
+        "La sesión caducó porque se cambió la contraseña. Vuelve a entrar.":
+            "A sessão expirou porque a senha foi alterada. Entre novamente.",
+        "El prefijo 'sni_' lo usa SquidManager para las reglas HTTPS. Elige otro nombre.":
+            "O prefixo 'sni_' é usado pelo SquidManager para as regras HTTPS. Escolha outro nome.",
+        "Hay un '!' sin ACL detrás.": "Há um '!' sem ACL depois.",
     },
 }
 
