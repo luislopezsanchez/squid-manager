@@ -451,8 +451,14 @@ _apply_lock = threading.Lock()
 
 def apply_squid_config(db) -> dict:
     """Aplica la configuración de Squid, serializado: una ejecución a la vez."""
+    from app.services import apply_progress
+
     with _apply_lock:
-        return _apply_squid_config(db)
+        apply_progress.iniciar()
+        try:
+            return _apply_squid_config(db)
+        finally:
+            apply_progress.finalizar()
 
 
 def _apply_squid_config(db) -> dict:
@@ -476,6 +482,7 @@ def _apply_squid_config(db) -> dict:
     """
     from app.services.config_generator import generate_squid_config
     from app.services.config_state import mark_clean, mark_dirty
+    from app.services import apply_progress
     from app.models.ldap_config import LdapConfig
     from app.models.ldap_user import LdapUser
     from app.models.kerberos_config import KerberosConfig
@@ -497,9 +504,11 @@ def _apply_squid_config(db) -> dict:
     # squid.conf generado fuera perfectamente válido. Escribir estos
     # archivos no afecta al Squid en producción: son datos independientes de
     # que el candidato de squid.conf termine aplicándose o no.
+    apply_progress.avanzar(apply_progress.PASO_ARCHIVOS_ACL)
     build_acl_list_files(db)
 
     # 1. Validar ANTES de escribir squid.conf.
+    apply_progress.avanzar(apply_progress.PASO_VALIDANDO)
     valid, msg = validate_squid_config(config_text)
     if not valid:
         mark_dirty()
@@ -520,6 +529,7 @@ def _apply_squid_config(db) -> dict:
     ajuste_dns = db.query(_Ajuste).filter(_Ajuste.key == "dns_nameservers").first()
     servidores_dns = parsear_lista(ajuste_dns.value if ajuste_dns else None)
     if servidores_dns:
+        apply_progress.avanzar(apply_progress.PASO_DNS)
         dns_ok, dns_msg = probar_servidores(servidores_dns)
         if not dns_ok:
             mark_dirty()
@@ -543,6 +553,7 @@ def _apply_squid_config(db) -> dict:
 
     padre = db.query(ParentProxy).first()
     if padre and padre.enabled:
+        apply_progress.avanzar(apply_progress.PASO_PROXY_PADRE)
         padre_ok, padre_msg = probar_configuracion(padre)
         if not padre_ok:
             mark_dirty()
@@ -590,6 +601,7 @@ def _apply_squid_config(db) -> dict:
             logger.info(f"Hay que recrear el contenedor: {published_msg}")
 
     # 3. Escribir la configuración ya validada.
+    apply_progress.avanzar(apply_progress.PASO_ESCRIBIENDO)
     with open(settings.SQUID_CONFIG_PATH, "w") as f:
         f.write(config_text)
 
@@ -603,6 +615,7 @@ def _apply_squid_config(db) -> dict:
             logger.warning(f"No se pudo sincronizar el estado del puerto: {estado_msg}")
 
     # 4. Archivos auxiliares: LDAP y usuarios del proxy.
+    apply_progress.avanzar(apply_progress.PASO_AUXILIARES)
     # Certificado del proxy padre: tiene que estar en el volumen antes de que
     # Squid lea la configuración que lo declara.
     from app.services.parent_proxy_service import escribir_ca_padre
@@ -628,6 +641,8 @@ def _apply_squid_config(db) -> dict:
     mark_clean()
 
     warnings = msg if msg != "Configuración válida" else ""
+
+    apply_progress.avanzar(apply_progress.PASO_RECARGANDO)
 
     # 5a. Cambió el puerto: hay que recrear el contenedor.
     if port_changed:

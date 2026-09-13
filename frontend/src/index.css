@@ -264,8 +264,24 @@ h1, h2, h3, h4 {
 }
 .dot-live { animation: pulse-dot 2.4s infinite; }
 
+/* Barra de progreso indeterminada: para una operación en curso de la que
+   no se conoce el % real (ej. validar/cargar un archivo de dominios) -un
+   segmento que recorre la barra en bucle, en vez de una barra fija o un
+   simple "Cargando…" sin ninguna señal de que sigue viva. */
+@keyframes indeterminate-bar {
+  0%   { left: -35%; width: 35%; }
+  60%  { left: 100%; width: 45%; }
+  100% { left: 100%; width: 45%; }
+}
+.indeterminate-bar-track { position: relative; overflow: hidden; }
+.indeterminate-bar-fill {
+  position: absolute; top: 0; bottom: 0;
+  animation: indeterminate-bar 1.3s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dot-live, .animate-slide-in, .animate-fade-up { animation: none; }
+  .indeterminate-bar-fill { animation: none; left: 0; width: 100%; }
 }
 
 /* ============================================================

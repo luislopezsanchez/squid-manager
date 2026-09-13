@@ -201,6 +201,23 @@ async def apply_config(
     return result
 
 
+@router.get("/apply-progress")
+async def apply_progress_status(_: Admin = Depends(get_current_admin)):
+    """En qué paso va el "Aplicar cambios" en curso, para que el panel
+    pueda mostrar una barra de progreso mientras espera la respuesta de
+    POST /apply -esa petición puede tardar varios minutos con una ACL de
+    archivo grande (ver apply_progress.py), y sin esto el botón se queda
+    girando sin ninguna pista de si sigue vivo o se colgó.
+
+    No requiere permiso de escritura: cualquier admin conectado puede ver
+    que HAY un apply en curso (lo haya iniciado otro admin o el hilo de
+    arranque), igual que ya puede ver /pending.
+    """
+    from app.services import apply_progress
+
+    return apply_progress.estado()
+
+
 class DnsTest(BaseModel):
     servers: str
 

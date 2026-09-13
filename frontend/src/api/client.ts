@@ -154,6 +154,7 @@ export const api = {
   getSquidStatus: () => request<any>('/squid/status'),
   previewConfig: () => request<any>('/squid/preview'),
   applyConfig: () => request<any>('/squid/apply', { method: 'POST' }),
+  getApplyProgress: () => request<{ activo: boolean; paso: string; pct: number }>('/squid/apply-progress'),
   getSettings: () => request<any>('/squid/settings'),
   updateSetting: (key: string, value: string, category: string, description: string) =>
     request<any>('/squid/settings', { method: 'PUT', body: JSON.stringify({ key, value, category, description }) }),

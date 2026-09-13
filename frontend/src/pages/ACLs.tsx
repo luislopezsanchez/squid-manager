@@ -193,6 +193,16 @@ export default function ACLs() {
             </button>
             <RequiereAplicar />
           </div>
+          {bulkBusy && (
+            <div className="mt-3">
+              <div className="indeterminate-bar-track h-1.5 w-full rounded-full bg-line-soft">
+                <div className="indeterminate-bar-fill h-full rounded-full bg-primary-500" />
+              </div>
+              <p className="text-xs text-ink-3 mt-1.5">
+                {traducir('Leyendo y validando el archivo… con listas de millones de dominios puede tardar varios segundos.')}
+              </p>
+            </div>
+          )}
         </form>
       )}
 

@@ -27,6 +27,20 @@ type Grupo = { id: string; titulo: string; Icon: (p: { className?: string }) => 
 // cierra los demas por diseño, no por accidente.
 const CLAVE_ABIERTO = 'squidmanager:menu-abierto'
 
+// Etiqueta de cada paso que reporta GET /squid/apply-progress -mismos
+// nombres que apply_progress.py en el backend. "iniciando" y cualquier
+// paso no mapeado caen al texto genérico "Aplicando…" que ya se mostraba
+// antes de que existiera esta barra de progreso.
+const PASO_LABELS: Record<string, string> = {
+  archivos_acl: traducir("Escribiendo listas de dominios…"),
+  validando: traducir("Validando configuración…"),
+  dns: traducir("Comprobando servidores DNS…"),
+  proxy_padre: traducir("Comprobando proxy padre…"),
+  escribiendo: traducir("Escribiendo configuración…"),
+  auxiliares: traducir("Escribiendo archivos auxiliares…"),
+  recargando: traducir("Recargando Squid…"),
+}
+
 function leerAbierto(): string | null {
   try {
     return localStorage.getItem(CLAVE_ABIERTO)
@@ -40,6 +54,7 @@ export default function Layout() {
   const location = useLocation()
   const [grupoManual, setGrupoManual] = useState<string | null>(leerAbierto)
   const [applying, setApplying] = useState(false)
+  const [applyProgress, setApplyProgress] = useState<{ paso: string; pct: number } | null>(null)
   const [pending, setPending] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
   const [version, setVersion] = useState<{ version: string; update_available: boolean } | null>(null)
@@ -122,7 +137,15 @@ export default function Layout() {
       return
     }
     setApplying(true)
+    setApplyProgress({ paso: '', pct: 0 })
     setToast(null)
+    // La petición de aplicar puede tardar varios minutos con una ACL de
+    // archivo grande (ver squid_service.py); este intervalo aparte solo
+    // consulta EN QUÉ PASO va, para poder mostrar una barra en vez de dejar
+    // el botón girando sin ninguna pista de si sigue vivo.
+    const poll = setInterval(() => {
+      api.getApplyProgress().then(p => setApplyProgress({ paso: p.paso, pct: p.pct })).catch(() => {})
+    }, 800)
     try {
       const result = await api.applyConfig()
       if (result.status === 'ok') {
@@ -134,7 +157,9 @@ export default function Layout() {
     } catch (e: any) {
       showToast(e.message, 'error')
     } finally {
+      clearInterval(poll)
       setApplying(false)
+      setApplyProgress(null)
       checkPending()
     }
   }
@@ -403,11 +428,28 @@ export default function Layout() {
                     <IconBolt className="w-4 h-4" />{traducir("Aplicar cambios")}</>
                 )}
               </button>
-              <p className="text-[11px] text-center mt-2 text-[#B9D2E0]/60">
-                {pending
-                  ? traducir("Hay cambios sin aplicar")
-                  : traducir("Squid está al día")}
-              </p>
+              {applying ? (
+                <div className="mt-2">
+                  <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500 ease-out"
+                      style={{
+                        width: `${Math.max(applyProgress?.pct || 0, 6)}%`,
+                        background: 'linear-gradient(90deg, var(--brand-400), var(--brand-500))',
+                      }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-center mt-1.5 text-[#B9D2E0]/70">
+                    {(applyProgress?.paso && PASO_LABELS[applyProgress.paso]) || traducir("Aplicando…")}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[11px] text-center mt-2 text-[#B9D2E0]/60">
+                  {pending
+                    ? traducir("Hay cambios sin aplicar")
+                    : traducir("Squid está al día")}
+                </p>
+              )}
             </>
           )}
 
