@@ -85,6 +85,16 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
     # ACLs de dominio que aparecen en alguna regla deny: su tráfico HTTPS se
     # corta en el paso 2 del bump, antes de descifrar nada.
     terminate_acls = []
+    # ACLs de dominio que de verdad hace falta declarar por SNI -las que
+    # aparecen en alguna regla http_access-, para no declarar (y que Squid
+    # tenga que parsear) la variante SNI de una ACL que existe pero a la
+    # que ninguna regla hace referencia todavía. Con una lista de millones
+    # de dominios esto no es un detalle menor: declarar sni_<nombre> sin
+    # que la use ninguna regla le hace parsear ese mismo archivo grande una
+    # segunda vez para nada -confirmado en pruebas: quitar esa declaración
+    # sobrante bajó el tiempo de `squid -k parse` a menos de la mitad con
+    # una ACL de ~5.9M dominios sin usar en ninguna regla.
+    domain_acls_used: set[str] = set()
 
     for rule in rules:
         names = rule.acl_names.split() if rule.acl_names else []
@@ -96,6 +106,7 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
         mentioned_domains = [n for n in names if n.lstrip("!") in domain_acls]
         if not mentioned_domains:
             continue
+        domain_acls_used.update(mentioned_domains)
 
         sni_names = " ".join(
             (f"!sni_{n[1:]}" if n.startswith("!") else f"sni_{n}")
@@ -185,6 +196,7 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
         acls=acls,
         rules=rendered_rules,
         terminate_acls=terminate_acls,
+        domain_acls_used=domain_acls_used,
         domain_acl_types=DOMAIN_ACL_TYPES,
         settings=settings,
         delay_pools=delay_pools,

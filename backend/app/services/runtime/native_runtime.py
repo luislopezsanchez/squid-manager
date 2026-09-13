@@ -212,7 +212,10 @@ class NativeRuntime(ProxyRuntime):
         if not self.squid:
             return False, "No se encontro el binario de Squid en el sistema"
         try:
-            result = self._run(self._squid_cmd("-k", "reconfigure"))
+            # Mismo margen que parse_config: una ACL de archivo grande hace
+            # que recargar (que vuelve a leer squid.conf entero) tarde más
+            # que los 60s por defecto.
+            result = self._run(self._squid_cmd("-k", "reconfigure"), timeout=600)
         except Exception as e:
             logger.error(f"Error recargando Squid: {e}")
             return False, f"Error: {e}"
@@ -245,7 +248,14 @@ class NativeRuntime(ProxyRuntime):
                 "No se encontro el binario de Squid: no se puede validar la "
                 "configuracion. Instala el paquete squid-openssl."
             )
-        result = self._run(_sudo_prefix() + [self.squid, "-k", "parse", "-f", str(path)])
+        # timeout largo (no los 60s por defecto de _run): con una ACL de
+        # archivo de varios millones de dominios, el propio `squid -k parse`
+        # -no este backend- tarda en cargar esa lista en memoria. Medido en
+        # pruebas: ~113s con una ACL de ~5.9M dominios referenciada en una
+        # regla (dstdomain + su variante SNI). Sin este margen, una lista
+        # grande pero legítima fallaba por timeout ANTES de que Squid
+        # terminara de validarla -no porque la config fuera inválida.
+        result = self._run(_sudo_prefix() + [self.squid, "-k", "parse", "-f", str(path)], timeout=600)
         # Squid escribe el resultado del parse por stderr; se juntan los dos
         # flujos para que quien analiza la salida no dependa de cual usa.
         salida = (result.stderr or "") + (result.stdout or "")

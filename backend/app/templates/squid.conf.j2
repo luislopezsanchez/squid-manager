@@ -79,8 +79,14 @@ acl step1 at_step SslBump1
 acl step2 at_step SslBump2
 acl step3 at_step SslBump3
 
-# ACLs de SNI para aplicar las políticas de dominio también a HTTPS
+# ACLs de SNI para aplicar las políticas de dominio también a HTTPS. Solo se
+# declara para una ACL que de verdad aparece en alguna regla http_access
+# (domain_acls_used, ver config_generator.py): una ACL de dominio que existe
+# pero que ninguna regla usa todavía no necesita su variante SNI, y con una
+# lista de millones de dominios declararla igual le costaba a Squid parsear
+# ese mismo archivo grande una segunda vez para nada.
 {% for acl in acls %}
+{% if acl.name in domain_acls_used %}
 {% if acl.type == 'dstdomain' %}
 {% if acl.source == 'file' %}
 acl sni_{{ acl.name }} ssl::server_name "/etc/squid/acl_lists/{{ acl.name }}.txt"
@@ -92,6 +98,7 @@ acl sni_{{ acl.name }} ssl::server_name {{ acl.value }}
 acl sni_{{ acl.name }} ssl::server_name_regex "/etc/squid/acl_lists/{{ acl.name }}.txt"
 {% else %}
 acl sni_{{ acl.name }} ssl::server_name_regex {{ acl.value }}
+{% endif %}
 {% endif %}
 {% endif %}
 {% endfor %}

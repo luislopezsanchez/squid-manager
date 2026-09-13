@@ -39,9 +39,18 @@ STATS_CMD = (
 
 
 def get_docker_client():
-    """Obtiene un cliente Docker usando el socket montado."""
+    """Obtiene un cliente Docker usando el socket montado.
+
+    timeout=600: el default de docker-py son 60s, y `container.exec_run()`
+    para `squid -k parse`/`reconfigure` espera a que el comando termine
+    DENTRO del contenedor -con una ACL de archivo de varios millones de
+    dominios, Squid tarda en cargarla en memoria más que esos 60s (medido
+    en pruebas: ~113s con ~5.9M dominios). Sin este margen, el cliente
+    Docker cortaba la espera y el apply fallaba por timeout aunque Squid
+    hubiera terminado de validar bien la configuración.
+    """
     try:
-        return docker_sdk.from_env()
+        return docker_sdk.from_env(timeout=600)
     except Exception as e:
         logger.error(f"No se pudo conectar a Docker: {e}")
         return None

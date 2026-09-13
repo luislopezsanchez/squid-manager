@@ -687,7 +687,10 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "same-origin" always;
 
-    client_max_body_size 10m;
+    # 250m: acompaña MAX_UPLOAD_BYTES de acls.py (carga masiva de dominios
+    # para una ACL de archivo -ver migración 0023). Por debajo de eso, nginx
+    # cortaba con 413 antes de que la petición llegara siquiera al backend.
+    client_max_body_size 250m;
 
     # Sin esta regla, /health cae en el catch-all de la SPA y devuelve 200 con
     # el HTML del panel: un monitor externo veria verde con el backend muerto.
@@ -702,14 +705,17 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        # 300s, no 120s: reindexar la documentacion del Asistente de IA hace
-        # una llamada real a Jina por fragmento (~200 con el corpus actual),
-        # y con el limite de velocidad de Jina (100/min) mas los reintentos
-        # ante un 429/503 puede superar los 120s. Con el timeout corto, nginx
-        # cortaba la conexion a mitad de camino sin ningun error visible -la
-        # peticion del navegador simplemente se interrumpia- mientras el
-        # backend seguia trabajando de fondo. Visto en vivo, 172.30.36.33.
-        proxy_read_timeout 300s;
+        # 600s: cubre dos casos que ya superaban los 120s originales -
+        # reindexar la documentacion del Asistente de IA (llamada real a
+        # Jina por fragmento, ~200 con el corpus actual, con su limite de
+        # velocidad de 100/min mas reintentos ante un 429/503; visto en vivo,
+        # 172.30.36.33) y aplicar una ACL de archivo de millones de dominios
+        # (squid -k parse/reconfigure tarda en cargarla, ver
+        # runtime/native_runtime.py). Con un timeout corto, nginx cortaba la
+        # conexion a mitad de camino sin ningun error visible -la peticion
+        # del navegador simplemente se interrumpia- mientras el backend
+        # seguia trabajando de fondo.
+        proxy_read_timeout 600s;
     }
 
     location /assets/ {
