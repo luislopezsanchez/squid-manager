@@ -5,6 +5,192 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.7] - 2026-09-10
+
+### Corregido
+
+- **Una instalación que ya había quedado «pegada» por el fallo de 0.24.5 no se
+  recuperaba sola al actualizar a 0.24.6.** Aquel fallo (`project_dir()` bajo
+  `/root`) escribía el `squid.conf` definitivo en disco y moría **antes** del
+  `squid -k reconfigure`. Al rearrancar, el backend veía el marcador de
+  «configuración generada» en el fichero y concluía que no había nada que
+  hacer —pero Squid seguía con la provisional en memoria (solo `localhost`,
+  `403` sin credenciales)—. Verificado en vivo actualizando 172.30.36.42 a
+  0.24.6: los contenedores quedaban sanos y en 0.24.6, pero el proxy seguía en
+  `403`. Ahora, cuando el `squid.conf` en disco ya es el definitivo, el
+  arranque **fuerza igualmente un `reconfigure`** (idempotente y barato) para
+  garantizar que el proceso corre lo que hay en disco. Con esto, actualizar a
+  esta versión desatasca esas instalaciones sin ningún paso manual.
+
+## [0.24.6] - 2026-09-10
+
+### Corregido
+
+- **Instalación Docker bajo `/root`: el panel arrancaba pero no configuraba
+  Squid.** Si el proyecto se clona dentro de `/root` (o cualquier ruta sin
+  permiso de traversía para «otros»), el usuario sin privilegios con el que
+  corre el backend en su contenedor (uid 999) no puede leer
+  `docker-compose.yml` a través del bind-mount. `project_dir()` propagaba el
+  `PermissionError` y tumbaba `apply_squid_config` entero: el proxy se quedaba
+  en el arranque provisional —solo `localhost`, responde `403` sin
+  credenciales en vez del `407` esperado— sin ningún error claro; en el log
+  del backend solo quedaba un `INFO`. Detectado probando una instalación desde
+  cero en `main` (172.30.36.42, 2026-09-10). Ahora:
+  - `project_dir()` degrada a «no disponible» (con un `WARNING` explicativo) en
+    vez de lanzar. El `squid -k reconfigure` por el SDK de Docker no necesita
+    esa ruta, así que la configuración **sí se aplica** y el proxy pasa a
+    exigir autenticación (`407`). Lo único que no funciona con la ruta
+    inaccesible es sincronizar el `.env` al **cambiar el puerto** desde el
+    panel, y eso ya avisa por separado.
+  - `install.sh` comprueba **antes de levantar nada** que la ruta de
+    instalación es accesible para ese usuario y, si no lo es, se detiene con
+    instrucciones (mover a `/opt/squid-manager`, o `chmod o+x` del directorio
+    que lo impide).
+- **`install.sh` no declaraba el proyecto como `safe.directory` de git.** Tras
+  instalar, un `git` manual en el directorio fallaba con `detected dubious
+  ownership` (el entrypoint del backend hace `chown` a uid 999 y el admin
+  corre git como root). Ahora se declara en la instalación, idempotente, igual
+  que ya hacían los `upgrade-*.sh`.
+
+### Documentación
+
+- `docs/installation.md`: aviso de no clonar en `/root`, y lista del **ruido
+  esperado durante la build** (el `mv /etc/resolv.conf … Device or resource
+  busy`, los helpers de Squid `found but cannot be built`, `Translation is
+  disabled`, `pip as root`) para no confundirlo con errores.
+
+## [0.24.5] - 2026-09-10
+
+### Corregido
+
+- **`upgrade-docker.sh` y `upgrade-nativo.sh` no sobrevivían a un corte de
+  SSH.** Corridos como `ssh host "bash upgrade-docker.sh"`, un corte de la
+  conexión durante el build de Squid (10+ min) manda `SIGHUP` y mata el
+  script a mitad: el `git reset` ya aplicado pero los contenedores sin
+  recrear (o `install-nativo.sh` a medio correr), el código en disco por
+  delante de lo que corre y sin una señal clara de qué pasó. Incidente real
+  en un servidor de producción (Docker: build hecho, contenedores viejos
+  todavía sirviendo) y reproducido en una VM de prueba (`Remote side
+  unexpectedly closed network connection`). Ahora, **antes** del backup y del
+  `git reset`, el script se re-lanza desligado de la terminal (`setsid`, con
+  toda la salida a `upgrade-<modo>-<fecha>.log`) y la invocación original sale
+  enseguida indicando el log y cómo seguirlo con `tail -f`. Guardas:
+  `SQUIDMGR_UPGRADE_DETACHED` (evita el re-lanzamiento infinito) y
+  `SQUIDMGR_UPGRADE_FOREGROUND=1` como opt-out para `tmux`/`screen` o consola
+  local. Si falta `setsid`, se corre en primer plano como antes.
+- **El log de un upgrade desligado no decía si había terminado bien.** Los dos
+  scripts terminan ahora con una línea inequívoca —`ACTUALIZACION COMPLETADA`
+  o `LA ACTUALIZACION NO TERMINO BIEN`— y salen con código distinto de 0 si la
+  verificación final falla.
+- **`upgrade-docker.sh` verificaba `/health` contra `localhost:$WEB_PORT` del
+  host.** Ese puerto puede estar detrás de un proxy inverso (aaPanel, nginx) o
+  incluso ocupado por otro servicio —visto en un servidor real donde `:3000`
+  era Grafana—, y además `/health` redirige a `/login` para peticiones que no
+  vienen de localhost desde la 0.24.x. Ahora la comprobación se hace **desde
+  dentro del contenedor `backend`**, donde la respuesta es el JSON con la
+  versión.
+
+## [0.24.4] - 2026-09-10
+
+### Corregido
+
+- **`upgrade-docker.sh` y `upgrade-nativo.sh` no comprobaban que estuvieran
+  corriendo en el modo correcto.** El path `/opt/squid-manager` es el default
+  de los dos modos de despliegue, y los dos scripts se recomiendan en la doc,
+  así que correr el que no toca es un error fácil. `upgrade-docker.sh` en una
+  instalación nativa hacía el backup y el `git reset --hard` —mutando el
+  checkout— y recién moría en el paso 3 con `docker: command not found`, un
+  error que no explica nada. Encontrado en un despliegue real. Ahora los dos
+  scripts comprueban, **antes de tocar nada**:
+  - `upgrade-docker.sh`: aborta si el `.env` dice `DEPLOY_MODE=native`, si no
+    hay comando `docker`, o si falta el plugin `docker compose` v2 —apuntando
+    a `upgrade-nativo.sh`—.
+  - `upgrade-nativo.sh`: aborta si el `.env` dice `DEPLOY_MODE=docker`, si hay
+    contenedores `squidmgr-*` corriendo, o si no hay `systemctl` —apuntando a
+    `upgrade-docker.sh`—.
+
+  Verificado en vivo (172.30.36.42): los cuatro casos abortan con un mensaje
+  claro y **sin haber creado ningún backup ni tocado el checkout**.
+
+## [0.24.3] - 2026-09-10
+
+### Corregido — documentación
+
+- **`docs/proxy-padre.md` contradecía lo que el producto hace desde la 0.22.0.**
+  Decía «Squid solo sabe presentar autenticación básica a un padre» y «Squid no
+  puede autenticarse contra un padre con NTLM ni Kerberos», cuando el método
+  `passthru` (RFC: reenvía las credenciales del usuario final) llega justo a un
+  padre que exige Digest/NTLM/Negotiate. Reescritas las secciones «Las cuatro
+  piezas → 1», «Configuración paso a paso → En el hijo» y «Limitaciones» para
+  cubrir `fixed` vs `passthru` y la restricción de `passthru` (incompatible con
+  que el hijo autentique a sus propios clientes). Es la guía que se lee para
+  ese escenario, y la que indexa el asistente de IA.
+- **`backend/app/services/parent_proxy_service.py`**: el docstring y el mensaje
+  del botón «Probar conexión» ante un padre con NTLM/Digest decían «no se
+  resuelve aquí» sin mencionar `passthru`. Ahora apuntan al método correcto.
+- **`docs/actualizacion.md`**: el camino manual de actualización en Docker
+  (`git pull`) pegaba contra el mismo `detected dubious ownership` que se
+  corrigió en `upgrade-docker.sh` —el `entrypoint.sh` del backend le cambia el
+  dueño al directorio del proyecto—; agregado el `git config --global --add
+  safe.directory` y el `REINDEX DATABASE` que el script hace solo. Y una nota
+  sobre volver a una versión anterior a la 0.22.0 en nativo: `alembic` falla al
+  importar si se recreó el `.venv` sin `pgvector`.
+- **README (3 idiomas)**: el requisito de «2 núcleos» se presentaba como piso,
+  sin haberse probado con 1. Reformulado como recomendación, aclarando que con
+  1 núcleo las builds son más lentas pero no hay límite duro comprobado.
+
+## [0.24.2] - 2026-09-10
+
+### Corregido
+
+- **`upgrade-docker.sh` y `upgrade-nativo.sh` abortaban con `detected dubious
+  ownership`** en el paso 2 (git). git 2.35.2+ se niega a operar sobre un repo
+  cuyo dueño no es quien corre git, y en Docker eso es lo normal, no la
+  excepción: `entrypoint.sh` del backend hace `chown` del directorio del
+  proyecto al usuario sin privilegios (uid 999) en cada arranque, y el script se
+  corre como root. Los dos scripts ahora declaran el directorio como
+  `safe.directory` de git antes del primer comando git, de forma idempotente
+  (solo lo agregan si no estaba). Encontrado en un despliegue real
+  (`/www/dk_project/dk_app/squid-manager`).
+
+## [0.24.1] - 2026-09-10
+
+Correcciones al camino de actualización, encontradas probando en vivo el upgrade
+de una instalación 0.21.0 real a `main` (172.30.36.42), en Docker y en nativo.
+
+### Corregido
+
+- **Los índices de texto quedaban lógicamente corruptos al actualizar en Docker.**
+  Hasta la 0.21.0 la imagen de Postgres era `postgres:16-alpine` (musl), que
+  inicializa la base con `en_US.utf8` **sin registrar versión de *collation***.
+  Desde la 0.22.0 la imagen es `pgvector/pgvector:pg16` (glibc). Al cambiar de
+  imagen, Postgres **no emite ningún warning** —no hay versión previa que
+  comparar— pero el orden con el que compara texto sí cambia: los índices B-tree
+  de columnas de texto (entre ellos el `UNIQUE` de `proxy_users.username`)
+  quedaban ordenados con el criterio viejo. Confirmado con `amcheck`:
+  `item order invariant violated`. Consecuencia: un `SELECT ... WHERE username =
+  X` por índice podía no encontrar la fila, y el `UNIQUE` podía dejar pasar un
+  duplicado. `upgrade-docker.sh` ahora corre `REINDEX DATABASE` después de
+  levantar los contenedores (rápido, idempotente, no-fatal si falla).
+- **`docker-compose.yml` inicializa la base con `--locale=C.UTF-8`**: orden de
+  texto por byte (como `--lc-collate=C` que ya usa `install-nativo.sh` en modo
+  nativo) con ctype UTF-8, y **sin versión de *collation***. Una instalación
+  nueva creada así es inmune a cualquier cambio futuro de imagen de Postgres o
+  de libc. Solo afecta a un volumen que se inicializa de cero; los existentes
+  los cubre el `REINDEX` de arriba.
+- **`upgrade-nativo.sh` asumía `/opt/squid-manager`.** No todas las
+  instalaciones están ahí. Ahora deriva `INSTALL_DIR` del directorio donde vive
+  el propio script (igual que `upgrade-docker.sh` con `PROJECT_DIR`), salvo
+  override explícito por variable de entorno. Verificado corriéndolo desde una
+  ruta no estándar, por ruta absoluta y con override.
+- **`docs/actualizacion.md`**: el camino manual de actualización nativa no
+  advertía que la extensión `pgvector` hay que crearla como superusuario
+  **antes** del `systemctl restart` —si no, la migración 0014 deja el backend en
+  bucle de reinicio con `permission denied to create extension "vector"`—.
+  Agregado como paso obligatorio, con el comando exacto y la receta de
+  recuperación. Y el comando recomendado apuntaba a `BRANCH=pruebas` en vez de
+  `BRANCH=main`.
+
 ## [0.24.0] - 2026-09-09
 
 Remediación de la auditoría completa del 2026-09-09 (`docs/audits/` no se versiona,

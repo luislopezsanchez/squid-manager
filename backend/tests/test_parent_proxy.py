@@ -123,16 +123,18 @@ def test_padre_que_rechaza_las_credenciales(monkeypatch):
     assert "rechazó las credenciales" in mensaje
 
 
-def test_padre_con_ntlm_avisa_de_que_squid_no_puede(monkeypatch):
-    """El caso que ahorra una tarde de probar usuarios y contraseñas."""
+def test_padre_con_ntlm_avisa_y_apunta_a_passthru(monkeypatch):
+    """El caso que ahorra una tarde de probar usuarios y contraseñas: NTLM/
+    Digest/Negotiate no van con un usuario/contraseña de servicio (metodo
+    'fixed'), pero SI con 'passthru'. El mensaje tiene que decir eso, no
+    'imposible'."""
     _falso_proxy(monkeypatch,
         "HTTP/1.1 407 Proxy Authentication Required\r\n"
         "Proxy-Authenticate: NTLM\r\n\r\n")
     ok, mensaje = probar_padre("proxy.local", 8080, "juan", "clave")
     assert not ok
     assert "NTLM" in mensaje
-    assert "no sabe presentar" in mensaje
-    assert "Basic" in mensaje
+    assert "passthru" in mensaje.lower()
 
 
 def test_padre_que_prohibe_la_salida(monkeypatch):

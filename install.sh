@@ -118,6 +118,15 @@ else
 fi
 ok "Código obtenido en $INSTALL_DIR"
 
+# git 2.35.2+ se niega a operar sobre un repo cuyo dueño no es quien corre
+# git ("detected dubious ownership"), y en Docker eso pasa siempre: el
+# entrypoint del backend hace chown de este directorio al usuario sin
+# privilegios (uid 999) en cada arranque, mientras que este script -y
+# cualquier `git` que el admin ejecute luego a mano- corre como root. Se
+# declara confiable aquí, una vez, de forma idempotente.
+git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$INSTALL_DIR" \
+    || git config --global --add safe.directory "$INSTALL_DIR"
+
 # ============================================
 # 4. Configurar .env
 # ============================================
@@ -218,6 +227,51 @@ fi
 chmod 600 .env
 ok "Permisos de .env restringidos (600)"
 ok "PROJECT_DIR apunta a $INSTALL_DIR"
+
+# El backend corre en su contenedor como un usuario SIN privilegios (uid
+# 999) y necesita leer $INSTALL_DIR/docker-compose.yml y $INSTALL_DIR/.env
+# a través del bind-mount. Si algún directorio de la ruta no tiene permiso
+# de acceso ("x") para "otros" -lo habitual si se clonó dentro de /root,
+# que es 700- ese usuario no llega al fichero: el panel arranca, pero NO
+# puede aplicar la configuración a Squid y el proxy se queda en el arranque
+# provisional (solo localhost), sin un error que lo explique. Confirmado en
+# vivo (172.30.36.42, 2026-09-10). Se comprueba ANTES de levantar nada.
+ruta_accesible_para_otros() {
+    local d
+    d="$(cd "$1" && pwd)"
+    while :; do
+        local perms
+        perms="$(stat -c '%A' "$d" 2>/dev/null)" || return 1
+        # 'drwxr-xr-x' -> el carácter 10 (índice 9) es la 'x' de "otros".
+        [ "${perms:9:1}" = "x" ] || return 1
+        [ "$d" = "/" ] && return 0
+        d="$(dirname "$d")"
+    done
+}
+if ! ruta_accesible_para_otros "$INSTALL_DIR"; then
+    echo
+    warn "La ruta de instalación no es accesible para el usuario del contenedor."
+    echo
+    echo "  $INSTALL_DIR está bajo un directorio sin permiso de acceso para"
+    echo "  \"otros\" (típico: clonaste en /root, que es 700). El backend corre"
+    echo "  como uid 999 dentro de su contenedor y no podrá leer"
+    echo "  docker-compose.yml ni el .env a través del bind-mount."
+    echo
+    echo "  Efecto: el panel abre y se puede iniciar sesión, pero NO aplica la"
+    echo "  configuración a Squid -el proxy se queda en el arranque provisional"
+    echo "  (solo localhost)-."
+    echo
+    echo "  Solución recomendada: mové el proyecto a una ruta accesible, p. ej. /opt:"
+    echo
+    echo "      cd / && sudo mv \"$INSTALL_DIR\" /opt/squid-manager"
+    echo "      cd /opt/squid-manager && sudo ./install.sh"
+    echo
+    echo "  Alternativa (mantener la ruta actual): dar permiso de TRAVERSÍA -no"
+    echo "  de listado- al directorio que lo impide, p. ej.:  sudo chmod o+x /root"
+    echo
+    fail "Instalación detenida antes de levantar contenedores."
+fi
+ok "La ruta de instalación es accesible para el usuario del contenedor"
 
 # ============================================
 # 5. Desplegar contenedores

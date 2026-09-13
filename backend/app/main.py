@@ -277,6 +277,31 @@ def _aplicar_configuracion_definitiva():
 
     ruta = Path(settings.SQUID_CONFIG_PATH)
     if not _es_configuracion_provisional(ruta):
+        # El fichero en disco YA es la definitiva. Normalmente eso significa
+        # que Squid la está sirviendo y no hay nada que hacer. Pero puede que
+        # una corrida anterior la escribiera y no llegara a recargar Squid
+        # -el caso real: el fallo de project_dir() bajo /root (corregido en
+        # 0.24.6) tumbaba apply_squid_config DESPUÉS de escribir el fichero
+        # pero ANTES del `squid -k reconfigure`, y al arrancar de nuevo esta
+        # comprobación veía el marcador y no reintentaba nada: Squid seguía
+        # con la provisional en memoria (solo localhost) indefinidamente-.
+        # Un reconfigure es idempotente y barato: garantiza que el proceso
+        # corre lo que hay en disco. Si Squid no está listo, no pasa nada.
+        def reconciliar():
+            import time as _t
+
+            from app.services.squid_service import reload_squid
+
+            for _ in range(10):
+                try:
+                    ok, _msg = reload_squid()
+                    if ok:
+                        return
+                except Exception:  # noqa: BLE001 - nunca debe tumbar el arranque
+                    pass
+                _t.sleep(30)
+
+        threading.Thread(target=reconciliar, name="reconfig-reconcilia", daemon=True).start()
         return
 
     def tarea():

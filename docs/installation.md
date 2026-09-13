@@ -88,6 +88,13 @@ suelto, fuera de un clon, usa `/opt/squid-manager`. Para imponer otra ruta:
 sudo INSTALL_DIR=/srv/squid ./install.sh
 ```
 
+> **No clones dentro de `/root`.** El backend corre en su contenedor como un
+> usuario sin privilegios y necesita leer `docker-compose.yml` y `.env` a
+> través del bind-mount; `/root` es `700` y ese usuario no puede atravesarlo,
+> con lo que el panel arranca pero no aplica la configuración a Squid. Usá
+> `/opt/squid-manager` (o cualquier ruta accesible). Desde 0.24.6 el instalador
+> lo comprueba y se detiene con instrucciones si la ruta no sirve.
+
 Si ya había una instalación en esa ruta, la actualiza conservando la
 configuración existente. Si encuentra cambios locales sin confirmar, hace una
 copia junto al proyecto y se detiene, en lugar de pisarlos con el `git pull`.
@@ -186,6 +193,21 @@ listening port: 3128
 ```
 
 Presiona `Ctrl+C` para salir de los logs (el contenedor sigue corriendo).
+
+> **Ruido esperado durante la build.** Estas líneas aparecen en el log de
+> construcción y **no son errores**:
+> - `mv: cannot move '/etc/resolv.conf' ... Device or resource busy` /
+>   `Cannot install symlink from /etc/resolv.conf` — un paquete intenta tocar
+>   `resolv.conf` dentro de la capa de build; no afecta a la imagen final.
+> - `configure: helper auth/ntlm/SMB_LM ... found but cannot be built` (y lo
+>   mismo con `ntlm/SSPI`, `acl/external/AD_group`, `LM_group`, `time_quota`),
+>   `WARNING: Samba wbinfo not found` — son helpers que requieren cabeceras de
+>   Samba y que el proyecto no usa.
+> - `WARNING: Translation is disabled` — las páginas de error van en español;
+>   el resto de traducciones no se compilan a propósito.
+> - `WARNING: Running pip as the 'root' user ...` y
+>   `useradd warning: squidmgr's uid 999 outside of the UID_MIN 1000 ... range`
+>   — esperados dentro de la imagen.
 
 ### Paso 5: Verificar que todo funciona
 

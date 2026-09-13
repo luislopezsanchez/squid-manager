@@ -21,6 +21,7 @@ abrir la LAN en un fichero de arranque.
 """
 
 import re
+import threading
 from pathlib import Path
 
 import pytest
@@ -134,6 +135,36 @@ def test_si_no_hay_fichero_hay_que_generarlo(tmp_path):
     from app.main import _es_configuracion_provisional
 
     assert _es_configuracion_provisional(tmp_path / "no-existe.conf") is True
+
+
+def test_con_la_definitiva_en_disco_igual_se_recarga_squid_una_vez(tmp_path, monkeypatch):
+    """El fichero en disco ya es la definitiva pero Squid puede seguir con la
+    provisional en memoria: pasó con el fallo de project_dir() bajo /root
+    (corregido en 0.24.6), que escribía el squid.conf y moría ANTES del
+    `squid -k reconfigure`. Al rearrancar, ver el marcador no basta: hay que
+    forzar un reconfigure (idempotente) para que el proceso corra lo que hay
+    en disco. Si no, el proxy se queda en "solo localhost" para siempre."""
+    import app.main as main
+
+    conf = tmp_path / "squid.conf"
+    conf.write_text(
+        "# SquidManager - Configuración generada automáticamente\n"
+        "auth_param basic program x\n"
+    )
+    monkeypatch.setattr(main.settings, "SQUID_CONFIG_PATH", str(conf))
+
+    llamadas = []
+    monkeypatch.setattr(
+        "app.services.squid_service.reload_squid",
+        lambda: (llamadas.append(1) or (True, "ok")),
+    )
+
+    main._aplicar_configuracion_definitiva()
+
+    for hilo in threading.enumerate():
+        if hilo.name == "reconfig-reconcilia":
+            hilo.join(timeout=5)
+    assert llamadas == [1]
 
 
 def test_reconoce_como_pendiente_un_contenido_que_no_es_ni_uno_ni_otro(tmp_path):

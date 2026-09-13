@@ -49,11 +49,57 @@ warn()  { echo -e "${YELLOW}[AVISO]${NC} $1"; }
 fail()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 paso()  { echo; echo -e "${BLUE}=== $1 ===${NC}"; }
 
-INSTALL_DIR="${INSTALL_DIR:-/opt/squid-manager}"
+# Mismo criterio que upgrade-docker.sh con PROJECT_DIR: si no se pasa
+# INSTALL_DIR explicito por variable de entorno, se usa el directorio donde
+# vive ESTE script -no una ruta fija-. No todas las instalaciones estan en
+# /opt/squid-manager: la forma documentada de correr esto (bajar el script
+# dentro del directorio de la instalacion y `sudo bash upgrade-nativo.sh`
+# ahi) hace que el directorio del script sea siempre la ruta correcta. El
+# chequeo de mas abajo ($INSTALL_DIR/.git) aborta con un mensaje claro si
+# aun asi no es un checkout de SquidManager.
+INSTALL_DIR="${INSTALL_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 BRANCH="${BRANCH:-main}"
 
-[ -d "$INSTALL_DIR/.git" ] || fail "No hay una instalacion en $INSTALL_DIR (o no es un checkout git). Para instalar desde cero usa install-nativo.sh, no este script."
+[ -d "$INSTALL_DIR/.git" ] || fail "No hay una instalacion de SquidManager en $INSTALL_DIR (o no es un checkout git). Corre este script desde el directorio donde esta instalado SquidManager, o pasa la ruta con INSTALL_DIR=/tu/ruta. Para instalar desde cero usa install-nativo.sh, no este script."
 [ -x "$INSTALL_DIR/install-nativo.sh" ] || fail "$INSTALL_DIR/install-nativo.sh no existe o no es ejecutable; no se puede completar la actualizacion."
+
+# Comprobacion de modo ANTES de tocar nada (backup, git reset): el path
+# /opt/squid-manager es el default de LOS DOS modos, asi que correr el que
+# no toca es un error facil. Simetrico a la comprobacion de upgrade-docker.sh.
+_MODO="$(sed -n 's/^DEPLOY_MODE=//p' "$INSTALL_DIR/.env" 2>/dev/null | head -1 | tr -d '[:space:]' | tr 'A-Z' 'a-z')"
+if [ "$_MODO" = "docker" ]; then
+    fail "El .env dice DEPLOY_MODE=docker: esta es una instalacion con Docker. Usa upgrade-docker.sh, no este script."
+fi
+if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^squidmgr-'; then
+    fail "Hay contenedores 'squidmgr-*' corriendo: esto parece una instalacion con Docker. Usa upgrade-docker.sh (para en su caso con 'docker compose down' si esta convirtiendo a nativo)."
+fi
+command -v systemctl >/dev/null 2>&1 || fail "No hay 'systemctl': una instalacion nativa se gobierna con systemd. Revisa que sea el modo correcto."
+
+# --- Blindaje contra corte de SSH --------------------------------------------
+# La recompilacion de Squid (install-nativo.sh, paso de build) tarda 10+ min.
+# Corrido como `ssh host "bash upgrade-nativo.sh"`, si la conexion se cae el
+# script recibe SIGHUP y muere a mitad: git YA actualizado, install-nativo.sh
+# a medio correr -paquetes puestos, migraciones quiza aplicadas, servicio
+# NO reiniciado o reiniciado sobre un build incompleto-. El checkout en disco
+# queda por delante de lo que corre y sin una senal clara de que fallo. Caso
+# real: un upgrade Docker en produccion quedo asi, y en una VM de prueba el
+# script murio con "Remote side unexpectedly closed network connection".
+# Para evitarlo el script se re-lanza desligado de la terminal (setsid,
+# salida a un log) y esta primera invocacion sale enseguida diciendo como
+# seguirlo. Opt-out: SQUIDMGR_UPGRADE_FOREGROUND=1 (util en tmux/screen o en
+# consola local, donde no hay riesgo de corte).
+if [ -z "${SQUIDMGR_UPGRADE_DETACHED:-}" ] && [ -z "${SQUIDMGR_UPGRADE_FOREGROUND:-}" ] \
+        && command -v setsid >/dev/null 2>&1; then
+    _LOG="$INSTALL_DIR/upgrade-nativo-$(date +%Y%m%d_%H%M%S).log"
+    echo "La actualizacion corre en SEGUNDO PLANO para sobrevivir a un corte de SSH."
+    echo "  Log:    $_LOG"
+    echo "  Seguir: tail -f \"$_LOG\""
+    echo "  Al terminar, el log dice si quedo OK. Primer plano: SQUIDMGR_UPGRADE_FOREGROUND=1 sudo -E bash \"$0\""
+    SQUIDMGR_UPGRADE_DETACHED=1 setsid bash "$0" "$@" >"$_LOG" 2>&1 </dev/null &
+    echo "  PID:    $!"
+    exit 0
+fi
+# ---------------------------------------------------------------------------
 
 cd "$INSTALL_DIR"
 
@@ -65,6 +111,15 @@ else
 fi
 
 paso "2. Trayendo el codigo nuevo (rama $BRANCH)"
+# git 2.35.2+ se niega a operar sobre un repo cuyo dueno no es quien corre
+# git ("detected dubious ownership"). Pasa cuando el checkout lo hizo un
+# usuario de despliegue (o el propio APP_USER) y este script se corre como
+# root, o al reves. Se declara el directorio como confiable antes de tocar
+# nada -install-nativo.sh, que se invoca despues, hereda esta config del
+# mismo usuario-. Idempotente: solo se agrega si no estaba.
+git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$INSTALL_DIR" \
+    || git config --global --add safe.directory "$INSTALL_DIR"
+
 # Mismo mecanismo, y el mismo bug real de fondo, que en upgrade-docker.sh:
 # `git checkout` se niega a cambiar de rama si eso pisaria una modificacion
 # local -aunque el `reset --hard` de abajo la fuera a descartar de todas
@@ -122,8 +177,21 @@ if [ "$COMMIT_SERVIDO" != "$COMMIT_ESPERADO" ]; then
     COMMIT_SERVIDO="$(curl -fsS -m 10 "http://127.0.0.1:${WEB_PORT}/health" 2>/dev/null | grep -oE '"commit":\s*"[^"]*"' | grep -oE '[0-9a-f]{7,}' || echo "")"
 fi
 
+echo
 if [ "$COMMIT_SERVIDO" = "$COMMIT_ESPERADO" ]; then
     ok "El panel confirma que esta sirviendo $COMMIT_SERVIDO."
+    echo
+    echo "=================================================="
+    echo " ACTUALIZACION COMPLETADA (rama $BRANCH, $COMMIT_ESPERADO)"
+    echo "=================================================="
+    echo " El navegador puede seguir mostrando la version anterior por cache:"
+    echo " forza recarga (Ctrl+Shift+R) y volve a iniciar sesion."
 else
     warn "El panel sigue reportando '$COMMIT_SERVIDO' en vez de '$COMMIT_ESPERADO' despues de reintentar. Revisa a mano: systemctl restart squidmanager && curl http://127.0.0.1:${WEB_PORT}/health"
+    echo
+    echo "=================================================="
+    echo " LA ACTUALIZACION NO TERMINO BIEN"
+    echo "=================================================="
+    echo " Revisa: journalctl -u squidmanager -n 50"
+    exit 1
 fi

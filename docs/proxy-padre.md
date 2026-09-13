@@ -36,14 +36,30 @@ Encadenar dos proxies necesita cuatro cosas. Faltando cualquiera, no funciona.
 
 ### 1. El hijo tiene que saber a qué padre salir
 
-**Panel del hijo → Proxy padre.** Servidor, puerto y, si el padre las pide,
-usuario y contraseña.
+**Panel del hijo → Proxy padre.** Servidor, puerto y, si el padre pide
+credenciales, cómo se las presenta —el campo **Método de autenticación**—:
 
-Squid **solo sabe presentar autenticación básica** a un padre. Si el proxy
-corporativo exige NTLM o Kerberos —habitual cuando está integrado con Active
-Directory— no hay usuario y contraseña que lo resuelvan: haría falta un
-intermediario que traduzca la autenticación. El botón **Probar conexión** lo
-dice explícitamente en lugar de dejarte adivinando.
+- **`fixed`** (por defecto): usuario y contraseña de servicio fijos, que se
+  ponen ahí mismo. Squid los presenta como **Basic** (`login=user:pass` de
+  `cache_peer` solo sabe Basic). Es lo habitual con otro SquidManager de
+  padre, o con un proxy corporativo que acepte Basic.
+- **`passthru`**: el hijo **reenvía tal cual las credenciales que ya trae el
+  usuario final** hacia el padre (`login=PASSTHRU connection-auth=on`). Es la
+  **única** forma de llegar a un padre que exige **Digest, NTLM o Negotiate**
+  (Kerberos) —lo habitual cuando el corporativo está integrado con Active
+  Directory—.
+
+  El precio: `passthru` **no se puede combinar con que este mismo hijo
+  autentique a sus propios clientes**. HTTP permite un solo
+  `Proxy-Authorization` por petición; si el hijo lo usa para su desafío
+  local, no queda "hueco" para reenviar al padre. El panel bloquea activar
+  `passthru` si hay usuarios locales del proxy habilitados, LDAP o Kerberos
+  en el hijo. En esa topología, **los usuarios los define el padre**, y el
+  hijo queda como filtro por dominio / SSL Bump, sin identidad de usuario
+  propia.
+
+El botón **Probar conexión** dice qué método exige el padre y si Squid puede
+presentarlo, en lugar de dejarte adivinando.
 
 ### 2. El hijo tiene que confiar en el certificado del padre
 
@@ -128,7 +144,12 @@ sin autenticación, y no interceptar su tráfico HTTPS.
 ### En el hijo
 
 1. **Proxy padre** → activar, servidor y puerto
-2. Credenciales, solo si el padre las pide
+2. **Método de autenticación**:
+   - `fixed` + usuario y contraseña de servicio, si el padre acepta Basic
+     (otro SquidManager, o un corporativo que lo permita).
+   - `passthru`, si el padre exige Digest / NTLM / Negotiate. Requiere
+     **desactivar antes la autenticación local del hijo** (usuarios del
+     proxy, LDAP, Kerberos) —el panel no deja guardar si no—.
 3. **Certificado CA del proxy padre** → cargar el del padre, si intercepta HTTPS
 4. **Probar conexión**
 5. Guardar → **Aplicar cambios**
@@ -191,12 +212,16 @@ inspecciona.
 
 ## Limitaciones
 
-- **La contraseña del padre se guarda en texto plano** en el `squid.conf`. Es
-  una limitación de Squid: usá una cuenta de servicio con los permisos justos,
-  nunca una cuenta personal.
+- **La contraseña de servicio del padre (método `fixed`) se guarda en texto
+  plano** en el `squid.conf`. Es una limitación de Squid: usá una cuenta de
+  servicio con los permisos justos, nunca una cuenta personal. (Con
+  `passthru` no hay contraseña de servicio: se reenvían las del usuario
+  final, que Squid no persiste.)
 - **El proxy que no intercepta pierde el filtrado por dominio dentro de HTTPS.**
   El bloqueo por SNI se mantiene, porque actúa antes de descifrar.
-- **Squid no puede autenticarse contra un padre con NTLM ni Kerberos.** Solo
-  autenticación básica.
+- **Contra un padre que exige Digest, NTLM o Negotiate solo se puede llegar
+  con `passthru`** —reenviando las credenciales del usuario final—, y eso
+  exige que el hijo **no** autentique a sus propios clientes (ver "Las
+  cuatro piezas → 1"). Con el método `fixed`, Squid solo presenta Basic.
 - **Los clientes finales necesitan el certificado del hijo**, que es quien les
   presenta el suyo. El certificado del padre solo lo necesita el hijo.

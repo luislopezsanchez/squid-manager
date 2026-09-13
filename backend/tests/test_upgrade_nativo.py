@@ -110,9 +110,73 @@ def test_exige_una_instalacion_existente():
     assert '[ -d "$INSTALL_DIR/.git" ]' in contenido
 
 
+def test_se_ubica_por_el_directorio_del_script_no_una_ruta_fija():
+    """Muchas instalaciones no estan en /opt/squid-manager. Igual que
+    upgrade-docker.sh con PROJECT_DIR, INSTALL_DIR se deriva del directorio
+    donde vive ESTE script cuando no se pasa uno explicito -no puede quedar
+    /opt/squid-manager como unico default-."""
+    contenido = _script()
+    assert 'INSTALL_DIR="${INSTALL_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"' in contenido
+    assert 'INSTALL_DIR="${INSTALL_DIR:-/opt/squid-manager}"' not in contenido
+
+
+def test_declara_el_directorio_como_safe_antes_de_cualquier_git():
+    """git 2.35.2+ aborta con "detected dubious ownership" si el dueno del
+    repo no es quien corre git. Hay que declararlo safe ANTES del primer
+    comando git, e idempotente. install-nativo.sh, invocado despues, hereda
+    esta config del mismo usuario."""
+    contenido = _script()
+    assert "safe.directory" in contenido
+    pos_safe = contenido.index("safe.directory")
+    pos_primer_git = contenido.index("git checkout --quiet -- .")
+    assert pos_safe < pos_primer_git
+    assert "--get-all safe.directory" in contenido
+
+
 def test_termina_invocando_install_nativo_de_la_version_destino():
     contenido = _script()
     assert 'bash "$INSTALL_DIR/install-nativo.sh"' in contenido
+
+
+def test_aborta_si_no_es_una_instalacion_nativa_antes_de_tocar_nada():
+    """Simetrico a upgrade-docker.sh: si el .env dice DEPLOY_MODE=docker, o
+    hay contenedores squidmgr-* corriendo, o no hay systemctl, esto no es una
+    instalacion nativa y hay que abortar ANTES del backup y del git reset."""
+    contenido = _script()
+    assert "DEPLOY_MODE" in contenido
+    assert '"$_MODO" = "docker"' in contenido
+    assert "squidmgr-" in contenido
+    pos_check = contenido.index('"$_MODO" = "docker"')
+    pos_backup = contenido.index('paso "1. Backup')
+    pos_git = contenido.index("git reset --hard --quiet")
+    assert pos_check < pos_backup < pos_git
+    assert "upgrade-docker.sh" in contenido
+
+
+def test_se_desliga_de_la_terminal_para_sobrevivir_a_un_corte_de_ssh():
+    """La recompilacion de Squid tarda 10+ min. Un corte de SSH manda SIGHUP
+    y mata el script a mitad de install-nativo.sh: paquetes puestos,
+    migraciones quiza aplicadas, servicio sin reiniciar -mismo patron del
+    incidente Docker en produccion-. El script se re-lanza con setsid a un
+    log ANTES del backup y del git reset, detras de las guardas
+    SQUIDMGR_UPGRADE_DETACHED / SQUIDMGR_UPGRADE_FOREGROUND."""
+    contenido = _script()
+    assert "setsid" in contenido
+    assert "SQUIDMGR_UPGRADE_DETACHED" in contenido
+    assert "SQUIDMGR_UPGRADE_FOREGROUND" in contenido
+    pos_detach = contenido.index("setsid bash")
+    pos_backup = contenido.index('paso "1. Backup')
+    pos_git = contenido.index("git reset --hard --quiet")
+    assert pos_detach < pos_backup < pos_git
+
+
+def test_el_log_dice_si_la_actualizacion_termino_bien_o_mal():
+    """Corriendo desligado el unico rastro es el log: termina con una linea
+    inequivoca de OK o de FALLO y sale con codigo != 0 si el commit servido
+    no coincide con el esperado."""
+    contenido = _script()
+    assert "ACTUALIZACION COMPLETADA" in contenido
+    assert "LA ACTUALIZACION NO TERMINO BIEN" in contenido
 
 
 def test_verifica_el_commit_servido_de_verdad_y_reintenta_si_no_coincide():
