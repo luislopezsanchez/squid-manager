@@ -385,6 +385,67 @@ Corrido así (por SSH, en primer plano de la propia sesión, no disparado por
 `systemd-run`) no le afecta el bug — a partir de esa actualización, el resto
 vuelve a aplicarse solo con normalidad.
 
+### La actualización desde el panel falla con `fatal: $HOME not set`
+
+Afecta a instalaciones nativas o Docker que estén en una versión entre
+**0.24.2 y 0.24.7** (ambas inclusive) y todavía no hayan logrado
+actualizarse con éxito ni una sola vez desde el panel. Se ve así en el
+registro de la actualización (Dashboard → Actualizaciones):
+
+```
+=== 2. Trayendo el codigo nuevo (rama main) ===
+fatal: $HOME not set
+```
+
+**Por qué pasa.** La 0.24.2 agregó `git config --global --add
+safe.directory` a `upgrade-nativo.sh`/`upgrade-docker.sh` para resolver
+otro bug real (`detected dubious ownership`, que git 2.35.2+ dispara
+cuando el dueño del checkout no coincide con quien corre `git` —siempre
+así en Docker, por el `chown` del `entrypoint`—). Sin querer, ese fix
+introdujo una dependencia nueva: `--global` necesita `$HOME` para ubicar
+`~/.gitconfig`, y **la actualización disparada desde el panel corre en
+una unidad `systemd-run` que nunca fijó esa variable** —así fue desde el
+origen mismo de esta función—. Mientras el checkout de una instalación no
+dispare "dubious ownership", esto no se nota (`git` no necesita tocar la
+configuración global para nada); en cuanto lo dispara, la actualización
+muere ahí, antes de haber tocado un solo byte del repositorio remoto.
+
+La 0.24.8 (commit `7e70e68`) lo tapó pasándole `HOME=/root` explícito a
+la unidad `systemd-run`. La corrección de fondo —usar `--system` en vez
+de `--global`, que no depende de `$HOME` en absoluto— llegó después,
+en los mismos commits que este párrafo documenta.
+
+**Por qué no se autorepara solo reintentando.** El fix vive en los
+mismos archivos (`autoupdate-check.sh`, `upgrade-nativo.sh`,
+`upgrade-docker.sh`) que la actualización tendría que traer del
+repositorio remoto para aplicarse — pero la actualización nunca llega a
+tocar el repositorio remoto, porque muere antes, en el propio `git
+config` local. Es un candado que se traba con la llave adentro: no
+importa cuántas veces se apruebe la actualización desde el panel, el
+resultado es idéntico. Hace falta un empujón único, por fuera del panel:
+
+```bash
+sudo systemctl set-environment HOME=/root
+```
+
+Con eso alcanza para que la próxima actualización (desde el panel, o el
+temporizador automático de cada minuto) complete normalmente y deje la
+instalación en una versión que ya no depende de este mecanismo para
+actualizarse sola en el futuro. El comando no persiste a un reinicio de
+la máquina; si hace falta que sobreviva a uno (por ejemplo, si la
+actualización va a tardar y no se puede correr enseguida), dejalo fijo
+con un drop-in:
+
+```bash
+sudo mkdir -p /etc/systemd/system.conf.d
+printf '[Manager]\nDefaultEnvironment=HOME=/root\n' | sudo tee /etc/systemd/system.conf.d/home.conf
+sudo systemctl daemon-reexec
+```
+
+(`/etc/environment` **no** sirve para esto: el manager de systemd no lo
+lee para el entorno por defecto de las unidades que lanza —verificado en
+vivo, Ubuntu 24.04/systemd 255—.)
+
 ### Una migración falla y el backend no arranca
 
 El backend queda reiniciándose en bucle. El motivo está en su registro:

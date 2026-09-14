@@ -43,7 +43,9 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
   que el `git fetch` roto no llega a traer, así que no se autorepara solo
   reintentando desde el panel — requiere una intervención única (por SSH)
   para destrabar esa instalación puntual antes de que pueda volver a
-  actualizarse sola.
+  actualizarse sola. Afecta a instalaciones entre 0.24.2 y 0.24.7; pasos
+  detallados y el comando exacto en
+  [docs/actualizacion.md](docs/actualizacion.md#la-actualización-desde-el-panel-falla-con-fatal-home-not-set).
 
 ---
 
