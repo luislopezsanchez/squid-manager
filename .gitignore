@@ -66,6 +66,9 @@ proxy.conf
 # (backend/app/services/update_service.py): no es código ni configuración
 # versionable, es el estado de ESTE despliegue puntual.
 backend/.update_state.json*
+# Resultado de la ultima actualizacion lanzada por autoupdate-check.sh
+# (lo escribe upgrade-nativo.sh, lo consume autoupdate-check.sh).
+backend/.update_result*
 
 # Idem para el buffer de métricas de red (metrics_service.py) -antes vivía
 # en /tmp, movido por el hallazgo 05-004 de la auditoría 2026-09-09.

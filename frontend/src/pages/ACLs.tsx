@@ -83,7 +83,7 @@ export default function ACLs() {
       setShowForm(false)
       return
     }
-    setForm({ name: acl.name, type: acl.type, value: acl.value, description: acl.description || '', enabled: acl.enabled })
+    setForm({ name: acl.name, type: acl.type, value: acl.value ?? '', description: acl.description || '', enabled: acl.enabled })
     setEditingId(acl.id)
     setShowForm(true)
   }

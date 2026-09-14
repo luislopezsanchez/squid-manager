@@ -67,3 +67,46 @@ def test_no_canaliza_a_bash_desde_internet():
     """La cabecera insiste en descargar-revisar-ejecutar, no `curl | bash`."""
     contenido = _script()
     assert "less install.sh" in contenido
+
+
+# Variables de .env.example que compose NO reenvia tal cual al backend, a
+# proposito: las de la base las combina en DATABASE_URL, TOKEN_EXPIRE se
+# traduce a ACCESS_TOKEN_EXPIRE_MINUTES, WEB_PORT/PROXY_PORT son mapeos de
+# puertos del host, y DEPLOY_MODE/NATIVE_SQUID_SERVICE solo tienen sentido
+# en la instalacion nativa (en Docker el backend usa su valor por defecto).
+_NO_SE_REENVIAN = {
+    "DB_NAME", "DB_USER", "DB_PASS", "TOKEN_EXPIRE", "WEB_PORT", "PROXY_PORT",
+    "DEPLOY_MODE", "NATIVE_SQUID_SERVICE",
+}
+
+
+def test_compose_pasa_al_backend_toda_variable_del_env_example():
+    """Compose solo inyecta en el contenedor lo que lista en `environment`:
+
+    una variable que install.sh escribe en el .env pero no figura ahi llega
+    vacia al backend, y este arranca igual con su valor por defecto -sin
+    ningun error que lo delate-. Asi DATA_KEY estuvo generandose en cada
+    instalacion Docker sin que el cifrado en reposo operara nunca
+    (auditoria 2026-09-14, hallazgo 05-005).
+    """
+    raiz = _raiz_del_proyecto()
+    if raiz is None:
+        pytest.skip("el proyecto no esta accesible desde aqui")
+    env_example = (raiz / ".env.example").read_text(encoding="utf-8")
+    compose = (raiz / "docker-compose.yml").read_text(encoding="utf-8")
+
+    # Solo el bloque environment del servicio backend.
+    bloque = compose.split("  backend:", 1)[1].split("    volumes:", 1)[0]
+    reenviadas = {
+        linea.strip().split(":", 1)[0]
+        for linea in bloque.splitlines()
+        if linea.startswith("      ") and ":" in linea and not linea.strip().startswith("#")
+    }
+
+    declaradas = {
+        linea.split("=", 1)[0].strip()
+        for linea in env_example.splitlines()
+        if "=" in linea and not linea.lstrip().startswith("#")
+    }
+    faltan = sorted(declaradas - _NO_SE_REENVIAN - reenviadas)
+    assert not faltan, f"variables del .env.example que el backend nunca recibe en Docker: {faltan}"

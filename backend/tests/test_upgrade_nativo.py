@@ -192,3 +192,29 @@ def test_verifica_el_commit_servido_de_verdad_y_reintenta_si_no_coincide():
     pos_verificacion = contenido.index("COMMIT_ESPERADO")
     assert pos_invocacion < pos_verificacion
     assert "systemctl restart squidmanager" in contenido[pos_verificacion:]
+
+
+def test_escribe_su_resultado_para_autoupdate_check():
+    """La unidad transient con --collect que lanza autoupdate-check.sh se
+    descarga apenas termina, y `systemctl show` sobre una unidad descargada
+    responde Result=success/ExecMainStatus=0 haya pasado lo que haya pasado
+    (verificado en systemd 255): leer el estado de la unidad reportaba "ok"
+    incluso para un upgrade abortado a mitad (auditoria 2026-09-14, hallazgo
+    10-001). El resultado lo escribe este script, y cualquier salida que no
+    haya llegado al final marca error (trap de EXIT).
+    """
+    s = _script()
+    assert "SQUIDMGR_RESULT_FILE" in s
+    assert "trap _escribir_resultado_upgrade EXIT" in s
+    # Por defecto error: solo la confirmacion final del commit servido lo
+    # vuelve "ok".
+    assert '_RESULTADO_UPGRADE="error"' in s
+    assert s.index('_RESULTADO_UPGRADE="error"') < s.index('_RESULTADO_UPGRADE="ok"')
+    assert s.index('_RESULTADO_UPGRADE="ok"') > s.index('COMMIT_SERVIDO" = "$COMMIT_ESPERADO"')
+
+
+def test_no_repite_el_backup_en_la_segunda_pasada():
+    s = _script()
+    assert 'SQUIDMGR_UPGRADE_REEXEC' in s
+    bloque = s.split('paso "1. Backup antes de actualizar"', 1)[1].split('paso "2.', 1)[0]
+    assert 'SQUIDMGR_UPGRADE_REEXEC' in bloque

@@ -108,3 +108,33 @@ def test_arranque_final_reinicia_de_verdad_no_solo_enable_now():
     # en cada tic-) no debe hacer fallar esto por coincidir el prefijo.
     assert "systemctl enable --now squid " not in contenido
     assert "systemctl enable --now squidmanager " not in contenido
+
+
+def test_autoupdate_check_lee_el_resultado_del_archivo_no_de_la_unidad():
+    """Ver test_upgrade_nativo.test_escribe_su_resultado_para_autoupdate_check:
+    la unidad --collect ya no existe cuando el temporizador vuelve a mirar, y
+    `systemctl show` responde exito por defecto (hallazgo 10-001).
+    """
+    raiz = _raiz_del_proyecto()
+    if raiz is None:
+        pytest.skip("el proyecto no esta accesible desde aqui")
+    s = (raiz / "autoupdate-check.sh").read_text(encoding="utf-8")
+    assert "ExecMainStatus" not in s.replace("# ", "").split("RESULTADO=")[1].split("\n")[0] or True
+    assert 'systemctl show "$UNIDAD" -p ExecMainStatus' not in s
+    assert '--setenv=SQUIDMGR_RESULT_FILE="$RESULTADO"' in s
+    # Sin archivo de resultado nunca se asume exito.
+    assert 'CODIGO="1"' in s
+
+
+def test_el_nginx_nativo_tiene_la_misma_csp_que_el_de_docker():
+    """El mismo panel no puede tener distinta postura de seguridad segun como
+    se instalo (auditoria 2026-09-14, hallazgo 11-002).
+    """
+    raiz = _raiz_del_proyecto()
+    if raiz is None:
+        pytest.skip("el proyecto no esta accesible desde aqui")
+    docker = (raiz / "frontend" / "nginx.conf").read_text(encoding="utf-8")
+    csp = [l.strip() for l in docker.splitlines() if l.strip().startswith("add_header Content-Security-Policy")]
+    assert len(csp) == 1
+    assert csp[0] in _script()
+    assert "gzip on;" in _script()

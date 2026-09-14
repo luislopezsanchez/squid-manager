@@ -123,6 +123,13 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${DB_USER:-squid}:${DB_PASS:?Define DB_PASS en el .env}@db:5432/${DB_NAME:-squidmanager}
       SECRET_KEY: ${SECRET_KEY:?Define SECRET_KEY en el .env (openssl rand -hex 32)}
+      # Cifra en reposo las credenciales de terceros (LDAP, SMTP, Telegram,
+      # IA, proxy padre, keytab) -ver .env.example-. install.sh la genera en
+      # el .env desde que existe, pero esta linea faltaba: compose solo pasa
+      # al contenedor lo que se lista aqui, asi que el backend la veia vacia
+      # y guardaba todo en texto plano sin avisar (auditoria 2026-09-14,
+      # hallazgo 05-005). Vacia sigue significando "sin cifrar".
+      DATA_KEY: ${DATA_KEY:-}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${TOKEN_EXPIRE:-480}
       SQUID_CONFIG_PATH: /etc/squid/squid.conf
       SQUID_CONTAINER_NAME: squidmgr-proxy

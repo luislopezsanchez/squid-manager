@@ -1,4 +1,4 @@
-import { idiomaActual } from '../i18n'
+import { idiomaActual, traducir } from '../i18n'
 const API_BASE = '/api'
 
 export function getToken(): string | null {
@@ -99,7 +99,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     // ni que limite supero (reportado en vivo: una carga masiva de ACL con
     // un archivo grande).
     if (res.status === 413) {
-      throw new Error('El archivo supera el tamaño máximo permitido (250 MB).')
+      throw new Error(traducir('El archivo supera el tamaño máximo permitido (250 MB).'))
     }
     const error = await res.json().catch(() => ({ detail: null }))
     throw new Error(extraerMensajeError(error.detail, `Error ${res.status}`))

@@ -4,11 +4,12 @@
   "engines": {
     "node": ">=18.18.0"
   },
-  "version": "0.24.8",
+  "version": "0.24.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit -p .",
     "preview": "vite preview"
   },
   "dependencies": {

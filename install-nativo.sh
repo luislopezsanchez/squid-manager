@@ -247,7 +247,7 @@ ok "Herramientas del panel disponibles (htpasswd, openssl)"
 # valido) tumbaba la instalacion ENTERA con "Unable to correct problems,
 # you have held broken packages" -bug real, encontrado en un servidor con
 # Node 22 de NodeSource ya instalado para otro servicio del mismo host
-# (209.126.86.242, 2026-09-13)-, sin llegar siquiera a este chequeo de
+# (un servidor compartido de un usuario, 2026-09-13)-, sin llegar siquiera a este chequeo de
 # version que ya sabia que ese Node de sobra alcanzaba.
 NODE_MAJOR="$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1 || echo 0)"
 if [ "${NODE_MAJOR:-0}" -ge 18 ] && command -v npm >/dev/null 2>&1; then
@@ -367,7 +367,9 @@ ok "Codigo en $INSTALL_DIR ($(git -C "$INSTALL_DIR" rev-parse --short HEAD))"
 # permiso de escritura en su propio $HOME (que es $INSTALL_DIR, propiedad de
 # root) para crear un .gitconfig ahi; --system la deja en /etc/gitconfig,
 # que este script ya puede escribir por correr como root.
-git config --system --add safe.directory "$INSTALL_DIR"
+# Idempotente: --add sin comprobar sumaba una linea identica a /etc/gitconfig
+# en cada upgrade.
+git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$INSTALL_DIR"     || git config --system --add safe.directory "$INSTALL_DIR"
 
 # ============================================
 # 5. Base de datos
@@ -503,7 +505,7 @@ if command -v ss >/dev/null 2>&1; then
     # el caso normal y esperado en la inmensa mayoria de instalaciones) hace
     # que grep devuelva 1 y aborte el script ENTERO en silencio por el 'set
     # -e' de mas arriba -bug real, encontrado probando esto mismo en vivo
-    # (209.126.86.242, 2026-09-13): con el puerto de Squid libre, la
+    # (un servidor compartido de un usuario, 2026-09-13): con el puerto de Squid libre, la
     # instalacion se cortaba aca sin ningun mensaje de error.
     _titular_puerto_proxy="$(ss -Htlnp "( sport = :${PROXY_PORT} )" 2>/dev/null | grep -oP 'users:\(\("\K[^"]+' | head -1 || true)"
     if [ -n "$_titular_puerto_proxy" ] && [ "$_titular_puerto_proxy" != "squid" ]; then
@@ -586,7 +588,7 @@ cat > /etc/sudoers.d/squidmanager <<EOF
 ${APP_USER} ALL=(root) NOPASSWD: ${SQUID_BIN} -f /etc/squid/squid.conf -k reconfigure
 ${APP_USER} ALL=(root) NOPASSWD: ${SQUID_BIN} -k parse -f /etc/squid/squid.conf.candidate
 ${APP_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart squid
-# Actualizaciones (ver docs/actualizaciones.md): el panel NUNCA ejecuta la
+# Actualizaciones (ver docs/actualizaciones-automaticas.md): el panel NUNCA ejecuta la
 # actualizacion en si, solo puede adelantar CUANDO este script -que decide
 # por su cuenta si corresponde actuar, leyendo el estado que el propio panel
 # dejo- se fija esa condicion. Sin argumentos: no hay forma de pedirle otra
@@ -604,7 +606,7 @@ ok "sudoers: 4 ordenes concedidas a $APP_USER"
 install -o root -g root -m 700 "$INSTALL_DIR/autoupdate-check.sh" \
     /usr/local/lib/squidmanager/autoupdate-check.sh
 
-# Temporizador que revisa cada 5 minutos si hay una actualizacion aprobada y
+# Temporizador que revisa cada minuto si hay una actualizacion aprobada y
 # ya vencida. Es la unica forma en la que una actualizacion se aplica sola:
 # el panel web jamas ejecuta nada con privilegios (ver la nota de diseno en
 # autoupdate-check.sh y en app/services/update_service.py).
@@ -633,7 +635,7 @@ EOF
 systemctl daemon-reload
 systemctl enable --now squidmanager-autoupdate.timer >/dev/null 2>&1 \
     || warn "No se pudo activar squidmanager-autoupdate.timer"
-ok "Temporizador de actualizaciones activo (cada 5 min)"
+ok "Temporizador de actualizaciones activo (cada minuto)"
 
 # ============================================
 # 8. Backend
@@ -736,7 +738,7 @@ ok "Panel compilado en $INSTALL_DIR/frontend/dist"
 # En un servidor compartido (con otros servicios en el mismo host, no solo
 # SquidManager) el WEB_PORT por defecto puede chocar con algo que no tiene
 # nada que ver con esta instalacion -bug real, encontrado en vivo
-# (209.126.86.242, 2026-09-13): el puerto 3000 ya lo ocupaba un contenedor
+# (un servidor compartido de un usuario, 2026-09-13): el puerto 3000 ya lo ocupaba un contenedor
 # de Grafana ajeno por completo. Sin este chequeo, la instalacion llegaba
 # hasta el ultimo paso (10) dando todo lo anterior por bueno, y recien ahi
 # nginx quedaba en estado "failed" con un bind() a mitad de un log que hay
@@ -769,6 +771,18 @@ server {
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "same-origin" always;
+
+    # Misma CSP que frontend/nginx.conf (modo Docker): faltaba aqui, y el
+    # mismo panel quedaba con distinta postura de seguridad segun como se
+    # instalara (auditoria 2026-09-14, hallazgo 11-002). Ver ahi el porque de
+    # cada directiva ('unsafe-inline' en style-src, Google Fonts, sin HSTS).
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+
+    gzip on;
+    gzip_vary on;
+    gzip_comp_level 5;
+    gzip_min_length 512;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;
 
     # 250m: acompaña MAX_UPLOAD_BYTES de acls.py (carga masiva de dominios
     # para una ACL de archivo -ver migración 0023). Por debajo de eso, nginx

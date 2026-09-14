@@ -32,6 +32,13 @@ set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/squid-manager}"
 ESTADO="$INSTALL_DIR/backend/.update_state.json"
+# Resultado que escribe upgrade-nativo.sh al terminar ("ok <commit>" o
+# "error <commit>"). Es la unica fuente de verdad sobre como termino la
+# actualizacion: la unidad transient de abajo se lanza con --collect, y una
+# vez descargada `systemctl show` responde Result=success/ExecMainStatus=0
+# sin importar como haya salido -verificado en systemd 255-, asi que leer el
+# estado de la unidad reportaba "ok" siempre (auditoria 2026-09-14, 10-001).
+RESULTADO="$INSTALL_DIR/backend/.update_result"
 UNIDAD="squidmanager-autoupdate-run"
 LOG_TAG="squidmanager-autoupdate"
 
@@ -140,7 +147,17 @@ if [ "$ESTADO_APPLY" = "running" ]; then
         exit 0  # sigue en curso, nada que hacer todavia
     fi
 
-    CODIGO="$(systemctl show "$UNIDAD" -p ExecMainStatus --value 2>/dev/null || echo 1)"
+    # Ver la nota junto a RESULTADO: el codigo de salida se lee del archivo
+    # que dejo upgrade-nativo.sh, nunca de la unidad. Sin archivo (el proceso
+    # murio antes de poder escribirlo, o lo mato systemd) es un error: nunca
+    # se asume exito por ausencia de evidencia.
+    if [ -f "$RESULTADO" ]; then
+        CODIGO="$(awk 'NR==1{print ($1=="ok") ? 0 : 1}' "$RESULTADO" 2>/dev/null || echo 1)"
+        rm -f "$RESULTADO"
+    else
+        CODIGO="1"
+        log "La actualizacion termino sin dejar resultado ($RESULTADO); se registra como error"
+    fi
     # journalctl a veces mete una linea de ruido propia ("Failed to open
     # /run/systemd/transient/....service: No such file or directory") si la
     # unidad transient (--collect) ya se autolimpio para el momento en que
@@ -198,6 +215,7 @@ RAMA="$(git -C "$INSTALL_DIR" branch --show-current 2>/dev/null || echo main)"
 log "Lanzando actualizacion aprobada (rama $RAMA)"
 consumir_request
 escribir_apply "running" "" ""
+rm -f "$RESULTADO" "$RESULTADO.tmp"  # nunca leer un resultado de una corrida anterior
 
 # --collect: la unidad se limpia sola una vez inactiva (no queda acumulando
 # unidades transient). Corre en su propio cgroup, independiente del de este
@@ -214,5 +232,6 @@ escribir_apply "running" "" ""
 # /root es el HOME correcto sin ninguna ambiguedad.
 systemd-run --unit="$UNIDAD" --collect --property=Type=oneshot \
     --setenv=INSTALL_DIR="$INSTALL_DIR" --setenv=BRANCH="$RAMA" --setenv=HOME=/root \
+    --setenv=SQUIDMGR_RESULT_FILE="$RESULTADO" \
     bash "$INSTALL_DIR/upgrade-nativo.sh" \
     || log "systemd-run fallo al lanzar la actualizacion"

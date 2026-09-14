@@ -823,5 +823,6 @@
   "allow ventas": "allow sales",
   "certificate pinning": "certificate pinning",
   "Toggle": "Toggle",
-  "Guardar aquí no lo aplica todavía: hace falta pulsar «Aplicar cambios» arriba para que Squid lo use.": "Saving here doesn't apply it yet: you need to click «Apply changes» above for Squid to use it."
+  "Guardar aquí no lo aplica todavía: hace falta pulsar «Aplicar cambios» arriba para que Squid lo use.": "Saving here doesn't apply it yet: you need to click «Apply changes» above for Squid to use it.",
+  "El archivo supera el tamaño máximo permitido (250 MB).": "The file exceeds the maximum allowed size (250 MB)."
 }

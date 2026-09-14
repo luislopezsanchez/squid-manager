@@ -110,7 +110,7 @@ echo "Codigo actualizado a $(git log --oneline -1)"
 
 # El `git reset --hard` de arriba acaba de sobrescribir ESTE MISMO archivo en
 # disco si el upgrade trae cambios en upgrade-docker.sh -exactamente lo que
-# paso al probar 0.24.4 -> 73fbc04 en vivo (172.126.86.242, 2026-09-13): el
+# paso al probar 0.24.4 -> 73fbc04 en vivo (servidor de un usuario, 2026-09-13): el
 # paso 5 de mas abajo seguia mostrando el mensaje y la logica de ANTES del
 # pull (sin el reintento contra el backend, comprobando localhost:$WEB_PORT
 # en vez de dentro del contenedor), aunque el checkout ya estuviera al dia -

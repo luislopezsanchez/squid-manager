@@ -5,6 +5,74 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.9] - 2026-09-14
+
+Correcciones de la auditoría integral del 2026-09-14
+(`docs/audits/2026-09-14-audit-full.md`), motivada por dos comportamientos
+reportados en vivo: «hago la actualización desde el panel, pero sigue la
+misma versión y sigue avisando que hay una actualización», y «después de
+un upgrade el admin no acepta la contraseña». El primero es un bug real
+(abajo). El segundo se investigó con el `audit_log` y el journal de una VM
+de pruebas y **no es un bug del backend**: nada en el código cambia la
+contraseña del admin por sí solo, y el hash guardado correspondía a lo que
+el formulario de cambio obligatorio recibió del navegador —lo más probable
+es que el gestor de contraseñas del navegador haya sugerido/guardado una
+contraseña distinta de la que se creía haber escrito—. `reset-admin-password.sh`
+sigue siendo la salida en ese caso.
+
+### Corregido
+
+- **Una actualización que fallaba a mitad se reportaba en el panel como
+  «aplicada».** `autoupdate-check.sh` leía el código de salida con
+  `systemctl show <unidad> -p ExecMainStatus`, pero la unidad se lanza con
+  `systemd-run --collect`, que la descarga apenas termina; sobre una unidad
+  ya descargada `systemctl show` responde un stub con `Result=success` y
+  `ExecMainStatus=0` sin importar cómo salió —verificado en Ubuntu 24.04 /
+  systemd 255 con una unidad que salía con código 3—. Es también la razón
+  por la que el bug de 0.24.8 (el actualizador matándose solo) pasó tanto
+  tiempo inadvertido: cada intento quedaba registrado como éxito. Ahora el
+  resultado lo escribe quien lo conoce: `upgrade-nativo.sh` deja
+  `backend/.update_result` («ok»/«error» + commit) con un `trap` de EXIT que
+  cubre también los cortes inesperados, y `autoupdate-check.sh` lee y
+  consume ese archivo; sin archivo, se registra error —nunca éxito por
+  ausencia de evidencia—. (Auditoría 2026-09-14, hallazgo 10-001.)
+  **Nota para instalaciones anteriores a 0.24.8**: el fix vive en el propio
+  actualizador, así que una instalación en la que «Actualizar ahora» nunca
+  llegó a correr nada necesita **una** actualización manual
+  (`sudo bash upgrade-nativo.sh`); a partir de ahí el botón del panel
+  funciona y, si falla, lo dice.
+- **En despliegue Docker, `DATA_KEY` nunca llegaba al backend.** `install.sh`
+  la generaba y la escribía en el `.env` desde que existe, pero
+  `docker-compose.yml` no la listaba en `environment` del servicio
+  `backend` —compose solo inyecta lo que se lista ahí—, así que el backend
+  arrancaba con `DATA_KEY=""` y guardaba las credenciales de terceros
+  (LDAP, SMTP, Telegram, IA, proxy padre, keytab) en texto plano sin
+  avisar. Agregada la línea, más un test que cruza `.env.example` contra el
+  compose para que no vuelva a faltar ninguna. Tras actualizar, volver a
+  guardar cada credencial desde el panel para que quede cifrada (la lectura
+  de valores viejos en claro sigue funcionando). (Hallazgo 05-005.)
+- **El frontend tenía un error de TypeScript que nadie veía**: `vite build`
+  transpila sin comprobar tipos, y el CI solo corría el build. Corregido el
+  error (`ACLs.tsx`, `value` puede ser `null` en una ACL de archivo) y
+  añadido `npm run typecheck` al `package.json` y al CI antes del build.
+  (Hallazgo 13-001.)
+- **El nginx de la instalación nativa no enviaba `Content-Security-Policy`
+  ni comprimía**, a diferencia del de Docker: el mismo panel quedaba con
+  distinta postura de seguridad según cómo se instalara. Copiadas la CSP y
+  la configuración de gzip de `frontend/nginx.conf`, con un test que exige
+  que sean idénticas. (Hallazgo 11-002.)
+- **`upgrade-nativo.sh` hacía el backup dos veces** por el relanzamiento tras
+  el `git reset` introducido en 0.24.7; la segunda pasada ahora lo salta.
+- El mensaje de «archivo demasiado grande» (413) al cargar dominios estaba
+  fijo en español; pasa por i18n como todo lo demás. (Hallazgo 14-001.)
+- Comentarios de scripts con IPs públicas de servidores reales
+  reemplazados por descripciones neutras. (Hallazgo 08-001.)
+- `install-nativo.sh`: `git config --system --add safe.directory` sumaba
+  una línea idéntica a `/etc/gitconfig` en cada upgrade; ahora comprueba
+  antes. Comentarios del temporizador que decían «cada 5 min» (es cada
+  minuto) y una referencia a `docs/actualizaciones.md` (el archivo es
+  `docs/actualizaciones-automaticas.md`).
+
 ## [0.24.8] - 2026-09-14
 
 ### Corregido

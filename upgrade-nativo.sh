@@ -124,8 +124,37 @@ fi
 
 cd "$INSTALL_DIR"
 
+# --- Resultado para autoupdate-check.sh ---------------------------------------
+# Quien lanza este script desde el panel (autoupdate-check.sh, via
+# systemd-run --collect) necesita saber si termino bien o mal. Leerlo de la
+# unidad transient NO sirve: --collect la descarga apenas termina, y
+# `systemctl show` sobre una unidad ya descargada responde un stub con
+# Result=success / ExecMainStatus=0 haya pasado lo que haya pasado -verificado
+# en Ubuntu 24.04 / systemd 255 con una unidad que salia con codigo 3-, asi
+# que todo upgrade se reportaba como "ok", incluso los que abortaban a mitad
+# (auditoria 2026-09-14, hallazgo 10-001). El resultado lo escribe entonces
+# quien lo conoce: este script, en un archivo que autoupdate-check.sh lee y
+# consume. El trap de EXIT cubre tambien los cortes inesperados (set -e,
+# fail, señal): salvo que la ultima linea de este script haya marcado "ok",
+# cualquier salida se registra como error. Se escribe solo si lo pidio
+# autoupdate-check.sh (SQUIDMGR_RESULT_FILE), para no dejar archivos sueltos
+# en una corrida manual.
+_RESULTADO_UPGRADE="error"
+_escribir_resultado_upgrade() {
+    [ -n "${SQUIDMGR_RESULT_FILE:-}" ] || return 0
+    printf '%s %s
+' "$_RESULTADO_UPGRADE" "$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo "")"         > "$SQUIDMGR_RESULT_FILE.tmp" && mv -f "$SQUIDMGR_RESULT_FILE.tmp" "$SQUIDMGR_RESULT_FILE"
+}
+trap _escribir_resultado_upgrade EXIT
+# ---------------------------------------------------------------------------
+
 paso "1. Backup antes de actualizar"
-if [ -x "$INSTALL_DIR/backup-database.sh" ]; then
+if [ -n "${SQUIDMGR_UPGRADE_REEXEC:-}" ]; then
+    # Segunda pasada (ver el relanzamiento tras el git reset, mas abajo): el
+    # backup ya se hizo en la primera, hace segundos. Repetirlo duplicaba el
+    # tiempo y los archivos en backups/ en cada upgrade.
+    ok "Backup ya realizado en la primera pasada de este mismo upgrade."
+elif [ -x "$INSTALL_DIR/backup-database.sh" ]; then
     "$INSTALL_DIR/backup-database.sh" || warn "El backup fallo; se continua igual, pero revisa el motivo antes de confiar en el upgrade."
 else
     warn "No se encontro backup-database.sh; se continua sin backup previo."
@@ -161,6 +190,10 @@ if [ -z "${SQUIDMGR_UPGRADE_REEXEC:-}" ]; then
     echo "Continuando con el codigo ya actualizado (proceso nuevo)..."
     export SQUIDMGR_UPGRADE_REEXEC=1
     export INSTALL_DIR BRANCH
+    # `exec` no dispara el trap de EXIT (no hay salida, se reemplaza el
+    # proceso); se quita igual, explicitamente, para que quede claro que el
+    # resultado lo escribe la segunda pasada y no esta.
+    trap - EXIT
     exec bash "$INSTALL_DIR/upgrade-nativo.sh"
 fi
 
@@ -212,6 +245,7 @@ fi
 
 echo
 if [ "$COMMIT_SERVIDO" = "$COMMIT_ESPERADO" ]; then
+    _RESULTADO_UPGRADE="ok"
     ok "El panel confirma que esta sirviendo $COMMIT_SERVIDO."
     echo
     echo "=================================================="

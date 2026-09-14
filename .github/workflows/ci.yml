@@ -75,6 +75,13 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # `vite build` no comprueba tipos (transpila con esbuild): un error de
+      # TypeScript no rompe el build ni el CI, y asi convivio uno durante
+      # semanas (auditoria 2026-09-14, hallazgo 13-001).
+      - name: Comprobar tipos
+        working-directory: frontend
+        run: npm run typecheck
+
       - name: Build
         working-directory: frontend
         run: npm run build

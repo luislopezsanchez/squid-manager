@@ -172,6 +172,22 @@ Cada afirmación del informe lleva su comando y su salida real (no se asumió na
 
 ---
 
+## Fase 8: Segunda auditoría integral, tras la semana de fixes del actualizador (COMPLETADA)
+
+### Objetivo
+Re-auditar `main @ 8c317ed` (v0.24.8) después de los 14 commits posteriores a la auditoría del 2026-09-13 (casi todos sobre actualizaciones automáticas, instalación nativa y `reset-admin-password.sh`), reverificar las tres correcciones de aquella auditoría y buscar errores de configuración y comportamientos inesperados antes de corregirlos.
+
+### Acciones realizadas
+- Auditoría `project-audit` modo `full` desde Windows (sin VM): suite en venv limpio (420 passed / 3 skipped), CI de GitHub verde en los 3 últimos commits, `pip-audit` y `npm audit` limpios, `tsc --noEmit` (1 error), mapa de autorización de los 23 routers, CRLF/secretos/`git ls-files`.
+- 04-001, 06-001 y 11-001 reverificados como corregidos en `73fbc04`.
+- **Hallazgos nuevos**: `docker-compose.yml` nunca pasa `DATA_KEY` al backend (cifrado en reposo inoperante en Docker, 05-005); `autoupdate-check.sh` lee `ExecMainStatus` de una unidad transient ya recolectada por `--collect`, así que un fallo de actualización puede reportarse como "ok" (10-001, *Probable*, pendiente de reproducir en VM); IP pública de un servidor real en 4 comentarios de scripts (08-001); typecheck del frontend roto y no ejecutado por nadie (13-001); mensaje 413 fuera de i18n (14-001); nginx nativo sin CSP/gzip (11-002).
+- Informe: `docs/audits/2026-09-14-audit-full.md`; ledger actualizado en `docs/audits/findings.md`.
+
+### Veredicto
+**APTO CON RESERVAS** — 0 Críticos, 3 Mayores con reserva explícita. Contexto de continuidad: el usuario iba a describir comportamientos inesperados observados en vivo; cruzarlos primero contra 10-001 y el doble backup de `upgrade-nativo.sh` antes de buscar causas nuevas.
+
+---
+
 ## Riesgos activos
 
 | Riesgo | Estado |
