@@ -138,3 +138,30 @@ def test_el_nginx_nativo_tiene_la_misma_csp_que_el_de_docker():
     assert len(csp) == 1
     assert csp[0] in _script()
     assert "gzip on;" in _script()
+
+
+def test_declara_safe_directory_con_system_no_global():
+    """install-nativo.sh ya usaba --system (nunca --global) desde que se
+    agrego el safe.directory: es justo por lo que $APP_USER no tiene permiso
+    de escribir su propio $HOME (que es INSTALL_DIR, propiedad de root).
+    Ver el mismo fix aplicado despues a upgrade-nativo.sh/upgrade-docker.sh/
+    install.sh, que si dependian de HOME por usar --global."""
+    contenido = _script()
+    assert "git config --system --get-all safe.directory" in contenido
+    assert "git config --system --add safe.directory" in contenido
+    assert "git config --global --add safe.directory" not in contenido
+
+
+def test_autoupdate_check_fija_home_en_la_unidad_systemd_run():
+    """Bug real, visto en vivo: una unidad transient de systemd-run no fija
+    HOME por si sola, y "git config --global" (en upgrade-nativo.sh, que
+    esta unidad lanza) aborta con "fatal: $HOME not set" sin HOME. Esta
+    unidad corre siempre como root, asi que /root es el HOME correcto sin
+    ambiguedad."""
+    raiz = _raiz_del_proyecto()
+    if raiz is None:
+        pytest.skip("el proyecto no esta accesible desde aqui")
+    s = (raiz / "autoupdate-check.sh").read_text(encoding="utf-8")
+    # La linea real del comando (no basta con que el texto aparezca en un
+    # comentario cerca): --setenv=BRANCH y --setenv=HOME en la misma linea.
+    assert '--setenv=BRANCH="$RAMA" --setenv=HOME=/root' in s

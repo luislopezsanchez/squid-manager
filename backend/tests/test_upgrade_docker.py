@@ -120,6 +120,29 @@ def test_declara_el_directorio_como_safe_antes_de_cualquier_git():
     assert "--get-all safe.directory" in contenido
 
 
+def test_declara_safe_directory_con_system_no_global():
+    """Bug real, visto en vivo: "git config --global --add safe.directory"
+    necesita $HOME para ubicar ~/.gitconfig, y una unidad transient de
+    systemd-run (el lanzador real desde el panel, en modo nativo) no lo fija
+    por si sola -> "fatal: $HOME not set". --system (como ya hacia
+    install-nativo.sh) escribe en /etc/gitconfig y no depende de HOME."""
+    contenido = _script()
+    assert "git config --system --get-all safe.directory" in contenido
+    assert "git config --system --add safe.directory" in contenido
+    assert "git config --global --add safe.directory" not in contenido
+
+
+def test_fija_home_defensivamente_al_arrancar():
+    """Segunda capa de defensa, independiente de --system: no depender de
+    que quien invoque este script (hoy o en el futuro) se acuerde de pasar
+    HOME explicito."""
+    contenido = _script()
+    assert 'export HOME="${HOME:-/root}"' in contenido
+    pos_export = contenido.index('export HOME="${HOME:-/root}"')
+    pos_primer_git = contenido.index("git config --system")
+    assert pos_export < pos_primer_git
+
+
 def test_se_desliga_de_la_terminal_para_sobrevivir_a_un_corte_de_ssh():
     """El build de Squid tarda 10+ min. Corrido como `ssh host "bash
     upgrade-docker.sh"`, un corte de SSH manda SIGHUP y el script muere a

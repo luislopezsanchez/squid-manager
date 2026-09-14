@@ -133,6 +133,33 @@ def test_declara_el_directorio_como_safe_antes_de_cualquier_git():
     assert "--get-all safe.directory" in contenido
 
 
+def test_declara_safe_directory_con_system_no_global():
+    """Bug real, visto en vivo: "git config --global --add safe.directory"
+    necesita $HOME para ubicar ~/.gitconfig, y una unidad transient de
+    systemd-run (el lanzador real desde el panel) no lo fija por si sola ->
+    "fatal: $HOME not set", con el proceso muriendo antes de tocar el
+    repositorio remoto. --system (como ya hacia install-nativo.sh) escribe
+    en /etc/gitconfig y no depende de HOME en absoluto. Si esto vuelve a
+    "--global" el bug reaparece igual, aunque exista el export defensivo de
+    abajo -mejor no depender de un solo mecanismo-."""
+    contenido = _script()
+    assert "git config --system --get-all safe.directory" in contenido
+    assert "git config --system --add safe.directory" in contenido
+    assert "git config --global --add safe.directory" not in contenido
+
+
+def test_fija_home_defensivamente_al_arrancar():
+    """Segunda capa de defensa, independiente de --system: si el dia de
+    manana un lanzador nuevo (u otro cambio) reintroduce una operacion que
+    si necesite HOME, este script no depende de que ese lanzador se acuerde
+    de pasarlo -se defiende solo, sin pisar un HOME ya presente."""
+    contenido = _script()
+    assert 'export HOME="${HOME:-/root}"' in contenido
+    pos_export = contenido.index('export HOME="${HOME:-/root}"')
+    pos_primer_git = contenido.index("git config --system")
+    assert pos_export < pos_primer_git
+
+
 def test_termina_invocando_install_nativo_de_la_version_destino():
     contenido = _script()
     assert 'bash "$INSTALL_DIR/install-nativo.sh"' in contenido
