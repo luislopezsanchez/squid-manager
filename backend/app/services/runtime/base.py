@@ -66,11 +66,17 @@ class ProxyRuntime:
         """
         raise NotImplementedError
 
-    def verify_port(self, expected_port: str) -> tuple[bool, str]:
+    def verify_port(self, expected_port: str) -> tuple[bool | None, str]:
         """Comprueba que el proxy es accesible de verdad en ese puerto.
 
         Es la comprobacion que evita el fallo mas silencioso de todos: Squid
         vivo y aparentemente sano, escuchando donde nadie le habla.
+
+        Devuelve `True`/`False` cuando la comprobacion se pudo completar
+        (coincide o no coincide de verdad), y `None` cuando la comprobacion en
+        si fallo por un motivo ajeno al puerto (daemon inalcanzable, error
+        transitorio). Quien llama no debe tratar `None` como `False`: un fallo
+        de verificacion no es un cambio de puerto confirmado.
         """
         raise NotImplementedError
 

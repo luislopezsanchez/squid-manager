@@ -319,14 +319,24 @@ class NativeRuntime(ProxyRuntime):
 
         return "\n".join(partes)
 
-    def verify_port(self, expected_port: str) -> tuple[bool, str]:
-        """Comprueba que hay algo escuchando de verdad en ese puerto."""
+    def verify_port(self, expected_port: str) -> tuple[bool | None, str]:
+        """Comprueba que hay algo escuchando de verdad en ese puerto.
+
+        `None` (no `False`) si la comprobacion en si no se pudo hacer -error
+        leyendo el estado de puertos-, para no confundir «no pude verificar»
+        con «confirmado que no coincide»: ver docstring en `base.py`.
+        """
         try:
             puerto = int(str(expected_port).strip())
         except (TypeError, ValueError):
             return False, f"El puerto configurado no es un numero: '{expected_port}'"
 
-        if puerto in self._listening_ports():
+        try:
+            escuchando = self._listening_ports()
+        except Exception as e:
+            return None, f"No se pudo comprobar los puertos en escucha: {e}"
+
+        if puerto in escuchando:
             return True, f"Squid escucha en el puerto {puerto}"
 
         estado, _ = self._service_state()

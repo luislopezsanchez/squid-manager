@@ -402,7 +402,7 @@ def write_ldap_aux_files(ldap_config, allowed_usernames: list[str]) -> bool:
         return False
 
 
-def verify_published_port(expected_port: str) -> tuple[bool, str]:
+def verify_published_port(expected_port: str) -> tuple[bool | None, str]:
     """Comprueba que el proxy es accesible de verdad en el puerto esperado.
 
     Es la comprobacion que faltaba: un desajuste entre el puerto que se publica
@@ -596,9 +596,22 @@ def _apply_squid_config(db) -> dict:
     port_changed = False
     if desired_port.isdigit():
         published_ok, published_msg = verify_published_port(desired_port)
-        port_changed = not published_ok
-        if port_changed:
-            logger.info(f"Hay que recrear el contenedor: {published_msg}")
+        # `published_ok` es `None` cuando la comprobacion en si fallo (daemon
+        # Docker inalcanzable, error transitorio) y no cuando se confirmo un
+        # desajuste real de puerto. Tratarlo como "cambio el puerto" -bug ya
+        # corregido- disparaba una recreacion completa del contenedor (corte
+        # de servicio) por un simple hipo del daemon, tipico justo despues de
+        # un `reconfigure` largo por una ACL de archivo grande. Solo un
+        # `False` explicito es un desajuste confirmado.
+        if published_ok is None:
+            logger.warning(
+                f"No se pudo verificar el puerto publicado, se sigue sin "
+                f"recrear el contenedor: {published_msg}"
+            )
+        else:
+            port_changed = not published_ok
+            if port_changed:
+                logger.info(f"Hay que recrear el contenedor: {published_msg}")
 
     # 3. Escribir la configuración ya validada.
     apply_progress.avanzar(apply_progress.PASO_ESCRIBIENDO)

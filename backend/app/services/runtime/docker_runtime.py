@@ -319,11 +319,22 @@ class DockerRuntime(ProxyRuntime):
             return False, f"wget dentro del contenedor de Squid fallo: {salida or resultado.exit_code}"
         return True, salida
 
-    def verify_port(self, expected_port: str) -> tuple[bool, str]:
-        """Comprueba que Docker publica de verdad el puerto que Squid escucha."""
+    def verify_port(self, expected_port: str) -> tuple[bool | None, str]:
+        """Comprueba que Docker publica de verdad el puerto que Squid escucha.
+
+        Devuelve `None` (no `False`) cuando la comprobacion en si no se pudo
+        completar -daemon Docker inalcanzable, contenedor momentaneamente no
+        localizable, error de API-: son fallos transitorios, no un desajuste
+        real de puerto, y quien llama no debe confundirlos. Antes ambos casos
+        devolvian `False` por igual, y un simple hipo del daemon durante un
+        `reconfigure` largo (p. ej. cargando una ACL de archivo grande) se leia
+        como «cambio el puerto», disparando una recreacion completa del
+        contenedor -corte real de servicio- sin que el puerto hubiera cambiado
+        en absoluto.
+        """
         container, err = self._container()
         if not container:
-            return False, err
+            return None, err
         try:
             container.reload()
             bindings = container.attrs.get("HostConfig", {}).get("PortBindings") or {}
@@ -333,7 +344,7 @@ class DockerRuntime(ProxyRuntime):
                 for b in binds
             }
         except Exception as e:
-            return False, f"No se pudo comprobar el puerto publicado: {e}"
+            return None, f"No se pudo comprobar el puerto publicado: {e}"
 
         if expected_port in published:
             return True, f"Docker publica el puerto {expected_port}"
