@@ -27,6 +27,16 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
   not set` al primer `git config --global`). Verificado en vivo de punta a
   punta sobre 192.168.145.135, incluido el flujo real de «Actualizar
   ahora».
+- **`apply.status` podía quedar pegado en `"running"` para siempre**, con el
+  panel avisando «actualización en curso» mucho después de que en realidad
+  ya había terminado. Con `set -o pipefail` activo, si `journalctl` no
+  devolvía ninguna línea útil para el log que se muestra en el panel (por
+  ejemplo si solo había la línea de ruido que ya se descarta), `grep -v`
+  salía con código 1 y eso mataba todo `autoupdate-check.sh` antes de
+  llegar a `escribir_apply "ok"` —mismo tipo de trampa de `pipefail` que el
+  propio script ya evita en otro punto (`leer_campo`), pero a la que este
+  `grep` se le había quedado afuera. Visto en vivo actualizando
+  192.168.145.135 a esta misma versión.
 - **La sección «hay una actualización disponible» seguía ahí después de
   aplicar una actualización con éxito**, y el aviso de «recargá la página»
   tampoco aparecía. `autoupdate-check.sh` solo actualizaba la sección
