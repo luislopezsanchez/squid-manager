@@ -90,6 +90,33 @@ os.replace(tmp, '$ESTADO')
 "
 }
 
+actualizar_check_tras_aplicar() {
+    # $1=commit corto ya instalado (post-actualizacion). Sin esto, "check"
+    # queda con el local_commit y update_available de ANTES de actualizar
+    # -el usuario ve "hay una actualizacion disponible" indefinidamente,
+    # hasta el proximo chequeo manual o el del hilo de 6hs-. Se compara
+    # contra el remote_commit ya guardado en vez de asumir "ya no hay
+    # actualizacion": si entre el ultimo chequeo y esta corrida aparecieron
+    # commits nuevos en GitHub, update_available debe seguir en true.
+    "$PY" -c "
+import json, os
+with open('$ESTADO', encoding='utf-8') as f:
+    datos = json.load(f)
+check = datos.setdefault('check', {})
+nuevo_local = '$1'
+check['local_commit'] = nuevo_local
+remoto = check.get('remote_commit')
+check['update_available'] = bool(remoto and nuevo_local and remoto != nuevo_local)
+if not check['update_available']:
+    check['commits'] = []
+tmp = '$ESTADO.tmp'
+with open(tmp, 'w', encoding='utf-8') as f:
+    json.dump(datos, f, ensure_ascii=False, indent=2)
+    f.write('\n')
+os.replace(tmp, '$ESTADO')
+"
+}
+
 consumir_request() {
     "$PY" -c "
 import json, os
@@ -135,6 +162,7 @@ if [ "$ESTADO_APPLY" = "running" ]; then
     if [ "$CODIGO" = "0" ]; then
         log "Actualizacion completada (commit $COMMIT_FINAL)"
         escribir_apply "ok" "$COMMIT_FINAL" "$COLA"
+        actualizar_check_tras_aplicar "$COMMIT_FINAL"
     else
         log "Actualizacion fallo (codigo $CODIGO); ver journalctl -u $UNIDAD"
         escribir_apply "error" "$COMMIT_FINAL" "$COLA"
