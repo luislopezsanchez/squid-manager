@@ -49,7 +49,7 @@ APP_USER="${APP_USER:-squidmgr}"
 # camino como "el" procedimiento de actualizacion.
 _ENV_PREVIO="$INSTALL_DIR/.env"
 if [ -f "$_ENV_PREVIO" ]; then
-    for _VAR in SECRET_KEY DATA_KEY WEB_PORT CORS_ORIGINS TRUSTED_PROXY_HOSTS DEBUG BCRYPT_COST ACCESS_TOKEN_EXPIRE_MINUTES; do
+    for _VAR in SECRET_KEY DATA_KEY WEB_PORT CORS_ORIGINS TRUSTED_PROXY_HOSTS DEBUG BCRYPT_COST ACCESS_TOKEN_EXPIRE_MINUTES ADMIN_INITIAL_PASSWORD; do
         if [ -z "${!_VAR:-}" ]; then
             # "|| true" en la asignacion misma, no solo en el uso de mas
             # abajo: con "set -o pipefail" activo, "grep (sin coincidencias)
