@@ -212,7 +212,7 @@ git fetch --all --quiet
 # actualizar y sin ninguna pista de por que.
 if ! git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
     RAMAS_DISPONIBLES="$(git branch -r | grep -v -- '->' | sed 's#origin/##' | tr -d ' ' | tr '\n' ' ')"
-    fail "La rama '$BRANCH' no existe en el repositorio remoto. Ramas disponibles: $RAMAS_DISPONIBLES. Si no elegiste esta rama a proposito, probablemente quedo la variable BRANCH exportada de antes (revisa con 'echo \$BRANCH' y con 'unset BRANCH', o el .bashrc/.profile de este usuario). Para forzar la rama correcta: BRANCH=main sudo bash upgrade-nativo.sh"
+    fail "La rama '$BRANCH' no existe en el repositorio remoto. Ramas disponibles: $RAMAS_DISPONIBLES. Si no elegiste esta rama a proposito, probablemente quedo la variable BRANCH exportada de antes (revisa con 'echo \$BRANCH' y con 'unset BRANCH', o el .bashrc/.profile de este usuario). Para forzar la rama correcta: sudo BRANCH=main bash upgrade-nativo.sh"
 fi
 
 git checkout --quiet "$BRANCH"

@@ -317,7 +317,7 @@ if [ -d "$INSTALL_DIR/.git" ]; then
     # cual es su valor. Mismo fix que upgrade-nativo.sh/upgrade-docker.sh.
     if ! git -C "$INSTALL_DIR" show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
         RAMAS_DISPONIBLES="$(git -C "$INSTALL_DIR" branch -r | grep -v -- '->' | sed 's#origin/##' | tr -d ' ' | tr '\n' ' ')"
-        fail "La rama '$BRANCH' no existe en el repositorio remoto. Ramas disponibles: $RAMAS_DISPONIBLES. Si no elegiste esta rama a proposito, probablemente quedo la variable BRANCH exportada de antes (revisa con 'echo \$BRANCH' y con 'unset BRANCH', o el .bashrc/.profile de este usuario). Para forzar la rama correcta: BRANCH=main sudo -E bash install-nativo.sh"
+        fail "La rama '$BRANCH' no existe en el repositorio remoto. Ramas disponibles: $RAMAS_DISPONIBLES. Si no elegiste esta rama a proposito, probablemente quedo la variable BRANCH exportada de antes (revisa con 'echo \$BRANCH' y con 'unset BRANCH', o el .bashrc/.profile de este usuario). Para forzar la rama correcta: sudo BRANCH=main bash install-nativo.sh"
     fi
 
     git -C "$INSTALL_DIR" checkout --quiet "$BRANCH"

@@ -138,7 +138,7 @@ if ! git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
     echo "       Si no elegiste esta rama a proposito, probablemente quedo" >&2
     echo "       la variable BRANCH exportada de antes (revisa con 'echo \$BRANCH'" >&2
     echo "       y con 'unset BRANCH', o el .bashrc/.profile de este usuario)." >&2
-    echo "       Para forzar la rama correcta: BRANCH=main sudo bash \"$0\"" >&2
+    echo "       Para forzar la rama correcta: sudo BRANCH=main bash \"$0\"" >&2
     exit 1
 fi
 
