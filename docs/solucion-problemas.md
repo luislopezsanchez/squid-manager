@@ -196,3 +196,45 @@ Ver [actualizacion.md](actualizacion.md#la-actualización-desde-el-panel-falla-c
 Corregido — ver la entrada correspondiente en [CHANGELOG.md](../CHANGELOG.md).
 Si seguís viendo cortes al aplicar una ACL de archivo grande, confirmá primero
 la versión instalada (`/health`) antes de reportarlo como nuevo.
+
+## Squid no arranca después de instalar o actualizar (instalación nativa)
+
+Si tenés una ACL de archivo con muchos dominios cargados (probado en vivo:
+5.87 millones), Squid puede tardar **más de 90 segundos** en levantar —
+tanto en un arranque en frío como en un `systemctl restart` — porque
+necesita reconstruir en memoria el árbol de búsqueda de esa lista antes de
+poder aceptar conexiones. `systemd` corta el arranque a los 90s por
+defecto (`TimeoutStartSec`), así que el servicio queda en `failed (Result:
+timeout)` aunque Squid no tenga ningún error real: solo necesitaba más
+tiempo.
+
+Confirmá la causa:
+
+```bash
+systemctl status squid   # "Result: timeout"
+journalctl -u squid -n 20 --no-pager   # "start-pre operation timed out"
+ls -la /etc/squid/acl_lists/   # ¿algún archivo de varios MB/millones de líneas?
+```
+
+Reintentar sin más no alcanza — vuelve a fallar igual. Dale más tiempo al
+arranque, una vez:
+
+```bash
+mkdir -p /etc/systemd/system/squid.service.d
+printf '[Service]\nTimeoutStartSec=300\n' > /etc/systemd/system/squid.service.d/timeout-temporal.conf
+systemctl daemon-reload
+systemctl reset-failed squid
+systemctl restart squid   # puede tardar varios minutos; es esperable
+```
+
+Confirmado en vivo: con una ACL de 5.87 millones de dominios, el arranque
+puede tardar entre 1 y 4 minutos según la carga de la máquina — largo, pero
+no infinito. Una vez que Squid queda `active`, si tu instalación va a
+seguir teniendo esa ACL de forma permanente, dejá el aumento del timeout de
+forma fija (en vez de borrar el archivo `.conf` de arriba); si fue algo
+puntual, podés quitarlo después:
+
+```bash
+rm /etc/systemd/system/squid.service.d/timeout-temporal.conf
+systemctl daemon-reload
+```

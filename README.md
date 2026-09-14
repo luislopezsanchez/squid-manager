@@ -54,9 +54,9 @@ despliega una instancia de SquidManager por nodo (ver
 | **Última versión** | v0.24.9 ([CHANGELOG.md](CHANGELOG.md)) |
 | **Probado con éxito en** | Ubuntu 24.04 LTS (Docker y nativo) y Ubuntu 22.04 / Debian 12 (nativo) |
 | **No soportado todavía** | Ubuntu 26.04 (Python 3.14 sin binarios de `psycopg`/`pydantic-core` aún) |
-| **Docker** | Docker 20.10+ y Docker Compose v2+ |
+| **Docker** | Docker 20.10+, Docker Compose v2+ y `git` (para clonar el repo — no viene preinstalado en toda imagen "mínima" de Ubuntu) |
 | **Nativo (sin Docker)** | Ubuntu 22.04 / 24.04 o Debian 12, x86_64 — necesita `squid-openssl`, no cualquier Linux |
-| **Hardware mínimo** | 2 CPU, 2 GB RAM (con swap ≥ 1 GB si es 1 GB), 5 GB disco |
+| **Hardware mínimo** | 2 CPU (con 1 CPU la primera instalación puede tardar más de una hora, no minutos), 2 GB RAM (con swap ≥ 1 GB si es 1 GB), 5 GB disco |
 
 Detalle completo, con las excepciones probadas en vivo, en
 [docs/instalacion-nativa.md](docs/instalacion-nativa.md#requisitos) (nativo) y

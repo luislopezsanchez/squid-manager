@@ -446,6 +446,16 @@ sudo systemctl daemon-reexec
 lee para el entorno por defecto de las unidades que lanza —verificado en
 vivo, Ubuntu 24.04/systemd 255—.)
 
+### Squid no arranca tras la actualización, en instalación nativa
+
+Si tenés una ACL de archivo con muchos dominios cargados, Squid puede tardar
+más de los 90 segundos que systemd le da por defecto para arrancar
+(`start-pre operation timed out` en `journalctl -u squid`). No es un fallo
+real de la actualización — Squid solo necesita más tiempo para reconstruir
+esa lista en memoria. Ver
+[solucion-problemas.md](solucion-problemas.md#squid-no-arranca-después-de-instalar-o-actualizar-instalación-nativa)
+para el diagnóstico y la solución.
+
 ### Una migración falla y el backend no arranca
 
 El backend queda reiniciándose en bucle. El motivo está en su registro:

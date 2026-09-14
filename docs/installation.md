@@ -27,6 +27,13 @@ Esta guía te llevará paso a paso desde un servidor vacío hasta tener SquidMan
 
 > ⚠️ La compilación de Squid desde el código fuente requiere al menos 2GB de RAM + 2GB de swap. Si tienes menos, la compilación puede fallar.
 
+> ⚠️ **Con 1 solo CPU, la compilación puede tardar mucho más de lo que sugieren
+> los "15-30 minutos" habituales — verificado en vivo: más de una hora en una
+> VM con 1 vCPU**, no por un problema del instalador sino porque `make -j1`
+> compila los archivos de Squid uno por uno, sin paralelismo. No se cuelga —
+> `ps aux` muestra `cc1plus` con CPU alta todo el tiempo — simplemente es
+> lento. Si podés, usá al menos 2 CPU para la primera instalación.
+
 ### Software necesario
 - **Docker** 20.10 o superior
 - **Docker Compose** v2 o superior

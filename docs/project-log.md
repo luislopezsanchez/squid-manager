@@ -198,3 +198,56 @@ Re-auditar `main @ 8c317ed` (v0.24.8) después de los 14 commits posteriores a l
 | ~~CORS abierto a `*`~~ | **Resuelto en la Fase 4.** Lista explícita de orígenes, vacía por defecto. |
 | ~~Puerto 8000 del backend público~~ | **Resuelto en la Fase 4.** Ya no se publica al host. |
 | Archivo htpasswd en volumen compartido | Sigue siendo el mecanismo (backend y squid montan `squid-config`), ahora con permisos `600` en vez de los por defecto. Sincronización correcta verificada de nuevo tras la auditoría. |
+
+---
+
+## Mejoras futuras pendientes
+
+### Actualizar instalaciones Docker desde el propio panel
+
+Hoy, "actualizar desde el panel" (aprobar y aplicar sin SSH) solo existe en
+instalación nativa (`update_service.py` corta la funcionalidad entera con un
+guard de `DEPLOY_MODE == "native"`). En Docker, el panel solo avisa que hay
+una versión nueva y le dice al admin que corra `upgrade-docker.sh` a mano.
+
+Investigado (no implementado) el 2026-09-14: no es un ajuste chico. El
+mecanismo nativo funciona porque systemd ya es un componente de confianza,
+siempre presente en el host, que `install-nativo.sh` deja preparado una vez
+(`squidmanager-autoupdate.timer` + una única línea de `sudo` sin argumentos
+en `/etc/sudoers.d/squidmanager`) — el panel (sin privilegios) solo puede
+"adelantar" cuándo corre ese mecanismo, nunca decirle qué hacer.
+
+Docker no tiene un equivalente: `install.sh` no instala nada a nivel del
+host (ni timer, ni servicio, ni sudoers), y actualizar en modo Docker
+significa `docker compose up -d --build` — reconstruir la imagen y recrear
+los contenedores, **incluido el propio backend que estaría ejecutando esa
+orden**. Es el mismo problema de fondo que resolvió `systemd-run` en
+nativo (lanzar el proceso real fuera del cgroup de quien lo lanza), pero
+Docker no tiene una forma nativa de lograr eso. Además, el
+`docker-socket-proxy` que ya usa el backend bloquea explícitamente el build
+de imágenes, a propósito (ver `docker-compose.yml`, sección del proxy).
+
+Lo único que ya está resuelto: el backend ya tiene montado el directorio
+completo del proyecto (con `.git`), así que el acceso a los archivos y al
+repositorio no es el problema — el hueco es específicamente el paso de
+"reconstruirme y recrearme a mí mismo".
+
+**Opciones evaluadas, de más a menos seguras:**
+
+1. **Timer de systemd en el host** (instalado por `install.sh`, corre como
+   root, mismo patrón que ya usa nativo) — el backend solo escribiría un
+   archivo de estado, igual que ya hace hoy, sin ganar ningún permiso nuevo
+   sobre Docker. La opción recomendada: reutiliza casi textual un mecanismo
+   ya probado en producción.
+2. **Contenedor "actualizador" dedicado**, con su propio acceso acotado,
+   disparado por el backend a través de un canal angosto (un archivo de
+   cola, no un socket completo). Un RCE en el backend ya no alcanza solo,
+   pero exige mantener un segundo componente.
+3. **Dar al backend actual un socket de Docker sin restricciones** (o
+   habilitar `BUILD=1` en el proxy que ya tiene) — el cambio más simple,
+   pero el más riesgoso: cualquier RCE en el backend (el componente más
+   expuesto a la red) pasaría a poder reconstruir o reemplazar cualquier
+   contenedor del host. Es justo lo que el proxy actual existe para evitar.
+
+No se estimó esfuerzo de implementación todavía; queda para cuando se
+decida abordarlo.
