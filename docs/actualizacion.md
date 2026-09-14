@@ -363,6 +363,28 @@ docker compose build backend frontend && docker compose up -d
 cd /opt/squid-manager/frontend && sudo npm run build && sudo systemctl restart squidmanager
 ```
 
+### El panel sigue avisando «hay una actualización disponible» después de aplicarla
+
+Corregido en 0.24.8 — antes de esa versión, una actualización disparada desde
+el panel (botón «Actualizar ahora», o el temporizador automático) podía
+morir a los pocos segundos de arrancar sin que quedara ningún rastro visible:
+`upgrade-nativo.sh` se relanzaba con `setsid` para sobrevivir a un corte de
+SSH, pero eso no lo sacaba del cgroup de la unidad `systemd-run` que lo
+lanzaba — al terminar esa unidad, systemd mataba el proceso real de fondo
+casi al instante (antes de que llegara a tocar el código), y aun así el panel
+registraba «aplicada con éxito». Si tu instalación depende de que el propio
+panel se actualice a sí mismo para llegar a 0.24.8 o más, este bug se
+interpone: hace falta un empujón manual, una única vez:
+
+```bash
+cd /opt/squid-manager
+sudo BRANCH=main bash upgrade-nativo.sh
+```
+
+Corrido así (por SSH, en primer plano de la propia sesión, no disparado por
+`systemd-run`) no le afecta el bug — a partir de esa actualización, el resto
+vuelve a aplicarse solo con normalidad.
+
 ### Una migración falla y el backend no arranca
 
 El backend queda reiniciándose en bucle. El motivo está en su registro:

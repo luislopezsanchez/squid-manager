@@ -91,6 +91,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
+    // 413: lo corta nginx ANTES de que la peticion llegue al backend (ver
+    // client_max_body_size en install-nativo.sh/frontend/nginx.conf), asi
+    // que la respuesta es su pagina de error HTML de siempre, no JSON del
+    // backend -res.json() falla, y sin este caso especial el usuario veia
+    // el mensaje generico "Error 413" sin ninguna pista de que significa
+    // ni que limite supero (reportado en vivo: una carga masiva de ACL con
+    // un archivo grande).
+    if (res.status === 413) {
+      throw new Error('El archivo supera el tamaño máximo permitido (250 MB).')
+    }
     const error = await res.json().catch(() => ({ detail: null }))
     throw new Error(extraerMensajeError(error.detail, `Error ${res.status}`))
   }

@@ -5,6 +5,65 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.24.8] - 2026-09-14
+
+### Corregido
+
+- **La actualización automática desde el panel («Actualizar ahora», o el
+  temporizador de cada 5 min) se mataba sola a los pocos segundos de
+  arrancar, sin ningún rastro visible del error.** `upgrade-nativo.sh` se
+  relanzaba con `setsid` para sobrevivir a un corte de SSH —pensado para
+  cuando un admin lo corre a mano—, pero `autoupdate-check.sh` ya lo invoca
+  con `systemd-run --collect`, que de por sí desliga el proceso de cualquier
+  sesión SSH. `setsid` separaba la sesión pero no sacaba al proceso del
+  cgroup de esa unidad: en cuanto el primer proceso salía con `exit 0` (tras
+  relanzarse en segundo plano), systemd daba la unidad por terminada y
+  mataba TODO el cgroup —incluido el hijo recién desprendido, casi siempre
+  antes de que escribiera una sola línea de log—, mientras el propio
+  `autoupdate-check.sh` registraba `apply.status: "ok"` sin que la
+  actualización real hubiera corrido ni un segundo. Al arreglarlo apareció
+  un segundo bug, tapado hasta entonces por el primero: la unidad de
+  `systemd-run` tampoco fijaba `$HOME`, y `git` lo necesita (`fatal: $HOME
+  not set` al primer `git config --global`). Verificado en vivo de punta a
+  punta sobre 192.168.145.135, incluido el flujo real de «Actualizar
+  ahora».
+- **La sección «hay una actualización disponible» seguía ahí después de
+  aplicar una actualización con éxito**, y el aviso de «recargá la página»
+  tampoco aparecía. `autoupdate-check.sh` solo actualizaba la sección
+  `apply` del estado al terminar; la sección `check` (de la que depende ese
+  aviso) quedaba con los valores de *antes* de actualizar hasta el próximo
+  chequeo manual o el del hilo de 6 h. Ahora se refresca sola al confirmar
+  que la actualización terminó bien.
+- **El toast de «Aplicar cambios» se autodescartaba a los 6 s incluso en
+  error**, sin dejar tiempo a leerlo ni copiarlo —el componente de toast
+  compartido ya tenía esta corrección (los errores se quedan hasta que se
+  cierran a propósito), pero el botón de la barra superior usa su propia
+  implementación aparte, que nunca la había heredado.
+- **`ADMIN_INITIAL_PASSWORD` no se preservaba entre actualizaciones.**
+  `install-nativo.sh` ya preservaba `SECRET_KEY`, `DATA_KEY` y otras
+  variables del `.env` previo al reinstalar, pero esta no estaba en la
+  lista: cada actualización generaba una contraseña aleatoria nueva y la
+  escribía en `.env` aunque nunca se aplicara de verdad (el admin ya
+  existía desde la primera instalación). Quien miraba `.env` después de
+  actualizar veía una contraseña que parecía «la actual» pero nunca lo fue.
+- **Un error 413 (archivo demasiado grande) al cargar dominios en ACLs
+  mostraba el mensaje genérico e inútil «Error: Error 413».** nginx corta
+  la petición antes de que llegue al backend y responde con su página de
+  error HTML de siempre, no JSON —el cliente intentaba parsearlo como JSON
+  del backend y caía al mensaje genérico. Ahora indica el límite real (250
+  MB).
+
+### Agregado
+
+- **`reset-admin-password.sh`**, al estilo `pihole -a -p`: resetea la
+  contraseña de un administrador sin necesitar la actual, corriendo
+  directo en el servidor (`sudo` en nativo, `docker exec` en Docker).
+  Reactiva la cuenta, fuerza a cambiarla en el próximo login e invalida
+  cualquier sesión JWT ya emitida. Documentado en
+  [docs/production.md](docs/production.md#recuperar-el-acceso-si-se-pierde-la-contraseña)
+  y [docs/instalacion-nativa.md](docs/instalacion-nativa.md), y agregado
+  como `make reset-password`.
+
 ## [0.24.7] - 2026-09-10
 
 ### Corregido

@@ -165,6 +165,19 @@ Configuración en `/opt/squid-manager/.env`. Tras editarla:
 systemctl restart squidmanager
 ```
 
+## Recuperar el acceso si se pierde la contraseña
+
+```bash
+cd /opt/squid-manager
+sudo ./reset-admin-password.sh
+```
+
+Resetea la contraseña de `admin` sin necesitar la actual (genera una nueva y
+la muestra una única vez) — igual que `pihole -a -p` en Pi-hole. Reactiva la
+cuenta e invalida cualquier sesión ya abierta. Ver
+[docs/production.md](production.md#recuperar-el-acceso-si-se-pierde-la-contraseña)
+para más opciones (fijar una contraseña elegida, resetear otro admin).
+
 ## Actualizar
 
 `upgrade-nativo.sh` es la forma recomendada — un script aparte del
