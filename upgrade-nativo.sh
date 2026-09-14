@@ -200,6 +200,21 @@ git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$INSTALL_D
 git checkout --quiet -- . 2>/dev/null || true
 git clean -fdq
 git fetch --all --quiet
+
+# BRANCH puede venir de una exportacion vieja en la shell del admin -de un
+# intento anterior, de haber copiado un comando de otra instalacion, de un
+# .bashrc con un "export BRANCH=..." que no se acordaba de tener- y el
+# fallo de git para una rama que no existe ("couldn't find remote ref") no
+# menciona en ningun lado que la causa es esa variable, ni cual es su
+# valor: un admin sin ese contexto no tiene de donde partir. Bug real,
+# visto en vivo: un usuario con BRANCH=despliegue-nativo exportado -una
+# rama que nunca existio en este repositorio- se quedaba sin poder
+# actualizar y sin ninguna pista de por que.
+if ! git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+    RAMAS_DISPONIBLES="$(git branch -r | grep -v -- '->' | sed 's#origin/##' | tr -d ' ' | tr '\n' ' ')"
+    fail "La rama '$BRANCH' no existe en el repositorio remoto. Ramas disponibles: $RAMAS_DISPONIBLES. Si no elegiste esta rama a proposito, probablemente quedo la variable BRANCH exportada de antes (revisa con 'echo \$BRANCH' y con 'unset BRANCH', o el .bashrc/.profile de este usuario). Para forzar la rama correcta: BRANCH=main sudo bash upgrade-nativo.sh"
+fi
+
 git checkout --quiet "$BRANCH"
 git reset --hard --quiet "origin/$BRANCH"
 

@@ -160,6 +160,23 @@ def test_fija_home_defensivamente_al_arrancar():
     assert pos_export < pos_primer_git
 
 
+def test_valida_que_la_rama_exista_antes_de_intentar_el_checkout():
+    """Bug real, visto en vivo: un usuario con BRANCH exportado a una rama
+    que nunca existio en el repo (probablemente de un intento anterior, o
+    de un .bashrc olvidado) se topaba con "fatal: couldn't find remote ref"
+    -un error de git que no menciona en ningun lado que la causa es esa
+    variable de entorno, ni cual es su valor. Un chequeo explicito, con un
+    mensaje que sí lo dice, ahorra ese ida y vuelta."""
+    contenido = _script()
+    assert 'git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"' in contenido
+    pos_check = contenido.index('git show-ref --verify')
+    pos_fetch = contenido.index("git fetch --all --quiet")
+    pos_checkout_real = contenido.index('git checkout --quiet "$BRANCH"')
+    assert pos_fetch < pos_check < pos_checkout_real
+    assert "BRANCH exportada de antes" in contenido
+    assert "echo \\$BRANCH" in contenido
+
+
 def test_termina_invocando_install_nativo_de_la_version_destino():
     contenido = _script()
     assert 'bash "$INSTALL_DIR/install-nativo.sh"' in contenido
