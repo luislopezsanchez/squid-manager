@@ -92,8 +92,25 @@ command -v systemctl >/dev/null 2>&1 || fail "No hay 'systemctl': una instalacio
 # salida a un log) y esta primera invocacion sale enseguida diciendo como
 # seguirlo. Opt-out: SQUIDMGR_UPGRADE_FOREGROUND=1 (util en tmux/screen o en
 # consola local, donde no hay riesgo de corte).
+#
+# Excepcion, ademas: $INVOCATION_ID (systemd la fija SIEMPRE para un
+# proceso que arranca como unidad -services y systemd-run, no solo
+# sesiones interactivas-). Cuando quien nos invoca es autoupdate-check.sh
+# via `systemd-run --collect --unit=squidmanager-autoupdate-run`, YA
+# estamos corriendo desatados de cualquier sesion SSH -es la razon de ser
+# de ese systemd-run-, asi que setsid no hace falta; peor, activamente
+# rompe las cosas: separa la sesion pero NO saca al proceso del cgroup de
+# la unidad, y en cuanto este primer proceso sale con "exit 0" systemd da
+# la unidad por terminada y mata TODO el cgroup (KillMode=control-group,
+# el default) -incluido el hijo recien desprendido, casi siempre antes de
+# que llegue a escribir una sola linea de log-. autoupdate-check.sh, que
+# vigila la unidad con `systemctl is-active` para saber cuando termino de
+# verdad, la ve inactiva de inmediato y asume que ya aplico -escribiendo
+# apply.status "ok" sin que la actualizacion real haya corrido ni un
+# segundo-. Bug real, visto en vivo: el commit instalado nunca cambiaba
+# pese a que el panel avisaba "actualizacion aplicada".
 if [ -z "${SQUIDMGR_UPGRADE_DETACHED:-}" ] && [ -z "${SQUIDMGR_UPGRADE_FOREGROUND:-}" ] \
-        && command -v setsid >/dev/null 2>&1; then
+        && [ -z "${INVOCATION_ID:-}" ] && command -v setsid >/dev/null 2>&1; then
     _LOG="$INSTALL_DIR/upgrade-nativo-$(date +%Y%m%d_%H%M%S).log"
     echo "La actualizacion corre en SEGUNDO PLANO para sobrevivir a un corte de SSH."
     echo "  Log:    $_LOG"
