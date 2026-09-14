@@ -41,6 +41,9 @@ restore: ## Restaurar backup de la BD (usage: make restore FILE=backups/xxx.sql)
 	@test -n "$(FILE)" || (echo "Especifica FILE=backups/archivo.sql"; exit 1)
 	docker exec -i squidmgr-db psql -U squid squidmanager < $(FILE)
 
+reset-password: ## Resetear la contraseña de un admin (usage: make reset-password [USER=admin])
+	./reset-admin-password.sh $(USER)
+
 test: ## Ejecutar tests del backend
 	docker exec squidmgr-backend pytest -v
 

@@ -52,9 +52,34 @@ make down       # Detener (sin borrar datos)
 make logs       # Ver logs
 make backup     # Backup de la BD a ./backups/
 make restore FILE=backups/xxx.sql  # Restaurar BD
+make reset-password [USER=admin]   # Resetear la contraseña de un admin
 make test       # Ejecutar tests del backend
 make status     # Estado + uso de recursos
 ```
+
+---
+
+## Recuperar el acceso si se pierde la contraseña
+
+Si nadie recuerda la contraseña de un administrador (o la cuenta quedó
+bloqueada), `reset-admin-password.sh` la resetea sin necesitar la actual —
+igual que `pihole -a -p` en Pi-hole. Se corre directo en el servidor, desde
+el directorio del proyecto:
+
+```bash
+./reset-admin-password.sh                    # resetea "admin", genera una contraseña nueva
+./reset-admin-password.sh otro_usuario        # resetea otro admin
+./reset-admin-password.sh admin "Clave123!"   # fija una contraseña elegida
+```
+
+Autodetecta Docker o instalación nativa por `DEPLOY_MODE` del `.env` (en
+nativo hace falta `sudo`, porque toca la base de datos directamente). Además
+de la contraseña, reactiva la cuenta, fuerza a cambiarla en el próximo login
+e invalida cualquier sesión ya abierta.
+
+Quien puede ejecutar esto ya tiene acceso a la máquina (SSH o consola) —no es
+un atajo nuevo alrededor de la autenticación del panel, es el mismo nivel de
+acceso que ya haría falta para editar la base de datos a mano.
 
 ---
 
