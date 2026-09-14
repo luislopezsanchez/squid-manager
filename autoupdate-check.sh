@@ -193,7 +193,16 @@ escribir_apply "running" "" ""
 # unidades transient). Corre en su propio cgroup, independiente del de este
 # script y del de squidmanager.service -imprescindible, ver nota de diseno
 # arriba-.
+# --setenv=HOME=/root: una unidad transient de systemd-run NO hereda ni
+# fija HOME por si sola (a diferencia de un shell de login normal), y
+# `git` lo necesita para ubicar la config global -sin esto, "git config
+# --global" en upgrade-nativo.sh/install-nativo.sh fallaba con "fatal:
+# $HOME not set" ni bien arrancaba. Bug real, quedo tapado mucho tiempo
+# por el de mas abajo (el cgroup matando el proceso antes de llegar a
+# ejecutar ningun git): recien se vio al arreglar ese otro. Este script
+# ya corre como root siempre (ver la nota de diseno arriba), asi que
+# /root es el HOME correcto sin ninguna ambiguedad.
 systemd-run --unit="$UNIDAD" --collect --property=Type=oneshot \
-    --setenv=INSTALL_DIR="$INSTALL_DIR" --setenv=BRANCH="$RAMA" \
+    --setenv=INSTALL_DIR="$INSTALL_DIR" --setenv=BRANCH="$RAMA" --setenv=HOME=/root \
     bash "$INSTALL_DIR/upgrade-nativo.sh" \
     || log "systemd-run fallo al lanzar la actualizacion"
