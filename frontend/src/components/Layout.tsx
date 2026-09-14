@@ -7,6 +7,7 @@ import {
   IconSettings, IconLock, IconAudit, IconBackup, IconLogs, IconBell, IconShield, IconSend,
   IconBolt, IconKey, IconLogout, IconSpinner, IconEye, IconGlobe, IconAssistant, IconArchive,
   IconChevronDown, IconActivity, IconTool, IconInfo, IconFile, IconMail, IconRefresh,
+  IconClose,
 } from './Icons'
 
 type Item = { to: string; label: string; Icon: (p: { className?: string }) => JSX.Element }
@@ -128,7 +129,14 @@ export default function Layout() {
 
   const showToast = (msg: string, type: 'success' | 'error' | 'warning') => {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 6000)
+    // Igual que el toast compartido (ver components/Toast.tsx): error y
+    // warning se quedan hasta que el usuario los cierra a proposito. Un
+    // fallo real de "Aplicar cambios" (ACL invalida, error de Squid, etc.)
+    // que desaparece solo a los 6s no deja tiempo ni de leerlo -reportado
+    // en vivo por un usuario que no llego a copiar el mensaje-.
+    if (type === 'success') {
+      setTimeout(() => setToast(null), 6000)
+    }
   }
 
   const handleApply = async () => {
@@ -531,7 +539,14 @@ export default function Layout() {
             >
               {toast.type === 'success' ? <IconShield /> : <IconBolt />}
             </span>
-            <p className="text-[13.5px] text-ink-2 leading-snug">{toast.msg}</p>
+            <p className="text-[13.5px] text-ink-2 leading-snug flex-1">{toast.msg}</p>
+            <button
+              onClick={() => setToast(null)}
+              aria-label={traducir("Cerrar")}
+              className="flex-none text-ink-3 hover:text-ink pt-1"
+            >
+              <IconClose className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       )}
