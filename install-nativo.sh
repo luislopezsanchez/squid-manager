@@ -308,6 +308,18 @@ if [ -d "$INSTALL_DIR/.git" ]; then
     git -C "$INSTALL_DIR" checkout --quiet -- . 2>/dev/null || true
     git -C "$INSTALL_DIR" clean -fdq
     git -C "$INSTALL_DIR" fetch --all --quiet
+
+    # BRANCH puede venir de una exportacion vieja en la shell del admin -de
+    # un intento anterior, de haber copiado un comando de otra instalacion,
+    # de un .bashrc con un "export BRANCH=..." que no se acordaba de tener-
+    # y el fallo de git para una rama que no existe ("couldn't find remote
+    # ref") no menciona en ningun lado que la causa es esa variable, ni
+    # cual es su valor. Mismo fix que upgrade-nativo.sh/upgrade-docker.sh.
+    if ! git -C "$INSTALL_DIR" show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+        RAMAS_DISPONIBLES="$(git -C "$INSTALL_DIR" branch -r | grep -v -- '->' | sed 's#origin/##' | tr -d ' ' | tr '\n' ' ')"
+        fail "La rama '$BRANCH' no existe en el repositorio remoto. Ramas disponibles: $RAMAS_DISPONIBLES. Si no elegiste esta rama a proposito, probablemente quedo la variable BRANCH exportada de antes (revisa con 'echo \$BRANCH' y con 'unset BRANCH', o el .bashrc/.profile de este usuario). Para forzar la rama correcta: BRANCH=main sudo -E bash install-nativo.sh"
+    fi
+
     git -C "$INSTALL_DIR" checkout --quiet "$BRANCH"
     git -C "$INSTALL_DIR" reset --hard --quiet "origin/$BRANCH"
 
@@ -353,7 +365,7 @@ else
 
     if ! git clone --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"; then
         rm -rf "$INSTALL_DIR"
-        fail "No se pudo clonar $REPO_URL (rama $BRANCH). Revisa el error de git de arriba: si es de DNS, prueba 'getent hosts $HOST_REPO' a mano."
+        fail "No se pudo clonar $REPO_URL (rama $BRANCH). Revisa el error de git de arriba: si es de DNS, prueba 'getent hosts $HOST_REPO' a mano. Si dice que la rama no existe ('Remote branch ... not found'), confirma que no haya quedado BRANCH=$BRANCH exportada de una sesion anterior ('echo \$BRANCH')."
     fi
 fi
 ok "Codigo en $INSTALL_DIR ($(git -C "$INSTALL_DIR" rev-parse --short HEAD))"

@@ -140,6 +140,21 @@ def test_el_nginx_nativo_tiene_la_misma_csp_que_el_de_docker():
     assert "gzip on;" in _script()
 
 
+def test_valida_que_la_rama_exista_antes_de_intentar_el_checkout():
+    """Mismo fix que upgrade-nativo.sh/upgrade-docker.sh, aplicado al camino
+    de "ya existe un checkout, actualizando" (no al de clonar desde cero,
+    que ya tiene su propio mensaje via el fallo de "git clone --branch").
+    Bug real: BRANCH exportada de antes apuntando a una rama que no existe
+    -el error de git no menciona la causa ni el valor de la variable."""
+    contenido = _script()
+    assert 'git -C "$INSTALL_DIR" show-ref --verify --quiet "refs/remotes/origin/$BRANCH"' in contenido
+    pos_check = contenido.index('show-ref --verify')
+    pos_fetch = contenido.index('git -C "$INSTALL_DIR" fetch --all --quiet')
+    pos_checkout_real = contenido.index('git -C "$INSTALL_DIR" checkout --quiet "$BRANCH"')
+    assert pos_fetch < pos_check < pos_checkout_real
+    assert "BRANCH exportada de antes" in contenido
+
+
 def test_declara_safe_directory_con_system_no_global():
     """install-nativo.sh ya usaba --system (nunca --global) desde que se
     agrego el safe.directory: es justo por lo que $APP_USER no tiene permiso
