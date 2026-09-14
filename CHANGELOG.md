@@ -5,6 +5,48 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [Sin publicar]
+
+### Corregido
+
+- **Un simple hipo del daemon Docker durante `reconfigure` podía disparar
+  una recreación completa del contenedor (corte real de servicio), sin que
+  el puerto hubiera cambiado.** `verify_published_port`/`verify_port`
+  devolvían `False` tanto ante un desajuste de puerto confirmado como ante
+  un fallo de la propia comprobación (daemon inalcanzable, error
+  transitorio de la API de Docker), y `_apply_squid_config` trataba ambos
+  casos como «cambió el puerto», llamando a `restart_squid()`. Reproducido
+  en vivo: al cargar una ACL de archivo grande (millones de dominios), el
+  `reconfigure` que la carga puede tardar decenas de segundos con el
+  daemon ocupado, y el siguiente «Aplicar cambios» (p. ej. al agregar otra
+  ACL) caía justo en esa ventana. Ahora `verify_port` devuelve `None`
+  cuando la comprobación en sí no se pudo completar, y solo un `False`
+  explícito (desajuste confirmado) dispara el restart; un `None` queda
+  como advertencia en el log y sigue con el `reconfigure` normal.
+- **La actualización desde el panel podía fallar para siempre con `fatal:
+  $HOME not set`, sin forma de autorepararse.** `upgrade-nativo.sh`,
+  `upgrade-docker.sh` e `install.sh` declaraban el repositorio como
+  confiable ante git con `git config --global --add safe.directory`, que
+  necesita `$HOME` para ubicar `~/.gitconfig`; una unidad transient de
+  `systemd-run` no fija `HOME` por sí sola. El fix anterior (0.24.8, commit
+  `7e70e68`) le agregó `--setenv=HOME=/root` a la invocación de
+  `systemd-run` en `autoupdate-check.sh`, pero ese archivo solo se
+  actualiza cuando una actualización se aplica *con éxito* —exactamente lo
+  que este bug impedía—, dejando a cualquier instalación anterior a 0.24.8
+  sin forma de salir del bucle solo con reintentar desde el panel. Ahora
+  los tres scripts usan `--system` en vez de `--global` (igual que
+  `install-nativo.sh`, que ya lo hacía así) para no depender de `$HOME` en
+  absoluto en esa operación, y además fijan `HOME=/root` al arrancar,
+  defensivamente, para no depender de que quien los invoque (hoy o en el
+  futuro) se acuerde de pasarlo. **Nota para instalaciones anteriores a
+  0.24.8 ya atascadas en este error**: el fix vive en los mismos scripts
+  que el `git fetch` roto no llega a traer, así que no se autorepara solo
+  reintentando desde el panel — requiere una intervención única (por SSH)
+  para destrabar esa instalación puntual antes de que pueda volver a
+  actualizarse sola.
+
+---
+
 ## [0.24.9] - 2026-09-14
 
 Correcciones de la auditoría integral del 2026-09-14
