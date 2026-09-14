@@ -153,8 +153,18 @@ if [ "$ESTADO_APPLY" = "running" ]; then
     # interpretarlos -visto en vivo-. ESC se arma con $'\033' porque sed no
     # siempre acepta \x1b tal cual en la expresion regular.
     ESC=$'\033'
+    # "|| true" en el grep: con `set -o pipefail` activo (arriba), grep sale
+    # con codigo 1 si no selecciona NINGUNA linea -no solo ante un error de
+    # verdad, tambien cuando el filtrado deja todo afuera (ej. si
+    # journalctl no devolvio nada mas que la linea de ruido que se
+    # descarta)-. Sin este "|| true", ese codigo 1 mataba el pipeline
+    # entero (y con el `set -e` de arriba, el script COMPLETO) antes de
+    # llegar a escribir_apply, dejando apply.status pegado en "running"
+    # para siempre. Bug real, mismo tipo de trampa que ya evita
+    # leer_campo() con su propio "|| true" -esta linea se quedo afuera esa
+    # vez-.
     COLA="$(journalctl -u "$UNIDAD" --no-pager -n 40 -o cat 2>/dev/null \
-        | grep -v 'Failed to open /run/systemd/transient' \
+        | { grep -v 'Failed to open /run/systemd/transient' || true; } \
         | sed -E "s/${ESC}\[[0-9;]*m//g" \
         | tail -c 4000 | sed "s/'/ /g")"
     COMMIT_FINAL="$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo "")"
