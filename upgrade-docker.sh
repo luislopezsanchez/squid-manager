@@ -18,6 +18,20 @@
 # es el mismo mecanismo de git de por medio-.
 set -euo pipefail
 
+# Defensivo, independiente de quien invoque este script: git (2.35.2+)
+# aborta CUALQUIER operacion con "fatal: $HOME not set" si la variable esta
+# directamente ausente del entorno (no alcanza con que este vacia), porque
+# necesita ubicar el .gitconfig del usuario incluso para decidir si el
+# repositorio es "de confianza". Mismo mecanismo, mismo riesgo, que en
+# upgrade-nativo.sh (ver su comentario): si el dia de mañana esto se lanza
+# desde una unidad de systemd, un cron, o cualquier contexto que no sea un
+# shell de login, HOME puede faltar sin que nadie se acuerde de pasarlo
+# explicito. Fijarlo aca, sin pisar uno ya presente, hace que este script
+# no dependa de que ESE detalle este bien resuelto en quien lo invoque. Se
+# corre siempre como root (sudo, ver el resto del script), asi que /root es
+# el HOME correcto sin ninguna ambiguedad.
+export HOME="${HOME:-/root}"
+
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 cd "$PROJECT_DIR"
 BRANCH="${BRANCH:-main}"
@@ -91,9 +105,13 @@ echo "=== 2. Trayendo el codigo nuevo (rama $BRANCH) ==="
 # excepcion: entrypoint.sh del backend le hace chown de este directorio al
 # usuario sin privilegios (uid 999) en cada arranque, y este script se corre
 # como root (sudo). Se declara el directorio como confiable antes de tocar
-# nada. Idempotente: solo se agrega si no estaba.
-git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$PROJECT_DIR" \
-    || git config --global --add safe.directory "$PROJECT_DIR"
+# nada. --system (no --global), igual que install-nativo.sh/install.sh:
+# dejarlo en /etc/gitconfig evita depender de HOME para ESTA operacion
+# puntual -por mas que ya se defienda arriba, no vale la pena que dos
+# mecanismos independientes tengan que funcionar bien para que esto no
+# rompa-. Idempotente: solo se agrega si no estaba.
+git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$PROJECT_DIR" \
+    || git config --system --add safe.directory "$PROJECT_DIR"
 
 # Se descarta cualquier cambio local ANTES de cambiar de rama, no despues:
 # `git checkout` se niega a cambiar de rama si eso pisaria una modificacion

@@ -46,6 +46,22 @@
 # unico honesto de hacer sin esa certeza.
 set -euo pipefail
 
+# Defensivo, independiente de quien invoque este script: git (2.35.2+)
+# aborta CUALQUIER operacion con "fatal: $HOME not set" si la variable esta
+# directamente ausente del entorno (no alcanza con que este vacia), porque
+# necesita ubicar el .gitconfig del usuario incluso para decidir si el
+# repositorio es "de confianza". Una unidad transient de systemd-run no
+# hereda ni fija HOME por si sola -a diferencia de un shell de login-, asi
+# que quien lanza esto (autoupdate-check.sh, hoy) tiene que acordarse de
+# pasarlo explicito para que no vuelva a pasar (bug real, visto en vivo:
+# "fatal: $HOME not set" en el primer git de mas abajo, con el proceso
+# muriendo antes de tocar nada). Fijarlo tambien aca, sin pisar uno ya
+# presente, hace que este script no dependa de que ESE detalle este bien en
+# el lanzador de turno -sea el de hoy o uno que se agregue el dia de
+# mañana-. Este script siempre corre como root (ver el chequeo de mas
+# abajo), asi que /root es el HOME correcto sin ninguna ambiguedad.
+export HOME="${HOME:-/root}"
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 info()  { echo -e "${BLUE}[INFO]${NC} $1"; }
 ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
@@ -165,10 +181,16 @@ paso "2. Trayendo el codigo nuevo (rama $BRANCH)"
 # git ("detected dubious ownership"). Pasa cuando el checkout lo hizo un
 # usuario de despliegue (o el propio APP_USER) y este script se corre como
 # root, o al reves. Se declara el directorio como confiable antes de tocar
-# nada -install-nativo.sh, que se invoca despues, hereda esta config del
-# mismo usuario-. Idempotente: solo se agrega si no estaba.
-git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$INSTALL_DIR" \
-    || git config --global --add safe.directory "$INSTALL_DIR"
+# nada. --system (no --global), igual que install-nativo.sh: dejarlo en
+# /etc/gitconfig en vez de en el .gitconfig del usuario que invoca evita
+# depender de HOME para ESTA operacion puntual -por mas que ya se defienda
+# arriba, no vale la pena que dos mecanismos independientes tengan que
+# funcionar bien para que esto no rompa-, y de paso es la MISMA linea que
+# ya corre install-nativo.sh al final de este mismo flujo (paso 3): la
+# segunda invocacion es un no-op idempotente, no una config duplicada o en
+# conflicto. Idempotente tambien en si misma: solo se agrega si no estaba.
+git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$INSTALL_DIR" \
+    || git config --system --add safe.directory "$INSTALL_DIR"
 
 # Mismo mecanismo, y el mismo bug real de fondo, que en upgrade-docker.sh:
 # `git checkout` se niega a cambiar de rama si eso pisaria una modificacion

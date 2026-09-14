@@ -12,6 +12,16 @@
 
 set -euo pipefail
 
+# Defensivo, independiente de quien invoque este script: git (2.35.2+)
+# aborta CUALQUIER operacion con "fatal: $HOME not set" si la variable esta
+# directamente ausente del entorno (no alcanza con que este vacia), porque
+# necesita ubicar el .gitconfig del usuario incluso para decidir si el
+# repositorio es "de confianza". Mismo mecanismo, mismo riesgo, que en
+# upgrade-nativo.sh/upgrade-docker.sh (ver sus comentarios). Se corre
+# siempre como root (chequeo de mas abajo), asi que /root es el HOME
+# correcto sin ninguna ambiguedad.
+export HOME="${HOME:-/root}"
+
 # Colores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -140,10 +150,14 @@ ok "Código obtenido en $INSTALL_DIR"
 # git ("detected dubious ownership"), y en Docker eso pasa siempre: el
 # entrypoint del backend hace chown de este directorio al usuario sin
 # privilegios (uid 999) en cada arranque, mientras que este script -y
-# cualquier `git` que el admin ejecute luego a mano- corre como root. Se
-# declara confiable aquí, una vez, de forma idempotente.
-git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$INSTALL_DIR" \
-    || git config --global --add safe.directory "$INSTALL_DIR"
+# cualquier `git` que el admin ejecute luego a mano- corre como root.
+# --system (no --global): dejarlo en /etc/gitconfig evita depender de HOME
+# para ESTA operacion puntual -por mas que ya se defienda arriba, no vale
+# la pena que dos mecanismos independientes tengan que funcionar bien para
+# que esto no rompa-. Se declara confiable aquí, una vez, de forma
+# idempotente.
+git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$INSTALL_DIR" \
+    || git config --system --add safe.directory "$INSTALL_DIR"
 
 # ============================================
 # 4. Configurar .env
