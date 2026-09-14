@@ -39,6 +39,12 @@ export default function Actualizaciones() {
   const { showToast, ToastContainer } = useToast()
   const puedeEscribir = isSuperadmin()
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Si el ciclo activo ("vigilando") ya estaba en curso en el render
+  // anterior: lo compara el propio efecto de abajo contra este ref para
+  // detectar el flanco de bajada (dejó de estar en curso), sin depender de
+  // que el commit ya se haya refrescado -ver el comentario del aviso más
+  // abajo.
+  const veniaVigilandoRef = useRef(false)
   // Commit que estaba instalado la primera vez que esta pestaña vio un ciclo
   // de actualización activo -se fija una sola vez, con useState (no una
   // ref) justamente para que comparar contra él en el efecto de abajo
@@ -78,6 +84,19 @@ export default function Actualizaciones() {
       clearInterval(pollRef.current)
       pollRef.current = null
     }
+    // El ciclo activo acaba de terminar (dejó de estar en curso o vencida):
+    // avisar sin depender de que el commit ya se haya refrescado. Bug real,
+    // visto en vivo: en una actualización desde una versión sin el
+    // mecanismo de resultado por archivo, apply.status pasaba de "running"
+    // a "error" pero check.local_commit tardaba otro ciclo de comprobación
+    // en refrescarse -la detección vieja, solo por diff de commit, nunca
+    // disparaba, y la página se quedaba mostrando "actualización en curso"
+    // para siempre pese a que el ciclo ya había terminado-.
+    if (veniaVigilandoRef.current && !vigilando) {
+      setActualizacionLista(true)
+      setCommitVigilado(null)
+    }
+    veniaVigilandoRef.current = vigilando
     return () => {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }

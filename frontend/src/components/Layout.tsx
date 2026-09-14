@@ -67,6 +67,11 @@ export default function Layout() {
   const [commitVigilado, setCommitVigilado] = useState<string | null>(null)
   const [actualizado, setActualizado] = useState(false)
   const fastPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Flanco de bajada de "vigilando", igual que en Actualizaciones.tsx: avisa
+  // apenas el ciclo activo termina, sin depender de que check.local_commit
+  // ya se haya refrescado -puede quedar rezagado un rato, y ahí la
+  // detección vieja (solo por diff de commit) nunca disparaba.
+  const veniaVigilandoRef = useRef(false)
 
   const readOnly = !canWrite()
 
@@ -98,6 +103,13 @@ export default function Layout() {
           }
           return prev
         })
+        // El ciclo activo acaba de terminar: avisar sin depender de que el
+        // commit ya se haya refrescado (ver el comentario del ref arriba).
+        if (veniaVigilandoRef.current && !vigilando) {
+          setActualizado(true)
+          setCommitVigilado(null)
+        }
+        veniaVigilandoRef.current = vigilando
       })
       .catch(() => {})
   }
