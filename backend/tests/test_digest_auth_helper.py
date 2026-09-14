@@ -78,6 +78,8 @@ def test_no_consulta_ldap_en_absoluto():
     """Digest solo sabe de usuarios locales: si este archivo empieza a
     importar ldap3 o un allow-list, se rompió esa separación deliberada."""
     raiz = _raiz_del_proyecto()
+    if raiz is None:
+        pytest.skip("el proyecto no esta accesible desde aqui")
     fuente = (raiz / "squid" / "digest_auth_helper.py").read_text(encoding="utf-8")
     assert "ldap3" not in fuente
     assert "ldap_allowlist" not in fuente

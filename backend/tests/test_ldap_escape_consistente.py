@@ -31,9 +31,26 @@ if sys.platform == "win32":
         allow_module_level=True,
     )
 
-from app.routes.ldap import _escapar_filtro_ldap as escapar_panel
-
 _AUTH_HELPER_PATH = Path(__file__).parent.parent.parent / "squid" / "auth_helper.py"
+
+# El contenedor squidmgr-backend solo tiene copiado backend/ (ver Dockerfile):
+# no existe un directorio squid/ hermano dentro de él, así que esta ruta
+# nunca resuelve ahí. Bug real, visto en vivo: correr la suite con
+# `docker exec squidmgr-backend python -m pytest tests/` -el comando que la
+# propia documentación recomienda (docs/actualizacion.md)- rompía la
+# RECOLECCIÓN entera (0 tests corridos, no solo este), porque el error pasaba
+# al importar el módulo a nivel de archivo, antes de que pytest pudiera
+# aislarlo a un solo test. En instalación nativa, o corriendo la suite desde
+# un checkout completo del repo (CI, o dentro del propio contenedor con el
+# repo montado), el archivo sí está y el test corre con normalidad.
+if not _AUTH_HELPER_PATH.is_file():
+    pytest.skip(
+        f"{_AUTH_HELPER_PATH} no existe -normal dentro del contenedor Docker "
+        "del backend, que solo tiene copiado backend/, no el repo completo-",
+        allow_module_level=True,
+    )
+
+from app.routes.ldap import _escapar_filtro_ldap as escapar_panel
 
 
 def _cargar_escapar_helper():

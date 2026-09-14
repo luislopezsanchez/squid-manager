@@ -43,7 +43,11 @@ ARRANQUES = [
 
 
 def _texto(relativa: str) -> str:
-    assert RAIZ is not None, "no se encontró la raíz del proyecto"
+    if RAIZ is None:
+        # Normal dentro del contenedor squidmgr-backend: solo tiene copiado
+        # backend/, no el repo completo (install-nativo.sh y
+        # squid/entrypoint.sh viven fuera de ahi).
+        pytest.skip("el proyecto no esta accesible desde aqui")
     fichero = RAIZ / relativa
     if not fichero.is_file():
         pytest.skip(f"{relativa} no está en este árbol")
@@ -91,9 +95,13 @@ def test_la_plantilla_real_si_exige_autenticacion():
 
     Si esta prueba fallara, el arranque cerrado dejaría el proxy inservible en
     lugar de seguro, que es un fallo distinto y peor de diagnosticar.
+
+    Ruta relativa a este propio archivo (backend/tests/..), no a RAIZ: a
+    diferencia de install-nativo.sh/squid/entrypoint.sh, la plantilla vive
+    DENTRO de backend/, así que esta prueba sí puede correr dentro del
+    contenedor squidmgr-backend, que no tiene el resto del repo pero sí eso.
     """
-    assert RAIZ is not None
-    plantilla = RAIZ / "backend" / "app" / "templates" / "squid.conf.j2"
+    plantilla = Path(__file__).resolve().parent.parent / "app" / "templates" / "squid.conf.j2"
     if not plantilla.is_file():
         pytest.skip("no está la plantilla")
     texto = plantilla.read_text(encoding="utf-8")

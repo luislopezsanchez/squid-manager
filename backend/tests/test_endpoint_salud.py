@@ -41,7 +41,12 @@ CONFIGURACIONES = {
 
 
 def _texto(relativa: str) -> str:
-    assert RAIZ is not None, "no se encontró la raíz del proyecto"
+    if RAIZ is None:
+        # Normal dentro del contenedor squidmgr-backend: solo tiene copiado
+        # backend/, no el repo completo (install-nativo.sh y
+        # frontend/nginx.conf viven fuera de ahi). No es una falla real del
+        # health check, es que este entorno no puede verificarlo.
+        pytest.skip("el proyecto no esta accesible desde aqui")
     fichero = RAIZ / relativa
     if not fichero.is_file():
         pytest.skip(f"{relativa} no está en este árbol")
