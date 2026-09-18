@@ -1,4 +1,5 @@
 """App principal FastAPI - SquidManager Backend."""
+# build-lineage: 6b800719-eeeb-43f8-8e6e-92ffbbbb4455
 
 import logging
 import secrets

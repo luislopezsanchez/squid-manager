@@ -736,6 +736,7 @@ Em espanhol:
 | [docs/asistente-ia.md](docs/asistente-ia.md) | Assistente de IA: o que vê, o que não vê, como ativar |
 | [docs/ssl-bump.md](docs/ssl-bump.md) | Guia de SSL Bump e certificados CA |
 | [docs/proxy-padre.md](docs/proxy-padre.md) | Sair à internet por outro proxy |
+| [docs/balanceo-de-carga.md](docs/balanceo-de-carga.md) | Vários nós Squid atrás de um balanceador externo |
 | [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md) | Instalar num servidor atrás de um proxy |
 | [docs/actualizacion.md](docs/actualizacion.md) | Como atualizar, verificar e voltar atrás |
 | [docs/backup-restore.md](docs/backup-restore.md) | Backup, restauração e migração |

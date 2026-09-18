@@ -148,7 +148,7 @@ propio proceso de actualización: [docs/actualizacion.md](docs/actualizacion.md)
 | **Primeros pasos** | [Después de instalar](docs/primeros-pasos.md) · [Panel web: qué hace cada sección](docs/panel-web.md) |
 | **Funciones** | [Lista completa de características](docs/caracteristicas.md) · [SSL Bump y certificados](docs/ssl-bump.md) |
 | **Autenticación** | [Cuentas, roles, Basic/Digest/none](docs/authentication.md) · [Kerberos / Negotiate (SSO)](docs/kerberos.md) |
-| **Redes** | [Proxy padre encadenado](docs/proxy-padre.md) |
+| **Redes** | [Proxy padre encadenado](docs/proxy-padre.md) · [Varios Squid detrás de un balanceador](docs/balanceo-de-carga.md) |
 | **Asistente de IA** | [Qué ve, qué no, cómo activarlo](docs/asistente-ia.md) |
 | **Backup** | [Backup, restore y migración](docs/backup-restore.md) |
 | **Idiomas** | [Arquitectura de traducciones](docs/idiomas.md) |

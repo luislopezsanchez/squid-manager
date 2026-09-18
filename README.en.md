@@ -732,6 +732,7 @@ In Spanish:
 | [docs/asistente-ia.md](docs/asistente-ia.md) | AI Assistant: what it sees, what it doesn't, how to enable it |
 | [docs/ssl-bump.md](docs/ssl-bump.md) | SSL Bump guide and CA certificates |
 | [docs/proxy-padre.md](docs/proxy-padre.md) | Reaching the internet through another proxy |
+| [docs/balanceo-de-carga.md](docs/balanceo-de-carga.md) | Multiple Squid nodes behind an external load balancer |
 | [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md) | Installing on a server behind a proxy |
 | [docs/actualizacion.md](docs/actualizacion.md) | How to upgrade, verify and roll back |
 | [docs/backup-restore.md](docs/backup-restore.md) | Backup, restore and migration |

@@ -351,4 +351,107 @@ Kerberos/Negotiate y NTLM, un balanceador round-robin puro rompe la
 negociación por falta de afinidad de sesión — hace falta afinidad por IP de
 cliente como mínimo.
 
-No se estimó esfuerzo de implementación todavía.
+**Actualización (2026-09-18):** la parte de guía de despliegue ya está
+escrita — ver [balanceo-de-carga.md](balanceo-de-carga.md), con ejemplo de
+HAProxy, la afinidad de sesión explicada y cómo usar el backup/restore JSON
+ya existente para mantener ACLs/reglas iguales entre nodos (manual, no
+automático). Queda pendiente, si se retoma, automatizar esa sincronización.
+
+No se estimó esfuerzo de implementación de la sincronización automática.
+
+### Huella de autoría en el código fuente (2026-09-18)
+
+Pedido por el autor del proyecto: algún medio para poder identificar copias
+o reusos no autorizados del código, coherente con la licencia Freeware
+vigente (sin permiso para modificar/redistribuir).
+
+Implementado: una huella no funcional (no altera ningún comportamiento,
+verificado con typecheck/build antes y después) repetida en más de un punto
+del código, de forma redundante. Se descartó a propósito cualquier mecanismo
+de aviso por red ("phone home") — inaceptable en un producto de seguridad
+que administra tráfico ajeno; ver la discusión completa de por qué en la
+conversación del 2026-09-18.
+
+El detalle de qué es y dónde está **a propósito no se documenta acá** — este
+archivo es parte del propio repositorio público, y describirlo aquí
+anularía su función. Queda registrado con el autor por fuera de este
+documento.
+
+### Funciones inspiradas en SquidStats (comparación, 2026-09-18)
+
+A pedido del autor, se comparó SquidManager contra
+[SquidStats](https://github.com/kaelthasmanu/SquidStats) (analizado también
+en la Fase 1, como referencia de arquitectura). No se copió código — se
+identificaron funciones de concepto que SquidManager no tiene, verificando
+cada una contra el código propio antes de anotarla.
+
+Dato de fondo que explica varios de los puntos: SquidStats se apoya en el
+**Cache Manager de Squid** (`mgr:info`, conexiones activas, stats de caché);
+SquidManager hoy **nunca lo consulta** — todas sus métricas salen de
+parsear `access.log` y `/proc`/cgroups.
+
+#### Ajustes finos de Kerberos (children/startup/idle, quitar `@REALM` del log)
+
+Verificado en `backend/app/templates/squid.conf.j2:43`: `auth_param
+negotiate children 10` está fijo en la plantilla, sin exponer `startup`/
+`idle` en el panel, y no hay opción de "pelar" el `@REALM` del nombre de
+usuario que llega a logs (relevante si a futuro hay cuotas por usuario, ver
+más abajo). Ajuste chico a la pantalla de Kerberos ya existente, no una
+función nueva. No se estimó esfuerzo.
+
+#### Estadísticas de caché de Squid (vía Cache Manager)
+
+Entradas almacenadas, capacidad usada/libre, tamaño de disco/inodos,
+antigüedad de objetos cacheados — información que Squid ya calcula solo,
+expuesta por su Cache Manager (`mgr:storedir` y similares), nunca leída hoy
+por SquidManager. Requiere habilitar acceso local al manager en
+`squid.conf` (`acl manager`, `http_access allow localhost manager`) y un
+servicio nuevo en el backend que lo consulte y lo muestre en el dashboard.
+Aditivo, no toca las métricas actuales basadas en logs. No se estimó
+esfuerzo.
+
+#### Conexiones activas en tiempo real
+
+Bytes leídos/escritos de una conexión **mientras sigue abierta**, no solo
+al cerrarse — estructuralmente imposible de obtener parseando `access.log`
+(esa línea recién se escribe cuando la conexión termina). Depende de la
+misma integración con Cache Manager del punto anterior. No se estimó
+esfuerzo.
+
+#### Terminar una conexión activa de un cliente
+
+`conntrack -D -s IP` en Linux (paquete `conntrack` + reglas de `iptables`
+para que trackee el puerto del proxy), `pfctl -k IP` en BSD/macOS —
+verificado en el propio README de SquidStats, con una advertencia
+explícita a replicar: en Docker o detrás de NAT hay que ejecutarlo en el
+host que sostiene el estado real de la conexión, si no, no corta nada.
+Encaja con el adaptador de runtime que ya existe en
+`backend/app/services/runtime/` (mismo patrón que ya distingue nativo vs
+Docker para reconfigure/restart) — sería una operación más de ese
+adaptador. No se estimó esfuerzo.
+
+#### Cuotas por volumen total (no solo velocidad)
+
+Los delay pools actuales limitan velocidad (KB/s), no un tope de volumen
+total (ej. "5GB al mes por usuario"). Se puede construir reutilizando la
+función de deshabilitar usuario que **ya existe y ya funciona** (purga de
+credenciales incluida, ver [authentication.md](authentication.md)): un job
+periódico que sume bytes por usuario desde el access.log ya parseado, y
+llame a esa misma función al superar la cuota. Bajo riesgo por apoyarse en
+un mecanismo ya probado, no uno nuevo. No se estimó esfuerzo.
+
+#### Descartado explícitamente (no copiar de SquidStats)
+
+- **Notificaciones por sesión personal de Telegram (API de usuario, no
+  bot)** — SquidManager solo usa bot token (`notification_service.py`), más
+  seguro: una sesión personal filtrada compromete la cuenta de Telegram
+  entera, un bot token filtrado solo ese canal de notificaciones.
+- **Soporte multi-base de datos (SQLite/MariaDB/MySQL/Postgres)** — ya hay
+  un compromiso con Postgres por `pgvector` (asistente de IA); sumar esto
+  sería mucho esfuerzo por poco beneficio real.
+- **Reenvío de logs remotos por syslog para centralizar** — tiene sentido
+  en SquidStats porque no asume una app por nodo. El plan ya anotado arriba
+  de "monitoreo centralizado" (sondear la API de cada instancia
+  SquidManager) es un diseño más seguro: reusa la autenticación y
+  auditoría que ya existen, en vez de abrir el Cache Manager a una IP
+  externa sin control propio.

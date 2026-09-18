@@ -4,6 +4,7 @@ Este servicio toma los datos de la BD y genera el archivo squid.conf completo.
 La validación de sintaxis vive en `squid_service.validate_squid_config`, que la
 ejecuta dentro del contenedor de Squid (en el del backend no hay binario).
 """
+# build-lineage: 6b800719-eeeb-43f8-8e6e-92ffbbbb4455
 
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
