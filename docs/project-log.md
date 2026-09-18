@@ -203,6 +203,25 @@ Re-auditar `main @ 8c317ed` (v0.24.8) después de los 14 commits posteriores a l
 
 ## Mejoras futuras pendientes
 
+### Índice por tema
+
+Las mejoras de abajo están escritas en orden cronológico (cuándo se
+investigó cada una). Esta tabla las agrupa por tema para verlas
+relacionadas entre sí — los enlaces apuntan a la entrada completa más
+abajo.
+
+| Tema | Mejoras |
+|------|---------|
+| **Directorio activo / autenticación** | [ACLs por grupo de Active Directory / LDAP](#acls-por-grupo-de-active-directory--ldap) · [Ajustes finos de Kerberos](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) |
+| **Ancho de banda y cuotas** (todo interrelacionado — ver la entrada consolidada) | [Rediseño de control de ancho de banda, límites por tipo de archivo y cuotas de navegación](#rediseño-de-ancho-de-banda-y-cuotas-de-navegación-2026-09-18) · [Terminar una conexión activa de un cliente](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) (acción de bloqueo inmediato, complementa las cuotas) |
+| **Reglas de acceso y contenido** | [Categorización de dominios](#categorización-de-dominios-2026-09-18) |
+| **Monitoreo y observabilidad** | [Monitoreo centralizado de varias instancias](#monitoreo-centralizado-de-varias-instancias-panel-central) · [Estadísticas de caché de Squid](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) · [Conexiones activas en tiempo real](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) · [Mejorar el dashboard con los KPIs de las funciones nuevas](#rediseño-de-ancho-de-banda-y-cuotas-de-navegación-2026-09-18) |
+| **Multi-nodo / escalabilidad** | [Sincronizar configuración entre nodos](#evaluado-alcance-reducido-clustering-de-squid-para-balanceo-de-carga) (resto pendiente de la guía de balanceo) |
+| **Asistente de IA** | [Agente de IA más capaz (agéntico)](#agente-de-ia-más-capaz-agéntico) |
+| **Plataforma / operaciones** | [Actualizar instalaciones Docker desde el panel](#actualizar-instalaciones-docker-desde-el-propio-panel) |
+
+---
+
 ### Actualizar instalaciones Docker desde el propio panel
 
 Hoy, "actualizar desde el panel" (aprobar y aplicar sin SSH) solo existe en
@@ -432,13 +451,13 @@ adaptador. No se estimó esfuerzo.
 
 #### Cuotas por volumen total (no solo velocidad)
 
-Los delay pools actuales limitan velocidad (KB/s), no un tope de volumen
-total (ej. "5GB al mes por usuario"). Se puede construir reutilizando la
-función de deshabilitar usuario que **ya existe y ya funciona** (purga de
-credenciales incluida, ver [authentication.md](authentication.md)): un job
-periódico que sume bytes por usuario desde el access.log ya parseado, y
-llame a esa misma función al superar la cuota. Bajo riesgo por apoyarse en
-un mecanismo ya probado, no uno nuevo. No se estimó esfuerzo.
+**Fusionada con el pedido más detallado del autor (2026-09-18)** — ver la
+entrada consolidada
+["Rediseño de ancho de banda y cuotas de navegación"](#rediseño-de-ancho-de-banda-y-cuotas-de-navegación-2026-09-18)
+más abajo, que incluye periodos (diario/semanal/mensual) y la acción a
+tomar al agotarse la cuota. Se deja este párrafo como referencia histórica
+de por dónde arrancó la idea (reutilizar la función de deshabilitar usuario
+que ya existe).
 
 #### Descartado explícitamente (no copiar de SquidStats)
 
@@ -455,3 +474,182 @@ un mecanismo ya probado, no uno nuevo. No se estimó esfuerzo.
   SquidManager) es un diseño más seguro: reusa la autenticación y
   auditoría que ya existen, en vez de abrir el Cache Manager a una IP
   externa sin control propio.
+
+### Agente de IA más capaz (agéntico)
+
+Pedido por el autor del proyecto (2026-09-18): el asistente de IA actual
+solo hace RAG (búsqueda semántica) sobre `README.md`/`docs/*.md`, y necesita
+dos API keys separadas (un proveedor de chat + Jina AI, obligatorio, para
+embeddings). Se pidió evaluar subir el nivel: un agente que pueda leer
+código fuente/configuración real y, más adelante, proponer o aplicar
+cambios de configuración si el admin se lo pide — usando modelos cloud,
+idealmente con nivel gratuito (se pensó en OpenRouter).
+
+**Investigado contra la documentación oficial de OpenRouter:**
+
+- **Tool calling (que el modelo ejecute acciones, no solo responda texto):**
+  soportado y estandarizado (formato compatible con OpenAI) en toda la API
+  de OpenRouter. Gemini y Groq — que SquidManager ya usa hoy para el
+  asistente — **también lo soportan**, así que no depende exclusivamente de
+  sumar OpenRouter como proveedor nuevo.
+- **Modelos gratuitos:** sufijo `:free`. Límite real: 20 peticiones/min y
+  50/día sin haber cargado nunca crédito (sube a 1000/día, no de golpe
+  /min, si alguna vez se cargó ≥$10). Para un flujo agéntico que hace varias
+  idas y vueltas de "herramienta" por pregunta, 50/día se consume rápido.
+- **Confiabilidad del tool-calling gratuito:** no uniforme entre modelos —
+  OpenRouter publica una métrica pública de "Tool Call Error Rate" por
+  modelo, lo que confirma que hay que revisar modelo por modelo antes de
+  confiarle una acción estructurada, no asumir que cualquiera gratuito
+  sirve igual.
+- **Embeddings:** OpenRouter ya expone `/embeddings` (dato nuevo, no lo
+  tenía cuando se evaluaron proveedores originalmente), pero no se encontró
+  ningún modelo de embeddings gratuito — no resolvería lo de "una sola key
+  gratis", solo consolidaría a costo.
+
+**Diseño de seguridad recomendado, no negociable si se implementa:** el
+backend ya tiene la infraestructura para hacer esto sin inventar nada
+nuevo — cada endpoint que modifica algo ya pasa por `require_writer`
+(permisos) y queda en el log de auditoría, y aplicar cambios ya corre
+`squid -k parse` antes de tocar el Squid real (`squid_service.py`). El
+agente **nunca** debe tener acceso a shell/archivos crudos: sus
+"herramientas" deben ser llamadas a esos mismos endpoints ya validados, y
+cualquier acción que modifique algo debe requerir confirmación explícita
+del admin (mostrar qué va a cambiar, no ejecutarlo solo) antes de
+aplicarse — esto además mitiga que un modelo gratuito alucine una llamada
+mal armada.
+
+**Alcance sugerido, en dos fases separadas:**
+1. Solo diagnóstico (leer código/config para explicar "por qué no
+   funciona X") — no escribe nada, riesgo bajo.
+2. Modificar configuración — el de mayor riesgo de todo lo anotado en esta
+   bitácora; no empezar hasta tener sólida y probada la fase 1.
+
+No se estimó esfuerzo de implementación todavía.
+
+### Rediseño de ancho de banda y cuotas de navegación (2026-09-18)
+
+Pedido por el autor del proyecto, en tres partes que están relacionadas
+entre sí y conviene encarar juntas:
+
+1. Rediseñar Delay Pools para crear una regla de ancho de banda de forma
+   simple, para cualquier tipo de objeto (grupo, usuario, tipo de tráfico,
+   dominio, etc.).
+2. Límites de velocidad para descargas grandes y/o para extensiones de
+   archivo específicas.
+3. Cuotas de navegación (diaria/semanal/mensual), con una acción
+   configurable al agotarse: cortar la navegación hasta el próximo
+   periodo, o dejar seguir navegando a velocidad limitada.
+
+#### Punto 1 y 2 son, en el fondo, la misma mejora
+
+Verificado en el código actual (`backend/app/models/delay_pool.py`,
+`app/routes/delay_pools.py`, `frontend/src/pages/DelayPools.tsx`): hoy un
+delay pool es **clase de Squid (1-5) + parámetros + una sola ACL** elegida
+de un desplegable, con la ACL ya creada de antemano en la página de ACLs.
+Para usarlo hay que saber de memoria qué clase de Squid corresponde a qué
+caso (clase 4 para limitar por usuario, por ejemplo) — no es intuitivo.
+
+La buena noticia: **Squid ya soporta aplicar un delay pool a cualquier tipo
+de ACL** (`proxy_auth` para usuario, un grupo, `dstdomain`/`dstdom_regex`
+para dominio —incluidas las categorías del punto siguiente—, `url_regex` o
+`req_mime_type` para tipo/extensión de archivo, o combinaciones vía
+`delay_access` encadenado). No hace falta nada nuevo de Squid — es una
+generalización de la interfaz y del modelo de datos de SquidManager: un
+asistente que primero pregunte **"¿a qué se aplica este límite?"**
+(usuario / grupo / dominio / categoría / tipo de archivo / todo el
+tráfico) y arme la clase y la ACL correctas por detrás, en vez de exigir
+que el admin conozca la taxonomía de clases de Squid de antemano.
+
+**Matiz honesto sobre "descargas grandes":** Squid no puede reclasificar
+una descarga a mitad de camino según cuán pesada termine siendo — el
+delay pool se aplica desde que arranca la conexión, no cuando se descubre
+que "es grande". El propio mecanismo de balde de fichas ya castiga más a
+las transferencias sostenidas que a las cortas (efecto colateral que ya
+existe), pero limitar específicamente "archivos de más de X MB" detectados
+por adelantado no es algo que los delay pools puedan hacer de forma
+nativa — sí es completamente viable limitar por **extensión** (`url_regex`)
+o por **tipo de contenido** (`req_mime_type`), que es lo que sí pidió el
+punto 2 explícitamente.
+
+Riesgo: medio (toca el generador de `squid.conf` y el modelo de datos de
+delay pools, pero de forma aditiva — los pools existentes con una sola ACL
+siguen funcionando igual).
+
+#### Punto 3: cuotas de navegación con periodo y acción configurable
+
+Amplía y reemplaza la idea más simple ya anotada arriba en ["Cuotas por
+volumen total"](#funciones-inspiradas-en-squidstats-comparación-2026-09-18)
+(inspirada en SquidStats, sin periodo ni acción configurable). Ahora con
+más detalle:
+
+- **Periodo:** diario, semanal o mensual — se resetea solo al empezar el
+  siguiente periodo.
+- **Acción al agotarse, a elegir:**
+  1. **Cortar la navegación** hasta el próximo periodo — reutiliza la
+     función de deshabilitar usuario que **ya existe y ya funciona**
+     (purga de credenciales incluida, ver
+     [authentication.md](authentication.md)), reactivándola sola al
+     empezar el periodo siguiente.
+  2. **Limitar la velocidad** en vez de cortar — reutiliza el motor de
+     delay pools del punto 1 (una vez rediseñado): al agotar la cuota, se
+     mueve al usuario a un pool con un límite bajo en vez de deshabilitarlo.
+
+Combinación interesante con ["Terminar una conexión activa de un
+cliente"](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) (ya
+anotada arriba): si la acción es "cortar", se podría además terminar de
+inmediato sus conexiones ya abiertas en vez de esperar a que las cierre
+solo — es opcional, no un requisito para la primera versión.
+
+El cálculo del consumo se apoya en lo que ya existe (SquidManager ya suma
+bytes por usuario desde el `access.log` para el dashboard) — lo nuevo es
+compararlo contra una cuota configurada y disparar la acción. No se
+estimó esfuerzo de implementación todavía.
+
+### Categorización de dominios (2026-09-18)
+
+Pedido por el autor del proyecto: poder agrupar dominios en categorías
+reutilizables (ej. "Redes sociales", "Streaming"), usables al crear ACLs o
+reglas, cargables de dos formas: (a) manualmente, con un archivo en un
+formato a definir, y (b) importadas desde sitios o servicios online
+dedicados a esta tarea.
+
+**Verificado en el código actual:** SquidManager **ya tiene** el mecanismo
+de base para esto — una ACL de tipo `dstdomain`/`dstdom_regex` puede venir
+de un archivo (`source='file'`), con carga masiva de hasta 250 MB y modo
+"reemplazar" o "agregar" (`backend/app/routes/acls.py`). Una "categoría" es,
+en esencia, darle a este mecanismo ya existente una capa de identidad
+reutilizable — que se pueda elegir por nombre desde el creador de reglas y
+de delay pools (ver la entrada de arriba), en vez de que cada lista sea una
+ACL aislada. Para la parte (a) (carga manual), el formato más simple y ya
+compatible es el mismo que hoy acepta la carga de ACL de archivo: un
+dominio por línea — no hace falta inventar un formato nuevo.
+
+**Para la parte (b) (importar desde un servicio externo), esto todavía NO
+está verificado y no hay que darlo por sentado:** el candidato más natural
+a investigar primero es algún proyecto de listas de bloqueo por categoría
+pensado específicamente para Squid/SquidGuard (existen proyectos
+académicos de este tipo, históricamente usados en instalaciones Squid
+reales), pero hace falta confirmar en su momento si siguen mantenidos, en
+qué formato exacto distribuyen las listas hoy, y bajo qué licencia se
+pueden redistribuir — no se investigó todavía, así que no se nombra ninguno
+en concreto acá para no comprometerse con algo sin verificar.
+
+Riesgo: bajo-medio para la parte manual (extiende algo que ya funciona);
+la parte de importación externa depende de qué tan estable sea la fuente
+que se elija, a evaluar cuando se investigue. No se estimó esfuerzo de
+implementación todavía.
+
+### Dashboard: nuevos KPIs para las funciones de arriba (2026-09-18)
+
+Pedido por el autor del proyecto: una vez que existan las funciones nuevas
+(cuotas, ancho de banda rediseñado, categorías, y las de monitoreo — caché
+de Squid, conexiones en vivo), sumar sus indicadores al dashboard,
+**manteniendo el diseño base de la plataforma** y priorizando que sea
+amigable, no sobrecargado.
+
+No es una función en sí misma, sino la fase final de las de arriba —
+depende de que cada una exista antes de poder mostrar su dato. Candidatos
+razonables una vez implementadas: usuarios cerca de agotar su cuota,
+consumo de caché de Squid (entradas, disco), conexiones activas en este
+momento. No se estimó esfuerzo ni se definió el diseño visual todavía —
+eso se hace recién cuando haya datos reales de qué mostrar.
