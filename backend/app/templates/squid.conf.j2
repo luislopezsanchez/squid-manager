@@ -39,8 +39,8 @@ http_port {{ internal_port }} ssl-bump \
 # soportan y están en el dominio lo intentan primero y entran sin que se les
 # pida nada; el resto (móviles, Linux fuera del dominio, invitados) cae solo
 # al basic de abajo. No sustituye a basic, coexiste con él.
-auth_param negotiate program /usr/lib/squid/negotiate_kerberos_auth -k /etc/squid/HTTP.keytab -s HTTP/{{ kerberos.proxy_fqdn }}@{{ kerberos.realm }}
-auth_param negotiate children 10
+auth_param negotiate program /usr/lib/squid/negotiate_kerberos_auth -k /etc/squid/HTTP.keytab -s HTTP/{{ kerberos.proxy_fqdn }}@{{ kerberos.realm }}{{ ' -r' if kerberos.strip_realm else '' }}
+auth_param negotiate children {{ kerberos.children or 10 }}{{ (' startup=' ~ kerberos.startup) if kerberos.startup is not none else '' }}{{ (' idle=' ~ kerberos.idle) if kerberos.idle is not none else '' }}
 auth_param negotiate keep_alive on
 {% endif %}
 {% if settings.get('proxy_auth_scheme', 'basic') == 'digest' %}

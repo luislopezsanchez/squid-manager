@@ -159,6 +159,32 @@ configurados para SPNEGO) antes de darlo por cerrado en producción.
 
 ---
 
+## Ajustes avanzados del helper
+
+En **Sistema → Kerberos**, debajo de Realm y FQDN, hay tres ajustes opcionales
+que casi nunca hace falta tocar:
+
+- **Procesos del helper (`children`):** cuántos procesos de
+  `negotiate_kerberos_auth` mantiene Squid vivos a la vez. Por defecto **10**
+  — el mismo valor que traía SquidManager fijo hasta ahora, así que
+  actualizar no cambia nada si no se toca.
+- **`startup` / `idle` (opcionales):** parámetros estándar de `auth_param`
+  de Squid (`children N startup=S idle=I`) para ajustar cuántos procesos
+  arrancan de entrada y cuántos quedan de reserva. Vacíos por defecto —
+  Squid decide solo, igual que hasta ahora. Si se definen, ninguno de los
+  dos puede superar `children`, o Squid rechaza la directiva al arrancar.
+- **Quitar el dominio del nombre de usuario:** activa el flag `-r` de
+  `negotiate_kerberos_auth` (confirmado en su manpage: *"Remove realm from
+  username before returning the username to squid"*). Sin marcar (default),
+  un usuario autenticado por Kerberos llega a los logs y a cualquier regla
+  por usuario como `usuario@REALM`; marcado, llega como `usuario` a secas.
+
+  ⚠️ Si ya hay reglas de acceso, grupos o (a futuro) cuotas creadas
+  referenciando el nombre completo con `@REALM`, activar esto las deja de
+  coincidir hasta que se actualicen — no se migran solas.
+
+---
+
 ## Solución de problemas
 
 | Síntoma | Causa probable |

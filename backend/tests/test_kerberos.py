@@ -108,11 +108,15 @@ def test_formato_desconocido_se_deja_intacto():
 
 class FakeKerberos:
     def __init__(self, enabled=True, realm="EMPRESA.LOCAL", proxy_fqdn="proxy.empresa.local",
-                 keytab_data=b"\x05\x02algo"):
+                 keytab_data=b"\x05\x02algo", children=10, startup=None, idle=None, strip_realm=False):
         self.enabled = enabled
         self.realm = realm
         self.proxy_fqdn = proxy_fqdn
         self.keytab_data = keytab_data
+        self.children = children
+        self.startup = startup
+        self.idle = idle
+        self.strip_realm = strip_realm
 
 
 # --- krb5.conf: permitted_enctypes para que Squid acepte tickets de un AD ---
@@ -212,3 +216,49 @@ def test_kerberos_activado_con_keytab_emite_negotiate_antes_que_basic():
     # Basic tiene que seguir presente: Kerberos convive, no reemplaza.
     assert "auth_param basic program" in config
     assert config.index("auth_param negotiate") < config.index("auth_param basic")
+
+
+def test_kerberos_children_por_defecto_es_10():
+    from app.services.config_generator import generate_squid_config
+
+    kerberos = FakeKerberos(enabled=True)
+    config = generate_squid_config(_fake_db_con_kerberos(kerberos))
+    assert "auth_param negotiate children 10" in config
+
+
+def test_kerberos_children_personalizado_sin_startup_ni_idle():
+    from app.services.config_generator import generate_squid_config
+
+    kerberos = FakeKerberos(enabled=True, children=20)
+    config = generate_squid_config(_fake_db_con_kerberos(kerberos))
+    assert "auth_param negotiate children 20\n" in config
+    assert "startup=" not in config
+    assert "idle=" not in config
+
+
+def test_kerberos_startup_e_idle_se_agregan_cuando_estan_definidos():
+    from app.services.config_generator import generate_squid_config
+
+    kerberos = FakeKerberos(enabled=True, children=15, startup=5, idle=3)
+    config = generate_squid_config(_fake_db_con_kerberos(kerberos))
+    assert "auth_param negotiate children 15 startup=5 idle=3" in config
+
+
+def test_kerberos_strip_realm_agrega_flag_r():
+    from app.services.config_generator import generate_squid_config
+
+    kerberos = FakeKerberos(enabled=True, strip_realm=True)
+    config = generate_squid_config(_fake_db_con_kerberos(kerberos))
+    assert " -r\n" in config
+    assert "auth_param negotiate program" in config
+    linea_program = next(l for l in config.splitlines() if "auth_param negotiate program" in l)
+    assert linea_program.endswith(" -r")
+
+
+def test_kerberos_sin_strip_realm_no_agrega_flag_r():
+    from app.services.config_generator import generate_squid_config
+
+    kerberos = FakeKerberos(enabled=True, strip_realm=False)
+    config = generate_squid_config(_fake_db_con_kerberos(kerberos))
+    linea_program = next(l for l in config.splitlines() if "auth_param negotiate program" in l)
+    assert not linea_program.endswith(" -r")

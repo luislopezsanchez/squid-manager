@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
 from jinja2 import Environment, FileSystemLoader
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -46,6 +46,10 @@ class KerberosConfigIn(BaseModel):
     enabled: bool = False
     realm: str | None = None
     proxy_fqdn: str | None = None
+    children: int = Field(10, ge=1, le=64)
+    startup: int | None = Field(None, ge=0, le=64)
+    idle: int | None = Field(None, ge=0, le=64)
+    strip_realm: bool = False
 
 
 @router.get("/config")
@@ -59,6 +63,10 @@ async def get_config(
         "enabled": config.enabled,
         "realm": config.realm or "",
         "proxy_fqdn": config.proxy_fqdn or "",
+        "children": config.children,
+        "startup": config.startup,
+        "idle": config.idle,
+        "strip_realm": config.strip_realm,
         "keytab_uploaded": bool(config.keytab_data),
         "keytab_filename": config.keytab_filename or "",
         "keytab_uploaded_at": config.keytab_uploaded_at,
@@ -89,14 +97,31 @@ async def update_config(
             detail="Para activar Kerberos hacen falta el realm y el FQDN del proxy.",
         )
 
+    # Mismo requisito que exige `auth_param ... children N startup=S idle=I`
+    # en Squid: S e I son una partición de N, no valores libres -pasarle
+    # startup=8 idle=0 con children=5 hace que Squid rechace la directiva al
+    # arrancar, con un error que no explica la causa desde el panel.
+    if data.startup is not None and data.startup > data.children:
+        raise HTTPException(400, detail="'startup' no puede ser mayor que 'children'.")
+    if data.idle is not None and data.idle > data.children:
+        raise HTTPException(400, detail="'idle' no puede ser mayor que 'children'.")
+
     config = _obtener_o_crear(db)
     config.enabled = data.enabled
     config.realm = realm.upper() if realm else None
     config.proxy_fqdn = proxy_fqdn.lower() if proxy_fqdn else None
+    config.children = data.children
+    config.startup = data.startup
+    config.idle = data.idle
+    config.strip_realm = data.strip_realm
     db.add(AuditLog(
         admin_id=current_admin.id, admin_username=current_admin.username,
         action="update", entity="kerberos_config", entity_id=config.id,
-        new_value=f"enabled={config.enabled} realm={config.realm} proxy_fqdn={config.proxy_fqdn}",
+        new_value=(
+            f"enabled={config.enabled} realm={config.realm} proxy_fqdn={config.proxy_fqdn} "
+            f"children={config.children} startup={config.startup} idle={config.idle} "
+            f"strip_realm={config.strip_realm}"
+        ),
     ))
     db.commit()
     mark_dirty()

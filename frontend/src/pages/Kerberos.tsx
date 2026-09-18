@@ -27,6 +27,10 @@ export default function Kerberos() {
         enabled: config.enabled,
         realm: config.realm,
         proxy_fqdn: config.proxy_fqdn,
+        children: config.children ?? 10,
+        startup: config.startup === '' ? null : config.startup,
+        idle: config.idle === '' ? null : config.idle,
+        strip_realm: !!config.strip_realm,
       })
       notificarCambioPendiente()
       showToast(traducir("Configuración de Kerberos guardada correctamente"), 'success')
@@ -148,6 +152,49 @@ export default function Kerberos() {
         {!config.enabled && (
           <p className="text-xs text-ink-3 mt-3">{traducir("Activa «Habilitar Kerberos» arriba para editar estos campos.")}</p>
         )}
+
+        <h3 className="field-label mt-6 mb-1.5">{traducir("Ajustes avanzados del helper")}</h3>
+        <p className="text-xs text-ink-3 mb-3">{traducir("Los valores por defecto sirven para la mayoría de los casos. Tocalos solo si sabés lo que estás ajustando.")}</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label htmlFor="kerberos-children" className="field-label block mb-1.5">{traducir("Procesos del helper (children)")}</label>
+            <input id="kerberos-children" type="number" min={1} max={64} value={config.children ?? 10}
+              onChange={e => setConfig({ ...config, children: e.target.value === '' ? '' : Number(e.target.value) })}
+              disabled={!config.enabled}
+              className="input font-mono text-sm disabled:opacity-50 disabled:bg-brand-50" />
+            <p className="text-xs text-ink-3 mt-1">{traducir("Cuántos procesos del helper de Kerberos mantiene Squid vivos a la vez. 10 alcanza para la mayoría de las instalaciones.")}</p>
+          </div>
+          <div>
+            <label htmlFor="kerberos-startup" className="field-label block mb-1.5">{traducir("Procesos al arrancar (startup, opcional)")}</label>
+            <input id="kerberos-startup" type="number" min={0} max={64} value={config.startup ?? ''}
+              onChange={e => setConfig({ ...config, startup: e.target.value === '' ? '' : Number(e.target.value) })}
+              disabled={!config.enabled}
+              placeholder={traducir("Automático")}
+              className="input font-mono text-sm disabled:opacity-50 disabled:bg-brand-50" />
+            <p className="text-xs text-ink-3 mt-1">{traducir("Vacío deja que Squid decida solo. No puede ser mayor que «children».")}</p>
+          </div>
+          <div>
+            <label htmlFor="kerberos-idle" className="field-label block mb-1.5">{traducir("Procesos de reserva (idle, opcional)")}</label>
+            <input id="kerberos-idle" type="number" min={0} max={64} value={config.idle ?? ''}
+              onChange={e => setConfig({ ...config, idle: e.target.value === '' ? '' : Number(e.target.value) })}
+              disabled={!config.enabled}
+              placeholder={traducir("Automático")}
+              className="input font-mono text-sm disabled:opacity-50 disabled:bg-brand-50" />
+            <p className="text-xs text-ink-3 mt-1">{traducir("Vacío deja que Squid decida solo. No puede ser mayor que «children».")}</p>
+          </div>
+        </div>
+        <label className="mt-4 flex items-center gap-2 cursor-pointer w-fit">
+          <input
+            type="checkbox"
+            checked={!!config.strip_realm}
+            onChange={e => setConfig({ ...config, strip_realm: e.target.checked })}
+            disabled={!config.enabled}
+            className="w-5 h-5 rounded text-primary-600 disabled:opacity-50"
+          />
+          <span className="text-sm text-ink-2">{traducir("Quitar el dominio (@REALM) del nombre de usuario en logs y cuotas")}</span>
+        </label>
+        <p className="text-xs text-ink-3 mt-1">{traducir("Sin marcar, un usuario de Kerberos aparece como usuario@REALM en registros y reglas por usuario. Marcado, aparece solo como usuario — cuidado si ya tenés reglas o cuotas creadas con el nombre completo, van a dejar de coincidir hasta que las actualices.")}</p>
+
         <div className="mt-4 flex items-center gap-3">
           <button
             onClick={handleSave}

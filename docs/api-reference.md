@@ -674,9 +674,20 @@ Content-Type: application/json
 {
   "enabled": true,
   "realm": "EMPRESA.COM",
-  "proxy_fqdn": "proxy.empresa.com"
+  "proxy_fqdn": "proxy.empresa.com",
+  "children": 10,
+  "startup": null,
+  "idle": null,
+  "strip_realm": false
 }
 ```
+
+`children` (procesos del helper, 1-64, default 10), `startup` e `idle`
+(opcionales, `null` deja que Squid decida solo — ver `auth_param negotiate
+children N startup=S idle=I` en [kerberos.md](kerberos.md#ajustes-avanzados-del-helper))
+y `strip_realm` (flag `-r` de `negotiate_kerberos_auth`: sin él, el usuario
+llega a logs/ACLs como `user@REALM`; con él, solo `user`). `startup`/`idle`,
+si se definen, no pueden superar `children` — se rechaza con 400.
 
 El keytab se sube aparte (endpoint de abajo). No se comprueba aquí que el keytab funcione de verdad — eso solo se sabe cuando un cliente real presenta un ticket; al aplicar se valida al menos que el archivo tenga forma de keytab.
 

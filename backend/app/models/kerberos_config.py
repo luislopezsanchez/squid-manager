@@ -44,5 +44,20 @@ class KerberosConfig(Base):
     keytab_filename = Column(String(255), nullable=True)
     keytab_uploaded_at = Column(DateTime, nullable=True)
 
+    # Procesos del helper que Squid mantiene vivos para Negotiate. Antes
+    # estaba fijo en 10 en la plantilla; el default acá es el mismo valor
+    # para que una instalación existente no cambie de comportamiento al
+    # actualizar.
+    children = Column(Integer, default=10, nullable=False)
+    # startup/idle son opcionales: si no se definen, `auth_param negotiate
+    # children N` se escribe igual que hasta ahora, sin esos calificadores
+    # (mismo comportamiento que Squid ya tenía por defecto).
+    startup = Column(Integer, nullable=True)
+    idle = Column(Integer, nullable=True)
+    # Corresponde al flag `-r` de negotiate_kerberos_auth (confirmado en su
+    # manpage): sin él, el usuario llega a logs/cuotas como `user@REALM`;
+    # con él, solo `user`. Apagado por defecto -no cambia lo que ya hay.
+    strip_realm = Column(Boolean, default=False, nullable=False)
+
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

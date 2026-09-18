@@ -150,6 +150,10 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "Los parámetros del delay pool no pueden quedar vacíos.": "The delay pool parameters cannot be left empty.",
         "Para activar Kerberos hacen falta el realm y el FQDN del proxy.":
             "The realm and the proxy's FQDN are required to enable Kerberos.",
+        "'startup' no puede ser mayor que 'children'.":
+            "'startup' cannot be greater than 'children'.",
+        "'idle' no puede ser mayor que 'children'.":
+            "'idle' cannot be greater than 'children'.",
         "Completa y guarda Realm y FQDN del proxy antes de generar el script.":
             "Fill in and save the Realm and proxy FQDN before generating the script.",
         "No se puede habilitar LDAP con Digest activo: Digest solo autentica usuarios locales del proxy. Cambia el esquema de autenticación a Basic en Configuración antes de habilitar LDAP.":
@@ -296,6 +300,10 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "Los parámetros del delay pool no pueden quedar vacíos.": "Os parâmetros do delay pool não podem ficar vazios.",
         "Para activar Kerberos hacen falta el realm y el FQDN del proxy.":
             "Para ativar o Kerberos são necessários o realm e o FQDN do proxy.",
+        "'startup' no puede ser mayor que 'children'.":
+            "'startup' não pode ser maior que 'children'.",
+        "'idle' no puede ser mayor que 'children'.":
+            "'idle' não pode ser maior que 'children'.",
         "Completa y guarda Realm y FQDN del proxy antes de generar el script.":
             "Preencha e salve o Realm e o FQDN do proxy antes de gerar o script.",
         "No se puede habilitar LDAP con Digest activo: Digest solo autentica usuarios locales del proxy. Cambia el esquema de autenticación a Basic en Configuración antes de habilitar LDAP.":
