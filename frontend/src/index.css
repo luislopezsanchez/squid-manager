@@ -140,6 +140,30 @@ h1, h2, h3, h4 {
   }
   .btn-danger:hover:not(:disabled) { filter: brightness(0.96); }
 
+  /* Como btn-ghost, pero visible en reposo: para una acción secundaria que
+     no puede quedar tan discreta como para perderse contra el fondo -el
+     estado de "reposo" de btn-ghost es casi invisible a propósito, pensado
+     para acciones de bajísima prioridad, no para esto. */
+  .btn-outline {
+    color: var(--brand-700);
+    background: var(--brand-50);
+    border-color: var(--brand-200);
+  }
+  .btn-outline:hover:not(:disabled) { filter: brightness(0.97); }
+
+  /* Botón de solo ícono para acciones de fila en una tabla (sincronizar,
+     actualizar lista, editar, eliminar): mismo tamaño en las cuatro,
+     círculo de fondo al pasar el mouse en vez de texto subrayado -menos
+     ruido visual con varias acciones por fila. */
+  .btn-icon {
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-full transition;
+    color: var(--ink-3);
+  }
+  .btn-icon svg { @apply w-[16px] h-[16px]; }
+  .btn-icon:hover:not(:disabled) { background: var(--brand-50); color: var(--brand-700); }
+  .btn-icon:disabled { @apply opacity-40 cursor-not-allowed; }
+  .btn-icon-danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
+
   .btn-sm { @apply px-2.5 py-1.5 text-[12.5px]; }
 
   /* ---------- Píldoras de estado ---------- */

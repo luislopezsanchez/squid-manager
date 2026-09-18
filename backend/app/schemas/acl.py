@@ -11,6 +11,7 @@ class AclCreate(BaseModel):
     description: str | None = None
     enabled: bool = True
     is_category: bool = False
+    display_name: str | None = Field(None, max_length=255)
 
 
 class AclUpdate(BaseModel):
@@ -20,6 +21,8 @@ class AclUpdate(BaseModel):
     description: str | None = None
     enabled: bool | None = None
     is_category: bool | None = None
+    sync_url: str | None = Field(None, max_length=500)
+    display_name: str | None = Field(None, max_length=255)
 
 
 class AclResponse(BaseModel):
@@ -39,6 +42,10 @@ class AclResponse(BaseModel):
     source: str = "inline"
     line_count: int | None = None
     is_category: bool = False
+    display_name: str | None = None
+    sync_url: str | None = None
+    last_synced_at: datetime | None = None
+    last_sync_status: str | None = None
     description: str | None = None
     enabled: bool
     created_at: datetime

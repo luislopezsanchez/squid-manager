@@ -44,6 +44,31 @@ class Acl(Base):
     # igual para las dos. Solo tiene sentido con type in
     # ('dstdomain', 'dstdom_regex') -reforzado en la ruta, no aquí.
     is_category = Column(Boolean, default=False, nullable=False)
+    # Nombre amigable para mostrar en el panel (ej. "Apuestas y juego
+    # online"), distinto de `name` -que sigue siendo el identificador
+    # técnico real de la ACL en squid.conf (ej. "hagezi_gambling") y el que
+    # hay que usar tal cual al referenciarla desde una regla o un delay
+    # pool. Solo cosmético: NULL para toda categoría creada antes de esto
+    # (y para cualquiera que el admin no le ponga un nombre lindo), y ahí el
+    # panel muestra `name` como siempre. Pensado sobre todo para las
+    # categorías predefinidas (hagezi_*): el prefijo es necesario para que
+    # el admin sepa de un vistazo que viene de una fuente externa, pero no
+    # hace falta mostrárselo como si fuera el nombre real de la categoría.
+    display_name = Column(String(255), nullable=True)
+    # URL de la que esta categoría se sincroniza sola (ej. una blocklist de
+    # HaGeZi). NULL = no sincroniza, se mantiene solo a mano -el caso de
+    # cualquier categoría creada manual o por archivo hasta ahora. Cuando
+    # tiene un valor, el hilo de fondo de category_sync_service la
+    # refresca una vez al día, siempre en modo "agregar" (nunca reemplaza):
+    # así lo que el admin haya sumado a mano encima de una lista externa no
+    # se pierde en el próximo refresco -ver el docstring de sync_one().
+    sync_url = Column(String(500), nullable=True)
+    last_synced_at = Column(DateTime, nullable=True)
+    # Texto corto para mostrar en el panel: "ok, 134082 dominios" o el
+    # motivo del último fallo ("no se pudo conectar", etc.) -no se guarda
+    # el error completo, alcanza para que el admin sepa si hace falta mirar
+    # el log del backend con más detalle.
+    last_sync_status = Column(String(255), nullable=True)
     description = Column(String(255), nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utcnow)

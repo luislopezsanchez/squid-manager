@@ -667,8 +667,95 @@ previstos en el diseño original:
   memoria. Se agregó un `<datalist>` con las categorías existentes para
   elegir en vez de retipear.
 
-Pendiente: la importación desde un servicio externo, sin cambios respecto
-a lo anotado arriba (sigue sin investigarse una fuente concreta).
+**Actualización (2026-09-18) — importación externa implementada y
+verificada en vivo.** Se investigaron y verificaron contra las fuentes
+reales (no de memoria) 5 candidatos: HaGeZi dns-blocklists (activo,
+categorías temáticas reales, formato ya compatible, GPL-3.0 — elegido),
+oisd.nl (descartado: no ofrece categorías de contenido, solo ads/tracking
+genérico), The Block List Project (formato de la raíz incompatible —
+"hosts", no dominio-solo—, y licencia inconsistente entre el repo y cada
+archivo — queda para una segunda vuelta), "Pi-hole optimized blocklists"
+(no es una fuente concreta) y domainCat (descartado: no es una lista
+descargable, es scraping en vivo de portales de terceros, abandonado desde
+2021).
+
+Diseño adoptado, decidido explícitamente en contra de la sugerencia inicial
+de dejarlo "conectado de fábrica": un botón (**"Cargar categorías
+predefinidas (HaGeZi)"**), no una sincronización activada sola desde una
+instalación nueva — mismo criterio que LDAP/Kerberos/el asistente de IA
+(apagado hasta que el admin lo activa a propósito). Una vez cargado, el
+refresco diario sí corre solo, sin que haga falta repetir el clic.
+
+Implementado:
+- Columnas nuevas en `acls` (migración 0026): `sync_url`, `last_synced_at`,
+  `last_sync_status`. Nace en NULL para toda ACL existente — nada empieza
+  a sincronizar sin que el admin lo conecte a propósito.
+- `category_sync_service.py`: hilo de fondo en el propio proceso (mismo
+  patrón que `update_service.start_update_checker` — funciona igual en
+  Docker y en nativo, no depende de `systemd` ni de `cron`), refresco cada
+  24 h de cualquier ACL con `sync_url`, siempre en modo **"agregar", nunca
+  "reemplazar"**: decisión de diseño explícita para no pisar dominios que
+  el admin sume a mano sobre una lista externa — la contra documentada es
+  que si la fuente saca un dominio de su lista, acá queda pegado igual.
+- Refactor: la lógica de mezcla/dedup que antes vivía solo en
+  `acls.bulk_domains` se extrajo a `squid_service.aplicar_lista_dominios`,
+  compartida por la carga manual y la sincronización automática.
+- Endpoints: `POST /api/acls/hagezi-preset` (carga las 9 categorías y
+  sincroniza al momento) y `POST /api/acls/{id}/sync-now` (repetir sin
+  esperar al refresco diario). `sync_url` también se puede fijar a mano vía
+  `PUT /api/acls/{id}` — no atado únicamente al preset de HaGeZi.
+
+**Las 9 categorías curadas** (de un catálogo real de 42 listas de HaGeZi,
+verificado en vivo — la mayoría del resto son paquetes combinados que
+mezclan todo sin distinguir categoría, o rastreadores de telemetría por
+fabricante de hardware pensados para un filtro DNS personal, no para
+política de navegación de una organización):
+
+| Categoría | Contenido | Dominios (verificado en vivo) |
+|---|---|---|
+| `hagezi_gambling` | Apuestas y juego online (`.mini`, no la lista completa de 517.000) | 134.081 |
+| `hagezi_nsfw` | Contenido para adultos | 74.633 |
+| `hagezi_pirateria` | Piratería | 51.171 |
+| `hagezi_social` | Redes sociales en general | 900 |
+| `hagezi_fraudes` | Tiendas y sitios falsos, estafas | 17.234 |
+| `hagezi_evasion_proxy` | DNS cifrado/VPN/Tor — no es "contenido", protege al proxy mismo de ser evadido | 16.432 |
+| `hagezi_popupads` | Pop-ups publicitarios maliciosos | 50.556 |
+| `hagezi_amenazas` | Malware/phishing (`tif.mini`, no la versión completa de 2.5 millones) | 186.096 |
+| `hagezi_acortadores` | Acortadores de URL — ⚠️ bloquea todos, no solo los usados para evadir bloqueos; alto riesgo de falso positivo, incluida a pedido explícito con esta advertencia | 9.965 |
+
+Verificado en vivo contra la VM de pruebas: descarga de las 9 listas
+(~541.000 dominios combinados) en <5 s; `squid -k parse` las acepta sin
+warnings en 2.4 s; un dominio agregado a mano sobrevive intacto a un
+refresco automático posterior; detección de "sin cambios" evita reescribir
+el archivo en disco cuando la fuente no trajo nada nuevo. 462 tests pasan
+(6 nuevos para esta función).
+
+**Segunda ronda de ajustes de UX (2026-09-18), a partir de revisar la
+pantalla real con el autor:**
+
+- **Nombre amigable separado del técnico** (`display_name`, migración
+  0027): las categorías de HaGeZi quedaban en la tabla con nombres como
+  `hagezi_gambling` — correcto como identificador de Squid, confuso para
+  reconocer de un vistazo. Ahora la tabla muestra un nombre legible
+  ("Apuestas y juego online") en grande y el nombre técnico chico debajo;
+  el técnico sigue siendo el que hay que usar en reglas/delay pools, sin
+  cambios ahí.
+- **Las categorías con muchos dominios (`source=file`) no se podían
+  editar**: la única acción disponible era "Reemplazar" (volver a subir el
+  archivo completo). Ahora tienen un editor de metadatos real
+  (`display_name`, descripción, activa/inactiva, y desconectar la
+  sincronización) que no toca la lista de dominios — verificado en vivo:
+  editar una categoría de 51.171 dominios no le tocó ni uno.
+- **Botones secundarios invisibles contra el fondo**: `btn-ghost` es
+  discreto a propósito para acciones de baja prioridad, no para las dos
+  formas principales de cargar una categoría. Se sumó `btn-accent` (para
+  "Cargar categorías predefinidas") y una variante nueva `btn-outline`
+  (fondo y borde con color, visible en reposo, no solo al pasar el mouse).
+- **Acciones de fila como texto ("Sincronizar ahora", "Reemplazar",
+  "Eliminar") reemplazadas por íconos** con tooltip — se sumaron
+  `IconEdit` e `IconTrash` (no existían en el proyecto) y una clase
+  `.btn-icon` reutilizable, pensada para cualquier tabla con varias
+  acciones por fila, no solo esta.
 
 ### Dashboard: nuevos KPIs para las funciones de arriba (2026-09-18)
 

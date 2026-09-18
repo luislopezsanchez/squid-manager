@@ -329,6 +329,10 @@ Para blocklists de miles de dominios, uno por línea (líneas vacías o que empi
 
 Una categoría (ej. "Redes sociales") **es una ACL con `is_category=true` y tipo `dstdomain`/`dstdom_regex`** — no hay endpoints nuevos: se crean y se cargan con los mismos `POST /api/acls/` y `POST /api/acls/bulk-domains` de arriba, pasando `is_category: true`. `GET /api/acls/?is_category=true` lista solo las categorías; se pueden referenciar por nombre en reglas de acceso y delay pools exactamente igual que cualquier otra ACL, sin ningún paso extra. El backup/restore de la plataforma (ver [backup-restore.md](backup-restore.md)) las incluye e identifica como tales.
 
+`display_name` (opcional, en `AclCreate`/`AclUpdate`/`AclResponse`): nombre amigable para mostrar en el panel (ej. "Redes sociales"), separado de `name` — que sigue siendo el identificador técnico real de la ACL en `squid.conf` (ej. `hagezi_social`) y el que hay que usar para referenciarla desde una regla o un delay pool. `NULL`/cadena vacía = el panel muestra `name`. Pensado sobre todo para las categorías predefinidas de HaGeZi, cuyo nombre técnico lleva el prefijo `hagezi_` a propósito (para que se note de dónde vienen) pero no es lo más legible para mostrar tal cual.
+
+Una categoría con `source=file` (por encima del umbral, ver más abajo) **sí se puede editar** vía `PUT /api/acls/{id}` — `display_name`, `description`, `enabled` y `sync_url` (para desconectar la sincronización automática, mandando `""`) se aceptan igual que en cualquier ACL. Lo único que se rechaza con 400 es mandar `value`: la lista de dominios de una ACL de archivo se cambia con `POST /api/acls/bulk-domains` (mismo nombre, modo `agregar` o `reemplazar`) o, si está sincronizada, con `POST /api/acls/{id}/sync-now`.
+
 Por debajo del umbral configurado (200 dominios) la ACL queda **inline**, igual que una creada a mano; por encima pasa a **file**: un archivo aparte que Squid lee directo, no una línea de `squid.conf` con miles de entradas. El umbral se reevalúa en cada carga — una lista que creció puede pasar de inline a file, y una que se redujo puede volver.
 
 `modo`:
@@ -346,7 +350,27 @@ Por debajo del umbral configurado (200 dominios) la ACL queda **inline**, igual 
 }
 ```
 
-`rechazados` trae como mucho las primeras 20 líneas rechazadas (`total_rechazados` da el conteo real). Límite de la lista combinada: 200.000 dominios — pensado como cortafuegos ante un archivo descomunal por error, no como techo real de uso.
+`rechazados` trae como mucho las primeras 20 líneas rechazadas (`total_rechazados` da el conteo real). Límite de la lista combinada: 10.000.000 de dominios (`MAX_DOMINIOS_POR_CARGA`) — pensado como cortafuegos ante un archivo descomunal por error, no como techo real de uso.
+
+### Sincronizar una categoría desde una fuente externa (HaGeZi)
+
+```http
+POST /api/acls/hagezi-preset
+Authorization: Bearer <token>
+```
+
+Crea (o reconecta) 9 categorías predefinidas a partir de listas públicas de [HaGeZi dns-blocklists](https://github.com/hagezi/dns-blocklists) (GPL-3.0): apuestas, contenido adulto, piratería, redes sociales, sitios falsos, evasión del proxy (DNS cifrado/VPN/Tor), pop-ups, amenazas de seguridad y acortadores de URL. Cada una queda con `sync_url` cargado y se sincroniza **ahora mismo** (no hace falta esperar al refresco diario). Nombres con prefijo `hagezi_` para distinguirlas de las propias.
+
+```http
+POST /api/acls/{acl_id}/sync-now
+Authorization: Bearer <token>
+```
+
+Dispara una sincronización inmediata de una categoría que ya tiene `sync_url` configurado (400 si no lo tiene). Devuelve la ACL actualizada, con `last_synced_at` y `last_sync_status`.
+
+**Cómo funciona la sincronización automática:** un hilo de fondo del backend (mismo patrón que el chequeo de actualizaciones, no depende de `systemd` ni de `cron` — funciona igual en Docker y en nativo) refresca **una vez al día** cualquier ACL con `sync_url` no nulo. Siempre en modo `agregar`, nunca `reemplazar`: si sumaste dominios propios a mano sobre una categoría sincronizada, no se pierden en el próximo refresco. La contra documentada a propósito: si la fuente externa saca un dominio de su lista, acá queda pegado igual, porque solo se suma, nunca se resta.
+
+`sync_url` también se puede fijar a mano en cualquier categoría vía `PUT /api/acls/{id}` (debe empezar con `https://`; una cadena vacía la desconecta) — no está atado únicamente al preset de HaGeZi.
 
 ---
 

@@ -13,18 +13,14 @@ from app.services.notification_service import queue_notification
 from app.services.config_state import mark_dirty
 from app.services.squid_names import (
     validate_name, validate_acl_type, validate_value, validar_lista_dominios,
-    ensure_not_referenced, find_references, MAX_DOMINIOS_POR_CARGA,
+    ensure_not_referenced, find_references,
 )
 
 router = APIRouter()
 
-# Umbral que decide 'inline' vs 'file' para una carga masiva: por debajo,
-# la lista sigue siendo una ACL normal (se ve y se edita como cualquier
-# otra en el panel); por encima, se escribe a un archivo aparte -ver
-# squid_service.build_acl_list_files- porque una sola línea de squid.conf
-# con miles de dominios es impracticable de editar y más lenta de parsear.
-UMBRAL_ACL_ARCHIVO = 200
-
+# El umbral que decide 'inline' vs 'file' (200 dominios) y el tope combinado
+# (MAX_DOMINIOS_POR_CARGA) viven en squid_service.aplicar_lista_dominios,
+# que es quien de verdad decide -ver ese docstring para el detalle.
 MAX_UPLOAD_BYTES = 250 * 1024 * 1024  # ver MAX_DOMINIOS_POR_CARGA en squid_names.py
 
 
@@ -39,7 +35,8 @@ def _to_response(acl: Acl) -> AclResponse:
         id=acl.id, name=acl.name, type=acl.type,
         value=None if acl.source == "file" else acl.value,
         source=acl.source, line_count=acl.line_count,
-        is_category=acl.is_category,
+        is_category=acl.is_category, display_name=acl.display_name,
+        sync_url=acl.sync_url, last_synced_at=acl.last_synced_at, last_sync_status=acl.last_sync_status,
         description=acl.description, enabled=acl.enabled,
         created_at=acl.created_at, updated_at=acl.updated_at,
     )
@@ -125,6 +122,7 @@ async def create_acl(
         raise HTTPException(400, detail="Ya existe una ACL con ese nombre")
 
     acl = Acl(name=name, type=acl_type, value=value, is_category=data.is_category,
+              display_name=data.display_name or None,
               description=data.description, enabled=data.enabled)
     db.add(acl)
     db.flush()
@@ -212,6 +210,15 @@ async def update_acl(
     if categoria_resultante and tipo_resultante not in TIPOS_CATEGORIZABLES:
         raise HTTPException(400, detail="Una categoría solo puede ser de tipo dominio (dstdomain o dstdom_regex).")
 
+    if "sync_url" in changes and changes["sync_url"]:
+        if not changes["sync_url"].startswith("https://"):
+            raise HTTPException(400, detail="La URL de sincronización debe empezar con https://.")
+    elif "sync_url" in changes:
+        changes["sync_url"] = None  # cadena vacía = desconectar la sincronización
+
+    if "display_name" in changes and not changes["display_name"]:
+        changes["display_name"] = None  # cadena vacía = volver a mostrar el nombre técnico
+
     for field, value in changes.items():
         setattr(acl, field, value)
 
@@ -274,7 +281,7 @@ async def cargar_dominios_masivo(
     """Crea o actualiza una ACL de dominios a partir de un archivo (uno por
     línea; líneas vacías o que empiezan con '#' se ignoran).
 
-    Por debajo de UMBRAL_ACL_ARCHIVO dominios, la ACL queda 'inline' (se ve
+    Por debajo de 200 dominios, la ACL queda 'inline' (se ve
     y se edita como cualquier otra); por encima, pasa a 'file' -un archivo
     aparte que Squid lee directo, ver squid_service.build_acl_list_files-.
     El umbral se reevalúa en cada carga: una lista que creció puede pasar de
@@ -304,103 +311,63 @@ async def cargar_dominios_masivo(
             ),
         )
 
-    acl = db.query(Acl).filter(Acl.name == name).first()
+    from app.services.squid_service import aplicar_lista_dominios
 
-    if acl and modo == "agregar":
-        # El archivo en disco es la fuente de verdad para una ACL 'file'
-        # desde la migración 0023; `acl.value` solo puede tener algo todavía
-        # si esta ACL viene de antes de esa migración y ningún apply la
-        # migró todavía -se cubren los dos casos, prefiriendo el archivo
-        # cuando existe.
-        if acl.source == "file":
-            from app.services.squid_service import ACL_LISTS_DIR
-
-            ruta = ACL_LISTS_DIR / f"{acl.name}.txt"
-            if ruta.exists():
-                existentes = [d.strip() for d in ruta.read_text(encoding="utf-8", errors="replace").splitlines() if d.strip()]
-            elif acl.value:
-                existentes = [d.strip() for d in acl.value.splitlines() if d.strip()]
-            else:
-                existentes = []
-        else:
-            existentes = acl.value.split()
-        combinados = list(dict.fromkeys(existentes + dominios_nuevos))  # dedup, conserva orden
-    else:
-        combinados = dominios_nuevos
-
-    if len(combinados) > MAX_DOMINIOS_POR_CARGA:
-        raise HTTPException(
-            400,
-            detail=f"La lista combinada tiene {len(combinados)} dominios, por encima del límite de {MAX_DOMINIOS_POR_CARGA}.",
-        )
-
-    nuevo_source = "file" if len(combinados) > UMBRAL_ACL_ARCHIVO else "inline"
-
-    old_value = None
-    if acl:
-        old_count = acl.line_count if acl.source == "file" else len(acl.value.split())
-        old_value = f"{acl.name} {acl.type} ({old_count} dominios)"
-
-    if nuevo_source == "file":
-        # El archivo se escribe DIRECTO -nunca pasa por `Acl.value`-: es la
-        # diferencia central con el esquema anterior (migración 0023). Con
-        # una lista de millones de dominios, evitar ese viaje de ida y
-        # vuelta por una columna TEXT es lo que hace que la carga y los
-        # applies siguientes sigan siendo rápidos.
-        from app.services.squid_service import write_acl_list_file, hash_domain_list
-
-        nuevo_value = None
-        hash_nuevo = hash_domain_list(combinados)
-        if acl and acl.source == "file" and acl.content_hash == hash_nuevo:
-            # Exactamente la misma lista que ya había (re-subir la misma
-            # blocklist sin cambios, típico de una sincronización
-            # automática): no hay nada que reescribir en disco.
-            content_hash, line_count = acl.content_hash, acl.line_count
-        else:
-            content_hash, line_count = write_acl_list_file(name, combinados)
-    else:
-        # 'inline' sigue exigiendo una sola línea sin saltos (validate_value):
-        # el separador ahí es el espacio, igual que cualquier ACL creada a mano.
-        nuevo_value = validate_value(" ".join(combinados))
-        content_hash, line_count = None, None
-
-    accion = "update" if acl else "create"
-    if acl:
-        acl.type = acl_type
-        acl.value = nuevo_value
-        acl.source = nuevo_source
-        acl.content_hash = content_hash
-        acl.line_count = line_count
-        acl.is_category = is_category
-        if description is not None:
-            acl.description = description
-    else:
-        acl = Acl(
-            name=name, type=acl_type, value=nuevo_value, source=nuevo_source,
-            content_hash=content_hash, line_count=line_count, is_category=is_category,
-            description=description or "Cargado desde archivo", enabled=True,
-        )
-        db.add(acl)
-
-    db.flush()
-    db.add(AuditLog(
+    acl, info = aplicar_lista_dominios(
+        db, name, acl_type, dominios_nuevos, modo,
+        description, is_category,
         admin_id=current_admin.id, admin_username=current_admin.username,
-        action=accion, entity="acl", entity_id=acl.id,
-        old_value=old_value,
-        new_value=f"{acl.name} {acl.type} ({len(combinados)} dominios, {nuevo_source}, {len(rechazados)} rechazados)",
-    ))
-    db.commit()
-    mark_dirty()
+    )
 
     if background_tasks:
         queue_notification(background_tasks, db, "acl_change",
                            "ACL cargada desde archivo",
-                           f"El admin {current_admin.username} cargó {len(combinados)} dominios en la ACL '{name}' ({nuevo_source}).")
+                           f"El admin {current_admin.username} cargó {info['combinados']} dominios en la ACL '{name}' ({info['source']}).")
 
     return {
         "acl": _to_response(acl).model_dump(mode="json"),
-        "dominios_importados": len(combinados),
+        "dominios_importados": info["combinados"],
         "dominios_nuevos": len(dominios_nuevos),
         "rechazados": rechazados[:20],
         "total_rechazados": len(rechazados),
     }
+
+
+@router.post("/hagezi-preset")
+async def cargar_categorias_hagezi(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_writer),
+):
+    """Crea (o reconecta) un subconjunto curado de categorías de HaGeZi
+    dns-blocklists (gambling, nsfw, anti-piracy) y las sincroniza ahora
+    mismo. Cada una queda con `sync_url` cargado, así el hilo de fondo
+    (category_sync_service) la refresca sola una vez al día -en modo
+    'agregar', nunca 'reemplazar', para no pisar dominios que el admin
+    sume a mano encima."""
+    from app.services.category_sync_service import cargar_preset_hagezi
+
+    resultados = cargar_preset_hagezi(db)
+    mark_dirty()
+    return {"resultados": resultados}
+
+
+@router.post("/{acl_id}/sync-now", response_model=AclResponse)
+async def sincronizar_categoria_ahora(
+    acl_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_writer),
+):
+    """Dispara una sincronización inmediata de una categoría, sin esperar
+    al refresco diario automático. Solo tiene sentido si ya tiene una
+    `sync_url` configurada (ver PUT /{acl_id} o /hagezi-preset)."""
+    acl = db.query(Acl).filter(Acl.id == acl_id).first()
+    if not acl:
+        raise HTTPException(404, detail="ACL no encontrada")
+    if not acl.sync_url:
+        raise HTTPException(400, detail="Esta categoría no tiene una URL de sincronización configurada.")
+
+    from app.services.category_sync_service import sync_one
+
+    sync_one(db, acl)
+    db.refresh(acl)
+    return _to_response(acl)

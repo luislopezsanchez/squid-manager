@@ -353,6 +353,9 @@ async def lifespan(app: FastAPI):
     from app.services.update_service import start_update_checker
     start_update_checker()
 
+    from app.services.category_sync_service import start_category_sync
+    start_category_sync()
+
     yield
     logger.info("Deteniendo SquidManager Backend...")
 

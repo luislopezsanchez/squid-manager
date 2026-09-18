@@ -351,6 +351,10 @@ export const api = {
     return request<any>('/acls/bulk-domains', { method: 'POST', body: formData })
   },
 
+  // Categorías: preset predefinido (HaGeZi) y sincronización manual
+  loadHagenziPreset: () => request<any>('/acls/hagezi-preset', { method: 'POST' }),
+  syncCategoryNow: (id: number) => request<any>(`/acls/${id}/sync-now`, { method: 'POST' }),
+
   // Logs
   getLogs: (params: { limit?: number; offset?: number; user?: string; status?: number; domain?: string; ip?: string; denied?: boolean } = {}) => {
     const qs = new URLSearchParams()

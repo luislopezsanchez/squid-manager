@@ -219,6 +219,119 @@ def write_acl_list_file(name: str, dominios: list[str]) -> tuple[str, int]:
     return hash_domain_list(dominios), len(dominios)
 
 
+# Umbral que decide 'inline' vs 'file' para una carga masiva -mismo valor
+# que UMBRAL_ACL_ARCHIVO en acls.py, duplicado a propósito para no crear un
+# import circular (acls.py ya importa de acá) por una sola constante.
+_UMBRAL_ACL_ARCHIVO = 200
+
+
+def aplicar_lista_dominios(
+    db, name: str, acl_type: str, dominios_nuevos: list[str], modo: str,
+    description: str | None, is_category: bool,
+    admin_id: int | None, admin_username: str,
+    display_name: str | None = None,
+):
+    """Crea o actualiza una ACL de dominios a partir de una lista YA
+    validada (ver squid_names.validar_lista_dominios).
+
+    Compartido por dos caminos que terminan en el mismo lugar -una ACL con
+    source 'inline' o 'file' según el tamaño- y solo difieren en de dónde
+    sale `dominios_nuevos`: la carga manual de archivo (acls.bulk_domains,
+    el admin sube un .txt) y la sincronización automática desde una URL
+    externa (category_sync_service, un proveedor como HaGeZi). Separar esto
+    evita que las dos reimplementen -y con el tiempo, diverjan en- la misma
+    lógica de merge/dedup/decisión inline-vs-file.
+
+    Devuelve (Acl, dict con 'combinados' y 'source').
+    """
+    from app.models.acl import Acl
+    from app.models.audit_log import AuditLog
+    from app.services.squid_names import validate_value, MAX_DOMINIOS_POR_CARGA
+    from app.services.config_state import mark_dirty
+
+    acl = db.query(Acl).filter(Acl.name == name).first()
+
+    if acl and modo == "agregar":
+        if acl.source == "file":
+            ruta = ACL_LISTS_DIR / f"{acl.name}.txt"
+            if ruta.exists():
+                existentes = [d.strip() for d in ruta.read_text(encoding="utf-8", errors="replace").splitlines() if d.strip()]
+            elif acl.value:
+                existentes = [d.strip() for d in acl.value.splitlines() if d.strip()]
+            else:
+                existentes = []
+        else:
+            existentes = acl.value.split() if acl.value else []
+        combinados = list(dict.fromkeys(existentes + dominios_nuevos))
+    else:
+        combinados = dominios_nuevos
+
+    if len(combinados) > MAX_DOMINIOS_POR_CARGA:
+        from fastapi import HTTPException
+        raise HTTPException(
+            400,
+            detail=f"La lista combinada tiene {len(combinados)} dominios, por encima del límite de {MAX_DOMINIOS_POR_CARGA}.",
+        )
+
+    nuevo_source = "file" if len(combinados) > _UMBRAL_ACL_ARCHIVO else "inline"
+
+    old_value = None
+    if acl:
+        old_count = acl.line_count if acl.source == "file" else len((acl.value or "").split())
+        old_value = f"{acl.name} {acl.type} ({old_count} dominios)"
+
+    if nuevo_source == "file":
+        hash_nuevo = hash_domain_list(combinados)
+        if acl and acl.source == "file" and acl.content_hash == hash_nuevo:
+            # Misma lista exacta que ya había -típico de una sincronización
+            # automática que no trajo cambios reales-: no hay nada que
+            # reescribir en disco ni que marcar como pendiente de aplicar
+            # más abajo (ver el chequeo de mark_dirty).
+            nuevo_value, content_hash, line_count = None, acl.content_hash, acl.line_count
+            sin_cambios = True
+        else:
+            content_hash, line_count = write_acl_list_file(name, combinados)
+            nuevo_value = None
+            sin_cambios = False
+    else:
+        nuevo_value = validate_value(" ".join(combinados)) if combinados else ""
+        content_hash, line_count = None, None
+        sin_cambios = bool(acl and acl.source == "inline" and acl.value == nuevo_value)
+
+    accion = "update" if acl else "create"
+    if acl:
+        acl.type = acl_type
+        if nuevo_source != "file" or not sin_cambios:
+            acl.value = nuevo_value
+        acl.source = nuevo_source
+        acl.content_hash = content_hash
+        acl.line_count = line_count
+        acl.is_category = is_category
+        if description is not None:
+            acl.description = description
+        if display_name is not None:
+            acl.display_name = display_name
+    else:
+        acl = Acl(name=name, type=acl_type, value=nuevo_value, source=nuevo_source,
+                   content_hash=content_hash, line_count=line_count, is_category=is_category,
+                   display_name=display_name,
+                   description=description or "Cargado desde archivo", enabled=True)
+        db.add(acl)
+
+    db.flush()
+    db.add(AuditLog(
+        admin_id=admin_id, admin_username=admin_username,
+        action=accion, entity="acl", entity_id=acl.id,
+        old_value=old_value,
+        new_value=f"{acl.name} {acl.type} ({len(combinados)} dominios, {nuevo_source})",
+    ))
+    db.commit()
+    if not sin_cambios:
+        mark_dirty()
+
+    return acl, {"combinados": len(combinados), "source": nuevo_source, "sin_cambios": sin_cambios}
+
+
 def build_acl_list_files(db) -> int:
     """Sincroniza /etc/squid/acl_lists/ con las ACLs 'file' de la BD, y
     borra los archivos que ya no correspondan a ninguna.
