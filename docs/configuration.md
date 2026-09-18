@@ -189,6 +189,19 @@ Ejemplo: Clase 2 con 64 KB/s global y 32 KB/s por usuario → Squid recibe `6553
 | `sync_filter` | Filtro para traer TODOS los usuarios al sincronizar | `(objectClass=person)` |
 | `enabled` | Activar/desactivar LDAP | `true` / `false` |
 
+> ⚠️ **La cuenta de `bind_dn` debe ser de solo lectura, sin privilegios de
+> administrador de dominio.** No hace falta más permiso que "leer el
+> directorio" para que LDAP funcione (login, sincronización, y a futuro
+> ACLs por grupo — ver [project-log.md](project-log.md#mejoras-futuras-pendientes)):
+> una cuenta de servicio dedicada, nunca una cuenta personal ni una con
+> privilegios elevados. Es especialmente importante si más adelante se usa
+> esta misma configuración para consultar pertenencia a grupos con el
+> helper `ext_ldap_group_acl` de Squid: ese helper recibe la contraseña de
+> bind como argumento de línea de comandos, visible para cualquiera con
+> acceso a `ps` en el servidor mientras el proceso corre — limitación
+> documentada del propio helper, no de SquidManager. Acotar los privilegios
+> de la cuenta es lo que evita que esa exposición importe.
+
 `user_filter` y `sync_filter` son dos cosas distintas y ambas configurables — no hay
 ningún filtro fijo en el código. Antes `sync_filter` estaba fijo al de Active Directory
 (`objectCategory=person`, un atributo exclusivo de AD); contra OpenLDAP o cualquier otro

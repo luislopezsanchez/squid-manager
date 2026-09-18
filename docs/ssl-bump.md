@@ -96,6 +96,44 @@ sudo update-ca-trust
 
 ---
 
+## ¿Se puede usar un certificado público (Let's Encrypt) en vez de la CA autofirmada?
+
+**No — no es una limitación de SquidManager, es un límite de diseño de SSL Bump y de las CA públicas.**
+
+- **Por el lado de Squid:** SSL Bump funciona firmando, al vuelo, un certificado
+  nuevo por cada dominio de destino que visita cada usuario, usando la **clave
+  privada** de una CA que Squid controla localmente (por eso el panel genera y
+  te hace instalar una CA propia). La [documentación oficial de Squid sobre
+  generación dinámica de certificados](https://wiki.squid-cache.org/Features/DynamicSslCert)
+  lo dice sin rodeos: hacer esto te convierte a vos en una CA raíz. Para que
+  Squid pudiera firmar con un certificado de Let's Encrypt, necesitaría tener
+  la clave privada de esa CA — algo que ninguna CA pública, Let's Encrypt
+  incluida, entrega jamás a un tercero para firmar dominios ajenos a demanda.
+- **Por el lado de Let's Encrypt:** aunque fuera técnicamente posible, está
+  prohibido explícitamente. Su [CPS (Certificate Practice Statement), sección
+  1.4.2 "Prohibited certificate uses"](https://letsencrypt.org/documents/isrg-cps-v2.6/)
+  prohíbe usar sus certificados en arquitecturas que faciliten interferencia
+  con comunicaciones cifradas, "incluyendo pero no limitado a eavesdropping
+  activo (ej. ataques man-in-the-middle)" — que es exactamente lo que hace SSL
+  Bump.
+
+En resumen: SSL Bump es un MITM autorizado por la organización sobre sus
+propios equipos, con una CA interna instalada a mano en cada cliente — es
+estructuralmente incompatible con una CA pública, que por definición solo
+emite certificados al dueño legítimo de un dominio, nunca a un tercero que
+quiere interceptar tráfico ajeno. Esto no va a cambiar en ninguna versión
+futura de SquidManager porque no depende de SquidManager: es así en Squid, y
+en cualquier otro proxy con inspección HTTPS (Fortinet, Palo Alto, etc. tienen
+la misma limitación y la misma solución: CA interna instalada en los equipos).
+
+> ℹ️ **No confundir con el certificado del panel web.** Usar Let's Encrypt
+> **sí** es válido y recomendable para servir el propio panel de SquidManager
+> por HTTPS (`https://panel.empresa.com` vía Nginx) — eso es un certificado
+> normal para un dominio que controlás, sin relación con SSL Bump. Ver
+> [production.md](production.md#4-https-para-el-panel).
+
+---
+
 ## Verificación
 
 Después de instalar el certificado:

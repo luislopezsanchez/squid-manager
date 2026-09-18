@@ -251,3 +251,104 @@ repositorio no es el problema — el hueco es específicamente el paso de
 
 No se estimó esfuerzo de implementación todavía; queda para cuando se
 decida abordarlo.
+
+### ACLs por grupo de Active Directory / LDAP
+
+Pedido por usuarios reales del proyecto (2026-09-18): poder crear reglas de
+acceso basadas en la pertenencia a un grupo del directorio (AD u otro LDAP),
+no solo por usuario individual o por grupo local sincronizado.
+
+Investigado contra la documentación oficial de Squid: es viable. Squid trae
+un helper propio para esto, `ext_ldap_group_acl` (empaquetado junto con
+`squid`/`squid-common`, no requiere compilar nada aparte), declarado como
+`external_acl_type`. Consulta al directorio **en vivo, request por
+request** — no requiere sincronizar membresías de grupo a la base de datos
+propia. Sintaxis y opciones: manpage `ext_ldap_group_acl(8)`
+(https://manpages.debian.org/testing/squid/ext_ldap_group_acl.8.en.html).
+
+Encaja con lo que ya existe: la configuración LDAP (bind DN, password
+cifrada, search base) ya está en el panel (**LDAP**, modelo `LdapConfig`),
+y ya existe el concepto de "grupo → ACL `proxy_auth`" para grupos locales
+(**Grupos de usuarios**, ver [authentication.md](authentication.md#grupos-de-usuarios)).
+La pieza nueva sería un tipo de grupo adicional ("grupo de AD/LDAP") que en
+vez de listar miembros propios, genera un `external_acl_type` parametrizado
+con la configuración LDAP ya existente.
+
+Limitación a tener en cuenta y ya documentada en
+[configuration.md](configuration.md#configuración-de-ldap): la contraseña
+de bind queda visible en la línea de comandos del helper (`ps`) mientras
+corre — se mitiga usando una cuenta de bind de solo lectura, sin
+privilegios de administrador de dominio (recomendación ya vigente para el
+bind actual, no exclusiva de esta función nueva).
+
+No se estimó esfuerzo de implementación todavía.
+
+### Monitoreo centralizado de varias instancias (panel "central")
+
+Pedido por usuarios reales del proyecto (2026-09-18): un panel central que
+vea las estadísticas de varios Squid/SquidManager como si fueran "nodos
+hijos".
+
+Investigado: Squid no tiene ningún mecanismo nativo de agregación entre
+instancias (confirmado en https://wiki.squid-cache.org/Features/CacheManager/Index
+— cada Squid expone su propio Cache Manager/SNMP, sin fan-in). La
+agregación tendría que construirse en la capa de aplicación, no en Squid.
+
+Encaja bien con la arquitectura actual, incluso mejor que si dependiera de
+Squid: SquidManager ya no lee del Cache Manager de Squid — tiene su propio
+`metrics_service.py` (parseo de `access.log` + `/proc`/cgroups) expuesto en
+`/api/metrics/*`. Un "panel central" sería, en esencia, un modo/pantalla
+nueva donde una instancia guarda una lista de instancias "hijas" (URL +
+token de acceso) y sondea periódicamente el `/api/metrics/dashboard` ya
+existente de cada una, agregando resultados — sin tocar Squid ni requerir
+que los Squids se conozcan entre sí.
+
+Pendiente de definir: cómo se autentica el panel central contra cada hijo
+(¿token de servicio nuevo, distinto del JWT de un admin humano?), y qué pasa
+si un hijo no responde (timeout, nodo marcado como "no disponible" sin
+tumbar el resto del dashboard).
+
+No se estimó esfuerzo de implementación todavía.
+
+### Evaluado y descartado: SSL Bump con certificado público (Let's Encrypt)
+
+Pedido por usuarios reales del proyecto (2026-09-18): usar un certificado
+"válido" (Let's Encrypt) en vez de la CA autofirmada para SSL Bump, para
+evitar tener que instalar la CA en cada equipo cliente.
+
+**No es viable, y no es una limitación de SquidManager que se pueda resolver
+a futuro.** SSL Bump exige que Squid tenga la clave privada de la CA con la
+que firma, al vuelo, cada certificado dinámico por dominio — ninguna CA
+pública entrega su clave privada a un tercero para eso, y el CPS de Let's
+Encrypt (sección 1.4.2, https://letsencrypt.org/documents/isrg-cps-v2.6/)
+prohíbe explícitamente usar sus certificados para interceptar comunicaciones
+cifradas (MITM). Detalle completo y por qué, documentado para los usuarios
+en [ssl-bump.md](ssl-bump.md#se-puede-usar-un-certificado-público-lets-encrypt-en-vez-de-la-ca-autofirmada).
+
+Sí se mantiene como válida la sugerencia, ya documentada, de usar Let's
+Encrypt para el certificado HTTPS del propio panel web (no tiene relación
+con SSL Bump).
+
+### Evaluado, alcance reducido: clustering de Squid para balanceo de carga
+
+Pedido por usuarios reales del proyecto (2026-09-18): instalaciones de Squid
+en clúster para balanceo de carga.
+
+Squid no tiene un modo nativo de clustering activo-activo con estado
+compartido (confirmado en https://wiki.squid-cache.org/Features/LoadBalance
+y https://wiki.squid-cache.org/Features/SmpScale): `cache_peer` con
+CARP/round-robin balancea la salida hacia varios padres, no la entrada de
+clientes; `workers` (SMP) escala en una sola máquina, no entre servidores.
+No hay ninguna directiva de "cluster" de Squid que el panel pueda exponer.
+
+Si se retoma, el alcance realista no es "balanceo de carga" sino, como
+mucho, una guía de despliegue detrás de un balanceador externo (HAProxy,
+keepalived+VRRP) con Squids idénticos, más quizás a futuro una función de
+sincronizar configuración (ACLs/reglas/usuarios) entre varias instancias —
+dejando claro que el balanceo en sí queda fuera de lo que Squid permite
+configurar. Aviso importante para documentar si se implementa: con
+Kerberos/Negotiate y NTLM, un balanceador round-robin puro rompe la
+negociación por falta de afinidad de sesión — hace falta afinidad por IP de
+cliente como mínimo.
+
+No se estimó esfuerzo de implementación todavía.
