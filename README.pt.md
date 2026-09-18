@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg">
+  <img alt="License" src="https://img.shields.io/badge/license-Freeware-orange.svg">
   <img alt="Squid" src="https://img.shields.io/badge/Squid-6.12%20%7C%206.14-green">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115-teal">
   <img alt="React" src="https://img.shields.io/badge/React-18-blue">
@@ -943,7 +943,7 @@ nenhuma mensagem de erro.
 
 ## 📝 Licença
 
-Apache-2.0 — veja [LICENSE](LICENSE) para mais detalhes.
+Freeware — uso pessoal ou interno permitido; **não é permitido modificar, redistribuir ou comercializar** o software. Veja [LICENSE](LICENSE) para o texto completo.
 
 ---
 

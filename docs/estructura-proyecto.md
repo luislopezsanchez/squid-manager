@@ -5,7 +5,7 @@ squid-manager/
 ├── docker-compose.yml          # Orquestación de contenedores
 ├── .env.example                # Template de configuración
 ├── README.md                   # Resumen y enlaces a toda la documentación
-├── LICENSE                     # Apache-2.0
+├── LICENSE                     # Freeware (uso permitido, sin modificar/redistribuir/comercializar)
 ├── CHANGELOG.md                # Historial de versiones
 ├── CONTRIBUTING.md             # Guía para contribuidores
 │

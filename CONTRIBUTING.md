@@ -175,7 +175,7 @@ Abre un [Issue](https://github.com/luislopezsanchez/squid-manager/issues) con la
 
 ## 📄 Licencia
 
-Al contribuir, aceptas que tus cambios se publiquen bajo la licencia Apache-2.0.
+El proyecto se distribuye bajo una licencia Freeware (ver [LICENSE](LICENSE)): uso personal o interno permitido, sin permiso para modificar, redistribuir ni comercializar el software. Al contribuir, aceptas que tu aporte se incorpore al proyecto bajo esos mismos términos.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Proyecto:** SquidManager - Panel de gestión web para Squid Proxy  
 **Repositorio:** /opt/squid-manager (servidor de pruebas)  
-**Licencia:** Apache-2.0  
+**Licencia:** Freeware (uso permitido, sin modificar/redistribuir/comercializar — ver [LICENSE](../LICENSE))  
 **Fecha de inicio:** 21 de Agosto, 2026
 
 ---

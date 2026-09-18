@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg">
+  <img alt="License" src="https://img.shields.io/badge/license-Freeware-orange.svg">
   <img alt="Squid" src="https://img.shields.io/badge/Squid-6.12%20%7C%206.14-green">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.136-teal">
   <img alt="React" src="https://img.shields.io/badge/React-18-blue">
@@ -162,7 +162,7 @@ propio proceso de actualización: [docs/actualizacion.md](docs/actualizacion.md)
 
 ## 📝 Licencia
 
-Apache-2.0 — Ver [LICENSE](LICENSE) para más detalles.
+Freeware — uso personal o interno permitido; **no se permite modificar, redistribuir ni comercializar** el software. Ver [LICENSE](LICENSE) para el texto completo.
 
 ## 🤝 Contribuir
 
