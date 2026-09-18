@@ -99,6 +99,7 @@ async def export_backup(
                 "name": a.name, "type": a.type,
                 "value": None if a.source == "file" else a.value,
                 "source": a.source, "line_count": a.line_count,
+                "is_category": a.is_category,
                 "description": a.description, "enabled": a.enabled,
             }
             for a in db.query(Acl).options(defer(Acl.value)).order_by(Acl.id).all()
@@ -239,6 +240,7 @@ async def restore_backup(
                 existing.type = a["type"]
                 existing.description = a.get("description")
                 existing.enabled = a["enabled"]
+                existing.is_category = a.get("is_category", False)
                 if existing.source != "file":
                     existing.source = "file"
                     existing.value = None
@@ -247,7 +249,7 @@ async def restore_backup(
             else:
                 db.add(Acl(
                     name=a["name"], type=a["type"], value=None, source="file",
-                    line_count=a.get("line_count"),
+                    line_count=a.get("line_count"), is_category=a.get("is_category", False),
                     description=a.get("description"), enabled=a["enabled"],
                 ))
             results["warnings"].append(
@@ -264,8 +266,10 @@ async def restore_backup(
                 existing.source = "inline"
                 existing.description = a.get("description")
                 existing.enabled = a["enabled"]
+                existing.is_category = a.get("is_category", False)
             else:
                 db.add(Acl(name=a["name"], type=a["type"], value=a["value"], source="inline",
+                           is_category=a.get("is_category", False),
                            description=a.get("description"), enabled=a["enabled"]))
         results["acls"] += 1
 

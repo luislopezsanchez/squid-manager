@@ -10,6 +10,7 @@ class AclCreate(BaseModel):
     value: str = Field(..., min_length=1)
     description: str | None = None
     enabled: bool = True
+    is_category: bool = False
 
 
 class AclUpdate(BaseModel):
@@ -18,6 +19,7 @@ class AclUpdate(BaseModel):
     value: str | None = None
     description: str | None = None
     enabled: bool | None = None
+    is_category: bool | None = None
 
 
 class AclResponse(BaseModel):
@@ -36,6 +38,7 @@ class AclResponse(BaseModel):
     # /acls/bulk-domains.
     source: str = "inline"
     line_count: int | None = None
+    is_category: bool = False
     description: str | None = None
     enabled: bool
     created_at: datetime

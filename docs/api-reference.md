@@ -257,7 +257,7 @@ GET /api/acls/?limit=1000&offset=0
 Authorization: Bearer <token>
 ```
 
-`limit` (1-5000, por defecto 1000) y `offset` (por defecto 0) son opcionales.
+`limit` (1-5000, por defecto 1000) y `offset` (por defecto 0) son opcionales. `is_category` (`true`/`false`, opcional) filtra por categorías de dominio o por ACLs técnicas — sin el parámetro, devuelve todas. Ver [Categorías de dominios](#categorías-de-dominios) más abajo.
 
 ### ACLs sin usar
 ```http
@@ -322,6 +322,12 @@ description: (opcional)
 ```
 
 Para blocklists de miles de dominios, uno por línea (líneas vacías o que empiezan con `#` se ignoran). Solo para `dstdomain`/`dstdom_regex` — el resto de tipos de ACL no tiene sentido cargarlos así.
+
+`is_category` (`true`/`false`, opcional, default `false`): marca la ACL resultante como una categoría de dominio — la muestra en la pantalla **Categorías de dominios** del panel en vez de (o además de) la lista general de ACLs. No cambia en nada cómo Squid la usa: para Squid, una categoría es una ACL de dominios como cualquier otra.
+
+### Categorías de dominios
+
+Una categoría (ej. "Redes sociales") **es una ACL con `is_category=true` y tipo `dstdomain`/`dstdom_regex`** — no hay endpoints nuevos: se crean y se cargan con los mismos `POST /api/acls/` y `POST /api/acls/bulk-domains` de arriba, pasando `is_category: true`. `GET /api/acls/?is_category=true` lista solo las categorías; se pueden referenciar por nombre en reglas de acceso y delay pools exactamente igual que cualquier otra ACL, sin ningún paso extra. El backup/restore de la plataforma (ver [backup-restore.md](backup-restore.md)) las incluye e identifica como tales.
 
 Por debajo del umbral configurado (200 dominios) la ACL queda **inline**, igual que una creada a mano; por encima pasa a **file**: un archivo aparte que Squid lee directo, no una línea de `squid.conf` con miles de entradas. El umbral se reevalúa en cada carga — una lista que creció puede pasar de inline a file, y una que se redujo puede volver.
 

@@ -148,7 +148,12 @@ export const api = {
   toggleUser: (id: number) => request<any>(`/proxy-users/${id}/toggle`, { method: 'PATCH' }),
 
   // ACLs
-  listAcls: () => request<any[]>('/acls/'),
+  listAcls: (params: { isCategory?: boolean } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.isCategory !== undefined) qs.append('is_category', String(params.isCategory))
+    const suffix = qs.toString() ? `?${qs}` : ''
+    return request<any[]>(`/acls/${suffix}`)
+  },
   createAcl: (data: any) => request<any>('/acls/', { method: 'POST', body: JSON.stringify(data) }),
   updateAcl: (id: number, data: any) => request<any>(`/acls/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAcl: (id: number) => request<void>(`/acls/${id}`, { method: 'DELETE' }),
@@ -335,13 +340,14 @@ export const api = {
   },
 
   // ACLs: carga masiva de dominios desde archivo
-  bulkUploadDomains: (file: File, aclName: string, modo: 'reemplazar' | 'agregar', aclType: string, description?: string) => {
+  bulkUploadDomains: (file: File, aclName: string, modo: 'reemplazar' | 'agregar', aclType: string, description?: string, isCategory?: boolean) => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('acl_name', aclName)
     formData.append('modo', modo)
     formData.append('acl_type', aclType)
     if (description) formData.append('description', description)
+    if (isCategory) formData.append('is_category', 'true')
     return request<any>('/acls/bulk-domains', { method: 'POST', body: formData })
   },
 

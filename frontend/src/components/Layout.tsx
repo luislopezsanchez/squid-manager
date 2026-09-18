@@ -231,6 +231,7 @@ export default function Layout() {
         { to: '/users', label: traducir("Usuarios"), Icon: IconUsers },
         { to: '/groups', label: traducir("Grupos"), Icon: IconGroups },
         { to: '/acls', label: traducir("ACLs"), Icon: IconTag },
+        { to: '/categorias', label: traducir("Categorías de dominios"), Icon: IconArchive },
         { to: '/rules', label: traducir("Reglas de acceso"), Icon: IconRules },
         { to: '/delay-pools', label: traducir("Ancho de banda"), Icon: IconGauge },
       ],

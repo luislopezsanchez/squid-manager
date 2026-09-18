@@ -16,7 +16,7 @@ SquidManager ofrece tres opciones de exportación/importación:
 
 ### Qué incluye
 - Configuración de Squid (todos los parámetros: puerto, caché, logging, etc.)
-- ACLs (todas, con tipo, valor y descripción)
+- ACLs (todas, con tipo, valor y descripción — incluidas las categorías de dominios, que son ACLs marcadas como tales)
 - Reglas de acceso (con orden preservado)
 - Usuarios del proxy (sin contraseñas — se resetean al restaurar)
 - Delay pools (con clase y parámetros)

@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ProxyUsers from './pages/ProxyUsers'
 import ACLs from './pages/ACLs'
+import Categorias from './pages/Categorias'
 import AccessRules from './pages/AccessRules'
 import Settings from './pages/Settings'
 import LdapConfig from './pages/LdapConfig'
@@ -62,6 +63,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="users" element={<ProxyUsers />} />
           <Route path="acls" element={<ACLs />} />
+          <Route path="categorias" element={<Categorias />} />
           <Route path="rules" element={<AccessRules />} />
           <Route path="delay-pools" element={<DelayPools />} />
           <Route path="ldap" element={<LdapConfig />} />

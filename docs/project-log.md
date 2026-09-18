@@ -639,6 +639,37 @@ la parte de importación externa depende de qué tan estable sea la fuente
 que se elija, a evaluar cuando se investigue. No se estimó esfuerzo de
 implementación todavía.
 
+**Actualización (2026-09-18) — parte manual implementada y probada en
+vivo contra la VM de pruebas.** Backend: columna `is_category` en `acls`
+(migración 0025), validada solo para `dstdomain`/`dstdom_regex`; filtro
+`GET /api/acls/?is_category=` y soporte en `POST /api/acls/` y
+`POST /api/acls/bulk-domains`. Frontend: página nueva **Categorías de
+dominios**. Backup/restore actualizado para exportar e importar
+`is_category` (antes se perdía el flag al restaurar). Documentado en
+[api-reference.md](api-reference.md#categorías-de-dominios),
+[panel-web.md](panel-web.md) y [caracteristicas.md](caracteristicas.md).
+456 tests siguen pasando; `squid -k parse` valida una categoría real sin
+warnings.
+
+Dos ajustes de UX que salieron de probarlo en vivo con el autor, no
+previstos en el diseño original:
+- **Nombres de categoría normalizados en vivo**: los nombres de ACL de
+  Squid no admiten espacios ni mayúsculas (`^[A-Za-z][A-Za-z0-9_-]{0,63}$`,
+  ver `squid_names.py`); escribir "Redes Sociales" a mano tiraba el error
+  recién al guardar. Ahora se transforma solo mientras se escribe
+  ("Redes Sociales" → `redes_sociales`), sin tocar el backend.
+- **Autocompletado de categorías existentes al cargar por archivo**:
+  probado en vivo, un typo de una sola letra al reescribir el nombre de
+  una categoría ya creada (`redessociales` vs `redesociales`) creó una
+  categoría nueva separada en lugar de sumarle el dominio a la que ya
+  existía — "agregar a lo que ya había" funciona bien cuando el nombre
+  coincide exacto, el problema era pedirle al admin que lo reescriba de
+  memoria. Se agregó un `<datalist>` con las categorías existentes para
+  elegir en vez de retipear.
+
+Pendiente: la importación desde un servicio externo, sin cambios respecto
+a lo anotado arriba (sigue sin investigarse una fuente concreta).
+
 ### Dashboard: nuevos KPIs para las funciones de arriba (2026-09-18)
 
 Pedido por el autor del proyecto: una vez que existan las funciones nuevas

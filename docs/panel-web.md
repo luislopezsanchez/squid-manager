@@ -11,6 +11,7 @@ El panel se organiza en tres grupos:
 | **Políticas** | Usuarios | CRUD de usuarios del proxy |
 | | Grupos | Agrupa usuarios y aplica políticas al grupo completo |
 | | ACLs | CRUD de listas de control de acceso |
+| | Categorías de dominios | ACLs de dominio con nombre reutilizable (ej: Redes sociales), para usar en reglas y delay pools |
 | | Reglas de acceso | CRUD de reglas `http_access` con reordenamiento |
 | | Ancho de banda | CRUD de delay pools (limitación de velocidad) |
 | **Sistema** | LDAP | Configuración LDAP/Active Directory |

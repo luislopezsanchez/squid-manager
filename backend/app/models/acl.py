@@ -36,6 +36,14 @@ class Acl(Base):
     # tener que traer ni contar el contenido.
     content_hash = Column(String(64), nullable=True)
     line_count = Column(Integer, nullable=True)
+    # Una "categoría" (Redes sociales, Streaming...) es, para Squid, una ACL
+    # de dominios como cualquier otra -este flag es solo una capa de
+    # identidad para que el panel la muestre en su propia pantalla y la
+    # destaque al crear reglas/delay pools, sin duplicar el mecanismo de
+    # carga de archivo ni la generación de squid.conf, que ya funcionan
+    # igual para las dos. Solo tiene sentido con type in
+    # ('dstdomain', 'dstdom_regex') -reforzado en la ruta, no aquí.
+    is_category = Column(Boolean, default=False, nullable=False)
     description = Column(String(255), nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utcnow)

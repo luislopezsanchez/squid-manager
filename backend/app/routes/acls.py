@@ -39,9 +39,15 @@ def _to_response(acl: Acl) -> AclResponse:
         id=acl.id, name=acl.name, type=acl.type,
         value=None if acl.source == "file" else acl.value,
         source=acl.source, line_count=acl.line_count,
+        is_category=acl.is_category,
         description=acl.description, enabled=acl.enabled,
         created_at=acl.created_at, updated_at=acl.updated_at,
     )
+
+
+# Solo dominios: una "categoría" es una ACL de dominios con nombre
+# reutilizable -no tiene sentido categorizar por IP, puerto u horario.
+TIPOS_CATEGORIZABLES = ("dstdomain", "dstdom_regex")
 
 
 async def _leer_archivo_subido(file: UploadFile) -> bytes:
@@ -62,6 +68,7 @@ async def _leer_archivo_subido(file: UploadFile) -> bytes:
 async def list_acls(
     limit: int = Query(1000, ge=1, le=5000),
     offset: int = Query(0, ge=0),
+    is_category: bool | None = Query(None, description="Filtra por categorías de dominio (true) o ACLs técnicas (false). Sin filtro por defecto."),
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -77,10 +84,10 @@ async def list_acls(
     grandes, esto por sí solo hacía que abrir la página de ACLs tardara
     varios segundos y moviera cientos de MB por la red hacia el navegador.
     """
-    acls = (
-        db.query(Acl).options(defer(Acl.value)).order_by(Acl.name)
-        .offset(offset).limit(limit).all()
-    )
+    query = db.query(Acl).options(defer(Acl.value))
+    if is_category is not None:
+        query = query.filter(Acl.is_category == is_category)
+    acls = query.order_by(Acl.name).offset(offset).limit(limit).all()
     return [_to_response(a) for a in acls]
 
 
@@ -110,11 +117,14 @@ async def create_acl(
     acl_type = validate_acl_type(data.type)
     value = validate_value(data.value)
 
+    if data.is_category and acl_type not in TIPOS_CATEGORIZABLES:
+        raise HTTPException(400, detail="Una categoría solo puede ser de tipo dominio (dstdomain o dstdom_regex).")
+
     existing = db.query(Acl).filter(Acl.name == name).first()
     if existing:
         raise HTTPException(400, detail="Ya existe una ACL con ese nombre")
 
-    acl = Acl(name=name, type=acl_type, value=value,
+    acl = Acl(name=name, type=acl_type, value=value, is_category=data.is_category,
               description=data.description, enabled=data.enabled)
     db.add(acl)
     db.flush()
@@ -197,6 +207,11 @@ async def update_acl(
     if "value" in changes and changes["value"] is not None:
         changes["value"] = validate_value(changes["value"])
 
+    tipo_resultante = changes.get("type", acl.type)
+    categoria_resultante = changes.get("is_category", acl.is_category)
+    if categoria_resultante and tipo_resultante not in TIPOS_CATEGORIZABLES:
+        raise HTTPException(400, detail="Una categoría solo puede ser de tipo dominio (dstdomain o dstdom_regex).")
+
     for field, value in changes.items():
         setattr(acl, field, value)
 
@@ -251,6 +266,7 @@ async def cargar_dominios_masivo(
     modo: str = Form("reemplazar"),
     acl_type: str = Form("dstdomain"),
     description: str | None = Form(None),
+    is_category: bool = Form(False),
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
     background_tasks: BackgroundTasks = None,
@@ -355,12 +371,13 @@ async def cargar_dominios_masivo(
         acl.source = nuevo_source
         acl.content_hash = content_hash
         acl.line_count = line_count
+        acl.is_category = is_category
         if description is not None:
             acl.description = description
     else:
         acl = Acl(
             name=name, type=acl_type, value=nuevo_value, source=nuevo_source,
-            content_hash=content_hash, line_count=line_count,
+            content_hash=content_hash, line_count=line_count, is_category=is_category,
             description=description or "Cargado desde archivo", enabled=True,
         )
         db.add(acl)
