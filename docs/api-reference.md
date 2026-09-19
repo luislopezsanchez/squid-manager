@@ -181,11 +181,100 @@ Authorization: Bearer <token>
 
 Vuelve a escribir `squid_passwd` aplicando las caducidades vencidas desde la última escritura, sin esperar a que otro cambio lo dispare.
 
+## Cuotas de navegación
+
+Límite de datos **por nombre de usuario** — local o importado de LDAP, da igual, viven en su propia tabla (`navigation_quotas`) en vez de ser columnas de `proxy_users`, justo para no dejar afuera a los usuarios LDAP. Periodo `daily`, `weekly` o `monthly`, con reinicio automático al empezar el siguiente.
+
+### Listar todas las cuotas
+```http
+GET /api/quotas/
+Authorization: Bearer <token>
+```
+
+**Respuesta:**
+```json
+[
+  {
+    "id": 3,
+    "username": "jperez",
+    "quota_bytes": 5368709120,
+    "quota_period": "monthly",
+    "quota_action": "cut",
+    "quota_throttle_bytes_per_sec": null,
+    "quota_bytes_used": 1204582,
+    "quota_period_started_at": "2026-09-01T00:00:00"
+  }
+]
+```
+
+`quota_bytes_used` y `quota_period_started_at` son estado en vivo, actualizado por un hilo de fondo — no algo que se edite a mano.
+
+### Crear o reemplazar la cuota de un usuario
+```http
+PUT /api/quotas/{username}
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "quota_bytes": 5368709120,
+  "quota_period": "monthly",
+  "quota_action": "cut",
+  "quota_throttle_bytes_per_sec": null
+}
+```
+
+`{username}` tiene que ser un usuario local (`proxy_users`) o LDAP (`ldap_users`) que ya exista — si no, 404. Si el usuario ya tenía una cuota **aplicada** (cortado o limitado), guardar una nueva la revierte primero y deja que el hilo de fondo la vuelva a evaluar desde cero en su próxima vuelta.
+
+### Aplicar la misma cuota a varios usuarios de una vez
+```http
+POST /api/quotas/bulk
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "usernames": ["jperez", "mgomez", "ana.lopez"],
+  "quota_bytes": 5368709120,
+  "quota_period": "monthly",
+  "quota_action": "cut"
+}
+```
+
+Pensado para no repetir el mismo formulario uno por uno cuando hay que ponérsela, por ejemplo, a 50 usuarios importados de Active Directory. Es "mejor esfuerzo": un nombre inválido no aborta a los demás.
+
+**Respuesta:**
+```json
+{
+  "aplicadas": [ /* mismo formato que el PUT individual, una por usuario */ ],
+  "errores": ["typo_de_usuario: 'typo_de_usuario' no es un usuario local ni LDAP conocido."]
+}
+```
+
+### Quitar la cuota de un usuario
+```http
+DELETE /api/quotas/{username}
+Authorization: Bearer <token>
+```
+
+Si estaba aplicada (cortado o limitado), lo revierte en el acto.
+
+### Cómo se aplica
+
+- **`quota_action: "cut"`** (por defecto) — al agotarse, deshabilita al usuario: exactamente como `PATCH /api/proxy-users/{id}/toggle` si es local, o como `PATCH /api/ldap/users/{id}/toggle` si es LDAP (purga de credenciales incluida en los dos casos). Se reactiva solo al empezar el periodo siguiente.
+- **`quota_action: "throttle"`** — en vez de cortar, crea automáticamente una regla de [Delay Pools](#delay-pools) (la página "Ancho de banda" del panel) con el límite de `quota_throttle_bytes_per_sec`, y la borra sola al empezar el periodo siguiente.
+
+Un hilo de fondo (`quota_service.py`) sigue el `access.log` como `tail -f` para sumar bytes por usuario, revisa cada ~15s si alguna cuota se agotó o si le tocó reiniciar el periodo, y aplica el cambio de inmediato (no espera a "Aplicar cambios" del panel: es cumplimiento automático, no una edición a revisar).
+
+**Nota de rendimiento:** cortar a un usuario reinicia Squid por completo para purgar credenciales (`systemctl restart squid`), no un `-k reconfigure` liviano — medido en vivo, puede tardar **~45 segundos**. Si varias cuotas se agotan en la misma vuelta del hilo, se procesan una por una: con muchos usuarios cortándose a la vez, esa vuelta puede tardar varios minutos antes de que el hilo quede libre para la siguiente. No afecta a Squid mientras tanto (sigue sirviendo tráfico normalmente durante su propio reinicio, salvo el pequeño corte inherente a reiniciar), pero si esto llega a ser un cuello de botella real con muchos usuarios, es candidato a revisar más adelante.
+
 ---
 
 ## Grupos de usuarios
 
-Los grupos mapean a una ACL `proxy_auth` en `squid.conf` y sirven para aplicar políticas a varios usuarios (locales o LDAP) a la vez.
+Dos orígenes (`source`):
+- **`local`** (por defecto): mapea a una ACL `proxy_auth` con una lista de miembros propia (locales o LDAP, pero elegidos uno por uno a mano).
+- **`ldap`**: la pertenencia se consulta **en vivo contra el directorio** en cada request, sin sincronizar nada — vía una ACL externa (`external_acl_type`, helper `squid/ldap_group_helper.py`). No usa `members`; en su lugar usa `ldap_group_name` (el `cn`/`sAMAccountName` exacto del grupo en el directorio) y `ldap_group_nested` (si además de miembros directos hay que contar grupos anidados — solo Active Directory, vía su regla de coincidencia recursiva `1.2.840.113556.1.4.1941`).
+
+Requiere LDAP activado y configurado ([LDAP / Active Directory](#ldap--active-directory)) para crear un grupo `ldap`. La excepción de SSL Bump por grupo (`no_bump`) todavía no está disponible para este origen.
 
 ### Listar grupos
 ```http
@@ -196,11 +285,16 @@ Authorization: Bearer <token>
 **Respuesta:**
 ```json
 [
-  {"id": 1, "name": "Comerciales", "description": "Equipo comercial", "members": ["jperez", "mgarcia"]}
+  {"id": 1, "name": "Comerciales", "description": "Equipo comercial", "no_bump": false,
+   "source": "local", "ldap_group_name": null, "ldap_group_nested": false,
+   "members": ["jperez", "mgarcia"]},
+  {"id": 2, "name": "ad_domainadmins", "description": "Administradores del dominio", "no_bump": false,
+   "source": "ldap", "ldap_group_name": "Domain Admins", "ldap_group_nested": true,
+   "members": []}
 ]
 ```
 
-### Crear grupo
+### Crear grupo local
 ```http
 POST /api/groups/
 Authorization: Bearer <token>
@@ -208,6 +302,22 @@ Content-Type: application/json
 
 {"name": "Comerciales", "description": "Equipo comercial"}
 ```
+
+### Crear grupo de LDAP/Active Directory
+```http
+POST /api/groups/
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "name": "ad_domainadmins",
+  "source": "ldap",
+  "ldap_group_name": "Domain Admins",
+  "ldap_group_nested": true
+}
+```
+
+`ldap_group_nested: false` (por defecto) solo cuenta membresía directa — funciona contra cualquier directorio LDAPv3. `true` además cuenta grupos anidados, pero es específico de Active Directory.
 
 ### Actualizar grupo
 ```http
@@ -1480,3 +1590,28 @@ Cache Manager a la red interna de Docker.
 
 Si Squid no responde, `info` o `storedir` quedan en `null` y el motivo aparece
 en `errores` — el que sí respondió no se pierde por el que falló.
+
+## Red
+
+### Terminar la conexión activa de un cliente
+
+```http
+POST /api/network/disconnect
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "ip": "192.168.1.50"
+}
+```
+
+Corta las conexiones TCP que ese cliente tenga **ya abiertas** contra Squid ahora mismo, vía `conntrack -D -s <ip>`. No es una operación de Squid — no hay forma de pedirle esto a Squid directamente (confirmado contra la lista squid-users) — y **no bloquea peticiones futuras**: para eso hace falta además deshabilitar al usuario ([`PATCH /api/proxy-users/{id}/toggle`](#activardesactivar-usuario)) o una regla de acceso que lo excluya.
+
+**Respuesta:**
+```json
+{"status": "ok", "message": "Conexiones de 192.168.1.50 terminadas"}
+```
+
+Si no había ninguna conexión abierta de esa IP, también responde `status: "ok"` (no es un error, solo no había nada que cortar).
+
+**Solo funciona en instalación nativa.** En modo Docker devuelve un 500 explicando por qué: la imagen de Squid no trae `conntrack` instalado, y el contenedor no corre con la capacidad `NET_ADMIN` que hace falta para que `conntrack -D` borre de verdad una entrada de la tabla de conexiones del kernel.

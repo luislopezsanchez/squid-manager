@@ -302,6 +302,69 @@ bind actual, no exclusiva de esta función nueva).
 
 No se estimó esfuerzo de implementación todavía.
 
+**Actualización (2026-09-19) — implementado con un helper propio en vez
+de `ext_ldap_group_acl`, y verificado en vivo contra el Active Directory
+real de la VM de pruebas.** Se optó por un helper Python
+(`squid/ldap_group_helper.py`) en vez del binario `ext_ldap_group_acl`
+sugerido originalmente: la contraseña de bind quedaría igual de expuesta
+en la línea de comandos con cualquiera de los dos, pero un helper propio
+reutiliza la MISMA configuración de conexión que ya lee
+`auth_helper.py` (`/etc/squid/ldap_helper.conf`, escrito por el backend)
+en vez de mantener una segunda copia de bind_dn/password en el
+`external_acl_type` del squid.conf generado — una fuente de verdad menos
+para desincronizar.
+
+**Grupos** ganó un `source` (`local`, el único que existía, o `ldap`).
+Un grupo `local` sigue igual que siempre; uno `ldap` no tiene miembros
+propios — en su lugar tiene `ldap_group_name` (el nombre del grupo en el
+directorio) y `ldap_group_nested` (si además de miembros directos hay
+que contar grupos anidados, vía la regla de coincidencia recursiva de
+Active Directory `1.2.840.113556.1.4.1941` — no funciona en OpenLDAP).
+Los dos se usan igual en las reglas de acceso, como cualquier ACL.
+
+**Bug real encontrado y corregido al probarlo en vivo:** el primer
+intento generaba `acl ad_grupo external ldap_group_helper "Admins. del
+dominio" direct` (nombre entre comillas, para los grupos con espacio en
+el nombre) — `squid -k parse` lo rechazó con `Can not open file Admins.
+for reading`. Resulta que squid.conf **no** admite comillas como forma
+genérica de escapar espacios en un parámetro de ACL: para varios tipos
+de ACL (confirmado para esta), un valor entre comillas se interpreta
+como "leer la lista desde este archivo", no como un string literal.
+Solución: el nombre del grupo se codifica `%XX` (igual que ya hace el
+protocolo de Squid con los helpers para valores con espacios, ver
+`auth_helper.py`) antes de escribirlo en el squid.conf generado, sin
+comillas — un único token sin espacios, que el propio helper decodifica
+con `unquote()` al recibirlo.
+
+**Verificado en vivo, contra el AD real de la VM de pruebas (no
+simulado):** se probó con dos grupos reales del directorio —
+"Admins. del dominio" (Domain Admins) y "Grupo de replicación de
+contraseña RODC denegada", que contiene al primero como miembro
+anidado, sin contener directamente a ningún usuario real—:
+
+| Usuario | Grupo | Modo | Esperado | Resultado real |
+|---|---|---|---|---|
+| llopez | Admins. del dominio | direct | OK (es miembro directo) | OK |
+| squidmanager | Admins. del dominio | direct | ERR (no es miembro) | ERR |
+| llopez | RODC denegada | direct | ERR (no es miembro directo) | ERR |
+| llopez | RODC denegada | nested | OK (miembro vía "Admins. del dominio") | OK |
+| squidmanager | RODC denegada | nested | ERR (no pertenece de ninguna forma) | ERR |
+
+Las cinco combinaciones dieron el resultado esperado, probando el
+helper real (`/usr/lib/squid/squidmanager_ldap_group_helper`) contra el
+servidor LDAP real, no una simulación. `squid -k parse` acepta la
+configuración generada sin warnings.
+
+No implementado en esta vuelta: la excepción de SSL Bump por grupo
+(`no_bump`) para grupos de LDAP — el bloque `ssl_bump` de la plantilla
+usa `proxy_auth` con la lista de miembros directo, no el helper externo;
+se rechaza explícitamente al crear/editar un grupo LDAP con `no_bump`
+en vez de aceptarlo y no hacer nada.
+
+516 tests de backend pasan (24 nuevos: 6 del generador de configuración,
+12 del helper de grupos LDAP con conexión simulada, 6 de la validación
+de la ruta).
+
 ### Monitoreo centralizado de varias instancias (panel "central")
 
 Pedido por usuarios reales del proyecto (2026-09-18): un panel central que
@@ -449,6 +512,54 @@ Encaja con el adaptador de runtime que ya existe en
 Docker para reconfigure/restart) — sería una operación más de ese
 adaptador. No se estimó esfuerzo.
 
+**Actualización (2026-09-19) — implementado, con una limitación real
+encontrada al probarlo en vivo que conviene tener presente.** Nueva
+operación `disconnect_client(ip)` en el adaptador de runtime:
+
+- **Nativo**: `conntrack -D -s <ip>` con sudo (nueva línea de sudoers,
+  sin comodines salvo esta —la IP es por naturaleza un argumento
+  variable—, y el paquete `conntrack` sumado a `install-nativo.sh`).
+  Devuelve éxito tanto si cortó algo como si no había ninguna conexión
+  que coincidiera (exit 1 de `conntrack -D`): no es un error, solo
+  significa que ya no había nada que cortar.
+- **Docker**: **no implementado a propósito**, no por falta de tiempo —
+  la imagen de Squid no trae `conntrack` instalado, y aunque lo trajera,
+  el contenedor no corre con la capacidad `NET_ADMIN` que hace falta
+  para que `conntrack -D` borre de verdad una entrada. Sumar esa
+  capacidad es una decisión de seguridad del despliegue que no
+  corresponde activar en silencio desde acá. El endpoint (`POST
+  /api/network/disconnect`) devuelve un mensaje explicando esto en vez
+  de fingir que funciona.
+
+Endpoint nuevo y botón "Terminar conexión" en el visor de logs en vivo,
+junto a la IP de cada entrada — no depende de la vista de "conexiones
+activas en tiempo real" (esa sigue sin implementarse, es una mejora
+aparte) porque ya alcanza con las IPs que el propio log muestra.
+
+**Encontrado al probarlo en vivo contra la VM de pruebas (que resultó
+ser un contenedor LXC de Proxmox, no una VM completa —confirmado con
+`systemd-detect-virt` → `lxc`):** con una descarga real en curso a
+través del proxy, `conntrack -L` mostraba **cero conexiones registradas**
+(`nf_conntrack_count = 0`) a pesar de que el módulo `nf_conntrack` está
+cargado — el motivo es que no hay ninguna regla de `iptables`/`nftables`
+en esa máquina que dispare el tracking (las tres cadenas están vacías,
+política ACCEPT sin reglas), algo común en una instalación mínima sin
+firewall propio, y que puede agravarse dentro de un contenedor LXC según
+qué tan privilegiado esté respecto al netfilter del host. No se pudo
+verificar en vivo el corte real de una conexión por esto — sí se verificó
+que el comando se arma bien, que el sudoers/paquete quedan instalados, y
+que el manejo de "no había nada que cortar" no se confunde con un error
+real. **Queda como nota para soporte:** si un admin reporta que "terminar
+conexión" no corta nada, lo primero a revisar es `sysctl
+net.netfilter.nf_conntrack_count` y si hay algo (aunque sea una regla
+trivial) enganchando conntrack en esa máquina — sin eso, ni esta función
+ni cualquier otra herramienta basada en `conntrack` va a poder hacer nada,
+independientemente de SquidManager.
+
+489 tests de backend pasan (5 nuevos: comando exacto que arma el modo
+nativo, manejo de "sin conexión que coincida", ausencia del binario, y
+que Docker devuelve la limitación en vez de intentarlo).
+
 #### Cuotas por volumen total (no solo velocidad)
 
 **Fusionada con el pedido más detallado del autor (2026-09-18)** — ver la
@@ -575,6 +686,72 @@ Riesgo: medio (toca el generador de `squid.conf` y el modelo de datos de
 delay pools, pero de forma aditiva — los pools existentes con una sola ACL
 siguen funcionando igual).
 
+**Actualización (2026-09-18) — implementado, probado en vivo con tráfico
+real, y verificado contra la documentación oficial de Squid tras una duda
+del autor.** Se reemplazó el formulario original (elegir a mano la clase
+1-5 de Squid) por un asistente de una sola pantalla: "¿A qué se aplica
+este límite?" con una lista ya resuelta (usuarios, grupos, dominios y
+categorías, tipos de archivo), una sola velocidad (sin distinguir
+restauración de límite, salvo en un "editor técnico" aparte para
+combinaciones que ese modelo simple no cubre). Para "tipo de archivo" se
+puede crear la lista de extensiones sin salir del formulario.
+
+Verificado en vivo contra la VM de pruebas, descargando de verdad a
+través del proxy (no solo `squid -k parse`): con una regla de 50 KB/s,
+las cinco variantes (todo el tráfico, usuario específico, dominio, tipo
+de archivo, grupo) bajaron la velocidad medida de ~1930 KB/s a ~50-55
+KB/s, y en cada caso el tráfico que NO calzaba con la regla (otro
+usuario, otro dominio, otra extensión) siguió sin límite — confirma que
+el aislamiento por ACL funciona como se espera.
+
+**Duda del autor, resuelta contra la documentación oficial:** ¿por qué
+"cada integrante su propio límite" en un grupo termina siendo un límite
+por IP/equipo y no por usuario autenticado, si otras plataformas basadas
+en Squid sí logran esto? Investigado a fondo:
+
+- Squid sí documenta una clase pensada exactamente para esto —
+  [`delay_class`](https://www.squid-cache.org/Doc/config/delay_class/)
+  clase 4, "cada usuario limitado a un ancho de banda sin importar en
+  cuántos equipos esté logueado". Se probó en vivo (clase 4, con el nivel
+  "usuario" en 50 KB/s y el resto en un valor gigante para no
+  restringir) — **la conexión se cuelga por completo (0 bytes hasta que
+  expira el timeout)**, repetido dos veces, incluida una prueba forzando
+  IPv4 puro (la doc oficial aclara que las clases 2-4 solo valen para
+  IPv4, clases 1 y 5 sí sirven con IPv6 — se descartó como causa).
+- Encontrado un defecto real y **todavía sin corregir** en el propio
+  rastreador de Squid: [Launchpad
+  #2018472](https://bugs.launchpad.net/bugs/2018472) ("squid crash basic
+  auth used delay_pools"), abierto desde 2023 contra Squid 5.2+, que
+  apunta a `DelayId::DelayClient()` accediendo a un puntero nulo al
+  intentar resolver el usuario autenticado para un delay pool con auth
+  Basic — exactamente la combinación que usa SquidManager
+  (`proxy_auth_scheme=basic`). Explica de forma consistente lo observado:
+  no es un error de configuración de SquidManager, es un defecto de
+  Squid en el camino código que resuelve "qué bucket le toca a este
+  usuario autenticado".
+- Conclusión práctica, ya reflejada en la interfaz: la casilla de "cada
+  integrante su propio límite" usa la clase 2 (probada, estable,
+  confirmada en vivo con descargas concurrentes), aclarando en el texto
+  que el límite es por IP/equipo, no por nombre de usuario — es honesto
+  sobre una limitación real de Squid, no un defecto de SquidManager. No
+  se activa la clase 4 hasta que ese defecto de Squid se corrija río
+  arriba.
+
+**Segunda duda resuelta — HTTPS con SSL Bump:** se encontró en la
+documentación un reporte de que "los delay pools no limitan HTTPS"
+([Debian #946049](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=946049)),
+lo que hubiera sido grave (casi todo el tráfico real es HTTPS). Verificado
+en vivo: el reporte es específicamente sobre HTTPS **sin** SSL Bump (un
+túnel `CONNECT` opaco que Squid nunca puede inspeccionar ni frenar bit a
+bit). Con SSL Bump activo —que es como SquidManager viene configurado por
+defecto— Squid descifra la conexión y la trata como HTTP normal por
+dentro, así que los delay pools sí aplican: confirmado descargando un
+archivo real por HTTPS a través del proxy con una regla de 50 KB/s
+activa, la velocidad bajó de forma consistente con lo esperado.
+
+Backend sin cambios (ya soportaba clase 1 y clase 2 con cualquier ACL);
+todo el trabajo fue de interfaz. 462 tests de backend siguen pasando.
+
 #### Punto 3: cuotas de navegación con periodo y acción configurable
 
 Amplía y reemplaza la idea más simple ya anotada arriba en ["Cuotas por
@@ -604,6 +781,141 @@ El cálculo del consumo se apoya en lo que ya existe (SquidManager ya suma
 bytes por usuario desde el `access.log` para el dashboard) — lo nuevo es
 compararlo contra una cuota configurada y disparar la acción. No se
 estimó esfuerzo de implementación todavía.
+
+**Verificado contra fuentes externas (2026-09-18), a pedido del autor
+antes de empezar a implementar:** Squid no tiene ningún mecanismo nativo
+de cuota por volumen — confirmado que la práctica estándar de la
+comunidad es exactamente lo que ya se tenía planeado acá: sumar bytes por
+usuario/periodo desde `access.log` (o una tabla propia) y comparar contra
+un límite configurado, sin depender de ninguna directiva de Squid para
+esto. No cambia nada del diseño ya anotado arriba.
+
+Sobre "Terminar una conexión activa de un cliente" (arriba): confirmado
+por el propio mantenedor de Squid (Amos Jeffries, lista squid-users) que
+Squid no tiene forma de matar una conexión existente por sí solo — "la
+única forma es identificar IP:puerto y usar herramientas de control TCP
+del sistema para forzar que muera" (`conntrack`/`iptables`), tal cual ya
+estaba anotado. Confirma que el diseño planeado (una operación más del
+adaptador de runtime nativo/Docker) es el camino correcto, no un atajo.
+
+**Actualización (2026-09-18) — implementado y probado en vivo contra
+tráfico real.** Extiende `ProxyUser` (migración 0028) con `quota_bytes`,
+`quota_period` (`daily`/`weekly`/`monthly`), `quota_action`
+(`cut`/`throttle`), `quota_throttle_bytes_per_sec`, y el estado en vivo
+`quota_bytes_used`/`quota_period_started_at`/`quota_action_applied`. Nace
+en NULL para todo usuario existente, mismo criterio que el resto de
+mecanismos "apagados hasta que el admin los activa a propósito".
+
+Un hilo de fondo nuevo (`quota_service.py`, arrancado junto a
+`start_syslog_forwarder`/`start_category_sync` en el lifespan) sigue el
+`access.log` igual que `tail -f` (se extrajo `read_new_lines()` de
+`syslog_service.py` a `log_service.py` para no duplicar esa lógica, con
+su propio manejo de rotación) y suma bytes por usuario cada ~15 s. Al
+agotarse la cuota:
+- **"cut"**: deshabilita al usuario exactamente como el interruptor
+  manual de Gestión > Usuarios (purga de credenciales incluida).
+- **"throttle"**: crea sola una ACL `proxy_auth` (`cuota_usuario_<id>`,
+  por id y no por nombre para no reimplementar la validación de
+  caracteres de las ACLs) y un delay pool clase 1 al límite configurado
+  (migración 0029, columna `quota_user_id` en `delay_pools` para poder
+  encontrarlo y borrarlo después sin arriesgarse a tocar uno creado a
+  mano).
+
+A diferencia del resto de cambios de configuración del panel (que quedan
+en "pendiente de aplicar" hasta que el admin aprieta *Aplicar cambios*),
+una cuota agotada **aplica de inmediato** — es cumplimiento automático,
+no una edición para revisar. Al empezar el siguiente periodo se revierte
+sola (reactiva al usuario o borra el delay pool) y resetea el contador;
+si el admin edita o quita la cuota a mano mientras ya estaba aplicada, se
+revierte en el acto en vez de esperar al reinicio de periodo.
+
+Verificado en vivo contra la VM de pruebas, con tráfico real a través del
+proxy (no solo la lógica en tests): una cuota de 20 KB con acción
+"cortar" — tras descargar 50 KB reales, el usuario quedó deshabilitado
+solo (confirmado con un 407 al intentar navegar de nuevo) sin intervención
+manual. La misma prueba con acción "limitar velocidad" creó el delay pool
+solo y la descarga siguiente bajó de ~1900 KB/s a ~53 KB/s. Quitar la
+cuota a mano revirtió ambas cosas al instante (usuario reactivado / delay
+pool borrado, velocidad de vuelta a lo normal). 485 tests de backend
+pasan (23 nuevos: matemática de reinicio de periodo incluyendo meses de
+distinta longitud y años bisiestos, disparo/no-repetición de la acción,
+acumulación de consumo, reversión, y validación de la API).
+
+Alcance: solo usuarios **locales** del proxy — un usuario LDAP se
+deshabilita desde la sincronización LDAP, no tiene una fila propia que
+este mecanismo pueda controlar; queda pendiente para una vuelta futura si
+hace falta.
+
+No implementado en esta vuelta: "terminar una conexión activa" al
+disparar "cortar" (la combinación opcional anotada arriba) — la cuota
+corta el acceso a partir de ahora, pero no interrumpe una descarga que ya
+estaba en curso en el momento exacto de agotarse.
+
+**Actualización (2026-09-19) — dos huecos reales encontrados al pensar en
+un caso concreto (50 usuarios locales + importados de Active Directory,
+¿hay que ponerles la cuota uno por uno?), y resueltos con un cambio de
+diseño en vez de un parche:**
+
+1. **No había forma de aplicar una cuota a varios usuarios a la vez** —
+   solo un formulario de a uno.
+2. **Los usuarios LDAP no podían tener cuota en absoluto** — el mecanismo
+   dependía de columnas en `proxy_users`, y un usuario importado de AD no
+   tiene fila ahí.
+
+**Opción descartada:** duplicar las 7 columnas de cuota en `ldap_users` y
+duplicar la lógica de aplicación para cada tabla. Quedaba dos veces casi
+lo mismo, con dos migraciones y dos caminos de prueba a mantener en
+paralelo indefinidamente.
+
+**Solución adoptada:** la cuota se movió a su propia tabla,
+`navigation_quotas` (migración 0030), indexada por **nombre de usuario**,
+no por id de una tabla concreta — una cuota es, en el fondo, "este nombre
+tiene un límite", sin importar si el nombre es de un usuario local o de
+uno importado de LDAP. `quota_service.py` resuelve en el momento de
+aplicar/revertir contra cuál de las dos tablas corresponde actuar (si
+existe un local y un LDAP con el mismo nombre, gana el local, por ser la
+cuenta que de verdad se autentica). El delay pool que crea la acción
+"limitar velocidad" pasó a apuntar a `navigation_quotas.id`
+(`delay_pools.quota_id`, antes `quota_user_id` contra `proxy_users.id`).
+
+Rutas nuevas, `/api/quotas/` (reemplazan los campos `quota_*` que antes
+vivían en `POST`/`PUT /api/proxy-users`):
+- `GET /` — todas las cuotas configuradas.
+- `PUT /{username}` — crear o reemplazar la cuota de uno.
+- `POST /bulk` — la misma cuota para varios nombres de una sola vez
+  (resuelve el problema 1); "mejor esfuerzo", un nombre inválido no
+  aborta a los demás.
+- `DELETE /{username}` — quitarla (reemplaza el flag `remove_quota` que
+  tenía el PUT de usuarios).
+
+Interfaz: la columna "Cuota" de Gestión → Usuarios ahora funciona igual
+para filas locales y LDAP (antes mostraba "—" para LDAP); se sumó una
+casilla de selección por fila y una barra de acción en bloque ("N
+seleccionados" → "Aplicar cuota a los seleccionados") que abre el mismo
+diálogo en modo "aplicar a varios" (sin valores previos que precargar, sin
+opción de "quitar" -no tiene sentido quitarle a todos una cuota que no
+todos tenían igual).
+
+**Encontrado al volver a probar en vivo (usuario local + una fila LDAP
+sintética, sin servidor LDAP real disponible para generar tráfico
+autenticado de verdad contra ese camino -limitación del entorno de
+pruebas, no de la función):** cortar a un usuario reinicia Squid por
+completo para purgar credenciales (`systemctl restart squid`, no un `-k
+reconfigure` liviano) — medido en vivo, **~45 segundos** cada vez. Si
+varias cuotas se agotan en la misma vuelta del hilo de fondo (cada 15s),
+se procesan una por una: con muchos usuarios cortándose a la vez, esa
+vuelta puede tardar varios minutos antes de quedar libre para la
+siguiente. No es un bug -cada corte de por sí funciona bien, confirmado
+para el camino local (usuario deshabilitado, después un 407 real al
+intentar navegar) y para el LDAP sintético (allow-list reescrita,
+reconfigure exitoso)- pero es una característica real a tener presente si
+esto llega a usarse con muchos usuarios agotando la cuota al mismo
+tiempo. Candidato a revisar más adelante si se vuelve un cuello de
+botella real (ej. paralelizar los cortes, o separar el reinicio de Squid
+de la purga en vez de acoplarlos).
+
+492 tests de backend pasan (26 de cuotas + 6 de validación, reescritos
+sobre el nuevo diseño).
 
 ### Categorización de dominios (2026-09-18)
 
