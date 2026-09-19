@@ -105,6 +105,20 @@ class ProxyRuntime:
         """
         raise NotImplementedError
 
+    def disconnect_client(self, ip: str) -> tuple[bool, str]:
+        """Termina las conexiones TCP ya abiertas de un cliente contra Squid.
+
+        No es algo que Squid pueda hacer por si solo (confirmado contra la
+        lista squid-users, ver docs/project-log.md): opera sobre la tabla de
+        conexiones del kernel (conntrack), no sobre Squid -por eso vive en el
+        adaptador de runtime y no en squid_service.py. Cortar la conexion no
+        deshace nada de lo que el cliente ya haya recibido: solo evita que
+        siga recibiendo mas por esa conexion puntual (para futuras peticiones
+        hace falta ademas negarle el acceso, ver ProxyUser.enabled o una
+        regla de acceso).
+        """
+        raise NotImplementedError
+
     def listen_port(self, desired_port: str) -> str:
         """Puerto que hay que escribir en la directiva `http_port`.
 

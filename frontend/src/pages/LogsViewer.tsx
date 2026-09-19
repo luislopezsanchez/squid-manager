@@ -59,8 +59,23 @@ export default function LogsViewer() {
   const [fStatus, setFStatus] = useState('')
   const [fDomain, setFDomain] = useState('')
   const [fDenied, setFDenied] = useState(false)
+  const [disconnecting, setDisconnecting] = useState('')
 
   const { showToast, ToastContainer } = useToast()
+
+  const handleDisconnect = async (ip: string) => {
+    if (disconnecting) return
+    if (!confirm(traducir("¿Terminar las conexiones abiertas de {ip}? Esto no le bloquea la navegación futura, solo corta lo que ya está en curso.", { ip }))) return
+    setDisconnecting(ip)
+    try {
+      const result = await api.disconnectClient(ip)
+      showToast(result.message)
+    } catch (e: any) {
+      showToast(`Error: ${e.message}`, 'error')
+    } finally {
+      setDisconnecting('')
+    }
+  }
 
   const loadLogs = useCallback(() => {
     setLoading(true)
@@ -225,6 +240,7 @@ export default function LogsViewer() {
                 <th className="text-left px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Estado")}</th>
                 <th className="text-right px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Bytes")}</th>
                 <th className="text-right px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Tiempo")}</th>
+                <th className="text-right px-4 py-2 text-xs font-medium text-ink-3 uppercase">{traducir("Acciones")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -240,10 +256,17 @@ export default function LogsViewer() {
                   </td>
                   <td className="px-4 py-2 text-right text-xs font-mono text-ink-3">{formatBytes(e.bytes)}</td>
                   <td className="px-4 py-2 text-right text-xs font-mono text-ink-3">{e.elapsed_ms}ms</td>
+                  <td className="px-4 py-2 text-right">
+                    <button onClick={() => handleDisconnect(e.client_ip)} disabled={disconnecting === e.client_ip}
+                      className="text-xs font-medium text-danger hover:underline disabled:opacity-50 disabled:cursor-wait"
+                      title={traducir("Termina las conexiones que este cliente tenga abiertas ahora mismo -no le bloquea el acceso futuro")}>
+                      {disconnecting === e.client_ip ? traducir('Terminando…') : traducir('Terminar conexión')}
+                    </button>
+                  </td>
                 </tr>
               ))}
               {entries.length === 0 && (
-                <tr><td colSpan={8} className="px-6 py-8 text-center text-ink-3">{traducir("Sin resultados con estos filtros")}</td></tr>
+                <tr><td colSpan={9} className="px-6 py-8 text-center text-ink-3">{traducir("Sin resultados con estos filtros")}</td></tr>
               )}
             </tbody>
           </table>

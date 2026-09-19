@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 # se traga se convierte en una averia silenciosa.
 SQUID_BINARIES = ("/usr/sbin/squid", "/usr/local/sbin/squid", "/usr/bin/squid")
 SYSTEMCTL_BINARIES = ("/usr/bin/systemctl", "/bin/systemctl")
+CONNTRACK_BINARIES = ("/usr/sbin/conntrack", "/usr/bin/conntrack")
 
 # Estados de socket en /proc/net/tcp: 0A es LISTEN.
 _TCP_LISTEN = "0A"
@@ -80,6 +81,7 @@ class NativeRuntime(ProxyRuntime):
     def __init__(self) -> None:
         self.squid = _find(SQUID_BINARIES, "squid")
         self.systemctl = _find(SYSTEMCTL_BINARIES, "systemctl")
+        self.conntrack = _find(CONNTRACK_BINARIES, "conntrack")
         self.service = (settings.NATIVE_SQUID_SERVICE or "squid").strip()
         self.config_path = settings.SQUID_CONFIG_PATH
         if not self.squid:
@@ -344,6 +346,26 @@ class NativeRuntime(ProxyRuntime):
             f"Nadie escucha en el puerto {puerto} (servicio {self.service}: "
             f"{estado}): el proxy no sera accesible."
         )
+
+    def disconnect_client(self, ip: str) -> tuple[bool, str]:
+        if not self.conntrack:
+            return False, "No se encontro el comando 'conntrack' en el sistema. Instala el paquete conntrack."
+        try:
+            result = self._run(_sudo_prefix() + [self.conntrack, "-D", "-s", ip], timeout=15)
+        except Exception as e:
+            logger.error(f"Error terminando la conexion de {ip}: {e}")
+            return False, f"Error: {e}"
+
+        salida = ((result.stderr or "") + (result.stdout or "")).strip()
+        # conntrack -D devuelve 0 si borro al menos una conexion y 1 si no
+        # encontro ninguna que coincidiera -esto ultimo no es un fallo, solo
+        # significa que ya no habia nada que cortar (terminada sola, o el
+        # cliente nunca abrio una conexion de verdad).
+        if result.returncode == 0:
+            return True, f"Conexiones de {ip} terminadas"
+        if result.returncode == 1 or "0 flow entries" in salida:
+            return True, f"No habia ninguna conexion activa de {ip} para terminar"
+        return False, f"conntrack fallo (exit {result.returncode}): {salida}"
 
     def apply_port(self, new_port: str) -> tuple[bool, str]:
         """Hace efectivo el puerto nuevo reiniciando el servicio.

@@ -319,6 +319,22 @@ class DockerRuntime(ProxyRuntime):
             return False, f"wget dentro del contenedor de Squid fallo: {salida or resultado.exit_code}"
         return True, salida
 
+    def disconnect_client(self, ip: str) -> tuple[bool, str]:
+        # No implementado en Docker a proposito, no por falta de tiempo: la
+        # imagen de Squid no trae el comando 'conntrack' instalado, y aunque
+        # lo trajera, el contenedor no corre con la capacidad NET_ADMIN que
+        # conntrack -D necesita para de verdad borrar una entrada de la
+        # tabla de conexiones del kernel -sumar esa capacidad es una
+        # decision de seguridad del despliegue, no algo para activar en
+        # silencio desde una funcion que dice "terminar una conexion".
+        # Mejor decir la verdad que fingir que funciona y no cortar nada.
+        return False, (
+            "Terminar una conexión no está disponible en modo Docker todavía: "
+            "requiere instalar 'conntrack' en la imagen de Squid y darle la "
+            "capacidad NET_ADMIN al contenedor, algo que no viene activado "
+            "por defecto. En una instalación nativa sí funciona."
+        )
+
     def verify_port(self, expected_port: str) -> tuple[bool | None, str]:
         """Comprueba que Docker publica de verdad el puerto que Squid escucha.
 

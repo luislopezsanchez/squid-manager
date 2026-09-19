@@ -156,6 +156,11 @@ PAQUETES=(
     # gnupg: hace falta para importar la clave del repositorio PGDG mas abajo
     # (gpg --dearmor), solo relevante en Debian pero barato de tener siempre.
     gnupg
+    # conntrack: para poder terminar la conexion ya abierta de un cliente
+    # (ver runtime/native_runtime.py:disconnect_client) -no es algo que
+    # Squid pueda hacer por si solo, opera sobre la tabla de conexiones del
+    # kernel, y ese comando no viene instalado por defecto.
+    conntrack
 )
 info "Paquetes: ${PAQUETES[*]}"
 apt-get install -y -qq "${PAQUETES[@]}" >/dev/null || fail "No se pudieron instalar los paquetes."
@@ -469,6 +474,11 @@ install -o root -g root -m 755 "$INSTALL_DIR/squid/digest_auth_helper.py" \
     /usr/lib/squid/squidmanager_digest_helper
 ok "Helper de autenticacion Digest instalado"
 
+# Helper de ACL externa: pertenencia a un grupo de LDAP/Active Directory.
+install -o root -g root -m 755 "$INSTALL_DIR/squid/ldap_group_helper.py" \
+    /usr/lib/squid/squidmanager_ldap_group_helper
+ok "Helper de grupos LDAP instalado"
+
 # Kerberos/Negotiate: el helper negotiate_kerberos_auth usa libkrb5, que sin
 # un /etc/krb5.conf usa valores por defecto que en Ubuntu 24.04 (MIT Kerberos
 # 1.20) rechazan RC4-HMAC -el tipo de cifrado mas comun en un AD real- con
@@ -592,14 +602,20 @@ ok "Consolidacion mensual de logs archivados configurada"
 # ============================================
 paso "7. Concediendo permisos al panel"
 
-# Sin comodines a proposito: son las tres ordenes exactas que ejecuta el
+# Casi sin comodines a proposito: son las ordenes exactas que ejecuta el
 # backend, y nada mas. Es bastante menos de lo que concede montar el socket de
-# Docker, que es lo que hace falta en el otro modo.
+# Docker, que es lo que hace falta en el otro modo. La unica excepcion es
+# "conntrack -D -s *" (terminar la conexion ya abierta de un cliente): la IP
+# es, por naturaleza, un argumento que cambia en cada uso -se valida como IP
+# real antes de llegar aca (ver runtime/native_runtime.py), y como el backend
+# nunca invoca esto con shell=True, no hay forma de colar nada mas alla de
+# esa IP en el comando real que corre.
 cat > /etc/sudoers.d/squidmanager <<EOF
 # Permisos minimos del panel SquidManager sobre Squid.
 ${APP_USER} ALL=(root) NOPASSWD: ${SQUID_BIN} -f /etc/squid/squid.conf -k reconfigure
 ${APP_USER} ALL=(root) NOPASSWD: ${SQUID_BIN} -k parse -f /etc/squid/squid.conf.candidate
 ${APP_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart squid
+${APP_USER} ALL=(root) NOPASSWD: /usr/sbin/conntrack -D -s *
 # Actualizaciones (ver docs/actualizaciones-automaticas.md): el panel NUNCA ejecuta la
 # actualizacion en si, solo puede adelantar CUANDO este script -que decide
 # por su cuenta si corresponde actuar, leyendo el estado que el propio panel
@@ -609,7 +625,7 @@ ${APP_USER} ALL=(root) NOPASSWD: /usr/local/lib/squidmanager/autoupdate-check.sh
 EOF
 chmod 440 /etc/sudoers.d/squidmanager
 visudo -cf /etc/sudoers.d/squidmanager >/dev/null || fail "El fichero de sudoers generado no es valido."
-ok "sudoers: 4 ordenes concedidas a $APP_USER"
+ok "sudoers: 5 ordenes concedidas a $APP_USER"
 
 # El script que de verdad aplica la actualizacion (root, invocado por el
 # temporizador de abajo o bajo demanda via la linea de sudoers de arriba).

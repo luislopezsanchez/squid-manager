@@ -245,3 +245,62 @@ def test_nativo_pide_el_reporte_por_http_directo(monkeypatch):
     assert "6.14" in salida
     assert llamadas["url"] == "http://127.0.0.1:3128/squid-internal-mgr/storedir"
     assert llamadas["headers"] == {"Host": "localhost"}
+
+
+# ---------------------------------------------------------------------------
+# Terminar la conexion activa de un cliente (conntrack)
+# ---------------------------------------------------------------------------
+def test_nativo_termina_conexion_via_conntrack(monkeypatch):
+    runtime = NativeRuntime()
+    runtime.conntrack = "/usr/sbin/conntrack"
+    llamadas = {}
+
+    def run_falso(cmd, timeout=60):
+        llamadas["cmd"] = cmd
+        return MagicMock(returncode=0, stdout="conntrack v1.4.7 (conntrack-tools): 1 flow entries have been deleted.\n", stderr="")
+
+    monkeypatch.setattr(runtime, "_run", run_falso)
+
+    ok, mensaje = runtime.disconnect_client("192.168.1.50")
+
+    assert ok
+    assert "192.168.1.50" in mensaje
+    assert llamadas["cmd"][-3:] == ["-D", "-s", "192.168.1.50"]
+
+
+def test_nativo_conntrack_sin_conexiones_no_es_un_error(monkeypatch):
+    """exit code 1 de conntrack -D significa 'no habia nada que coincidiera',
+    no un fallo -pasa todo el tiempo (la conexion ya se cerro sola, o el
+    cliente nunca abrio una de verdad)."""
+    runtime = NativeRuntime()
+    runtime.conntrack = "/usr/sbin/conntrack"
+    monkeypatch.setattr(runtime, "_run", lambda cmd, timeout=60: MagicMock(
+        returncode=1, stdout="", stderr="conntrack v1.4.7: 0 flow entries have been deleted.\n",
+    ))
+
+    ok, mensaje = runtime.disconnect_client("10.0.0.5")
+
+    assert ok
+    assert "no habia" in mensaje.lower()
+
+
+def test_nativo_sin_conntrack_instalado(monkeypatch):
+    runtime = NativeRuntime()
+    runtime.conntrack = None
+
+    ok, mensaje = runtime.disconnect_client("10.0.0.5")
+
+    assert not ok
+    assert "conntrack" in mensaje.lower()
+
+
+def test_docker_no_soporta_terminar_conexion_todavia():
+    """La imagen de Squid no trae 'conntrack' ni la capacidad NET_ADMIN -se
+    dice la limitacion tal cual en vez de intentar un exec que fallaria
+    igual, con un mensaje mas dificil de entender."""
+    runtime = DockerRuntime()
+
+    ok, mensaje = runtime.disconnect_client("10.0.0.5")
+
+    assert not ok
+    assert "Docker" in mensaje
