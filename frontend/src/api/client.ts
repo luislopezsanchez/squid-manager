@@ -230,6 +230,25 @@ export const api = {
   // Estadisticas de cache (Cache Manager de Squid: mgr:info + mgr:storedir).
   getCacheStats: () => request<any>('/cache-manager/stats'),
 
+  // Termina las conexiones ya abiertas de un cliente (conntrack) -no bloquea
+  // peticiones futuras, solo corta lo que ya esta en curso ahora mismo.
+  disconnectClient: (ip: string) =>
+    request<{ status: string; message: string }>('/network/disconnect', {
+      method: 'POST', body: JSON.stringify({ ip }),
+    }),
+
+  // Cuotas de navegacion: por nombre de usuario, sirve igual para uno
+  // local o uno importado de LDAP.
+  listQuotas: () => request<any[]>('/quotas/'),
+  setQuota: (username: string, data: any) =>
+    request<any>(`/quotas/${encodeURIComponent(username)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  setQuotaBulk: (usernames: string[], data: any) =>
+    request<{ aplicadas: any[]; errores: string[] }>('/quotas/bulk', {
+      method: 'POST', body: JSON.stringify({ usernames, ...data }),
+    }),
+  removeQuota: (username: string) =>
+    request<void>(`/quotas/${encodeURIComponent(username)}`, { method: 'DELETE' }),
+
   // Contacto (Ayuda > Contacto): reporta un error o sugerencia sobre
   // SquidManager mismo al soporte del producto.
   sendContact: (data: { categoria: string; mensaje: string; email_respuesta?: string }) =>
@@ -242,6 +261,7 @@ export const api = {
   syncLdapUsers: () => request<any>('/ldap/sync', { method: 'POST' }),
   listLdapUsers: () => request<any[]>('/ldap/users'),
   toggleLdapUser: (id: number) => request<any>(`/ldap/users/${id}/toggle`, { method: 'PATCH' }),
+  listLdapGroups: () => request<{ groups: string[] }>('/ldap/groups'),
 
   // Grupos de usuarios
   listGroups: () => request<any[]>('/groups/'),

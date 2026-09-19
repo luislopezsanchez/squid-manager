@@ -2,6 +2,8 @@ import { traducir } from '../i18n'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import { formatBytes } from '../utils/format'
+import { normalizarUsername } from '../utils/usernames'
 
 interface LocalUser {
   source: 'local'
@@ -23,6 +25,20 @@ interface LdapUserRow {
 }
 
 type UnifiedUser = LocalUser | LdapUserRow
+
+// Cuota de navegación -por nombre de usuario, sirve igual para uno local o
+// uno importado de LDAP (ver app/models/navigation_quota.py). Se carga
+// aparte (no viene con el usuario) y se cruza por `username`.
+interface Quota {
+  id: number
+  username: string
+  quota_bytes: number
+  quota_period: 'daily' | 'weekly' | 'monthly'
+  quota_action: 'cut' | 'throttle'
+  quota_throttle_bytes_per_sec: number | null
+  quota_bytes_used: number
+  quota_period_started_at: string | null
+}
 
 /**
  * Los usuarios LDAP importados antes de este cambio no tienen `created_at`
@@ -190,6 +206,173 @@ function PasswordModal({ username, onClose, onSetPassword, onGenerate }: {
   )
 }
 
+const TAMANO_UNITS = [
+  { value: 1048576, label: traducir("MB") },
+  { value: 1073741824, label: traducir("GB") },
+]
+const VELOCIDAD_UNITS = [
+  { value: 1024, label: traducir("KB/s") },
+  { value: 1048576, label: traducir("MB/s") },
+]
+const PERIODO_LABELS: Record<string, string> = {
+  daily: traducir("Diario"), weekly: traducir("Semanal"), monthly: traducir("Mensual"),
+}
+
+// Elige la unidad más legible para un valor guardado en bytes (o
+// bytes/s) -sin esto, reabrir una cuota guardada en MB la mostraba
+// convertida a una fracción de GB casi ilegible (ej. "0,0048828125 GB"
+// para lo que en realidad eran "5 MB"), porque el editor siempre asumía
+// la unidad más grande de la lista en vez de la que se había usado.
+function detectarUnidad(valor: number, unidades: { value: number }[]): number {
+  const ordenadas = [...unidades].sort((a, b) => b.value - a.value)
+  for (const u of ordenadas) {
+    if (valor >= u.value) return u.value
+  }
+  return ordenadas[ordenadas.length - 1]?.value ?? 1
+}
+
+/**
+ * Configurar / editar / quitar la cuota de navegación de uno o varios
+ * usuarios (locales o LDAP, da igual). Con más de un nombre en
+ * `usernames` es el modo "aplicar en bloque": no hay valores previos que
+ * precargar ni opción de "quitar" (cada usuario puede tener o no cuota
+ * ya, no tiene sentido "quitarles a todos"). Mismo patrón visual que
+ * PasswordModal -un diálogo aparte en vez de un formulario más en la
+ * fila, porque son varios campos relacionados entre sí.
+ */
+function QuotaModal({ usernames, existing, onClose, onSave, onRemove }: {
+  usernames: string[]
+  existing?: Quota
+  onClose: () => void
+  onSave: (data: {
+    quota_bytes: number; quota_period: string; quota_action: string
+    quota_throttle_bytes_per_sec?: number
+  }) => Promise<void>
+  onRemove?: () => Promise<void>
+}) {
+  const esBulk = usernames.length > 1
+  const tamanoUnidadInicial = existing ? detectarUnidad(existing.quota_bytes, TAMANO_UNITS) : 1073741824
+  const [tamano, setTamano] = useState(
+    existing ? Math.round((existing.quota_bytes / tamanoUnidadInicial) * 100) / 100 : 5
+  )
+  const [tamanoUnidad, setTamanoUnidad] = useState(tamanoUnidadInicial)
+  const [periodo, setPeriodo] = useState(existing?.quota_period || 'monthly')
+  const [accion, setAccion] = useState(existing?.quota_action || 'cut')
+  const velocidadUnidadInicial = existing?.quota_throttle_bytes_per_sec
+    ? detectarUnidad(existing.quota_throttle_bytes_per_sec, VELOCIDAD_UNITS)
+    : 1024
+  const [velocidad, setVelocidad] = useState(
+    existing?.quota_throttle_bytes_per_sec
+      ? Math.round((existing.quota_throttle_bytes_per_sec / velocidadUnidadInicial) * 100) / 100
+      : 128
+  )
+  const [velocidadUnidad, setVelocidadUnidad] = useState(velocidadUnidadInicial)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErr('')
+    setBusy(true)
+    try {
+      await onSave({
+        quota_bytes: Math.round(tamano * tamanoUnidad),
+        quota_period: periodo,
+        quota_action: accion,
+        quota_throttle_bytes_per_sec: accion === 'throttle' ? Math.round(velocidad * velocidadUnidad) : undefined,
+      })
+      onClose()
+    } catch (e: any) {
+      setErr(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleRemove = async () => {
+    if (!onRemove) return
+    setBusy(true)
+    setErr('')
+    try {
+      await onRemove()
+      onClose()
+    } catch (e: any) {
+      setErr(e.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <h2 className="text-xl font-bold mb-1">
+          {esBulk
+            ? traducir("Aplicar cuota a {n} usuarios", { n: usernames.length })
+            : traducir("Cuota de navegación de \"{u}\"", { u: usernames[0] })}
+        </h2>
+        <p className="text-sm text-ink-3 mb-5">
+          {esBulk
+            ? traducir("Se aplica la misma configuración a todos los seleccionados, reemplazando la cuota que ya tuvieran.")
+            : traducir("Límite de datos por periodo. Se resetea solo al empezar el siguiente.")}
+        </p>
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label htmlFor="quota-size" className="field-label">{traducir("Tamaño de la cuota")}</label>
+            <div className="flex gap-2">
+              <input id="quota-size" type="number" min="0.1" step="0.1" value={tamano}
+                onChange={e => setTamano(parseFloat(e.target.value) || 0)} className="input flex-1" required />
+              <select value={tamanoUnidad} onChange={e => setTamanoUnidad(parseInt(e.target.value))} className="input w-28">
+                {TAMANO_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="quota-period" className="field-label">{traducir("Periodo")}</label>
+            <select id="quota-period" value={periodo} onChange={e => setPeriodo(e.target.value as any)} className="input">
+              <option value="daily">{traducir("Diario")}</option>
+              <option value="weekly">{traducir("Semanal")}</option>
+              <option value="monthly">{traducir("Mensual")}</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="quota-action" className="field-label">{traducir("Al agotarse")}</label>
+            <select id="quota-action" value={accion} onChange={e => setAccion(e.target.value as any)} className="input">
+              <option value="cut">{traducir("Cortar la navegación hasta el próximo periodo")}</option>
+              <option value="throttle">{traducir("Limitar la velocidad en vez de cortar")}</option>
+            </select>
+          </div>
+          {accion === 'throttle' && (
+            <div className="field">
+              <label htmlFor="quota-throttle" className="field-label">{traducir("Velocidad límite")}</label>
+              <div className="flex gap-2">
+                <input id="quota-throttle" type="number" min="1" step="1" value={velocidad}
+                  onChange={e => setVelocidad(parseFloat(e.target.value) || 0)} className="input flex-1" required />
+                <select value={velocidadUnidad} onChange={e => setVelocidadUnidad(parseInt(e.target.value))} className="input w-28">
+                  {VELOCIDAD_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+          {err && <div className="mb-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{err}</div>}
+          <div className="flex gap-2 mt-2">
+            {existing && onRemove && (
+              <button type="button" onClick={handleRemove} disabled={busy}
+                className="btn btn-danger disabled:opacity-50">{traducir("Quitar cuota")}</button>
+            )}
+            <button type="button" onClick={onClose} disabled={busy}
+              className="flex-1 px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">
+              {traducir("Cancelar")}
+            </button>
+            <button type="submit" disabled={busy} className="flex-1 btn btn-primary disabled:opacity-50">
+              {busy ? traducir('Guardando…') : traducir('Guardar')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function ProxyUsers() {
   const [localUsers, setLocalUsers] = useState<LocalUser[]>([])
   const [ldapUsers, setLdapUsers] = useState<LdapUserRow[]>([])
@@ -201,9 +384,20 @@ export default function ProxyUsers() {
   const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'ldap'>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
   const [passwordModalFor, setPasswordModalFor] = useState<LocalUser | null>(null)
+  // null = cerrado; string[] con 1 elemento = editar la cuota de ese
+  // usuario; con más de uno = aplicar la misma cuota en bloque.
+  const [quotaModalFor, setQuotaModalFor] = useState<string[] | null>(null)
   // Nombre -> grupos a los que pertenece. La membresía se guarda por nombre
   // de usuario, no por id, así que sirve igual para locales y para LDAP.
   const [groupsByUser, setGroupsByUser] = useState<Map<string, string[]>>(new Map())
+  // Nombre -> cuota, si tiene una configurada. Igual que groupsByUser: se
+  // carga aparte y se cruza por username, sirve para locales y LDAP por
+  // igual.
+  const [quotasByUser, setQuotasByUser] = useState<Map<string, Quota>>(new Map())
+  // Selección para aplicar una cuota a varios usuarios de una vez -sin
+  // esto, ponerle una cuota a 50 usuarios importados de AD era repetir el
+  // mismo formulario 50 veces.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   // Acciones "en vuelo" por fila, para poder deshabilitar el botón exacto que
   // se apretó y mostrar que está trabajando. Sin esto, bloquear a alguien
   // (que reinicia Squid para purgar credenciales, unos segundos) no daba
@@ -231,7 +425,8 @@ export default function ProxyUsers() {
       api.listUsers().catch(() => []),
       api.listLdapUsers().catch(() => []),
       api.listGroups().catch(() => []),
-    ]).then(([local, ldap, groups]) => {
+      api.listQuotas().catch(() => []),
+    ]).then(([local, ldap, groups, quotas]) => {
       setLocalUsers(local.map((u: any) => ({ ...u, source: 'local' as const })))
       setLdapUsers(ldap.map((u: any) => ({ ...u, source: 'ldap' as const })))
 
@@ -244,6 +439,8 @@ export default function ProxyUsers() {
         }
       }
       setGroupsByUser(map)
+
+      setQuotasByUser(new Map((quotas as Quota[]).map(q => [q.username, q])))
     }).finally(() => setLoading(false))
   }
 
@@ -326,6 +523,55 @@ export default function ProxyUsers() {
     }
   }
 
+  const handleSaveQuota = async (data: {
+    quota_bytes: number; quota_period: string; quota_action: string
+    quota_throttle_bytes_per_sec?: number
+  }) => {
+    if (!quotaModalFor) return
+    if (quotaModalFor.length > 1) {
+      const result = await api.setQuotaBulk(quotaModalFor, data)
+      notificarCambioPendiente()
+      loadUsers()
+      setSelected(new Set())
+      if (result.errores.length > 0) {
+        showToast(traducir("{n} cuotas aplicadas, {m} con error: {detalle}", {
+          n: result.aplicadas.length, m: result.errores.length, detalle: result.errores.join('; '),
+        }), 'error')
+      } else {
+        showToast(traducir("Cuota aplicada a {n} usuarios", { n: result.aplicadas.length }))
+      }
+      return
+    }
+    const username = quotaModalFor[0]
+    await api.setQuota(username, data)
+    notificarCambioPendiente()
+    loadUsers()
+    showToast(traducir("Cuota de \"{u}\" guardada", { u: username }))
+  }
+
+  const handleRemoveQuota = async () => {
+    if (!quotaModalFor || quotaModalFor.length !== 1) return
+    const username = quotaModalFor[0]
+    await api.removeQuota(username)
+    notificarCambioPendiente()
+    loadUsers()
+    showToast(traducir("Cuota de \"{u}\" quitada", { u: username }))
+  }
+
+  const toggleSelected = (username: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(username)) next.delete(username); else next.add(username)
+      return next
+    })
+  }
+
+  const toggleSelectedTodos = () => {
+    setSelected(prev =>
+      prev.size === filteredUsers.length ? new Set() : new Set(filteredUsers.map(u => u.username))
+    )
+  }
+
   const enabledCount = allUsers.filter(u => u.enabled).length
 
   return (
@@ -363,10 +609,11 @@ export default function ProxyUsers() {
               <input
                 id="proxyuser-username"
                 type="text" value={newUser.username}
-                onChange={e => setNewUser({ ...newUser, username: e.target.value })}
-                className="input"
+                onChange={e => setNewUser({ ...newUser, username: normalizarUsername(e.target.value) })}
+                className="input font-mono text-sm"
                 required
               />
+              <p className="field-help mt-1">{traducir("Solo letras, números, punto, guion y guion bajo, sin espacios ni acentos.")}</p>
             </div>
             <div>
               <label htmlFor="proxyuser-password" className="field-label block mb-1.5">{traducir("Contraseña")}</label>
@@ -406,6 +653,25 @@ export default function ProxyUsers() {
         </select>
       </div>
 
+      {/* Barra de acción en bloque: solo aparece con algo seleccionado, para
+          no ocupar espacio el resto del tiempo. Poner una cuota a 50
+          usuarios uno por uno era justo la queja que motivó esto. */}
+      {selected.size > 0 && (
+        <div className="flex items-center justify-between bg-brand-50 border border-brand-200 rounded-lg px-4 py-2.5 mb-4">
+          <span className="text-sm font-medium text-brand-700">
+            {traducir("{n} seleccionados", { n: selected.size })}
+          </span>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setQuotaModalFor(Array.from(selected))} className="btn btn-primary btn-sm">
+              {traducir("Aplicar cuota a los seleccionados")}
+            </button>
+            <button onClick={() => setSelected(new Set())} className="text-sm text-ink-3 hover:text-ink-2">
+              {traducir("Cancelar selección")}
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
       ) : (
@@ -413,10 +679,15 @@ export default function ProxyUsers() {
           <table className="table-panel">
             <thead>
               <tr>
+                <th className="text-left px-2">
+                  <input type="checkbox" checked={filteredUsers.length > 0 && selected.size === filteredUsers.length}
+                    onChange={toggleSelectedTodos} title={traducir("Seleccionar todos")} />
+                </th>
                 <th className="text-left">{traducir("Usuario")}</th>
                 <th className="text-left">{traducir("Origen")}</th>
                 <th className="text-left">{traducir("Estado")}</th>
                 <th className="text-left">{traducir("Grupos")}</th>
+                <th className="text-left">{traducir("Cuota")}</th>
                 <th className="text-left">{traducir("Creado")}</th>
                 <th className="text-right">{traducir("Acciones")}</th>
               </tr>
@@ -424,6 +695,9 @@ export default function ProxyUsers() {
             <tbody className="divide-y divide-line-soft">
               {filteredUsers.map(u => (
                 <tr key={`${u.source}-${u.id}`} className="hover:bg-brand-50">
+                  <td className="px-2 py-4">
+                    <input type="checkbox" checked={selected.has(u.username)} onChange={() => toggleSelected(u.username)} />
+                  </td>
                   <td className="px-6 py-4 font-medium text-ink">
                     {u.username}
                     {u.source === 'ldap' && u.display_name && (
@@ -457,6 +731,32 @@ export default function ProxyUsers() {
                       </div>
                     )}
                   </td>
+                  <td className="px-6 py-4">
+                    {(() => {
+                      const cuota = quotasByUser.get(u.username)
+                      if (!cuota) {
+                        return (
+                          <button onClick={() => setQuotaModalFor([u.username])} className="text-xs text-brand-700 hover:underline">
+                            {traducir("Configurar")}
+                          </button>
+                        )
+                      }
+                      return (
+                        <button onClick={() => setQuotaModalFor([u.username])} className="text-left group" title={traducir("Editar cuota")}>
+                          <div className="text-xs text-ink-2 group-hover:text-brand-700">
+                            {formatBytes(cuota.quota_bytes_used)} / {formatBytes(cuota.quota_bytes)}
+                            <span className="text-ink-3"> · {PERIODO_LABELS[cuota.quota_period] || cuota.quota_period}</span>
+                          </div>
+                          <div className="w-28 h-1.5 rounded-full bg-line-soft mt-1 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${cuota.quota_bytes_used >= cuota.quota_bytes ? 'bg-danger' : cuota.quota_bytes_used / cuota.quota_bytes > 0.8 ? 'bg-warn' : 'bg-ok'}`}
+                              style={{ width: `${Math.min(100, (cuota.quota_bytes_used / cuota.quota_bytes) * 100)}%` }}
+                            />
+                          </div>
+                        </button>
+                      )
+                    })()}
+                  </td>
                   <td className="px-6 py-4 text-sm text-ink-3">
                     {formatFecha(u.created_at)}
                   </td>
@@ -485,7 +785,7 @@ export default function ProxyUsers() {
               ))}
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-ink-3">
+                  <td colSpan={8} className="px-6 py-12 text-center text-ink-3">
                     {allUsers.length === 0
                       ? traducir('No hay usuarios. Crea el primero o sincroniza LDAP.') : traducir('Ningún usuario coincide con el filtro.')}
                   </td>
@@ -507,6 +807,16 @@ export default function ProxyUsers() {
           onSetPassword={async (password) => {
             await api.updateUser(passwordModalFor.id, { password })
           }}
+        />
+      )}
+
+      {quotaModalFor && (
+        <QuotaModal
+          usernames={quotaModalFor}
+          existing={quotaModalFor.length === 1 ? quotasByUser.get(quotaModalFor[0]) : undefined}
+          onClose={() => setQuotaModalFor(null)}
+          onSave={handleSaveQuota}
+          onRemove={quotaModalFor.length === 1 ? handleRemoveQuota : undefined}
         />
       )}
     </div>

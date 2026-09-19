@@ -27,5 +27,10 @@ class ProxyUser(Base):
     digest_ha1_realm = Column(String(255), nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
     expires_at = Column(DateTime, nullable=True)
+
+    # La cuota de navegación (antes columnas acá) vive en su propia tabla,
+    # ver app/models/navigation_quota.py -por nombre de usuario, no atada a
+    # esta tabla, para que un usuario LDAP pueda tener una igual.
+
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

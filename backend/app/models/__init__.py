@@ -19,6 +19,7 @@ from app.models.doc_chunk import DocChunk
 from app.models.update_config import UpdateConfig
 from app.models.contact_message import ContactMessage
 from app.models.smtp_config import SmtpConfig
+from app.models.navigation_quota import NavigationQuota
 
 __all__ = [
     "Admin",
@@ -41,4 +42,5 @@ __all__ = [
     "UpdateConfig",
     "ContactMessage",
     "SmtpConfig",
+    "NavigationQuota",
 ]

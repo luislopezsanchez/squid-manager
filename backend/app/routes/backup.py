@@ -15,6 +15,7 @@ from app.models.access_rule import AccessRule
 from app.models.proxy_user import ProxyUser
 from app.models.squid_settings import SquidSetting
 from app.models.delay_pool import DelayPool
+from app.models.navigation_quota import NavigationQuota
 from app.models.ldap_config import LdapConfig
 from app.models.ldap_user import LdapUser
 from app.models.user_group import UserGroup, UserGroupMember
@@ -114,10 +115,23 @@ async def export_backup(
              "expires_at": u.expires_at.isoformat() if u.expires_at else None}
             for u in db.query(ProxyUser).all()
         ],
+        "navigation_quotas": [
+            # La cuota es configuración y se preserva; cuánto lleva
+            # consumido y si ya se le aplicó la acción son estado de
+            # tiempo de ejecución -no tiene sentido resucitar "ya se le
+            # había cortado la navegación" desde una foto vieja de la BD.
+            {"username": q.username, "quota_bytes": q.quota_bytes, "quota_period": q.quota_period,
+             "quota_action": q.quota_action, "quota_throttle_bytes_per_sec": q.quota_throttle_bytes_per_sec}
+            for q in db.query(NavigationQuota).all()
+        ],
         "delay_pools": [
             {"pool_class": dp.pool_class, "parameters": dp.parameters,
              "acl_name": dp.acl_name, "description": dp.description, "enabled": dp.enabled}
-            for dp in db.query(DelayPool).all()
+            # Los que gestiona solo quota_service.py (quota_id) se excluyen:
+            # apuntan a una cuota por id, que al restaurar nace con un id
+            # distinto -y si la cuota se vuelve a agotar, el propio hilo de
+            # fondo los recrea solo, sin que hagan falta en el backup.
+            for dp in db.query(DelayPool).filter(DelayPool.quota_id.is_(None)).all()
         ],
         "user_groups": [
             {
@@ -336,6 +350,23 @@ async def restore_backup(
             "Estos usuarios se han creado sin contraseña y están deshabilitados; "
             "asígnales una con «Resetear contraseña»: " + ", ".join(pending_password)
         )
+
+    for q in backup.get("navigation_quotas", []):
+        existing = db.query(NavigationQuota).filter(NavigationQuota.username == q["username"]).first()
+        if not existing:
+            db.add(NavigationQuota(
+                username=q["username"],
+                quota_bytes=q["quota_bytes"],
+                quota_period=q.get("quota_period"),
+                quota_action=q.get("quota_action") or "cut",
+                quota_throttle_bytes_per_sec=q.get("quota_throttle_bytes_per_sec"),
+                quota_period_started_at=utcnow(),
+            ))
+        else:
+            existing.quota_bytes = q["quota_bytes"]
+            existing.quota_period = q.get("quota_period")
+            existing.quota_action = q.get("quota_action") or "cut"
+            existing.quota_throttle_bytes_per_sec = q.get("quota_throttle_bytes_per_sec")
 
     for lu in backup.get("ldap_users", []):
         existing = db.query(LdapUser).filter(LdapUser.username == lu["username"]).first()

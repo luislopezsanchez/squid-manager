@@ -107,6 +107,49 @@ def iter_lines_reverse(path: str, max_lines: int = MAX_SCAN_LINES):
         logger.error(f"Error leyendo access.log: {e}")
 
 
+def read_new_lines(offset: int) -> tuple[list[str], int]:
+    """Lee las líneas nuevas del access.log desde `offset` -para un
+    seguidor tipo `tail -f` que necesita saber exactamente qué es nuevo
+    desde la última pasada (reenvío a syslog, acumulador de cuotas de
+    navegación). Si el fichero se rotó (es más chico que el offset
+    guardado), se relee desde el principio.
+
+    Compartida entre los dos seguidores en vez de duplicada: los dos
+    necesitan exactamente esta misma lógica de "qué es nuevo" y el mismo
+    manejo de rotación -tenerla en dos copias es una donde arreglar un bug
+    y otra donde no.
+    """
+    p = Path(ACCESS_LOG_PATH)
+    if not p.exists():
+        return [], offset
+
+    size = p.stat().st_size
+    if size < offset:
+        offset = 0
+
+    with open(p, "rb") as f:
+        f.seek(offset)
+        chunk = f.read()
+
+    if not chunk:
+        return [], offset
+
+    # La última línea puede estar incompleta si se leyó a mitad de escritura;
+    # se deja para la próxima pasada en vez de reenviarla partida.
+    text = chunk.decode("utf-8", errors="replace")
+    if text.endswith("\n"):
+        new_offset = offset + len(chunk)
+        lines = text.splitlines()
+    else:
+        last_nl = text.rfind("\n")
+        if last_nl == -1:
+            return [], offset
+        new_offset = offset + len(text[: last_nl + 1].encode("utf-8"))
+        lines = text[:last_nl].splitlines()
+
+    return lines, new_offset
+
+
 def parse_line(line: str) -> dict | None:
     """Parsea una línea del access.log de Squid con todos los campos."""
     m = LINE_PATTERN.match(line.strip())
