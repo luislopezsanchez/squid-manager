@@ -1,8 +1,10 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import RequiereAplicar from '../components/RequiereAplicar'
+import { normalizarNombreAcl } from '../utils/aclNames'
 
 interface Acl {
   id: number
@@ -45,12 +47,20 @@ export default function ACLs() {
   const [form, setForm] = useState({ name: '', type: 'dstdomain', value: '', description: '', enabled: true })
   const [error, setError] = useState('')
   const { showToast, ToastContainer } = useToast()
+  // Las categorías de dominio (HaGeZi, o las creadas a mano) son ACLs
+  // dstdomain/dstdom_regex por dentro, pero tienen su propia página
+  // ("Categorías de dominios") con edición de metadatos y sincronización.
+  // Mostrarlas también acá por defecto duplicaba la lista y confundía
+  // dónde había que administrar cada una -se ocultan salvo que se pida
+  // verlas explícitamente.
+  const [verCategorias, setVerCategorias] = useState(false)
 
-  const loadAcls = () => {
-    api.listAcls().then(setAcls).catch(e => showToast(traducir("Error al cargar ACLs"), 'error')).finally(() => setLoading(false))
+  const loadAcls = (incluirCategorias = verCategorias) => {
+    api.listAcls({ isCategory: incluirCategorias ? undefined : false })
+      .then(setAcls).catch(() => showToast(traducir("Error al cargar ACLs"), 'error')).finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadAcls() }, [])
+  useEffect(() => { loadAcls(verCategorias) }, [verCategorias])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -137,7 +147,13 @@ export default function ACLs() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="page-title">{traducir("Listas de Control de Acceso (ACLs)")}</h1>
-          <p className="page-sub">{traducir("Define qué tráfico coincide con cada criterio")}</p>
+          <p className="page-sub">
+            {traducir("Define qué tráfico coincide con cada criterio")}
+            {" · "}
+            <Link to="/categorias" className="text-brand-700 hover:underline">{traducir("Categorías de dominios")}</Link>
+            {" "}
+            {traducir("se administran aparte")}
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -212,8 +228,9 @@ export default function ACLs() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor="acl-name" className="field-label block mb-1.5">{traducir("Nombre")}</label>
-              <input id="acl-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                placeholder={traducir("ej: redes_sociales")} className="input" required />
+              <input id="acl-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: normalizarNombreAcl(e.target.value) })}
+                placeholder={traducir("ej: redes_sociales")} className="input font-mono text-sm" required />
+              <p className="field-help mt-1">{traducir("Identificador técnico — se ajusta solo a minúsculas y guiones bajos, sin espacios ni acentos.")}</p>
             </div>
             <div>
               <label htmlFor="acl-type" className="field-label block mb-1.5">{traducir("Tipo de ACL")}</label>
@@ -243,6 +260,11 @@ export default function ACLs() {
           </div>
         </form>
       )}
+
+      <label className="flex items-center gap-2 text-sm text-ink-2 mb-3">
+        <input type="checkbox" checked={verCategorias} onChange={e => setVerCategorias(e.target.checked)} />
+        {traducir("Mostrar también las categorías de dominio")}
+      </label>
 
       {loading ? (
         <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>

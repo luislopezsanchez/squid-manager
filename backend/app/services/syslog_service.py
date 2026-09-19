@@ -18,11 +18,20 @@ from pathlib import Path
 
 from app.database import SessionLocal
 from app.models.syslog_config import SyslogConfig
-from app.services.log_service import ACCESS_LOG_PATH, parse_line
+from app.services.log_service import parse_line, read_new_lines
 
 logger = logging.getLogger(__name__)
 
-_STATE_FILE = "/tmp/squidmgr_syslog_offset.json"
+# Ni en /tmp: en instalación nativa el servicio corre con PrivateTmp=yes
+# (systemd), así que /tmp se recrea vacío en cada arranque -perder el
+# offset ahí hace que el próximo tick relea el access.log ENTERO desde el
+# principio y lo reenvíe entero al syslog externo como si fuera tráfico
+# nuevo (mismo bug encontrado en vivo en quota_service.py, ver el
+# comentario ahí junto a _STATE_FILE). Mismo criterio que
+# metrics_service.py con .network_state.json -ver también la auditoría de
+# seguridad de septiembre (hallazgo 05-004) sobre rutas fijas en /tmp.
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_STATE_FILE = str(_BACKEND_DIR / ".syslog_offset_state.json")
 _POLL_SECONDS = 2.0
 
 _FACILITY_CODES = {
@@ -141,40 +150,6 @@ def _forward_batch(entries: list[dict], config: SyslogConfig) -> int:
     return sent
 
 
-def _read_new_lines(offset: int) -> tuple[list[str], int]:
-    """Lee las líneas nuevas desde `offset`. Si el fichero se rotó (es más
-    chico que el offset guardado), se relee desde el principio."""
-    p = Path(ACCESS_LOG_PATH)
-    if not p.exists():
-        return [], offset
-
-    size = p.stat().st_size
-    if size < offset:
-        offset = 0
-
-    with open(p, "rb") as f:
-        f.seek(offset)
-        chunk = f.read()
-
-    if not chunk:
-        return [], offset
-
-    # La última línea puede estar incompleta si se leyó a mitad de escritura;
-    # se deja para la próxima pasada en vez de reenviarla partida.
-    text = chunk.decode("utf-8", errors="replace")
-    if text.endswith("\n"):
-        new_offset = offset + len(chunk)
-        lines = text.splitlines()
-    else:
-        last_nl = text.rfind("\n")
-        if last_nl == -1:
-            return [], offset
-        new_offset = offset + len(text[: last_nl + 1].encode("utf-8"))
-        lines = text[:last_nl].splitlines()
-
-    return lines, new_offset
-
-
 def _forwarder_loop():
     offset = _load_offset()
     logger.info("Reenviador de syslog iniciado (canal apagado hasta que se habilite en Configuración)")
@@ -192,12 +167,12 @@ def _forwarder_loop():
                 # líneas para cuando se habilite, así que se sigue avanzando
                 # el offset para no reenviar de golpe todo lo perdido mientras
                 # estuvo apagado.
-                lines, offset = _read_new_lines(offset)
+                lines, offset = read_new_lines(offset)
                 _save_offset(offset)
                 time.sleep(_POLL_SECONDS)
                 continue
 
-            lines, new_offset = _read_new_lines(offset)
+            lines, new_offset = read_new_lines(offset)
             if lines:
                 entries = [e for e in (parse_line(l) for l in lines) if e]
                 sent = _forward_batch(entries, config)
