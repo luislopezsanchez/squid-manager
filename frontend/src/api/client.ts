@@ -277,6 +277,16 @@ export const api = {
   updateDelayPool: (id: number, data: any) => request<any>(`/delay-pools/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteDelayPool: (id: number) => request<void>(`/delay-pools/${id}`, { method: 'DELETE' }),
 
+  // Monitoreo centralizado: nodos remotos de SquidManager que este panel
+  // consulta para ver sus métricas junto a las propias.
+  listCentralNodes: () => request<any[]>('/central/nodes'),
+  createCentralNode: (data: any) => request<any>('/central/nodes', { method: 'POST', body: JSON.stringify(data) }),
+  updateCentralNode: (id: number, data: any) => request<any>(`/central/nodes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCentralNode: (id: number) => request<void>(`/central/nodes/${id}`, { method: 'DELETE' }),
+  testCentralNode: (data: { url: string; username: string; password: string }) =>
+    request<any>('/central/test', { method: 'POST', body: JSON.stringify(data) }),
+  getCentralDashboard: () => request<{ nodes: any[] }>('/central/dashboard'),
+
   // Audit
   listAudit: (limit = 100, offset = 0) => request<any>(`/audit/?limit=${limit}&offset=${offset}`),
   auditStats: () => request<any>('/audit/stats'),

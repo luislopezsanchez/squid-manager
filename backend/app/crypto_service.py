@@ -1,8 +1,9 @@
 """Cifrado en reposo de las credenciales de terceros guardadas en la base.
 
-Siete columnas hoy: bind_password de LDAP, smtp_password, telegram_bot_token,
-api_key/embedding_api_key del asistente de IA, la contraseña del proxy padre
-y el keytab de Kerberos. Ninguna se devuelve nunca por la API (el patrón de
+Ocho columnas hoy: bind_password de LDAP, smtp_password, telegram_bot_token,
+api_key/embedding_api_key del asistente de IA, la contraseña del proxy padre,
+el keytab de Kerberos, y la contraseña de cada nodo de monitoreo centralizado.
+Ninguna se devuelve nunca por la API (el patrón de
 enmascarado ya existía y se mantiene tal cual), pero hasta ahora vivían en
 texto plano en la base -quien obtenga un volcado (ver el hallazgo 11-001,
 `.gitignore` de `backups/`) se las lleva sin romper nada (auditoría

@@ -20,6 +20,7 @@ from app.models.update_config import UpdateConfig
 from app.models.contact_message import ContactMessage
 from app.models.smtp_config import SmtpConfig
 from app.models.navigation_quota import NavigationQuota
+from app.models.monitored_node import MonitoredNode
 
 __all__ = [
     "Admin",
@@ -43,4 +44,5 @@ __all__ = [
     "ContactMessage",
     "SmtpConfig",
     "NavigationQuota",
+    "MonitoredNode",
 ]

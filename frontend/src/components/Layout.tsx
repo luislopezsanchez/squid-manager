@@ -194,8 +194,9 @@ export default function Layout() {
   // Reorganizado en 5 grupos en vez de 3 (2026-09-09): "Sistema" habia
   // crecido a 9 items, dificil de escanear, y no habia ningun lugar para
   // reportes/estadisticas (actividad de red, cache, cuotas) ni para una futura
-  // seccion de cluster/monitoreo centralizado -esta ultima se agrega el
-  // dia que exista, no antes: un grupo vacio no aporta nada al menu.
+  // seccion de cluster/monitoreo centralizado. El grupo "central" (2026-09-19)
+  // es esa seccion, agregada recien cuando la funcion existio, no antes: un
+  // grupo vacio no aporta nada al menu.
   // Los grupos sin items no se renderizan (ver el filter() de abajo), asi
   // que agregar "Reportes y estadisticas" como grupo ya armado, aunque
   // estos items no existen todavia.
@@ -221,6 +222,14 @@ export default function Layout() {
         { to: '/reportes/tendencias', label: traducir("Tendencias"), Icon: IconActivity },
         { to: '/reportes/panorama', label: traducir("Panorama"), Icon: IconDashboard },
         // Cuotas por usuario/grupo se suma aca cuando exista.
+      ],
+    },
+    {
+      id: 'central',
+      titulo: traducir("Monitoreo centralizado"),
+      Icon: IconRefresh,
+      items: [
+        { to: '/panel-central', label: traducir("Panel central"), Icon: IconGlobe },
       ],
     },
     {

@@ -168,6 +168,7 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "El prefijo 'sni_' lo usa SquidManager para las reglas HTTPS. Elige otro nombre.":
             "The 'sni_' prefix is used by SquidManager for HTTPS rules. Choose another name.",
         "Hay un '!' sin ACL detrás.": "There's a '!' with no ACL after it.",
+        "Este servidor": "This server",
     },
     "pt": {
         "ACL no encontrada": "ACL não encontrada",
@@ -318,6 +319,7 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "El prefijo 'sni_' lo usa SquidManager para las reglas HTTPS. Elige otro nombre.":
             "O prefixo 'sni_' é usado pelo SquidManager para as regras HTTPS. Escolha outro nome.",
         "Hay un '!' sin ACL detrás.": "Há um '!' sem ACL depois.",
+        "Este servidor": "Este servidor",
     },
 }
 

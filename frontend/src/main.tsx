@@ -33,6 +33,7 @@ import ActividadRed from './pages/ActividadRed'
 import RendimientoErrores from './pages/RendimientoErrores'
 import Tendencias from './pages/Tendencias'
 import Panorama from './pages/Panorama'
+import PanelCentral from './pages/PanelCentral'
 import ChangePassword from './pages/ChangePassword'
 import Layout from './components/Layout'
 import { getToken, isSuperadmin } from './api/client'
@@ -89,6 +90,7 @@ function App() {
           <Route path="reportes/rendimiento" element={<RendimientoErrores />} />
           <Route path="reportes/tendencias" element={<Tendencias />} />
           <Route path="reportes/panorama" element={<Panorama />} />
+          <Route path="panel-central" element={<PanelCentral />} />
         </Route>
       </Routes>
     </BrowserRouter>

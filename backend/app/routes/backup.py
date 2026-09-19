@@ -18,6 +18,7 @@ from app.models.delay_pool import DelayPool
 from app.models.navigation_quota import NavigationQuota
 from app.models.ldap_config import LdapConfig
 from app.models.ldap_user import LdapUser
+from app.models.monitored_node import MonitoredNode
 from app.models.user_group import UserGroup, UserGroupMember
 from app.models.audit_log import AuditLog
 from app.services.auth_service import get_current_admin, require_writer
@@ -147,6 +148,13 @@ async def export_backup(
             for u in db.query(LdapUser).order_by(LdapUser.username).all()
         ],
         "ldap_config": None,
+        # Igual que con la contraseña de bind de LDAP: la contraseña de cada
+        # nodo no viaja en el backup, es una credencial contra OTRO sistema
+        # (otra instancia de SquidManager), no algo propio de esta.
+        "monitored_nodes": [
+            {"name": n.name, "url": n.url, "username": n.username, "enabled": n.enabled}
+            for n in db.query(MonitoredNode).order_by(MonitoredNode.name).all()
+        ],
     }
 
     ldap = db.query(LdapConfig).first()
@@ -406,6 +414,28 @@ async def restore_backup(
                 "introducirla en Configuración LDAP."
             )
         results["ldap"] = True
+
+    nodos_sin_password = []
+    for nodo_data in backup.get("monitored_nodes", []):
+        existing = db.query(MonitoredNode).filter(MonitoredNode.url == nodo_data["url"]).first()
+        if existing:
+            existing.name = nodo_data["name"]
+            existing.username = nodo_data["username"]
+            existing.enabled = nodo_data["enabled"]
+        else:
+            db.add(MonitoredNode(
+                name=nodo_data["name"], url=nodo_data["url"], username=nodo_data["username"],
+                password="", enabled=False,
+            ))
+            nodos_sin_password.append(nodo_data["name"])
+    if nodos_sin_password:
+        results["warnings"].append(
+            "Las contraseñas de los nodos de monitoreo centralizado no viajan en los "
+            "backups: se crearon deshabilitados, vuelve a introducirles la contraseña "
+            "y habilítalos -" + ", ".join(nodos_sin_password) + "."
+        )
+    if backup.get("monitored_nodes"):
+        results["monitored_nodes"] = len(backup["monitored_nodes"])
 
     db.add(AuditLog(
         admin_id=admin.id, admin_username=admin.username,

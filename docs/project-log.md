@@ -217,7 +217,7 @@ entrada completa más abajo.
 | ✅ Implementado | Ancho de banda y cuotas | [Rediseño de control de ancho de banda, límites por tipo de archivo y cuotas de navegación](#rediseño-de-ancho-de-banda-y-cuotas-de-navegación-2026-09-18) — incluye cuotas para usuarios LDAP y aplicación en bloque, verificado en vivo con un usuario LDAP real |
 | ✅ Implementado | Ancho de banda y cuotas | [Terminar una conexión activa de un cliente](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) — el corte real no se pudo verificar en la VM de pruebas por falta de reglas de conntrack ahí (limitación del entorno, no del código) |
 | ✅ Implementado | Reglas de acceso y contenido | [Categorización de dominios](#categorización-de-dominios-2026-09-18) (manual + importación desde HaGeZi) |
-| ⏳ Pendiente | Monitoreo y observabilidad | [Monitoreo centralizado de varias instancias](#monitoreo-centralizado-de-varias-instancias-panel-central) — diseño evaluado, no implementado |
+| ✅ Implementado | Monitoreo y observabilidad | [Monitoreo centralizado de varias instancias](#monitoreo-centralizado-de-varias-instancias-panel-central) — reutiliza el rol "viewer" que ya existía, sin mecanismo de autenticación nuevo |
 | ⏳ Pendiente | Monitoreo y observabilidad | [Estadísticas de caché de Squid](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) (vía Cache Manager) |
 | ⏳ Pendiente | Monitoreo y observabilidad | [Conexiones activas en tiempo real](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) — depende de la integración con Cache Manager de arriba |
 | ⏳ Pendiente | Monitoreo y observabilidad | [Nuevos KPIs de dashboard](#rediseño-de-ancho-de-banda-y-cuotas-de-navegación-2026-09-18) para las funciones ya implementadas (cuotas, ancho de banda, categorías) |
@@ -394,6 +394,60 @@ Pendiente de definir: cómo se autentica el panel central contra cada hijo
 (¿token de servicio nuevo, distinto del JWT de un admin humano?), y qué pasa
 si un hijo no responde (timeout, nodo marcado como "no disponible" sin
 tumbar el resto del dashboard).
+
+**Actualización (2026-09-19) — implementado y verificado en vivo.**
+
+La duda de autenticación se resolvió sin inventar un mecanismo nuevo:
+SquidManager **ya tenía** un rol "viewer" (solo lectura, ver `Admin.role` y
+`require_writer` en `auth_service.py`) que nunca se usaba desde ningún lado
+del código todavía. El panel central se autentica contra cada nodo con el
+login normal (`POST /api/auth/login`) usando una cuenta -recomendada,
+`viewer`- ya existente en ese nodo, y con el JWT que le devuelve pide su
+`GET /api/metrics/dashboard`, también ya existente. Cero mecanismos nuevos
+en el nodo remoto: cualquier instancia de SquidManager ya sabe ser "nodo
+hijo" de otra sin ningún cambio, con solo crearle una cuenta de solo
+lectura.
+
+Tabla nueva `monitored_nodes` (migración 0032): nombre, URL, usuario y
+contraseña -cifrada en reposo con `EncryptedString`, igual que las otras
+siete credenciales de terceros que ya cifra el proyecto (LDAP, SMTP,
+Kerberos, etc.; ver `crypto_service.py`). Como con la contraseña de bind de
+LDAP, no viaja en los backups -un restore la deja en blanco y el nodo
+deshabilitado, con una advertencia para volver a cargarla a mano.
+
+Rutas nuevas bajo `/api/central/`: `GET/POST /nodes`, `PUT/DELETE
+/nodes/{id}`, `POST /test` (prueba credenciales antes de guardar, igual que
+`POST /api/ldap/test`), y `GET /dashboard` (el dashboard de este servidor
++ el de cada nodo habilitado, en una sola llamada). Cada nodo se consulta
+con `httpx` síncrono de forma secuencial (mismo estilo que el resto del
+proyecto para llamadas salientes, ver `ai_service.py`) con un timeout
+corto (6s): un nodo caído no cuelga la vista más que unos segundos, y
+nunca tumba a los demás -cualquier fallo (timeout, credenciales
+rechazadas, no es un SquidManager) se devuelve como parte del resultado
+en vez de propagarse.
+
+Página nueva "Panel central" (grupo de menú "Monitoreo centralizado",
+anotado como hueco pendiente desde la reorganización del menú del
+2026-09-09): tarjetas con el estado de cada nodo (tráfico actual, usuarios
+activos, CPU, memoria, o el motivo si está caído) que se refrescan solas
+cada 30s -mucho más espaciado que el dashboard local (5s), porque cada
+ciclo implica un login real contra cada nodo, no solo leer el propio
+proceso- más la gestión de altas/bajas de nodos.
+
+**Verificado en vivo contra la VM de pruebas** (sin una segunda instancia
+de SquidManager disponible, se armó un nodo que apunta a sí misma -mismo
+mecanismo, origen y destino son la misma instancia solo para la prueba):
+creada una cuenta `viewer` real y un nodo real apuntando a
+`http://127.0.0.1:3000` (el puerto real donde escucha nginx en instalación
+nativa -primer intento fallido con el puerto 80, que en esta VM sirve el
+sitio nginx "default" de Debian, no el panel: encontrado y corregido en el
+momento). Con eso: login exitoso, `GET /api/central/dashboard` devolvió
+"Este servidor" + el nodo de prueba con datos reales (tráfico, CPU,
+memoria) en la misma respuesta, `GET /api/central/nodes` enmascaró la
+contraseña como `***`, y probar con una contraseña incorrecta devolvió el
+error esperado sin lanzar ninguna excepción. 537 tests de backend pasan
+(16 nuevos: login/dashboard simulados con httpx, y validación de URL/
+enmascarado de contraseña).
 
 No se estimó esfuerzo de implementación todavía.
 

@@ -1615,3 +1615,78 @@ Corta las conexiones TCP que ese cliente tenga **ya abiertas** contra Squid ahor
 Si no había ninguna conexión abierta de esa IP, también responde `status: "ok"` (no es un error, solo no había nada que cortar).
 
 **Solo funciona en instalación nativa.** En modo Docker devuelve un 500 explicando por qué: la imagen de Squid no trae `conntrack` instalado, y el contenedor no corre con la capacidad `NET_ADMIN` que hace falta para que `conntrack -D` borre de verdad una entrada de la tabla de conexiones del kernel.
+
+## Monitoreo centralizado
+
+Ver un vistazo del tráfico, usuarios activos, CPU y memoria de **este servidor y de otras instancias de SquidManager** ("nodos") en una sola pantalla, sin sincronizar nada entre ellos.
+
+Cada nodo se consulta con el login normal de ese panel remoto (`POST /api/auth/login`, ver [Autenticación](#autenticación)) usando una cuenta que ya exista ahí — **recomendado: una cuenta con rol `viewer`** (solo lectura) dedicada a esto, nunca la de un admin humano. No hace falta ningún mecanismo de token nuevo ni ningún cambio en Squid: cualquier instancia de SquidManager ya sabe ser "nodo" de otra con solo crearle esa cuenta.
+
+### Listar nodos configurados
+
+```http
+GET /api/central/nodes
+Authorization: Bearer <token>
+```
+
+La contraseña siempre viaja enmascarada como `"***"`.
+
+### Agregar un nodo
+
+```http
+POST /api/central/nodes
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "name": "Sucursal Norte",
+  "url": "https://10.0.0.5:8443",
+  "username": "monitor_viewer",
+  "password": "...",
+  "enabled": true
+}
+```
+
+`url` debe empezar con `http://` o `https://`. La contraseña se guarda cifrada en reposo (mismo mecanismo que la contraseña de bind de LDAP, la de SMTP, etc.).
+
+### Editar / eliminar un nodo
+
+```http
+PUT /api/central/nodes/{id}
+DELETE /api/central/nodes/{id}
+```
+
+En `PUT`, mandar `"password": "***"` (o simplemente omitir el campo) conserva la contraseña ya guardada.
+
+### Probar credenciales antes de guardar
+
+```http
+POST /api/central/test
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"url": "https://10.0.0.5:8443", "username": "monitor_viewer", "password": "..."}
+```
+
+Hace el login + un `GET /api/metrics/dashboard` de prueba contra ese nodo, sin necesidad de haberlo guardado antes (mismo patrón que `POST /api/ldap/test`). Responde `{"status": "ok", ...}` o `{"status": "error", "message": "..."}` — nunca falla con un error HTTP, el resultado de la prueba siempre viaja en el cuerpo.
+
+### El dashboard combinado
+
+```http
+GET /api/central/dashboard
+Authorization: Bearer <token>
+```
+
+Devuelve el dashboard de este servidor (`GET /api/metrics/dashboard`) más el de cada nodo habilitado, en una sola llamada:
+
+```json
+{
+  "nodes": [
+    {"id": null, "name": "Este servidor", "url": null, "status": "ok", "data": { "...": "..." }},
+    {"id": 3, "name": "Sucursal Norte", "url": "https://10.0.0.5:8443", "status": "ok", "data": { "...": "..." }},
+    {"id": 4, "name": "Sucursal Sur", "url": "https://10.0.0.9:8443", "status": "error", "message": "No se pudo conectar: ..."}
+  ]
+}
+```
+
+Un nodo caído, con credenciales rechazadas, o que no responde a tiempo (timeout de 6s) nunca hace fallar la llamada completa — aparece con `status: "error"` y un `message` explicando por qué, mientras los demás se muestran con normalidad.
