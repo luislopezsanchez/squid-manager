@@ -206,19 +206,24 @@ Re-auditar `main @ 8c317ed` (v0.24.8) después de los 14 commits posteriores a l
 ### Índice por tema
 
 Las mejoras de abajo están escritas en orden cronológico (cuándo se
-investigó cada una). Esta tabla las agrupa por tema para verlas
-relacionadas entre sí — los enlaces apuntan a la entrada completa más
-abajo.
+investigó cada una). Esta tabla las agrupa por tema y por estado, para ver
+de un vistazo qué queda realmente pendiente — los enlaces apuntan a la
+entrada completa más abajo.
 
-| Tema | Mejoras |
-|------|---------|
-| **Directorio activo / autenticación** | [ACLs por grupo de Active Directory / LDAP](#acls-por-grupo-de-active-directory--ldap) · [Ajustes finos de Kerberos](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) |
-| **Ancho de banda y cuotas** (todo interrelacionado — ver la entrada consolidada) | [Rediseño de control de ancho de banda, límites por tipo de archivo y cuotas de navegación](#rediseño-de-ancho-de-banda-y-cuotas-de-navegación-2026-09-18) · [Terminar una conexión activa de un cliente](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) (acción de bloqueo inmediato, complementa las cuotas) |
-| **Reglas de acceso y contenido** | [Categorización de dominios](#categorización-de-dominios-2026-09-18) |
-| **Monitoreo y observabilidad** | [Monitoreo centralizado de varias instancias](#monitoreo-centralizado-de-varias-instancias-panel-central) · [Estadísticas de caché de Squid](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) · [Conexiones activas en tiempo real](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) · [Mejorar el dashboard con los KPIs de las funciones nuevas](#rediseño-de-ancho-de-banda-y-cuotas-de-navegación-2026-09-18) |
-| **Multi-nodo / escalabilidad** | [Sincronizar configuración entre nodos](#evaluado-alcance-reducido-clustering-de-squid-para-balanceo-de-carga) (resto pendiente de la guía de balanceo) |
-| **Asistente de IA** | [Agente de IA más capaz (agéntico)](#agente-de-ia-más-capaz-agéntico) |
-| **Plataforma / operaciones** | [Actualizar instalaciones Docker desde el panel](#actualizar-instalaciones-docker-desde-el-propio-panel) |
+| Estado | Tema | Mejora |
+|--------|------|--------|
+| ✅ Implementado | Directorio activo / autenticación | [ACLs por grupo de Active Directory / LDAP](#acls-por-grupo-de-active-directory--ldap) — verificado en vivo contra un AD real, incluida pertenencia anidada |
+| ✅ Implementado | Directorio activo / autenticación | [Ajustes finos de Kerberos](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) (children/startup/idle, pelar `@REALM`) |
+| ✅ Implementado | Ancho de banda y cuotas | [Rediseño de control de ancho de banda, límites por tipo de archivo y cuotas de navegación](#rediseño-de-ancho-de-banda-y-cuotas-de-navegación-2026-09-18) — incluye cuotas para usuarios LDAP y aplicación en bloque, verificado en vivo con un usuario LDAP real |
+| ✅ Implementado | Ancho de banda y cuotas | [Terminar una conexión activa de un cliente](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) — el corte real no se pudo verificar en la VM de pruebas por falta de reglas de conntrack ahí (limitación del entorno, no del código) |
+| ✅ Implementado | Reglas de acceso y contenido | [Categorización de dominios](#categorización-de-dominios-2026-09-18) (manual + importación desde HaGeZi) |
+| ⏳ Pendiente | Monitoreo y observabilidad | [Monitoreo centralizado de varias instancias](#monitoreo-centralizado-de-varias-instancias-panel-central) — diseño evaluado, no implementado |
+| ⏳ Pendiente | Monitoreo y observabilidad | [Estadísticas de caché de Squid](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) (vía Cache Manager) |
+| ⏳ Pendiente | Monitoreo y observabilidad | [Conexiones activas en tiempo real](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) — depende de la integración con Cache Manager de arriba |
+| ⏳ Pendiente | Monitoreo y observabilidad | [Nuevos KPIs de dashboard](#rediseño-de-ancho-de-banda-y-cuotas-de-navegación-2026-09-18) para las funciones ya implementadas (cuotas, ancho de banda, categorías) |
+| ⏳ Pendiente | Multi-nodo / escalabilidad | [Sincronizar configuración entre nodos](#evaluado-alcance-reducido-clustering-de-squid-para-balanceo-de-carga) (alcance reducido, evaluado) |
+| ⏳ Pendiente | Asistente de IA | [Agente de IA más capaz (agéntico)](#agente-de-ia-más-capaz-agéntico) |
+| ⏳ Pendiente | Plataforma / operaciones | [Actualizar instalaciones Docker desde el panel](#actualizar-instalaciones-docker-desde-el-propio-panel) — 3 opciones evaluadas, ninguna implementada todavía |
 
 ---
 
@@ -480,6 +485,11 @@ negotiate children 10` está fijo en la plantilla, sin exponer `startup`/
 usuario que llega a logs (relevante si a futuro hay cuotas por usuario, ver
 más abajo). Ajuste chico a la pantalla de Kerberos ya existente, no una
 función nueva. No se estimó esfuerzo.
+
+**Actualización (2026-09-18) — implementado.** `children`/`startup`/`idle`
+expuestos en la pantalla de Kerberos, y opción para pelar el `@REALM` del
+nombre de usuario antes de que llegue al log (commit
+`ed76bdc`, ver [kerberos.md](kerberos.md)).
 
 #### Estadísticas de caché de Squid (vía Cache Manager)
 
@@ -916,6 +926,38 @@ de la purga en vez de acoplarlos).
 
 492 tests de backend pasan (26 de cuotas + 6 de validación, reescritos
 sobre el nuevo diseño).
+
+**Actualización (2026-09-19) — verificado en vivo contra un usuario LDAP
+real (superando la limitación anotada arriba, "sin servidor LDAP real
+disponible"), y bug real de fondo encontrado y corregido en el proceso.**
+
+Con el AD real de la VM de pruebas ya configurado (ver [ACLs por grupo de
+Active Directory / LDAP](#acls-por-grupo-de-active-directory--ldap)), se
+sincronizó, se le puso una cuota real de 5 MB/día con acción "cortar" a
+un usuario LDAP real (`llopez`), y minutos después, con tráfico real
+generado por ese usuario, **el corte se disparó solo**: quedó deshabilitado
+en `ldap_users` y removido del archivo que Squid usa como allow-list —
+confirma que la rama LDAP de `_resolver_identidad()` funciona de punta a
+punta contra un directorio real, no solo en los tests con dobles.
+
+**Bug real encontrado en el camino:** al reiniciar el backend para este
+mismo trabajo, la cuota de `llopez` saltó de 0 a **55 MB de "consumo"** sin
+que hubiera navegado nada nuevo. Causa: `quota_service.py` (y también
+`syslog_service.py`, mismo patrón) guardaban en `/tmp` hasta dónde habían
+leído el `access.log`, pero el servicio corre con `PrivateTmp=yes` —cada
+reinicio del backend (deploy, upgrade, un crash, un reboot) borra ese
+`/tmp` y el siguiente ciclo relee el log **entero** como si fuera todo
+tráfico nuevo, inflando de golpe el consumo de cualquiera que ya tuviera
+una cuota activa (y, en el caso de syslog, reenviando el historial
+completo de nuevo a un destino externo). No es exclusivo del entorno de
+pruebas: le pasaría a cualquier instalación nativa real tras un reinicio
+del servicio. Corregido moviendo el archivo de estado a la carpeta del
+backend, mismo criterio que ya usaba `metrics_service.py` por el mismo
+motivo (auditoría de seguridad de septiembre, hallazgo 05-004) —
+verificado con dos reinicios seguidos del backend en la VM, el offset ya
+no se pierde.
+
+521 tests de backend pasan.
 
 ### Categorización de dominios (2026-09-18)
 
