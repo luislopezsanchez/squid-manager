@@ -122,6 +122,20 @@ export default function LdapConfig() {
         <h2 className="font-medium text-ink mb-1">{traducir("Datos del servidor LDAP")}</h2>
         <p className="text-sm text-ink-3 mb-4">{traducir("Esta configuración sirve para cualquier directorio LDAPv3 (Active Directory, OpenLDAP, FreeIPA…), no solo Active Directory — lo único que cambia entre uno y otro son los filtros de búsqueda de abajo.")}</p>
 
+        {/* Ejemplo completo de un caso real de Active Directory, verificado
+            en vivo -los tres puntos donde más se traba un admin nuevo
+            (formato del Bind DN, CN vs OU del contenedor de usuarios, y qué
+            privilegio hace falta) juntos en un solo lugar, en vez de
+            repartidos como ayuda suelta en cada campo. */}
+        <div className="note note-info mb-5">
+          <div>
+            <p className="note-title">{traducir("Ejemplo real para Active Directory")}</p>
+            <p className="note-text">
+              {traducir("Bind DN: usuario@midominio.com (formato UPN — el más simple y el que más veces funciona a la primera). Search Base: cn=Users,dc=midominio,dc=com para el contenedor de usuarios por defecto de Windows — ojo, es CN, no OU (OU= es solo para carpetas que vos mismo creaste en el directorio). No hace falta una cuenta administradora: alcanza con un usuario de dominio común, sin ningún privilegio especial.")}
+            </p>
+          </div>
+        </div>
+
         {/* Preset: solo rellena los filtros con un valor de partida conocido
             para el tipo de directorio elegido — no se guarda como tal, y los
             campos se pueden seguir editando a mano después. */}
@@ -141,6 +155,9 @@ export default function LdapConfig() {
             <option value="openldap">{traducir("OpenLDAP (posixAccount)")}</option>
             <option value="inetorg">{traducir("LDAP genérico (inetOrgPerson)")}</option>
           </select>
+          <p className="field-help mt-1">
+            {traducir("Solo rellena los dos filtros de abajo con un valor típico; no se guarda como tal. Por eso puede aparecer vacío otra vez si recargás la página, aunque los filtros sigan configurados tal cual quedaron.")}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -152,7 +169,10 @@ export default function LdapConfig() {
           <div>
             <label htmlFor="ldap-bind-dn" className="field-label block mb-1.5">{traducir("Bind DN")}</label>
             <input id="ldap-bind-dn" type="text" value={config.bind_dn} onChange={e => setConfig({ ...config, bind_dn: e.target.value })}
-              placeholder="cn=admin,dc=domain,dc=com" className="input font-mono text-sm" />
+              placeholder="usuario@dominio.com" className="input font-mono text-sm" />
+            <p className="field-help mt-1">
+              {traducir("La cuenta de servicio que usa SquidManager para conectarse (no la de cada usuario). En Active Directory, lo más simple es el formato usuario@dominio.com (UPN); también admite DOMINIO\\usuario o el DN completo si lo conocés exacto.")}
+            </p>
           </div>
           <div>
             <label htmlFor="ldap-bind-password" className="field-label block mb-1.5">{traducir("Contraseña Bind")}</label>
@@ -164,7 +184,10 @@ export default function LdapConfig() {
           <div>
             <label htmlFor="ldap-search-base" className="field-label block mb-1.5">{traducir("Search Base")}</label>
             <input id="ldap-search-base" type="text" value={config.search_base} onChange={e => setConfig({ ...config, search_base: e.target.value })}
-              placeholder="ou=users,dc=domain,dc=com" className="input font-mono text-sm" />
+              placeholder="cn=Users,dc=domain,dc=com" className="input font-mono text-sm" />
+            <p className="field-help mt-1">
+              {traducir("Dónde buscar a los usuarios. En Active Directory el contenedor por defecto es cn=Users (con CN, no OU) — usa OU= solo si los usuarios están en una carpeta organizativa que se creó a propósito.")}
+            </p>
           </div>
           <div>
             <label htmlFor="ldap-user-filter" className="field-label block mb-1.5">{traducir("Filtro de usuario (login)")}</label>
@@ -196,7 +219,10 @@ export default function LdapConfig() {
           <div>
             <label htmlFor="ldap-test-username" className="field-label block mb-1.5">{traducir("Usuario de prueba")}</label>
             <input id="ldap-test-username" type="text" value={testUser.username} onChange={e => setTestUser({ ...testUser, username: e.target.value })}
-              placeholder="usuario.ldap" className="input" />
+              placeholder="jperez" className="input" />
+            <p className="field-help mt-1">
+              {traducir("Solo el nombre de login corto (el que reemplaza el %s del filtro de arriba) — nunca usuario@dominio.com ni el DN completo, aunque el Bind DN sí los use.")}
+            </p>
           </div>
           <div>
             <label htmlFor="ldap-test-password" className="field-label block mb-1.5">{traducir("Contraseña de prueba")}</label>

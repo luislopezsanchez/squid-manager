@@ -20,6 +20,21 @@ class UserGroup(Base):
     # actúa antes de descifrar y les sigue afectando.
     no_bump = Column(Boolean, default=False, nullable=False)
 
+    # 'local' (por defecto): miembros propios, listados en UserGroupMember,
+    # se traducen a "acl <nombre> proxy_auth <usuario1> <usuario2> ...".
+    # 'ldap': la pertenencia se consulta en vivo contra el directorio, sin
+    # sincronizar nada -ver ldap_group_name/ldap_group_nested y
+    # squid/ldap_group_helper.py. UserGroupMember no se usa para estos.
+    source = Column(String(10), nullable=False, default="local")
+    # Nombre del grupo en el directorio (cn o sAMAccountName), solo cuando
+    # source='ldap'.
+    ldap_group_name = Column(String(255), nullable=True)
+    # False (por defecto): solo cuenta membresía DIRECTA del grupo -sirve
+    # contra cualquier LDAPv3. True: además cuenta grupos anidados, vía la
+    # regla de coincidencia recursiva de Active Directory -no funciona en
+    # OpenLDAP u otros directorios sin ese OID.
+    ldap_group_nested = Column(Boolean, default=False, nullable=False)
+
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 

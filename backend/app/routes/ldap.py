@@ -249,6 +249,78 @@ async def test_ldap_connection(
         return {"results": results, "success": False}
 
 
+def _raiz_dominio(search_base: str) -> str:
+    """Extrae la raíz del dominio (los componentes dc=) de un search_base.
+
+    search_base suele estar acotado a donde viven los USUARIOS (p.ej.
+    "cn=Users,dc=test,dc=com"), pero los grupos de un Active Directory real
+    suelen vivir en otro lado (CN=Builtin, una OU de Grupos aparte, etc.) -
+    buscar grupos solo dentro de ese search_base los dejaría afuera. Se
+    busca en cambio desde la raíz del dominio (los componentes dc=), en
+    todo el subárbol -mismo criterio con el que se inventariaron a mano los
+    grupos reales del AD de pruebas al construir esta función.
+    """
+    partes = [p.strip() for p in search_base.split(",") if p.strip().lower().startswith("dc=")]
+    return ",".join(partes) if partes else search_base
+
+
+@router.get("/groups")
+async def list_ldap_groups(
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    """Busca los grupos existentes en el directorio (para autocompletar).
+
+    Se usa al crear/editar un grupo de LDAP en el panel: sin esto había que
+    escribir el nombre exacto del grupo de memoria, sin ninguna
+    confirmación de que existe hasta guardar y esperar el primer intento de
+    acceso real contra el helper externo.
+    """
+    config = db.query(LdapConfig).first()
+    if not config or not config.enabled:
+        raise HTTPException(400, detail="LDAP no está configurado o está deshabilitado")
+
+    from ldap3 import Server, Connection, SUBTREE
+
+    try:
+        server = Server(config.server_url, connect_timeout=10)
+        conn = Connection(server, user=config.bind_dn, password=config.bind_password,
+                          auto_bind=True, receive_timeout=15)
+    except Exception as e:
+        raise HTTPException(400, detail=f"Error conectando a LDAP: {e}")
+
+    # Paginado por el mismo motivo que la sincronización de usuarios: Active
+    # Directory corta a las 1000 entradas (MaxPageSize) sin avisar.
+    try:
+        entries = conn.extend.standard.paged_search(
+            search_base=_raiz_dominio(config.search_base),
+            search_filter=(
+                "(|(objectClass=group)(objectClass=posixGroup)"
+                "(objectClass=groupOfNames)(objectClass=groupOfUniqueNames))"
+            ),
+            search_scope=SUBTREE,
+            attributes=["cn"],
+            paged_size=500,
+            generator=False,
+        )
+    except Exception as e:
+        conn.unbind()
+        raise HTTPException(400, detail=f"Error buscando grupos: {e}")
+
+    nombres = set()
+    for entry in entries:
+        if entry.get("type") != "searchResEntry":
+            continue
+        cn = entry.get("attributes", {}).get("cn")
+        if isinstance(cn, list):
+            cn = cn[0] if cn else None
+        if cn:
+            nombres.add(cn)
+
+    conn.unbind()
+    return {"groups": sorted(nombres)[:1000]}
+
+
 # ============================================================
 # Gestión de usuarios LDAP (allow-list estricto)
 # ============================================================

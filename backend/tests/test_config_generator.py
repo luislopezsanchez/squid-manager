@@ -57,13 +57,16 @@ class FakeLdap:
 class FakeDB:
     """Simula una sesión SQLAlchemy con queries básicas."""
 
-    def __init__(self, settings=None, acls=None, rules=None, users=None, delay_pools=None, ldap=None):
+    def __init__(self, settings=None, acls=None, rules=None, users=None, delay_pools=None, ldap=None,
+                 groups=None, group_members=None):
         self._settings = settings or []
         self._acls = acls or []
         self._rules = rules or []
         self._users = users or []
         self._delay_pools = delay_pools or []
         self._ldap = ldap
+        self._groups = groups or []
+        self._group_members = group_members or []
 
     def query(self, model):
         name = model.__name__ if hasattr(model, "__name__") else str(model)
@@ -79,6 +82,13 @@ class FakeDB:
             return self._FakeQuery(self._delay_pools)
         elif name == "LdapConfig":
             return self._FakeQuery([self._ldap] if self._ldap else [])
+        elif name == "UserGroup":
+            return self._FakeQuery(self._groups)
+        elif name == "UserGroupMember":
+            # El .filter(group_id == ...) de config_generator es un no-op acá
+            # (como el resto de filtros de este doble): para un test con más
+            # de un grupo, pasar solo los miembros del grupo que interesa.
+            return self._FakeQuery(self._group_members)
         return self._FakeQuery([])
 
     class _FakeQuery:
@@ -148,10 +158,21 @@ def test_generate_empty_config():
 
 
 class FakeGroup:
-    def __init__(self, name, description=""):
+    def __init__(self, name, description="", no_bump=False, source="local",
+                 ldap_group_name=None, ldap_group_nested=False):
         self.id = abs(hash(name)) % 1000
         self.name = name
         self.description = description
+        self.no_bump = no_bump
+        self.source = source
+        self.ldap_group_name = ldap_group_name
+        self.ldap_group_nested = ldap_group_nested
+
+
+class FakeGroupMember:
+    def __init__(self, group_id, username):
+        self.group_id = group_id
+        self.username = username
 
 
 def test_el_orden_de_las_reglas_se_respeta():
@@ -242,3 +263,77 @@ def test_base_de_certificados_en_el_volumen_persistente():
     config = generate_squid_config(db)
     assert "-s /var/lib/ssl_crtd/db" in config
     assert "/tmp/ssl_crtd" not in config
+
+
+# --- Grupos locales vs. grupos de LDAP/Active Directory --------------------
+
+def test_grupo_local_se_traduce_a_proxy_auth():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        groups=[FakeGroup("ventas", source="local")],
+        group_members=[FakeGroupMember(0, "jperez"), FakeGroupMember(0, "mgomez")],
+    )
+    config = generate_squid_config(db)
+    assert "acl ventas proxy_auth jperez mgomez" in config
+    assert "external_acl_type" not in config
+
+
+def test_grupo_local_vacio_usa_el_placeholder():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        groups=[FakeGroup("vacio", source="local")],
+    )
+    config = generate_squid_config(db)
+    assert "acl vacio proxy_auth __EMPTY_GROUP__" in config
+
+
+def test_grupo_ldap_declara_el_helper_externo_una_sola_vez():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        groups=[
+            FakeGroup("ad_ventas", source="ldap", ldap_group_name="Ventas"),
+            FakeGroup("ad_soporte", source="ldap", ldap_group_name="Soporte Tecnico"),
+        ],
+    )
+    config = generate_squid_config(db)
+    assert config.count("external_acl_type ldap_group_helper") == 1
+    # Codificado %XX y sin comillas a proposito: squid.conf interpreta un
+    # parametro de ACL entre comillas como "leer desde este archivo", no
+    # como un string con espacios escapado -confirmado en vivo, ver el
+    # comentario en config_generator.py junto a ldap_group_name_encoded.
+    assert "acl ad_ventas external ldap_group_helper Ventas direct" in config
+    assert "acl ad_soporte external ldap_group_helper Soporte%20Tecnico direct" in config
+    assert '"Soporte Tecnico"' not in config
+
+
+def test_grupo_ldap_anidado_usa_el_parametro_nested():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        groups=[FakeGroup("ad_admins", source="ldap", ldap_group_name="Domain Admins", ldap_group_nested=True)],
+    )
+    config = generate_squid_config(db)
+    assert "acl ad_admins external ldap_group_helper Domain%20Admins nested" in config
+
+
+def test_sin_grupos_ldap_no_se_declara_el_helper():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        groups=[FakeGroup("solo_local", source="local")],
+        group_members=[FakeGroupMember(0, "jperez")],
+    )
+    config = generate_squid_config(db)
+    assert "external_acl_type" not in config
+
+
+def test_grupos_locales_y_ldap_conviven():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        groups=[
+            FakeGroup("local1", source="local"),
+            FakeGroup("ad1", source="ldap", ldap_group_name="Grupo1"),
+        ],
+    )
+    config = generate_squid_config(db)
+    assert "acl local1 proxy_auth __EMPTY_GROUP__" in config
+    assert "acl ad1 external ldap_group_helper Grupo1 direct" in config
+    assert config.count("external_acl_type ldap_group_helper") == 1

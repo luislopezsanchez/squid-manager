@@ -8,6 +8,7 @@ ejecuta dentro del contenedor de Squid (en el del backend no hay binario).
 
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
+from urllib.parse import quote
 from sqlalchemy.orm import Session, defer
 
 from app.models.acl import Acl
@@ -65,16 +66,49 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
     groups = []
     groups_sin_bump = []
     for g in db.query(UserGroup).order_by(UserGroup.name).all():
-        members = [
-            m.username
-            for m in db.query(UserGroupMember).filter(UserGroupMember.group_id == g.id).all()
-        ]
-        grupo = {"name": g.name, "members": members}
+        source = getattr(g, "source", "local")
+        members = (
+            []
+            if source == "ldap"
+            else [
+                m.username
+                for m in db.query(UserGroupMember).filter(UserGroupMember.group_id == g.id).all()
+            ]
+        )
+        ldap_group_name = getattr(g, "ldap_group_name", None)
+        grupo = {
+            "name": g.name, "members": members, "source": source,
+            # Codificado %XX (mismo criterio que ya usa el protocolo de
+            # helpers de Squid para valores con espacios, ver auth_helper.py):
+            # squid.conf NO admite un parámetro de ACL con espacios entre
+            # comillas como si fuera un string cualquiera -las comillas ahí
+            # significan "leer la lista desde este archivo", no "escapar
+            # este texto"- confirmado en vivo: "Admins. del dominio" entre
+            # comillas rompía el parseo con "Can not open file Admins. for
+            # reading". Un único token sin espacios evita el problema del
+            # todo, y ldap_group_helper.py ya decodifica cada campo con
+            # unquote() por el mismo motivo.
+            "ldap_group_name_encoded": quote(ldap_group_name, safe="") if ldap_group_name else None,
+            "ldap_group_name": ldap_group_name,
+            "ldap_group_nested": getattr(g, "ldap_group_nested", False),
+        }
         groups.append(grupo)
         # Solo interesa si tiene a alguien: una ACL de un grupo vacío no puede
-        # eximir a nadie, y ensucia la configuración.
+        # eximir a nadie, y ensucia la configuración. La excepción de SSL
+        # Bump por grupo todavía no soporta grupos de LDAP (el bloque
+        # ssl_bump de la plantilla usa proxy_auth con la lista de miembros
+        # directo, no el helper externo) -se valida al crear/editar el
+        # grupo, así que en la práctica nunca debería llegar acá un grupo
+        # LDAP con no_bump=True, pero el filtro por `members` es la
+        # salvaguarda real.
         if getattr(g, "no_bump", False) and members:
             groups_sin_bump.append(grupo)
+
+    # Al menos un grupo LDAP -> hace falta declarar el external_acl_type una
+    # sola vez (un único pool de helpers, compartido por todos los grupos de
+    # AD que existan; cada uno pasa su propio nombre de grupo como parámetro
+    # fijo de su ACL, ver plantilla).
+    hay_grupos_ldap = any(g["source"] == "ldap" for g in groups)
 
     domain_acls = {a.name for a in acls if a.type in DOMAIN_ACL_TYPES}
 
@@ -203,6 +237,7 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
         delay_pools=delay_pools,
         ldap=ldap,
         groups=groups,
+        hay_grupos_ldap=hay_grupos_ldap,
         ssl_exclude=ssl_exclude,
         internal_port=puerto_escucha,
         modo_despliegue=runtime.name,

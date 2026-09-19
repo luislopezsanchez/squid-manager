@@ -104,6 +104,11 @@ RUN chmod +x /usr/lib/squid/squidmanager_auth_helper
 COPY digest_auth_helper.py /usr/lib/squid/squidmanager_digest_helper
 RUN chmod +x /usr/lib/squid/squidmanager_digest_helper
 
+# Helper de ACL externa: pertenencia a un grupo de LDAP/Active Directory
+# (ver ACLs por grupo de AD en Gestion > Grupos).
+COPY ldap_group_helper.py /usr/lib/squid/squidmanager_ldap_group_helper
+RUN chmod +x /usr/lib/squid/squidmanager_ldap_group_helper
+
 # Guardar copia de archivos de config en /opt/squid-defaults/ (el volumen /etc/squid los ocultara)
 RUN mkdir -p /opt/squid-defaults && cp /etc/squid/mime.conf /opt/squid-defaults/ 2>/dev/null || true \
     && cp /etc/squid/mime.conf.default /opt/squid-defaults/ 2>/dev/null || true \

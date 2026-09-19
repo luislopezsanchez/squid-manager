@@ -186,13 +186,24 @@ acl {{ acl.name }} {{ acl.type }} {{ acl.value }}
 {% endfor %}
 
 {% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
-# --- Grupos de usuarios (ACLs proxy_auth) ---
+{% if hay_grupos_ldap %}
+# Helper de ACL externa compartido por todos los grupos de LDAP/Active
+# Directory que existan (uno solo, cada grupo le pasa su propio nombre de
+# directorio como parámetro fijo de su ACL, más abajo). Consulta el
+# directorio en vivo por cada request, sin sincronizar membresías.
+external_acl_type ldap_group_helper children=5 %LOGIN /usr/lib/squid/squidmanager_ldap_group_helper
+{% endif %}
+# --- Grupos de usuarios ---
 # Siempre se genera la ACL del grupo (incluso vacío) para evitar "ACL not found"
 # si una regla lo referencia. El placeholder __EMPTY_GROUP__ no coincide con nadie.
 # Con 'none' no se declaran: no hay auth_param configurado, y una ACL
-# proxy_auth sin esquema aborta el arranque de Squid.
+# proxy_auth (o el %LOGIN del helper externo) sin esquema aborta el arranque.
 {% for group in groups %}
+{% if group.source == 'ldap' %}
+acl {{ group.name }} external ldap_group_helper {{ group.ldap_group_name_encoded }} {{ 'nested' if group.ldap_group_nested else 'direct' }}
+{% else %}
 acl {{ group.name }} proxy_auth {{ group.members|join(' ') if group.members else '__EMPTY_GROUP__' }}
+{% endif %}
 {% endfor %}
 {% endif %}
 
