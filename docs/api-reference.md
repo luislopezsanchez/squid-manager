@@ -1371,7 +1371,9 @@ Authorization: Bearer <token>
 
 ## Asistente de IA
 
-Responde preguntas sobre el uso del panel usando **solo la documentación del proyecto** como fuente (README + `docs/*.md` en español, nunca la base de datos ni la configuración real). Apagado por defecto, igual que LDAP/Kerberos/Syslog. Necesita dos API keys separadas: una de un proveedor de chat (para generar la respuesta) y una de Jina AI (para la búsqueda semántica por embeddings — sin ella no puede encontrar los fragmentos relevantes).
+Responde preguntas sobre el uso del panel usando **solo la documentación del proyecto** como fuente por defecto (README + `docs/*.md` en español, nunca la base de datos ni la configuración real). Apagado por defecto, igual que LDAP/Kerberos/Syslog. Necesita dos API keys separadas: una de un proveedor de chat (para generar la respuesta) y una de Jina AI (para la búsqueda semántica por embeddings — sin ella no puede encontrar los fragmentos relevantes).
+
+**Modo agéntico (fase 1, opcional):** con `agentic_enabled: true`, además de la documentación el asistente puede consultar el estado real del servidor (ACLs, reglas de acceso, grupos, ajustes generales, si hay cambios sin aplicar — nunca usuarios, dominios visitados, ni contenido de logs) y **proponer** cambios de configuración. Nunca los aplica por sí solo: arma una propuesta que el administrador confirma a mano en el panel, con el mismo endpoint que usaría sin el asistente de por medio (ver `ai_tools.py`). Solo disponible con `provider` `gemini`, `groq` o `nvidia_nim` (los que se confirmaron con tool-calling contra su documentación oficial) — con `ollama_cloud`, activar esto da `400`.
 
 ### Ver configuración
 ```http
@@ -1393,11 +1395,12 @@ Content-Type: application/json
   "api_key": "...",
   "embedding_api_key": "...",
   "chat_model": "gemini-2.0-flash",
-  "embedding_model": "jina-embeddings-v3"
+  "embedding_model": "jina-embeddings-v3",
+  "agentic_enabled": false
 }
 ```
 
-`provider`: `gemini`, `ollama_cloud`, `nvidia_nim` o `groq`. Enviar `api_key`/`embedding_api_key` como `"***"` conserva la que ya había guardada. Habilitar (`enabled: true`) exige tener las dos keys — sin la de Jina, `400`.
+`provider`: `gemini`, `ollama_cloud`, `nvidia_nim` o `groq`. Enviar `api_key`/`embedding_api_key` como `"***"` conserva la que ya había guardada. Habilitar (`enabled: true`) exige tener las dos keys — sin la de Jina, `400`. `agentic_enabled: true` con `provider: "ollama_cloud"` también da `400`.
 
 ### Probar una API key de proveedor
 ```http
@@ -1450,7 +1453,7 @@ Content-Type: application/json
 {"pregunta": "¿Cómo habilito la carga masiva de dominios?"}
 ```
 
-Cualquier admin puede preguntar, incluida una cuenta de solo lectura: es una consulta de lectura sobre documentación, no una acción sobre el proxy. `400` si el asistente no está activado.
+Cualquier admin puede preguntar, incluida una cuenta de solo lectura: en modo normal es una consulta de lectura sobre documentación; en modo agéntico también puede leer el estado real (mismos datos a los que un viewer ya tiene acceso por otras páginas) y proponer cambios -nunca aplicarlos-, así que tampoco requiere permisos de escritura. `400` si el asistente no está activado.
 
 ```json
 {
@@ -1462,13 +1465,26 @@ Cualquier admin puede preguntar, incluida una cuenta de solo lectura: es una con
 }
 ```
 
-`fuentes` son los fragmentos de documentación que se usaron para armar la respuesta — sirve para verificar de dónde salió, no es una alucinación sin base.
+`fuentes` son los fragmentos de documentación que se usaron para armar la respuesta — sirve para verificar de dónde salió, no es una alucinación sin base. Vacío si la pregunta se respondió con el modo agéntico en vez de con documentación.
+
+**En modo agéntico**, la respuesta suma dos campos más:
+
+```json
+{
+  "respuesta": "Tenés 12 ACLs configuradas, ninguna deshabilitada...",
+  "fuentes": [],
+  "herramientas_usadas": ["listar_acls"],
+  "propuesta": null
+}
+```
+
+Si el asistente propuso un cambio (por ejemplo, crear una ACL), `propuesta` trae `{"accion": "proponer_crear_acl", "argumentos": {...}}` — el frontend la muestra como una tarjeta con "Aplicar"/"Descartar"; "Aplicar" llama al endpoint normal de creación ([`POST /api/acls/`](#crear-acl)) con esos mismos argumentos, con la misma validación y auditoría de siempre. Este endpoint nunca ejecuta la propuesta por sí mismo.
 
 ---
 
 ## Actualizaciones
 
-Comprueba si hay una versión nueva de SquidManager en GitHub y permite aprobarla —de inmediato o programada— sin salir del panel. Solo instalación nativa. El panel nunca ejecuta la actualización en sí: solo puede aprobarla; quién la aplica de verdad y con qué permisos está explicado en [docs/actualizaciones-automaticas.md](actualizaciones-automaticas.md).
+Comprueba si hay una versión nueva de SquidManager en GitHub y permite aprobarla —de inmediato o programada— sin salir del panel. Disponible en instalación nativa y en Docker (ver `es_nativo` más abajo). El panel nunca ejecuta la actualización en sí: solo puede aprobarla; quién la aplica de verdad y con qué permisos está explicado en [docs/actualizaciones-automaticas.md](actualizaciones-automaticas.md). Única diferencia real entre los dos modos: en nativo, aprobar "ahora" adelanta el chequeo del temporizador al instante (vía sudo); en Docker, el backend no tiene forma de tocar systemd desde dentro del contenedor, así que el temporizador del host (`squidmanager-docker-autoupdate.timer`) la nota sola en su próximo ciclo (hasta 1 minuto).
 
 ### Ver el estado
 
@@ -1591,6 +1607,28 @@ Cache Manager a la red interna de Docker.
 Si Squid no responde, `info` o `storedir` quedan en `null` y el motivo aparece
 en `errores` — el que sí respondió no se pierde por el que falló.
 
+### Conexiones activas ahora
+
+```http
+GET /api/cache-manager/active-connections
+Authorization: Bearer <token>
+```
+
+A diferencia de todo lo demás en el panel (que sale de `access.log`, y solo existe una vez que una petición *terminó*), esto lee `mgr:client_list` — la cuenta de conexiones que Squid tiene **abiertas en este instante**, directo de su memoria.
+
+**Respuesta:**
+```json
+{
+  "clientes": [
+    {"address": "127.0.0.1", "name": "localhost", "conexiones_activas": 1, "icp_requests": 0, "http_requests": 1},
+    {"address": "172.30.36.1", "name": null, "conexiones_activas": 2, "icp_requests": 0, "http_requests": 126}
+  ],
+  "total_conexiones": 3
+}
+```
+
+Si Squid no responde, `clientes` viene vacío y aparece un campo `"error"` con el motivo (no lanza un error HTTP).
+
 ## Red
 
 ### Terminar la conexión activa de un cliente
@@ -1690,3 +1728,24 @@ Devuelve el dashboard de este servidor (`GET /api/metrics/dashboard`) más el de
 ```
 
 Un nodo caído, con credenciales rechazadas, o que no responde a tiempo (timeout de 6s) nunca hace fallar la llamada completa — aparece con `status: "error"` y un `message` explicando por qué, mientras los demás se muestran con normalidad.
+
+### Sincronizar la configuración a un nodo
+
+```http
+POST /api/central/nodes/{id}/sync
+Authorization: Bearer <token>
+```
+
+Envía la configuración de **este servidor** al nodo remoto, vía su propio `POST /api/backup/restore` (el mismo mecanismo que restaurar un archivo de backup descargado a mano, sin archivo intermedio) — **sobrescribe** la configuración del nodo. A diferencia del resto de este grupo de rutas (solo lectura), esto requiere que la cuenta guardada para el nodo tenga permisos de escritura ahí; una cuenta `viewer` (la recomendada para solo monitorear) se rechaza con un mensaje claro, no falla en silencio.
+
+**Respuesta (éxito):**
+```json
+{"id": 3, "name": "Sucursal Norte", "url": "https://10.0.0.5:8443", "status": "ok", "data": {"status": "ok", "message": "Backup restaurado correctamente", "details": {"...": "..."}}}
+```
+
+**Respuesta (cuenta sin permisos de escritura):**
+```json
+{"id": 3, "name": "Sucursal Norte", "url": "https://10.0.0.5:8443", "status": "error", "message": "La cuenta guardada para este nodo no tiene permisos de escritura ahí"}
+```
+
+Igual que el resto de esta sección, nunca falla con un error HTTP salvo que el nodo no exista (404): el resultado de la sincronización siempre viaja en el cuerpo.

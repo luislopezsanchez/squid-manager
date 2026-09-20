@@ -218,12 +218,12 @@ entrada completa más abajo.
 | ✅ Implementado | Ancho de banda y cuotas | [Terminar una conexión activa de un cliente](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) — el corte real no se pudo verificar en la VM de pruebas por falta de reglas de conntrack ahí (limitación del entorno, no del código) |
 | ✅ Implementado | Reglas de acceso y contenido | [Categorización de dominios](#categorización-de-dominios-2026-09-18) (manual + importación desde HaGeZi) |
 | ✅ Implementado | Monitoreo y observabilidad | [Monitoreo centralizado de varias instancias](#monitoreo-centralizado-de-varias-instancias-panel-central) — reutiliza el rol "viewer" que ya existía, sin mecanismo de autenticación nuevo |
-| ⏳ Pendiente | Monitoreo y observabilidad | [Estadísticas de caché de Squid](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) (vía Cache Manager) |
-| ⏳ Pendiente | Monitoreo y observabilidad | [Conexiones activas en tiempo real](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) — depende de la integración con Cache Manager de arriba |
-| ⏳ Pendiente | Monitoreo y observabilidad | [Nuevos KPIs de dashboard](#rediseño-de-ancho-de-banda-y-cuotas-de-navegación-2026-09-18) para las funciones ya implementadas (cuotas, ancho de banda, categorías) |
-| ⏳ Pendiente | Multi-nodo / escalabilidad | [Sincronizar configuración entre nodos](#evaluado-alcance-reducido-clustering-de-squid-para-balanceo-de-carga) (alcance reducido, evaluado) |
-| ⏳ Pendiente | Asistente de IA | [Agente de IA más capaz (agéntico)](#agente-de-ia-más-capaz-agéntico) |
-| ⏳ Pendiente | Plataforma / operaciones | [Actualizar instalaciones Docker desde el panel](#actualizar-instalaciones-docker-desde-el-propio-panel) — 3 opciones evaluadas, ninguna implementada todavía |
+| ✅ Implementado | Monitoreo y observabilidad | [Estadísticas de caché de Squid](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) (vía Cache Manager) — ya estaba hecho de una sesión anterior, esta lista no se había actualizado |
+| ✅ Implementado | Monitoreo y observabilidad | [Conexiones activas en tiempo real](#funciones-inspiradas-en-squidstats-comparación-2026-09-18) — vía `mgr:client_list`, mismo mecanismo de Cache Manager de arriba |
+| ✅ Implementado | Monitoreo y observabilidad | [Nuevos KPIs de dashboard](#dashboard-nuevos-kpis-para-las-funciones-de-arriba-2026-09-18) — solo el aviso de cuotas por agotarse; caché y conexiones activas se dejaron en su propia pantalla a propósito |
+| ✅ Implementado | Multi-nodo / escalabilidad | [Sincronizar configuración entre nodos](#evaluado-alcance-reducido-clustering-de-squid-para-balanceo-de-carga) — manual, a pedido, reutilizando el monitoreo centralizado; el balanceo de carga en sí sigue fuera de lo que Squid permite configurar |
+| ✅ Implementado | Asistente de IA | [Agente de IA más capaz (agéntico)](#agente-de-ia-más-capaz-agéntico) — solo lectura + propuestas que el administrador confirma a mano, nunca aplica nada solo |
+| ✅ Implementado | Plataforma / operaciones | [Actualizar instalaciones Docker desde el panel](#actualizar-instalaciones-docker-desde-el-propio-panel) — sin verificar en vivo por falta de un entorno Docker disponible |
 
 ---
 
@@ -275,6 +275,56 @@ repositorio no es el problema — el hueco es específicamente el paso de
 
 No se estimó esfuerzo de implementación todavía; queda para cuando se
 decida abordarlo.
+
+**Actualización (2026-09-19) — implementado con la opción 1 (recomendada),
+sin verificación en vivo por falta de un entorno Docker disponible en
+esta sesión (limitación del entorno de trabajo, no del diseño; ver el
+detalle al final).**
+
+Extiende `update_service.py` (antes rechazaba cualquier llamada fuera de
+`DEPLOY_MODE=native` con un error) para que comprobar contra GitHub y
+aprobar una actualización funcionen igual en Docker -son operaciones sin
+privilegios, solo escriben el archivo de estado ya existente
+(`.update_state.json`), que en Docker resulta estar en el mismo volumen
+del proyecto que ya se monta en el mismo path dentro y fuera del
+contenedor (`docker-compose.yml`): el host ya podía leerlo sin ningún
+cambio. Lo único exclusivo de nativo es el "empujón" inmediato vía sudo
+(`_disparar_verificacion_inmediata`) -en Docker no hay sudo hacia el host
+desde dentro de un contenedor, así que aprobar "ahora" espera al próximo
+tic del temporizador del host (hasta 1 minuto, contra "segundos" en
+nativo).
+
+Nuevo `docker-autoupdate-check.sh`, más simple que su equivalente nativo
+a propósito: nativo necesita lanzar la actualización real en una unidad de
+systemd APARTE (vía `systemd-run`) porque el propio backend corre en el
+mismo host, como el mismo tipo de servicio systemd que la actualización
+reinicia -si el proceso que la lanza comparte cgroup con lo que se
+reinicia, se mata a sí mismo a mitad de camino-. El temporizador de
+Docker no tiene ese problema: ya es un proceso del host, completamente
+ajeno al ciclo de vida de los contenedores que reinicia, así que invoca
+`upgrade-docker.sh` directo y en primer plano, sin necesitar una unidad
+transient ni un archivo de resultado intermedio.
+
+Instalado por `install.sh` (temporizador `squidmanager-docker-autoupdate.timer`,
+cada minuto, igual cadencia que nativo) y, para que una instalación Docker
+ya existente no se quede afuera hasta que alguien vuelva a correr
+`install.sh` a mano, el mismo bloque de instalación (idempotente) se sumó
+también a `upgrade-docker.sh`: la próxima actualización manual de
+cualquier instalación existente ya deja el temporizador funcionando solo.
+También se sumó `git` a la imagen del backend -sin él,
+`update_service.py` no tiene forma de saber qué commit tiene desplegado
+desde dentro del contenedor, y la comprobación de "hay una actualización
+disponible" nunca detectaría ninguna.
+
+**Limitación del entorno de trabajo:** esta sesión no tuvo acceso a una
+instalación Docker real para probar el temporizador de punta a punta (la
+VM de pruebas disponible es nativa). Se verificó lo que sí se pudo sin
+ese entorno: sintaxis de los scripts de bash (`bash -n`), los 553 tests
+de backend (3 nuevos, sobre el cambio de compuertas de modo en
+`update_service.py`), y que la instalación nativa existente sigue
+funcionando exactamente igual que antes (nada de lo tocado le cambia el
+comportamiento). Queda pendiente una verificación en vivo contra una
+instalación Docker real la próxima vez que haya una disponible.
 
 ### ACLs por grupo de Active Directory / LDAP
 
@@ -500,6 +550,35 @@ automático). Queda pendiente, si se retoma, automatizar esa sincronización.
 
 No se estimó esfuerzo de implementación de la sincronización automática.
 
+**Actualización (2026-09-19) — la sincronización se implementó, deliberadamente
+manual y a pedido, no automática/programada.** Aprovecha directamente la
+tabla `monitored_nodes` que ya trae el monitoreo centralizado (mismo
+mecanismo de login contra el nodo remoto): `POST
+/api/central/nodes/{id}/sync` arma el mismo JSON que ya arma `GET
+/api/backup/export` (se extrajo `build_backup_dict()` de esa ruta para
+reusarlo) y lo manda directo al `POST /api/backup/restore` del nodo remoto,
+sin archivo intermedio.
+
+Se descartó a propósito una sincronización automática/programada: empujar
+cambios de configuración solos, en segundo plano, a instancias remotas de
+producción sin que un admin lo dispare a mano es un perfil de riesgo
+distinto (y mayor) al de todo lo demás en este proyecto, donde nada se
+aplica sin una acción explícita ("Aplicar cambios" incluido). La cuenta
+guardada para un nodo de solo monitoreo (rol `viewer`, la recomendada) no
+alcanza para sincronizar -se rechaza con un mensaje claro-, así que
+sincronizar de verdad exige guardarle al nodo una cuenta con permisos de
+escritura, una decisión aparte y explícita del administrador.
+
+Verificado en vivo contra la VM de pruebas (nodo apuntando a sí misma, dos
+cuentas de prueba: una `viewer` y una con permisos de escritura): la cuenta
+`viewer` fue rechazada con el mensaje esperado; la cuenta con permisos
+sincronizó de verdad -18 ajustes, 18 ACLs, 2 reglas, 2 delay pools, 2
+grupos y 6 usuarios LDAP restaurados, con las advertencias esperadas sobre
+las ACLs de archivo (su contenido no viaja en el backup, hay que
+recargarlas aparte). 5 tests nuevos de backend sobre
+`sincronizar_configuracion()` (éxito, login rechazado, sin permisos de
+escritura, error genérico, respuesta no JSON).
+
 ### Huella de autoría en el código fuente (2026-09-18)
 
 Pedido por el autor del proyecto: algún medio para poder identificar copias
@@ -556,6 +635,16 @@ servicio nuevo en el backend que lo consulte y lo muestre en el dashboard.
 Aditivo, no toca las métricas actuales basadas en logs. No se estimó
 esfuerzo.
 
+**Actualización — ya estaba implementado antes de esta entrada** (commit
+`d6b87f8`, "estadisticas de cache (Cache Manager de Squid)"): esta lista de
+pendientes simplemente nunca se había actualizado para reflejarlo. La
+integración con el Cache Manager ya existe (`GET
+/squid-internal-mgr/<reporte>` sobre el propio puerto de Squid, ver
+`ProxyRuntime.cache_manager_report()`), con `mgr:info` y `mgr:storedir`
+parseados en `cache_manager_service.py` y mostrados en Reportes → Estado
+del caché. Este hallazgo (2026-09-19) es justo lo que hizo mucho más barato
+el punto siguiente.
+
 #### Conexiones activas en tiempo real
 
 Bytes leídos/escritos de una conexión **mientras sigue abierta**, no solo
@@ -563,6 +652,24 @@ al cerrarse — estructuralmente imposible de obtener parseando `access.log`
 (esa línea recién se escribe cuando la conexión termina). Depende de la
 misma integración con Cache Manager del punto anterior. No se estimó
 esfuerzo.
+
+**Actualización (2026-09-19) — implementado, y mucho más barato de lo
+estimado gracias al hallazgo de arriba: la integración con Cache Manager
+ya existía.** Solo hizo falta sumar `client_list` a la lista de reportes
+permitidos (`REPORTES_PERMITIDOS` en `cache_manager_service.py`) y un
+parser nuevo -mismo patrón que `mgr:info`/`mgr:storedir`, cada campo con su
+propio regex, tolerante a que un reporte puntual falle sin tumbar el
+resto-. `mgr:client_list` da la cuenta de conexiones **ya establecidas en
+este instante** por cliente (dirección, nombre si lo resuelve, conexiones
+activas, peticiones HTTP/ICP) directo de la memoria de Squid, no de logs.
+
+Nuevo `GET /api/cache-manager/active-connections`, con una tabla nueva
+("Conexiones activas ahora") en la misma pantalla de Estado del caché.
+Verificado en vivo contra la VM de pruebas: `curl
+http://127.0.0.1:3128/squid-internal-mgr/client_list` devolvió datos reales
+de dos clientes (localhost y un cliente real con 126 peticiones HTTP), y el
+parser los interpretó correctamente. 10 tests de backend pasan sobre el
+parser (con el texto real capturado en esa prueba como fixture).
 
 #### Terminar una conexión activa de un cliente
 
@@ -700,6 +807,67 @@ mal armada.
    bitácora; no empezar hasta tener sólida y probada la fase 1.
 
 No se estimó esfuerzo de implementación todavía.
+
+**Actualización (2026-09-20) — implementado, con alcance decidido por el
+autor tras una pregunta directa antes de empezar a programar** (el único
+punto de esta tanda de mejoras donde hizo falta parar a preguntar: qué
+datos reales puede ver un proveedor de IA externo es una decisión de
+privacidad/cumplimiento, no una de ingeniería). El autor pidió: responder
+preguntas sobre SquidManager, revisar configuraciones reales en busca de
+errores, poder "hacer configuraciones" pero **nunca tocar el código
+fuente**, y no responder nada fuera de tema.
+
+Diseño resultante -fase 1 y el arranque de fase 2, fusionadas, pero con la
+fase 2 reducida a "proponer, nunca ejecutar":
+
+- **Lectura**, ejecutada al toque (`app/services/ai_tools.py`):
+  `listar_acls`, `listar_reglas_acceso`, `listar_grupos`,
+  `ver_ajustes_squid`, `ver_estado_aplicacion`, `buscar_documentacion`
+  (reusa la búsqueda semántica que ya existía). Deliberadamente
+  estructurales -nombres, tipos, cantidades- y **nunca** nombres de
+  usuario, dominios visitados, ni contenido de logs: quién navegó qué no
+  es del asistente, y una ACL de archivo nunca expone su contenido (puede
+  tener millones de líneas), solo cuántas tiene.
+- **Propuesta**, nunca ejecutada (`proponer_crear_acl`, por ahora la única):
+  `ejecutar_herramienta()` la intercepta ANTES de tocar la base y devuelve
+  la propuesta tal cual. El modelo no tiene, en ningún punto del código, un
+  camino hacia una escritura real -ni siquiera indirecto-. Quien aplica de
+  verdad es el administrador, a mano, con el mismo botón "Crear" que ya
+  existía en la página de ACLs (el frontend arma la propuesta como una
+  tarjeta con "Aplicar"/"Descartar"; "Aplicar" llama al mismo
+  `api.createAcl()` de siempre, con la validación y el registro de
+  auditoría de siempre). Así se cumple "nunca tocar el código fuente" de
+  la forma más literal posible: el agente no tiene ninguna vía de escritura
+  propia, ni falsa ni real.
+- **Tool-calling implementado para Gemini y para el formato OpenAI-compatible**
+  (Groq, NVIDIA NIM) -los dos formatos que la investigación previa había
+  confirmado contra la documentación oficial de cada proveedor. Ollama
+  Cloud queda fuera del modo agéntico (no confirmado) pero sigue
+  funcionando igual que siempre en modo solo-documentación; se rechaza
+  explícitamente combinarlo con el modo agéntico, tanto al guardar la
+  configuración como al preguntar.
+- Bucle acotado a 4 iteraciones (`_MAX_ITERACIONES_AGENTE`): un modelo
+  gratuito que no termine de decidir nunca deja la conversación colgada
+  indefinidamente.
+- Interruptor nuevo (`AiConfig.agentic_enabled`, migración 0033), apagado
+  por defecto: activarlo es una decisión explícita del administrador,
+  informada en la propia UI de que estos datos reales salen hacia el
+  proveedor de IA configurado, no solo la documentación como hasta ahora.
+
+**Verificado en vivo contra la VM de pruebas:** las 6 herramientas de
+lectura devuelven datos reales de la base (ACLs, reglas, grupos, ajustes,
+estado de aplicación); `proponer_crear_acl` confirmado que NO crea nada
+-se probó pidiéndole crear una ACL de prueba y verificando después, contra
+la base real, que no existe-; y el rechazo de Ollama Cloud + modo agéntico
+funciona tanto al guardar como al preguntar. **No se pudo verificar el
+diálogo de punta a punta con un proveedor de IA real** -esta VM no tiene
+ninguna API key de Gemini/Groq/NVIDIA configurada, y no correspondía pedir
+o usar una sin que el autor lo pidiera-; el bucle de tool-calling en sí
+(cuántas rondas, qué se le pasa al modelo en cada formato, cómo se
+interpreta una respuesta con herramientas vs. con texto final) se probó
+con las respuestas de los proveedores simuladas, no en vivo. 568 tests de
+backend pasan (15 nuevos: herramientas de `ai_tools.py`, y el bucle
+agéntico contra Gemini y contra el formato OpenAI-compatible).
 
 ### Rediseño de ancho de banda y cuotas de navegación (2026-09-18)
 
@@ -1179,3 +1347,25 @@ razonables una vez implementadas: usuarios cerca de agotar su cuota,
 consumo de caché de Squid (entradas, disco), conexiones activas en este
 momento. No se estimó esfuerzo ni se definió el diseño visual todavía —
 eso se hace recién cuando haya datos reales de qué mostrar.
+
+**Actualización (2026-09-19) — implementado el primero de los tres
+candidatos, deliberadamente no los tres.** Se sumó "usuarios cerca de
+agotar su cuota" (≥80% de su límite, sin que la acción se haya aplicado
+todavía) como un aviso que solo ocupa espacio cuando hay alguien en esa
+situación -no una tarjeta fija casi siempre vacía-, con link directo a
+Gestión → Usuarios. Los otros dos candidatos (caché de Squid, conexiones
+activas) se dejaron **fuera del dashboard principal a propósito**: los dos
+ya tienen su propia pantalla dedicada ("Estado del caché", que ahora
+también incluye conexiones activas -ver la entrada de "Estadísticas de
+caché de Squid" más abajo-), y duplicarlos en el dashboard iba en contra
+del propio pedido de "no sobrecargado". Motivo técnico adicional para no
+sumar conexiones activas al dashboard: ese dato sale de una consulta en
+vivo al Cache Manager de Squid, y el dashboard principal se refresca cada
+5 segundos -someter a Squid a esa consulta extra cada 5s por cada admin
+con el dashboard abierto no se justificaba por un dato que ya tiene su
+propio lugar.
+
+`GET /api/panel/dashboard` (y `/api/metrics/dashboard`) suman el campo
+`quotas_en_riesgo` (cuenta, no la lista de nombres -esto se pinta en un
+dashboard compartido, no es el lugar para señalar personas-). Nuevo
+`contar_cuotas_en_riesgo()` en `quota_service.py`, con `UMBRAL_RIESGO = 0.8`.
