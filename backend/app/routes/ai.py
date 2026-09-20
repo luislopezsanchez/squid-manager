@@ -37,6 +37,9 @@ class AiConfigIn(BaseModel):
     embedding_api_key: str | None = None
     chat_model: str | None = None
     embedding_model: str | None = None
+    # Fase 1 del asistente agéntico: consulta el estado real del servidor y
+    # puede proponer cambios -nunca aplicarlos solo-, ver ai_tools.py.
+    agentic_enabled: bool = False
 
 
 class PreguntaIn(BaseModel):
@@ -80,6 +83,7 @@ async def get_config(
         "chat_model": config.chat_model or "",
         "embedding_model": config.embedding_model or "",
         "fragmentos_indexados": total_fragmentos,
+        "agentic_enabled": config.agentic_enabled,
     }
 
 
@@ -103,6 +107,7 @@ async def update_config(
         config.embedding_api_key = data.embedding_api_key
     config.chat_model = data.chat_model
     config.embedding_model = data.embedding_model
+    config.agentic_enabled = data.agentic_enabled
 
     if config.enabled and not config.api_key:
         raise HTTPException(400, detail="Hace falta una API key para habilitar el asistente")
@@ -111,6 +116,15 @@ async def update_config(
             400,
             detail="Hace falta la API key de Jina AI para poder buscar en la documentación.",
         )
+    # Ollama Cloud no se confirmó contra su documentación oficial que soporte
+    # tool-calling (ver docs/project-log.md) -a diferencia de Gemini/Groq/
+    # NVIDIA NIM, que sí. Se rechaza acá, no solo en ai_service.py, para que
+    # el admin se entere al guardar y no recién al primer mensaje.
+    if config.agentic_enabled and config.provider == "ollama_cloud":
+        raise HTTPException(
+            400,
+            detail="El modo agéntico no está disponible con Ollama Cloud todavía. Probá con Gemini, Groq o NVIDIA NIM.",
+        )
 
     # Nunca las API keys, solo si cambiaron.
     db.add(AuditLog(
@@ -118,6 +132,7 @@ async def update_config(
         action="update", entity="ai_config", entity_id=config.id,
         new_value=(
             f"enabled={config.enabled} provider={config.provider} chat_model={config.chat_model} "
+            f"agentic_enabled={config.agentic_enabled} "
             f"api_key={'(cambiada)' if api_key_cambio else '(sin cambios)'} "
             f"embedding_api_key={'(cambiada)' if embedding_key_cambio else '(sin cambios)'}"
         ),
@@ -190,9 +205,13 @@ async def responder_pregunta(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """Cualquier admin puede preguntar (incluido un viewer): es una consulta
+    """Cualquier admin puede preguntar (incluido un viewer): en modo normal es
 
-    de solo lectura sobre documentación, no una acción sobre el proxy.
+    una consulta de solo lectura sobre documentación; en modo agéntico
+    también puede leer el estado real (mismos datos a los que un viewer ya
+    tiene acceso por otras páginas del panel) y proponer cambios -nunca
+    aplicarlos, ver ai_tools.py-, así que tampoco requiere permisos de
+    escritura.
     """
     if not data.pregunta.strip():
         raise HTTPException(400, detail="La pregunta no puede estar vacía")

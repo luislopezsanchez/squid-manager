@@ -12,7 +12,19 @@ const PROVEEDORES = [
   { value: 'ollama_cloud', label: 'Ollama Cloud', ejemploModelo: 'llama3.1' },
 ]
 
-type Turno = { pregunta: string; respuesta: string; fuentes: { archivo: string; seccion: string | null }[] }
+type Propuesta = { accion: string; argumentos: Record<string, any> }
+type Turno = {
+  pregunta: string; respuesta: string
+  fuentes: { archivo: string; seccion: string | null }[]
+  herramientasUsadas?: string[]
+  propuesta?: Propuesta | null
+  propuestaEstado?: 'pendiente' | 'aplicada' | 'descartada'
+}
+
+// Proveedores con soporte de tool-calling confirmado contra su
+// documentación oficial (ver docs/project-log.md) -Ollama Cloud queda
+// afuera del modo agéntico hasta confirmarlo.
+const PROVEEDORES_AGENTICO = ['gemini', 'groq', 'nvidia_nim']
 
 // La conversación se guarda en sessionStorage -viva mientras dure la
 // pestaña/sesión del navegador, como pidió el usuario, sin necesidad de
@@ -76,7 +88,8 @@ export default function Asistente() {
   }
 
   const handleCambiarProveedor = (provider: string) => {
-    setConfig({ ...config, provider })
+    const agentic_enabled = config.agentic_enabled && PROVEEDORES_AGENTICO.includes(provider)
+    setConfig({ ...config, provider, agentic_enabled })
     setModelosProveedor(null) // la lista de modelos era del proveedor anterior
   }
 
@@ -136,6 +149,7 @@ export default function Asistente() {
         embedding_api_key: config.embedding_api_key,
         chat_model: config.chat_model,
         embedding_model: config.embedding_model,
+        agentic_enabled: config.agentic_enabled,
       })
       showToast(traducir("Configuración guardada correctamente"), 'success')
       cargar()
@@ -172,12 +186,39 @@ export default function Asistente() {
     setPregunta('')
     try {
       const r = await api.preguntarAsistente(texto)
-      setConversacion(prev => [...prev, { pregunta: texto, respuesta: r.respuesta, fuentes: r.fuentes || [] }])
+      setConversacion(prev => [...prev, {
+        pregunta: texto, respuesta: r.respuesta, fuentes: r.fuentes || [],
+        herramientasUsadas: r.herramientas_usadas || [],
+        propuesta: r.propuesta || null,
+        propuestaEstado: r.propuesta ? 'pendiente' : undefined,
+      }])
     } catch (e: any) {
       setConversacion(prev => [...prev, { pregunta: texto, respuesta: `⚠️ ${e.message}`, fuentes: [] }])
     } finally {
       setPreguntando(false)
     }
+  }
+
+  const handleAplicarPropuesta = async (indice: number) => {
+    const turno = conversacion[indice]
+    if (!turno.propuesta) return
+    try {
+      if (turno.propuesta.accion === 'proponer_crear_acl') {
+        const a = turno.propuesta.argumentos
+        await api.createAcl({
+          name: a.name, type: a.type, value: a.value,
+          description: a.description || '', enabled: true,
+        })
+        showToast(traducir('ACL "{n}" creada', { n: a.name }), 'success')
+      }
+      setConversacion(prev => prev.map((t, i) => i === indice ? { ...t, propuestaEstado: 'aplicada' } : t))
+    } catch (e: any) {
+      showToast(`Error: ${e.message}`, 'error')
+    }
+  }
+
+  const handleDescartarPropuesta = (indice: number) => {
+    setConversacion(prev => prev.map((t, i) => i === indice ? { ...t, propuestaEstado: 'descartada' } : t))
   }
 
   if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
@@ -190,7 +231,9 @@ export default function Asistente() {
       <ToastContainer />
       <h1 className="page-title mb-2">{traducir("Asistente")}</h1>
       <p className="text-sm text-ink-3 mb-6">
-        {traducir("Responde consultas sobre cómo usar el panel, basándose únicamente en la documentación del proyecto. No tiene acceso a la configuración real de este servidor ni puede ejecutar ninguna acción.")}
+        {config.agentic_enabled
+          ? traducir("Responde consultas sobre SquidManager y puede consultar la configuración real de este servidor para diagnosticar. Puede proponer cambios, pero nunca los aplica solo -siempre pide tu confirmación-, y no tiene acceso a archivos ni al código fuente del proyecto.")
+          : traducir("Responde consultas sobre cómo usar el panel, basándose únicamente en la documentación del proyecto. No tiene acceso a la configuración real de este servidor ni puede ejecutar ninguna acción.")}
       </p>
 
       {/* Configuración */}
@@ -278,6 +321,26 @@ export default function Asistente() {
               </>
             )}
           </div>
+
+          <label className={`flex items-start gap-2 mt-4 pt-4 border-t border-line-soft ${
+            PROVEEDORES_AGENTICO.includes(config.provider) ? 'cursor-pointer' : 'opacity-50'
+          }`}>
+            <input
+              type="checkbox"
+              checked={!!config.agentic_enabled}
+              disabled={!PROVEEDORES_AGENTICO.includes(config.provider)}
+              onChange={e => setConfig({ ...config, agentic_enabled: e.target.checked })}
+              className="w-4 h-4 mt-0.5 rounded"
+            />
+            <span className="text-sm text-ink-2">
+              {traducir("Modo agéntico (fase 1): puede consultar ACLs, reglas, grupos y ajustes reales")}
+              <span className="block text-xs text-ink-3 mt-0.5">
+                {PROVEEDORES_AGENTICO.includes(config.provider)
+                  ? traducir("También puede proponer cambios de configuración -nunca los aplica solo, siempre pide tu confirmación-. Estos datos salen hacia el proveedor de IA, no solo la documentación.")
+                  : traducir("No disponible con este proveedor todavía -probá con Gemini, Groq o NVIDIA NIM.")}
+              </span>
+            </span>
+          </label>
         </div>
 
         {/* Paso 2: Jina AI, fijo, para la búsqueda en la documentación */}
@@ -370,8 +433,40 @@ export default function Asistente() {
                           ))}
                         </div>
                       )}
+                      {!!turno.herramientasUsadas?.length && (
+                        <p className="mt-2 pt-2 border-t border-line-soft text-[11px] text-ink-3">
+                          {traducir("Consultó")}: {turno.herramientasUsadas.join(', ')}
+                        </p>
+                      )}
                     </div>
                   </div>
+
+                  {turno.propuesta && (
+                    <div className="flex justify-start">
+                      <div className="border border-brand-300 bg-white rounded-lg px-4 py-3 max-w-[85%] w-full">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-brand-700 mb-2">
+                          {traducir("Propuesta -sin aplicar todavía")}
+                        </p>
+                        <pre className="text-xs bg-brand-50 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+                          {JSON.stringify(turno.propuesta.argumentos, null, 2)}
+                        </pre>
+                        {turno.propuestaEstado === 'aplicada' ? (
+                          <p className="text-xs text-ok font-medium mt-2">✓ {traducir("Aplicada")}</p>
+                        ) : turno.propuestaEstado === 'descartada' ? (
+                          <p className="text-xs text-ink-3 mt-2">{traducir("Descartada")}</p>
+                        ) : (
+                          <div className="flex gap-2 mt-2">
+                            <button onClick={() => handleAplicarPropuesta(i)} className="btn btn-primary btn-sm">
+                              {traducir("Aplicar")}
+                            </button>
+                            <button onClick={() => handleDescartarPropuesta(i)} className="btn btn-ghost btn-sm">
+                              {traducir("Descartar")}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {preguntando && (

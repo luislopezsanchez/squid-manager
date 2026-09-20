@@ -1,10 +1,17 @@
 """Asistente de IA: responde consultas sobre el uso del panel usando la
-documentación del proyecto como única fuente.
+documentación del proyecto, y opcionalmente (modo agéntico, apagado por
+defecto) consultando el estado real del servidor y proponiendo cambios de
+configuración -ver ai_tools.py para el porqué eso es seguro: nunca escribe
+nada por sí solo, solo arma propuestas que el administrador confirma a
+mano.
 
 Diseño deliberado, no accidental:
-- Solo lee `docs/*.md` y el `README.md` en español -nunca la base de datos,
-  nunca el squid.conf real, nunca credenciales-. Esta función es un buscador
-  con lenguaje natural encima, no un agente que actúa sobre el proxy.
+- Por defecto (modo agéntico apagado) solo lee `docs/*.md` y el `README.md`
+  en español -nunca la base de datos, nunca el squid.conf real, nunca
+  credenciales-. Es un buscador con lenguaje natural encima, no un agente.
+  Con el modo agéntico activado, sí consulta ACLs/reglas/grupos/ajustes
+  reales (nunca credenciales, nunca usuarios, nunca contenido de logs) para
+  poder diagnosticar contra el estado real -ver ai_tools.py-.
 - Los embeddings son siempre de Jina AI (`jina-embeddings-v3`, con
   `dimensions=768` para calzar con la columna de la tabla): se investigó
   Gemini, NVIDIA NIM, Cohere y Voyage AI antes de elegir -Gemini tiene
@@ -19,6 +26,7 @@ Diseño deliberado, no accidental:
   mucho más general del que hace falta acá.
 """
 
+import json
 import logging
 import re
 import threading
@@ -323,6 +331,97 @@ def _openai_compatible_generar(
     if not contenido:
         raise AiServiceError(f"{nombre} devolvió una respuesta vacía.")
     return contenido
+
+
+# --- Modo agéntico: generación con herramientas (tool calling) -------------
+#
+# Solo Gemini y los proveedores OpenAI-compatible (Groq, NVIDIA NIM): son los
+# que se verificaron contra su documentación oficial antes de sumar esto (ver
+# docs/project-log.md). Ollama Cloud queda fuera del modo agéntico -no se
+# confirmó su soporte- pero sigue funcionando igual que siempre para el modo
+# de solo documentación.
+
+def _gemini_generar_con_herramientas(contents: list[dict], tools: list[dict], api_key: str, model: str, system: str) -> dict:
+    url = _GEMINI_GENERATE_URL.format(model=model)
+    body = {
+        "contents": contents,
+        "systemInstruction": {"parts": [{"text": system}]},
+        "tools": [{"functionDeclarations": tools}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048},
+    }
+    try:
+        r = _post_con_reintentos(
+            url, {"x-goog-api-key": api_key}, body, timeout=60,
+            reintentos=_REINTENTOS_INTERACTIVO, espera=_ESPERA_ENTRE_REINTENTOS_INTERACTIVO,
+        )
+    except httpx.HTTPStatusError as e:
+        raise _error_proveedor("Gemini", e)
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con Gemini: {e}")
+
+    candidatos = r.json().get("candidates") or []
+    if not candidatos:
+        raise AiServiceError("Gemini no devolvió ninguna respuesta (puede haber bloqueado el contenido).")
+    partes = candidatos[0].get("content", {}).get("parts") or []
+
+    llamadas = []
+    texto = ""
+    for p in partes:
+        if "functionCall" in p:
+            fc = p["functionCall"]
+            llamadas.append({"id": None, "nombre": fc.get("name"), "argumentos": fc.get("args") or {}})
+        elif "text" in p:
+            texto += p["text"]
+
+    if llamadas:
+        return {"tipo": "tool_calls", "llamadas": llamadas, "mensaje_bruto": {"role": "model", "parts": partes}}
+    texto = texto.strip()
+    if not texto:
+        raise AiServiceError("Gemini devolvió una respuesta vacía.")
+    return {"tipo": "texto", "contenido": texto}
+
+
+def _openai_compatible_generar_con_herramientas(
+    messages: list[dict], tools: list[dict], api_key: str, model: str, base_url: str, nombre: str,
+) -> dict:
+    body = {
+        "model": model,
+        "messages": messages,
+        "tools": [{"type": "function", "function": t} for t in tools],
+    }
+    try:
+        r = _post_con_reintentos(
+            f"{base_url}/chat/completions",
+            {"Authorization": f"Bearer {api_key}"},
+            body, timeout=60,
+            reintentos=_REINTENTOS_INTERACTIVO, espera=_ESPERA_ENTRE_REINTENTOS_INTERACTIVO,
+        )
+    except httpx.HTTPStatusError as e:
+        raise _error_proveedor(nombre, e)
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con {nombre}: {e}")
+
+    choices = r.json().get("choices") or []
+    if not choices:
+        raise AiServiceError(f"{nombre} no devolvió ninguna respuesta.")
+    mensaje = choices[0].get("message") or {}
+    tool_calls = mensaje.get("tool_calls")
+
+    if tool_calls:
+        llamadas = []
+        for tc in tool_calls:
+            fn = tc.get("function", {})
+            try:
+                argumentos = json.loads(fn.get("arguments") or "{}")
+            except json.JSONDecodeError:
+                argumentos = {}
+            llamadas.append({"id": tc.get("id"), "nombre": fn.get("name"), "argumentos": argumentos})
+        return {"tipo": "tool_calls", "llamadas": llamadas, "mensaje_bruto": mensaje}
+
+    contenido = (mensaje.get("content") or "").strip()
+    if not contenido:
+        raise AiServiceError(f"{nombre} devolvió una respuesta vacía.")
+    return {"tipo": "texto", "contenido": contenido}
 
 
 # --- Listado de modelos disponibles (para probar la key antes de guardar) ---
@@ -632,6 +731,103 @@ _RESPUESTA_SALUDO = (
 )
 
 
+_MAX_ITERACIONES_AGENTE = 4
+
+_SYSTEM_PROMPT_AGENTICO = (
+    "Sos el asistente de SquidManager, un panel de administración de un "
+    "proxy Squid. Tenés herramientas para consultar el estado REAL de este "
+    "servidor (ACLs, reglas de acceso, grupos, ajustes generales, si hay "
+    "cambios sin aplicar) y para buscar en la documentación del proyecto. "
+    "Usalas cuando necesites información real para responder, o para "
+    "revisar la configuración en busca de errores, en vez de adivinar.\n\n"
+    "Podés PROPONER cambios de configuración con las herramientas que "
+    "empiezan con 'proponer_' (por ejemplo, crear una ACL nueva). Estas "
+    "NUNCA se aplican solas: arman una propuesta que el administrador tiene "
+    "que revisar y confirmar a mano en el panel, con el mismo botón que "
+    "usaría sin vos de por medio. Usalas solo cuando el administrador pidió "
+    "explícitamente crear o cambiar algo, nunca por iniciativa propia. No "
+    "tenés acceso a archivos, a una terminal, ni al código fuente del "
+    "proyecto, y nunca aplicás ningún cambio por tu cuenta.\n\n"
+    "Respondé ÚNICAMENTE preguntas relacionadas con SquidManager, Squid y "
+    "cómo administrar este panel. Si te preguntan algo sin relación con "
+    "eso, decí con amabilidad que solo podés ayudar con SquidManager y no "
+    "respondas esa otra pregunta."
+)
+
+
+def preguntar_agentico(db: Session, config: AiConfig, pregunta: str) -> dict:
+    """Modo agéntico (fase 1): el modelo puede consultar el estado real del
+    servidor y proponer cambios -nunca aplicarlos-, ver ai_tools.py."""
+    from app.services.ai_tools import TOOL_DEFS, ejecutar_herramienta
+
+    es_gemini = config.provider == "gemini"
+    if not es_gemini and config.provider not in _PROVEEDORES_OPENAI_COMPATIBLE:
+        raise AiServiceError(
+            "El modo agéntico todavía no está disponible con este proveedor. "
+            "Probá con Gemini, Groq o NVIDIA NIM."
+        )
+
+    herramientas_usadas: list[str] = []
+    propuesta: dict | None = None
+
+    def _registrar_resultado(nombre: str, argumentos: dict) -> dict:
+        nonlocal propuesta
+        herramientas_usadas.append(nombre)
+        try:
+            salida = ejecutar_herramienta(db, config, nombre, argumentos)
+        except ValueError as e:
+            return {"error": str(e)}
+        if salida.get("__propuesta__"):
+            propuesta = {"accion": salida["accion"], "argumentos": salida["argumentos"]}
+            return {"resultado": "Propuesta registrada: se le mostró al administrador para que la confirme."}
+        return salida
+
+    if es_gemini:
+        contents = [{"role": "user", "parts": [{"text": pregunta}]}]
+        for _ in range(_MAX_ITERACIONES_AGENTE):
+            resultado = _gemini_generar_con_herramientas(
+                contents, TOOL_DEFS, config.api_key, config.chat_model, _SYSTEM_PROMPT_AGENTICO,
+            )
+            if resultado["tipo"] == "texto":
+                return {
+                    "respuesta": resultado["contenido"], "fuentes": [],
+                    "propuesta": propuesta, "herramientas_usadas": herramientas_usadas,
+                }
+            contents.append(resultado["mensaje_bruto"])
+            partes = [
+                {"functionResponse": {"name": ll["nombre"], "response": _registrar_resultado(ll["nombre"], ll["argumentos"])}}
+                for ll in resultado["llamadas"]
+            ]
+            contents.append({"role": "function", "parts": partes})
+    else:
+        base_url, nombre_prov = _PROVEEDORES_OPENAI_COMPATIBLE[config.provider]
+        messages = [
+            {"role": "system", "content": _SYSTEM_PROMPT_AGENTICO},
+            {"role": "user", "content": pregunta},
+        ]
+        for _ in range(_MAX_ITERACIONES_AGENTE):
+            resultado = _openai_compatible_generar_con_herramientas(
+                messages, TOOL_DEFS, config.api_key, config.chat_model, base_url, nombre_prov,
+            )
+            if resultado["tipo"] == "texto":
+                return {
+                    "respuesta": resultado["contenido"], "fuentes": [],
+                    "propuesta": propuesta, "herramientas_usadas": herramientas_usadas,
+                }
+            messages.append(resultado["mensaje_bruto"])
+            for ll in resultado["llamadas"]:
+                salida = _registrar_resultado(ll["nombre"], ll["argumentos"])
+                messages.append({
+                    "role": "tool", "tool_call_id": ll["id"],
+                    "content": json.dumps(salida, ensure_ascii=False),
+                })
+
+    raise AiServiceError(
+        "El asistente no pudo terminar de responder tras varios pasos consultando "
+        "el sistema. Probá reformular la pregunta."
+    )
+
+
 def preguntar(db: Session, config: AiConfig, pregunta: str) -> dict:
     if not config.enabled or not config.api_key:
         raise AiServiceError("El asistente de IA no está activado.")
@@ -640,6 +836,9 @@ def preguntar(db: Session, config: AiConfig, pregunta: str) -> dict:
 
     if _SALUDOS.match(pregunta.strip()):
         return {"respuesta": _RESPUESTA_SALUDO, "fuentes": []}
+
+    if config.agentic_enabled:
+        return preguntar_agentico(db, config, pregunta)
 
     fragmentos = _buscar_fragmentos(db, config, pregunta)
     if not fragmentos:

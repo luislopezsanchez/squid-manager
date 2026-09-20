@@ -33,5 +33,11 @@ class AiConfig(Base):
     # para las dos cosas-.
     chat_model = Column(String(100), nullable=True)
     embedding_model = Column(String(100), nullable=True)
+    # Fase 1 del asistente agéntico (ver docs/project-log.md): puede consultar
+    # el estado REAL del servidor (ACLs, reglas, grupos, ajustes) y proponer
+    # cambios de configuración -nunca aplicarlos por sí solo, ni tocar
+    # archivos/código-. Apagado por defecto: activar esto manda más datos
+    # reales al proveedor de IA que la sola búsqueda en documentación.
+    agentic_enabled = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
