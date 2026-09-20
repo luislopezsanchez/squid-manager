@@ -61,16 +61,11 @@ async def _read_upload(file: UploadFile) -> bytes:
 # BACKUP - Exportar toda la configuración a JSON
 # ============================================
 
-@router.get("/export")
-async def export_backup(
-    db: Session = Depends(get_db),
-    admin: Admin = Depends(require_writer),
-):
-    """Exportar toda la configuración de SquidManager a un archivo JSON.
-
-    Incluye grupos, miembros y allow-list de LDAP: sin ellos, restaurar dejaba
-    reglas apuntando a grupos inexistentes y la configuración no era válida.
-    """
+def build_backup_dict(db: Session, exported_by: str) -> dict:
+    """Arma el dict completo de backup -reusado por GET /export (que lo
+    sirve como descarga) y por la sincronización de configuración entre
+    nodos (central_monitor_service.py), que lo manda directo por HTTP a
+    otra instancia en vez de pasar por un archivo intermedio."""
     # Una sola consulta de miembros, agrupada en memoria por group_id, en vez
     # de una consulta por grupo (auditoria 2026-09-09, hallazgo 09-002 -mismo
     # patron en user_groups.py).
@@ -83,7 +78,7 @@ async def export_backup(
             "platform": "SquidManager",
             "version": BACKUP_VERSION,
             "exported_at": utcnow().isoformat(),
-            "exported_by": admin.username,
+            "exported_by": exported_by,
         },
         "squid_settings": [
             {"key": s.key, "value": s.value, "category": s.category, "description": s.description}
@@ -166,6 +161,20 @@ async def export_backup(
             "enabled": ldap.enabled,
         }
 
+    return backup
+
+
+@router.get("/export")
+async def export_backup(
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(require_writer),
+):
+    """Exportar toda la configuración de SquidManager a un archivo JSON.
+
+    Incluye grupos, miembros y allow-list de LDAP: sin ellos, restaurar dejaba
+    reglas apuntando a grupos inexistentes y la configuración no era válida.
+    """
+    backup = build_backup_dict(db, admin.username)
     json_str = json.dumps(backup, indent=2, ensure_ascii=False)
     filename = f"squidmanager-backup-{utcnow().strftime('%Y%m%d-%H%M%S')}.json"
 

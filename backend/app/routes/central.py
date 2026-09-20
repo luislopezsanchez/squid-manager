@@ -16,8 +16,9 @@ from app.models.admin import Admin
 from app.models.audit_log import AuditLog
 from app.models.monitored_node import MonitoredNode
 from app.services.auth_service import get_current_admin, require_writer
-from app.services.central_monitor_service import consultar_nodo, consultar_todos
+from app.services.central_monitor_service import consultar_nodo, consultar_todos, sincronizar_configuracion
 from app.services.metrics_service import get_dashboard
+from app.routes.backup import build_backup_dict
 from app.i18n import idioma_de_cabecera, traducir
 
 router = APIRouter()
@@ -184,3 +185,33 @@ async def central_dashboard(
         "data": get_dashboard(db=db),
     }
     return {"nodes": [local, *remotos]}
+
+
+@router.post("/nodes/{node_id}/sync")
+async def sync_node(
+    node_id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_writer),
+):
+    """Envía la configuración de ESTE servidor al nodo remoto, sobrescribiendo
+    la suya -mismo backup/restore JSON que ya existe para un archivo
+    descargado a mano, sin archivo intermedio de por medio.
+
+    Requiere que la cuenta guardada para el nodo tenga permisos de
+    escritura ahí (una cuenta "viewer" -la recomendada para solo
+    monitorear- no alcanza y se informa con claridad, no falla en
+    silencio)."""
+    node = db.query(MonitoredNode).filter(MonitoredNode.id == node_id).first()
+    if not node:
+        raise HTTPException(404, detail="Nodo no encontrado")
+
+    backup = build_backup_dict(db, current_admin.username)
+    resultado = sincronizar_configuracion(node, backup)
+
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="sync", entity="monitored_node", entity_id=node.id,
+        new_value=f"{node.name} ({node.url}): {resultado['status']}",
+    ))
+    db.commit()
+    return resultado

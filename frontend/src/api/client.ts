@@ -287,6 +287,7 @@ export const api = {
   testCentralNode: (data: { url: string; username: string; password: string }) =>
     request<any>('/central/test', { method: 'POST', body: JSON.stringify(data) }),
   getCentralDashboard: () => request<{ nodes: any[] }>('/central/dashboard'),
+  syncCentralNode: (id: number) => request<any>(`/central/nodes/${id}/sync`, { method: 'POST' }),
 
   // Audit
   listAudit: (limit = 100, offset = 0) => request<any>(`/audit/?limit=${limit}&offset=${offset}`),

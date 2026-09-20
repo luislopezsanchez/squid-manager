@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import { formatRate, formatNumber } from '../utils/format'
-import { IconRefresh, IconEdit, IconTrash, IconGlobe } from '../components/Icons'
+import { IconRefresh, IconEdit, IconTrash, IconGlobe, IconUpload } from '../components/Icons'
 
 interface Node {
   id: number
@@ -45,6 +45,7 @@ export default function PanelCentral() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState(FORM_VACIO)
   const [testing, setTesting] = useState(false)
+  const [syncingId, setSyncingId] = useState<number | null>(null)
   const [testResult, setTestResult] = useState<{ status: string; message?: string } | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const { showToast, ToastContainer } = useToast()
@@ -131,6 +132,26 @@ export default function PanelCentral() {
       loadEstado()
     } catch (e: any) {
       showToast(`${traducir("Error")}: ${e.message}`, 'error')
+    }
+  }
+
+  const handleSync = async (node: Node) => {
+    if (!confirm(traducir(
+      'Esto SOBRESCRIBE la configuración de "{n}" con la de este servidor (ACLs, reglas, usuarios, grupos, cuotas...). ¿Continuar?',
+      { n: node.name },
+    ))) return
+    setSyncingId(node.id)
+    try {
+      const resultado = await api.syncCentralNode(node.id)
+      if (resultado.status === 'ok') {
+        showToast(traducir('Configuración sincronizada a "{n}"', { n: node.name }))
+      } else {
+        showToast(resultado.message, 'error')
+      }
+    } catch (e: any) {
+      showToast(`${traducir("Error")}: ${e.message}`, 'error')
+    } finally {
+      setSyncingId(null)
     }
   }
 
@@ -286,6 +307,10 @@ export default function PanelCentral() {
                 <p className="text-xs text-ink-3 font-mono">{node.url} · {node.username}</p>
               </div>
               <div className="flex gap-2">
+                <button onClick={() => handleSync(node)} disabled={syncingId === node.id}
+                  className="btn-icon" title={traducir("Sincronizar configuración a este nodo")}>
+                  <IconUpload className="w-4 h-4" />
+                </button>
                 <button onClick={() => handleEdit(node)} className="btn-icon" title={traducir("Editar")}>
                   <IconEdit className="w-4 h-4" />
                 </button>

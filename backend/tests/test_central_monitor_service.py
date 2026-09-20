@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 import app.services.central_monitor_service as central_monitor_service
-from app.services.central_monitor_service import consultar_nodo, consultar_todos
+from app.services.central_monitor_service import consultar_nodo, consultar_todos, sincronizar_configuracion
 
 
 class FakeNode:
@@ -22,10 +22,11 @@ class FakeNode:
 
 
 class FakeResponse:
-    def __init__(self, status_code=200, json_data=None, json_error=False):
+    def __init__(self, status_code=200, json_data=None, json_error=False, text=""):
         self.status_code = status_code
         self._json_data = json_data
         self._json_error = json_error
+        self.text = text
 
     def json(self):
         if self._json_error:
@@ -145,4 +146,68 @@ def test_json_de_login_invalido_no_lanza(monkeypatch):
         lambda *a, **k: FakeResponse(200, json_data=None, json_error=True),
     )
     resultado = consultar_nodo(FakeNode())
+    assert resultado["status"] == "error"
+
+
+# --- sincronizar_configuracion: empujar el backup a un nodo remoto ---------
+
+def _post_login_y_luego(respuesta_restore):
+    """login siempre exitoso; la SEGUNDA llamada a httpx.post (el restore
+    real) responde lo que se le pida -ambos pasos usan httpx.post, a
+    diferencia de consultar_nodo() que usa httpx.get para el segundo."""
+    llamadas = {"n": 0}
+
+    def _post(url, **k):
+        llamadas["n"] += 1
+        if llamadas["n"] == 1:
+            return FakeResponse(200, json_data={"access_token": "tok"})
+        return respuesta_restore
+
+    return _post
+
+
+def test_sincronizar_exito(monkeypatch):
+    monkeypatch.setattr(
+        central_monitor_service.httpx, "post",
+        _post_login_y_luego(FakeResponse(200, json_data={"users": 3, "acls": 10})),
+    )
+    resultado = sincronizar_configuracion(FakeNode(), {"metadata": {}})
+    assert resultado["status"] == "ok"
+    assert resultado["data"]["users"] == 3
+
+
+def test_sincronizar_login_rechazado_no_llega_a_restaurar(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(401))
+    resultado = sincronizar_configuracion(FakeNode(), {"metadata": {}})
+    assert resultado["status"] == "error"
+    assert "contraseña" in resultado["message"].lower()
+
+
+def test_sincronizar_cuenta_sin_permisos_de_escritura(monkeypatch):
+    monkeypatch.setattr(
+        central_monitor_service.httpx, "post",
+        _post_login_y_luego(FakeResponse(403)),
+    )
+    resultado = sincronizar_configuracion(FakeNode(), {"metadata": {}})
+    assert resultado["status"] == "error"
+    assert "permisos de escritura" in resultado["message"]
+
+
+def test_sincronizar_error_generico_incluye_el_detalle(monkeypatch):
+    monkeypatch.setattr(
+        central_monitor_service.httpx, "post",
+        _post_login_y_luego(FakeResponse(400, text="Archivo JSON inválido")),
+    )
+    resultado = sincronizar_configuracion(FakeNode(), {"metadata": {}})
+    assert resultado["status"] == "error"
+    assert "400" in resultado["message"]
+    assert "Archivo JSON inválido" in resultado["message"]
+
+
+def test_sincronizar_respuesta_no_json_no_lanza(monkeypatch):
+    monkeypatch.setattr(
+        central_monitor_service.httpx, "post",
+        _post_login_y_luego(FakeResponse(200, json_data=None, json_error=True)),
+    )
+    resultado = sincronizar_configuracion(FakeNode(), {"metadata": {}})
     assert resultado["status"] == "error"
