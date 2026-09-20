@@ -229,6 +229,7 @@ export const api = {
 
   // Estadisticas de cache (Cache Manager de Squid: mgr:info + mgr:storedir).
   getCacheStats: () => request<any>('/cache-manager/stats'),
+  getActiveConnections: () => request<any>('/cache-manager/active-connections'),
 
   // Termina las conexiones ya abiertas de un cliente (conntrack) -no bloquea
   // peticiones futuras, solo corta lo que ya esta en curso ahora mismo.

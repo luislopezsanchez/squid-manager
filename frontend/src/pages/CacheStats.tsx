@@ -32,6 +32,16 @@ type StoreDir = {
 
 type Estadisticas = { info: InfoCache | null; storedir: StoreDir | null; errores: string[] }
 
+type Cliente = {
+  address: string
+  name: string | null
+  conexiones_activas: number
+  icp_requests: number
+  http_requests: number
+}
+
+type ConexionesActivas = { clientes: Cliente[]; total_conexiones: number; error?: string }
+
 function formatKB(kb: number | null | undefined): string {
   if (kb === null || kb === undefined) return '—'
   if (kb >= 1024 * 1024) return `${(kb / (1024 * 1024)).toFixed(2)} GB`
@@ -82,6 +92,7 @@ function Tarjeta({ titulo, valor, Icon, color, detalle }: {
 
 export default function CacheStats() {
   const [datos, setDatos] = useState<Estadisticas | null>(null)
+  const [conexiones, setConexiones] = useState<ConexionesActivas | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -90,6 +101,7 @@ export default function CacheStats() {
       .then(setDatos)
       .catch((e: any) => setError(e.message))
       .finally(() => setLoading(false))
+    api.getActiveConnections().then(setConexiones).catch(() => {})
   }
 
   useEffect(() => {
@@ -194,6 +206,46 @@ export default function CacheStats() {
                 <span className="font-medium tabular">{formatKB(info?.mem_size_kb)}</span>
               </div>
             </div>
+          </div>
+
+          <div className="card p-6 mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-ink">{traducir("Conexiones activas ahora")}</h2>
+              {conexiones && !conexiones.error && (
+                <span className="text-sm text-ink-3">
+                  {traducir("{n} en total", { n: conexiones.total_conexiones })}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-ink-3 mb-4">
+              {traducir("A diferencia del resto de esta página, esto no sale del historial (access.log): es lo que Squid tiene abierto en memoria en este instante.")}
+            </p>
+            {conexiones?.error ? (
+              <p className="text-sm text-danger">{conexiones.error}</p>
+            ) : !conexiones || conexiones.clientes.length === 0 ? (
+              <p className="text-sm text-ink-3">{traducir("No hay conexiones abiertas en este momento.")}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-ink-3 border-b border-line-soft">
+                      <th className="pb-2 font-medium">{traducir("Cliente")}</th>
+                      <th className="pb-2 font-medium">{traducir("Conexiones activas")}</th>
+                      <th className="pb-2 font-medium">{traducir("Peticiones HTTP")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {conexiones.clientes.map(c => (
+                      <tr key={c.address} className="border-b border-line-soft last:border-0">
+                        <td className="py-2 font-mono">{c.name || c.address}</td>
+                        <td className="py-2 tabular">{c.conexiones_activas}</td>
+                        <td className="py-2 tabular">{c.http_requests}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

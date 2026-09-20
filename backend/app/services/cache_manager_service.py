@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Únicos reportes que este servicio sabe pedir y mostrar -el frontend nunca
 # manda un nombre de reporte libre; otros reportes de Squid (mgr:config, por
 # ejemplo) pueden volcar datos que no corresponde exponer por el panel.
-REPORTES_PERMITIDOS = ("info", "storedir")
+REPORTES_PERMITIDOS = ("info", "storedir", "client_list")
 
 
 class CacheManagerError(Exception):
@@ -104,6 +104,54 @@ _PATRONES_STOREDIR = {
 
 def _parsear_storedir(texto: str) -> dict:
     return {clave: _numero(texto, patron) for clave, patron in _PATRONES_STOREDIR.items()}
+
+
+# --- Parseo de "mgr:client_list" ----------------------------------------
+#
+# Conexiones YA abiertas en este instante, mantenidas por Squid en memoria
+# -a diferencia de todo lo demás que muestra el panel (access.log), esto no
+# depende de que la conexión termine para saber que existe.
+
+_BLOQUE_CLIENTE = re.compile(
+    r"Address:\s*(?P<address>\S+)\s*\n"
+    r"(?:Name:\s*(?P<name>\S+)\s*\n)?"
+    r"Currently established connections:\s*(?P<conexiones>\d+)"
+    r"(?:.*?ICP\s+Requests\s+(?P<icp>\d+))?"
+    r"(?:.*?HTTP Requests\s+(?P<http>\d+))?",
+    re.DOTALL,
+)
+
+
+def _parsear_client_list(texto: str) -> list[dict]:
+    clientes = []
+    # Cada cliente es un bloque separado por una línea en blanco; partir por
+    # "Address:" en vez de por línea en blanco es más robusto ante algún
+    # espacio de más que Squid meta entre bloques.
+    for bloque in re.split(r"\n(?=Address:)", texto):
+        m = _BLOQUE_CLIENTE.search(bloque)
+        if not m:
+            continue
+        clientes.append({
+            "address": m.group("address"),
+            "name": m.group("name"),
+            "conexiones_activas": int(m.group("conexiones")),
+            "icp_requests": int(m.group("icp")) if m.group("icp") else 0,
+            "http_requests": int(m.group("http")) if m.group("http") else 0,
+        })
+    return clientes
+
+
+def obtener_conexiones_activas(db: Session) -> dict:
+    """Conexiones abiertas ahora mismo, por cliente (mgr:client_list)."""
+    try:
+        clientes = _parsear_client_list(_pedir_reporte(db, "client_list"))
+        return {
+            "clientes": clientes,
+            "total_conexiones": sum(c["conexiones_activas"] for c in clientes),
+        }
+    except CacheManagerError as e:
+        logger.warning("No se pudo obtener mgr:client_list de Squid: %s", e)
+        return {"clientes": [], "total_conexiones": 0, "error": str(e)}
 
 
 def obtener_estadisticas_cache(db: Session) -> dict:

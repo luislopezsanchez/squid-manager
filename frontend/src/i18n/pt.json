@@ -675,7 +675,8 @@
   "Actualización aplicada": "Atualização aplicada",
   "El servidor ya está corriendo la versión nueva, pero esta pestaña sigue mostrando la anterior. Recargá para ver los cambios.": "O servidor já está rodando a nova versão, mas esta aba ainda mostra a anterior. Recarregue para ver as mudanças.",
   "Recargar página": "Recarregar página",
-  "Esta instalación corre en modo Docker: la comprobación y aplicación automática de actualizaciones solo está disponible en instalación nativa por ahora. Usa upgrade-docker.sh manualmente.": "Esta instalação roda em modo Docker: a verificação e aplicação automática de atualizações só está disponível em instalação nativa por enquanto. Use upgrade-docker.sh manualmente.",
+  "Esta instalación corre en modo Docker: un temporizador del servidor revisa cada minuto si aprobaste una actualización, en vez de aplicarla al instante como en instalación nativa. La diferencia práctica es de hasta un minuto.":
+    "Esta instalação roda em modo Docker: um timer no servidor verifica a cada minuto se você aprovou uma atualização, em vez de aplicá-la instantaneamente como em instalação nativa. A diferença prática é de até um minuto.",
   "Versión": "Versão",
   "Comprobar automáticamente": "Verificar automaticamente",
   "Instalada": "Instalada",
@@ -689,7 +690,8 @@
   "Actualización en curso… el panel puede reiniciarse en cualquier momento.": "Atualização em andamento… o painel pode reiniciar a qualquer momento.",
   "Programada para": "Agendada para",
   "aprobada por": "aprovada por",
-  "Ya pasó bastante de la hora programada y todavía no se aplicó — el temporizador que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: systemctl status squidmanager-autoupdate.timer).": "Já passou bastante da hora agendada e ainda não foi aplicada — o timer que a aplica pode estar parado. Cancele e avise quem administra o servidor se continuar assim (verificar: systemctl status squidmanager-autoupdate.timer).",
+  "Ya pasó bastante de la hora programada y todavía no se aplicó — el temporizador que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: systemctl status {unidad}).":
+    "Já passou bastante da hora agendada e ainda não foi aplicada — o timer que a aplica pode estar parado. Cancele e avise quem administra o servidor se continuar assim (verificar: systemctl status {unidad}).",
   "Se revisa una vez por minuto: puede tardar hasta un minuto después de la hora elegida en arrancar.": "É verificado uma vez por minuto: pode levar até um minuto depois da hora escolhida para começar.",
   "Aprobando…": "Aprovando…",
   "Actualizar ahora": "Atualizar agora",
@@ -1054,5 +1056,33 @@
   "No hay nodos remotos configurados todavía.": "Ainda não há nós remotos configurados.",
   "Deshabilitado": "Desabilitado",
   "Panel central": "Painel central",
-  "¿Eliminar el nodo \"{n}\"?": "Excluir o nó \"{n}\"?"
+  "¿Eliminar el nodo \"{n}\"?": "Excluir o nó \"{n}\"?",
+  "Conexiones activas ahora": "Conexões ativas agora",
+  "{n} en total": "{n} no total",
+  "A diferencia del resto de esta página, esto no sale del historial (access.log): es lo que Squid tiene abierto en memoria en este instante.":
+    "Diferente do resto desta página, isso não vem do histórico (access.log): é o que o Squid tem aberto na memória neste instante.",
+  "No hay conexiones abiertas en este momento.": "Não há conexões abertas neste momento.",
+  "Cliente": "Cliente",
+  "Peticiones HTTP": "Requisições HTTP",
+  "1 usuario está por agotar su cuota de navegación": "1 usuário está prestes a esgotar sua cota de navegação",
+  "{n} usuarios están por agotar su cuota de navegación": "{n} usuários estão prestes a esgotar sua cota de navegação",
+  "Ya consumieron 80% o más de su límite del periodo. Ver en Gestión → Usuarios.": "Já consumiram 80% ou mais do seu limite do período. Ver em Gestão → Usuários.",
+  "+ Agregar nodo": "+ Adicionar nó",
+  "Esto SOBRESCRIBE la configuración de \"{n}\" con la de este servidor (ACLs, reglas, usuarios, grupos, cuotas...). ¿Continuar?":
+    "Isso SOBRESCREVE a configuração de \"{n}\" com a deste servidor (ACLs, regras, usuários, grupos, cotas...). Continuar?",
+  "Configuración sincronizada a \"{n}\"": "Configuração sincronizada para \"{n}\"",
+  "Sincronizar configuración a este nodo": "Sincronizar configuração para este nó",
+  "Responde consultas sobre SquidManager y puede consultar la configuración real de este servidor para diagnosticar. Puede proponer cambios, pero nunca los aplica solo -siempre pide tu confirmación-, y no tiene acceso a archivos ni al código fuente del proyecto.":
+    "Responde consultas sobre o SquidManager e pode consultar a configuração real deste servidor para diagnosticar. Pode propor mudanças, mas nunca as aplica sozinho -sempre pede sua confirmação-, e não tem acesso a arquivos nem ao código-fonte do projeto.",
+  "Modo agéntico (fase 1): puede consultar ACLs, reglas, grupos y ajustes reales": "Modo agêntico (fase 1): pode consultar ACLs, regras, grupos e configurações reais",
+  "También puede proponer cambios de configuración -nunca los aplica solo, siempre pide tu confirmación-. Estos datos salen hacia el proveedor de IA, no solo la documentación.":
+    "Também pode propor mudanças de configuração -nunca as aplica sozinho, sempre pede sua confirmação-. Esses dados saem para o provedor de IA, não só a documentação.",
+  "No disponible con este proveedor todavía -probá con Gemini, Groq o NVIDIA NIM.": "Ainda não disponível com este provedor -experimente Gemini, Groq ou NVIDIA NIM.",
+  "Consultó": "Consultou",
+  "Propuesta -sin aplicar todavía": "Proposta -ainda não aplicada",
+  "Aplicada": "Aplicada",
+  "Descartada": "Descartada",
+  "Aplicar": "Aplicar",
+  "Descartar": "Descartar",
+  "ACL \"{n}\" creada": "ACL \"{n}\" criada"
 }

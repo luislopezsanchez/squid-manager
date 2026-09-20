@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.admin import Admin
 from app.services.auth_service import get_current_admin
-from app.services.cache_manager_service import obtener_estadisticas_cache
+from app.services.cache_manager_service import obtener_estadisticas_cache, obtener_conexiones_activas
 
 router = APIRouter()
 
@@ -22,3 +22,17 @@ async def cache_stats(
 ):
     """Estadísticas de caché de Squid (mgr:info + mgr:storedir), parseadas."""
     return obtener_estadisticas_cache(db)
+
+
+@router.get("/active-connections")
+async def active_connections(
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    """Conexiones YA abiertas ahora mismo, por cliente (mgr:client_list).
+
+    A diferencia del resto de las métricas (que salen de access.log, y solo
+    existen una vez que una petición termina), esto sale de la memoria viva
+    de Squid: cuenta lo que sigue en curso en este instante.
+    """
+    return obtener_conexiones_activas(db)

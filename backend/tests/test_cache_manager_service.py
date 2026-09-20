@@ -1,8 +1,10 @@
-"""Tests del parser de mgr:info/mgr:storedir (cache_manager_service.py).
+"""Tests del parser de mgr:info/mgr:storedir/mgr:client_list
+(cache_manager_service.py).
 
 Las fixtures son texto REAL, capturado en vivo contra un Squid corriendo
-(172.30.36.33, 2026-09-10) -no inventado a mano-, para que el parser se
-pruebe contra el formato de verdad que Squid produce.
+(172.30.36.33, 2026-09-10; client_list contra 172.30.36.52, 2026-09-19) -no
+inventado a mano-, para que el parser se pruebe contra el formato de
+verdad que Squid produce.
 """
 
 import pytest
@@ -13,8 +15,10 @@ from app.services.cache_manager_service import (
     REPORTES_PERMITIDOS,
     _parsear_info,
     _parsear_storedir,
+    _parsear_client_list,
     _pedir_reporte,
     obtener_estadisticas_cache,
+    obtener_conexiones_activas,
 )
 
 INFO_REAL = """Squid Object Cache: Version 6.14
@@ -106,7 +110,66 @@ def test_pedir_reporte_rechaza_nombres_no_permitidos():
 
 
 def test_reportes_permitidos_es_la_lista_corta_esperada():
-    assert set(REPORTES_PERMITIDOS) == {"info", "storedir"}
+    assert set(REPORTES_PERMITIDOS) == {"info", "storedir", "client_list"}
+
+
+CLIENT_LIST_REAL = """Cache Clients:
+Address: 127.0.0.1
+Name:    localhost
+Currently established connections: 1
+    ICP  Requests 0
+    HTTP Requests 0
+
+Address: 172.30.36.1
+Currently established connections: 2
+    ICP  Requests 0
+    HTTP Requests 126
+        NONE_NONE                110  87%
+        TCP_DENIED                16  13%
+
+TOTALS
+ICP : 0 Queries, 0 Hits (  0%)
+HTTP: 126 Requests, 0 Hits (  0%)
+"""
+
+
+def test_parsear_client_list_saca_los_dos_clientes_reales():
+    clientes = _parsear_client_list(CLIENT_LIST_REAL)
+    assert len(clientes) == 2
+    assert clientes[0]["address"] == "127.0.0.1"
+    assert clientes[0]["name"] == "localhost"
+    assert clientes[0]["conexiones_activas"] == 1
+    assert clientes[0]["http_requests"] == 0
+    assert clientes[1]["address"] == "172.30.36.1"
+    assert clientes[1]["name"] is None
+    assert clientes[1]["conexiones_activas"] == 2
+    assert clientes[1]["http_requests"] == 126
+
+
+def test_parsear_client_list_con_texto_vacio_devuelve_lista_vacia():
+    assert _parsear_client_list("") == []
+
+
+def test_obtener_conexiones_activas_suma_el_total(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.cache_manager_service._pedir_reporte",
+        lambda db, reporte: CLIENT_LIST_REAL,
+    )
+    resultado = obtener_conexiones_activas(db=None)
+    assert resultado["total_conexiones"] == 3
+    assert len(resultado["clientes"]) == 2
+    assert "error" not in resultado
+
+
+def test_obtener_conexiones_activas_si_falla_devuelve_vacio_no_lanza(monkeypatch):
+    def _falla(db, reporte):
+        raise CacheManagerError("Squid no responde")
+
+    monkeypatch.setattr("app.services.cache_manager_service._pedir_reporte", _falla)
+    resultado = obtener_conexiones_activas(db=None)
+    assert resultado["clientes"] == []
+    assert resultado["total_conexiones"] == 0
+    assert "Squid no responde" in resultado["error"]
 
 
 def test_obtener_estadisticas_un_reporte_falla_no_tumba_al_otro():

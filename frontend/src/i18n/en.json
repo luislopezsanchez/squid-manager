@@ -675,7 +675,8 @@
   "Actualización aplicada": "Update applied",
   "El servidor ya está corriendo la versión nueva, pero esta pestaña sigue mostrando la anterior. Recargá para ver los cambios.": "The server is already running the new version, but this tab is still showing the old one. Reload to see the changes.",
   "Recargar página": "Reload page",
-  "Esta instalación corre en modo Docker: la comprobación y aplicación automática de actualizaciones solo está disponible en instalación nativa por ahora. Usa upgrade-docker.sh manualmente.": "This installation runs in Docker mode: automatic update checking and applying is only available on a native install for now. Use upgrade-docker.sh manually.",
+  "Esta instalación corre en modo Docker: un temporizador del servidor revisa cada minuto si aprobaste una actualización, en vez de aplicarla al instante como en instalación nativa. La diferencia práctica es de hasta un minuto.":
+    "This installation runs in Docker mode: a timer on the server checks every minute whether you approved an update, instead of applying it instantly like on a native install. The practical difference is up to a minute.",
   "Versión": "Version",
   "Comprobar automáticamente": "Check automatically",
   "Instalada": "Installed",
@@ -689,7 +690,8 @@
   "Actualización en curso… el panel puede reiniciarse en cualquier momento.": "Update in progress… the panel may restart at any moment.",
   "Programada para": "Scheduled for",
   "aprobada por": "approved by",
-  "Ya pasó bastante de la hora programada y todavía no se aplicó — el temporizador que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: systemctl status squidmanager-autoupdate.timer).": "Well past the scheduled time and it still hasn't applied — the timer that applies it may be down. Cancel and tell whoever administers the server if it stays like this (check: systemctl status squidmanager-autoupdate.timer).",
+  "Ya pasó bastante de la hora programada y todavía no se aplicó — el temporizador que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: systemctl status {unidad}).":
+    "Well past the scheduled time and it still hasn't applied — the timer that applies it may be down. Cancel and tell whoever administers the server if it stays like this (check: systemctl status {unidad}).",
   "Se revisa una vez por minuto: puede tardar hasta un minuto después de la hora elegida en arrancar.": "It's checked once a minute: it can take up to a minute after the chosen time to start.",
   "Aprobando…": "Approving…",
   "Actualizar ahora": "Update now",
@@ -1054,5 +1056,33 @@
   "No hay nodos remotos configurados todavía.": "No remote nodes configured yet.",
   "Deshabilitado": "Disabled",
   "Panel central": "Central panel",
-  "¿Eliminar el nodo \"{n}\"?": "Delete node \"{n}\"?"
+  "¿Eliminar el nodo \"{n}\"?": "Delete node \"{n}\"?",
+  "Conexiones activas ahora": "Active connections right now",
+  "{n} en total": "{n} total",
+  "A diferencia del resto de esta página, esto no sale del historial (access.log): es lo que Squid tiene abierto en memoria en este instante.":
+    "Unlike the rest of this page, this doesn't come from the log history (access.log): it's what Squid has open in memory at this instant.",
+  "No hay conexiones abiertas en este momento.": "There are no open connections right now.",
+  "Cliente": "Client",
+  "Peticiones HTTP": "HTTP requests",
+  "1 usuario está por agotar su cuota de navegación": "1 user is about to run out of browsing quota",
+  "{n} usuarios están por agotar su cuota de navegación": "{n} users are about to run out of browsing quota",
+  "Ya consumieron 80% o más de su límite del periodo. Ver en Gestión → Usuarios.": "They've already used 80% or more of their period limit. See in Management → Users.",
+  "+ Agregar nodo": "+ Add node",
+  "Esto SOBRESCRIBE la configuración de \"{n}\" con la de este servidor (ACLs, reglas, usuarios, grupos, cuotas...). ¿Continuar?":
+    "This OVERWRITES \"{n}\"'s configuration with this server's (ACLs, rules, users, groups, quotas...). Continue?",
+  "Configuración sincronizada a \"{n}\"": "Configuration synced to \"{n}\"",
+  "Sincronizar configuración a este nodo": "Sync configuration to this node",
+  "Responde consultas sobre SquidManager y puede consultar la configuración real de este servidor para diagnosticar. Puede proponer cambios, pero nunca los aplica solo -siempre pide tu confirmación-, y no tiene acceso a archivos ni al código fuente del proyecto.":
+    "Answers questions about SquidManager and can check this server's real configuration to diagnose issues. It can propose changes, but never applies them on its own -it always asks for your confirmation-, and has no access to files or the project's source code.",
+  "Modo agéntico (fase 1): puede consultar ACLs, reglas, grupos y ajustes reales": "Agentic mode (phase 1): can check real ACLs, rules, groups and settings",
+  "También puede proponer cambios de configuración -nunca los aplica solo, siempre pide tu confirmación-. Estos datos salen hacia el proveedor de IA, no solo la documentación.":
+    "It can also propose configuration changes -it never applies them on its own, always asks for your confirmation-. This data goes out to the AI provider, not just the documentation.",
+  "No disponible con este proveedor todavía -probá con Gemini, Groq o NVIDIA NIM.": "Not available with this provider yet -try Gemini, Groq or NVIDIA NIM.",
+  "Consultó": "Checked",
+  "Propuesta -sin aplicar todavía": "Proposal -not applied yet",
+  "Aplicada": "Applied",
+  "Descartada": "Discarded",
+  "Aplicar": "Apply",
+  "Descartar": "Discard",
+  "ACL \"{n}\" creada": "ACL \"{n}\" created"
 }
