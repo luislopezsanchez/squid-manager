@@ -314,7 +314,50 @@ docker compose up -d
 ok "Contenedores desplegados"
 
 # ============================================
-# 6. Esperar al backend y recoger la contraseña del admin
+# 6. Temporizador de actualizaciones
+# ============================================
+# Mismo mecanismo que instalación nativa (ver install-nativo.sh y la nota de
+# diseño en app/services/update_service.py): el panel web nunca ejecuta nada
+# con privilegios, solo escribe un archivo de estado que este script del
+# HOST revisa cada minuto -y aplica, si corresponde, reconstruyendo los
+# contenedores con upgrade-docker.sh. Sin systemd-run (a diferencia de
+# nativo): esta unidad ya es un proceso del host, ajeno al ciclo de vida de
+# los contenedores que reinicia, así que puede aplicar la actualización
+# directo y en primer plano sin arriesgarse a cortarse a sí misma.
+info "Configurando el temporizador de actualizaciones..."
+install -o root -g root -m 755 "$INSTALL_DIR/docker-autoupdate-check.sh" \
+    /usr/local/lib/squidmanager/docker-autoupdate-check.sh
+
+cat > /etc/systemd/system/squidmanager-docker-autoupdate.service <<EOF
+[Unit]
+Description=SquidManager (Docker) - Comprobar y aplicar actualizacion aprobada
+
+[Service]
+Type=oneshot
+Environment=PROJECT_DIR=$INSTALL_DIR
+ExecStart=/usr/local/lib/squidmanager/docker-autoupdate-check.sh
+EOF
+
+cat > /etc/systemd/system/squidmanager-docker-autoupdate.timer <<'EOF'
+[Unit]
+Description=SquidManager (Docker) - Revisar actualizaciones pendientes cada minuto
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now squidmanager-docker-autoupdate.timer >/dev/null 2>&1 \
+    || warn "No se pudo activar squidmanager-docker-autoupdate.timer"
+ok "Temporizador de actualizaciones activo (cada minuto)"
+
+# ============================================
+# 7. Esperar al backend y recoger la contraseña del admin
 # ============================================
 # La contraseña del administrador la genera el backend la primera vez que
 # arranca, y solo la escribe una vez en su log. Se espera a que termine para
@@ -352,7 +395,7 @@ for _ in $(seq 1 90); do
 done
 
 # ============================================
-# 7. Resumen
+# 8. Resumen
 # ============================================
 IP_SERVIDOR="$(hostname -I 2>/dev/null | awk '{print $1}')"
 [[ -z "$IP_SERVIDOR" ]] && IP_SERVIDOR="localhost"

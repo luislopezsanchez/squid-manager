@@ -1,9 +1,10 @@
 #!/bin/bash
 # Actualiza una instalacion Docker de SquidManager: backup previo de la
-# base de datos, trae el codigo nuevo de forma segura, reconstruye y
-# levanta los contenedores, reconstruye los indices de la base (necesario
-# por el cambio de imagen de Postgres, ver el paso 4) y verifica que el
-# panel responda al final.
+# base de datos, trae el codigo nuevo de forma segura, instala/actualiza el
+# temporizador de actualizaciones del host, reconstruye y levanta los
+# contenedores, reconstruye los indices de la base (necesario por el cambio
+# de imagen de Postgres, ver el paso 5) y verifica que el panel responda al
+# final.
 #
 # Se corre desde el directorio de la instalacion (no una ruta fija): usa el
 # directorio donde vive ESTE script como PROJECT_DIR, salvo que se pase uno
@@ -168,14 +169,57 @@ if [ -z "${SQUIDMGR_UPGRADE_REEXEC:-}" ]; then
 fi
 
 echo
-echo "=== 3. Reconstruyendo y levantando los contenedores ==="
+echo "=== 3. Configurando el temporizador de actualizaciones ==="
+# Idempotente y barato: instalaciones de ANTES de que este mecanismo
+# existiera (ver docs/project-log.md, "Actualizar instalaciones Docker
+# desde el propio panel") lo reciben en la primera actualización manual que
+# corran con el script nuevo, sin tener que volver a correr install.sh a
+# mano. Mismo criterio que install.sh: sobrescribir las mismas unidades con
+# el mismo contenido no rompe nada si ya estaban.
+if [ "$(id -u)" = "0" ]; then
+    install -o root -g root -m 755 "$PROJECT_DIR/docker-autoupdate-check.sh" \
+        /usr/local/lib/squidmanager/docker-autoupdate-check.sh 2>/dev/null || true
+
+    cat > /etc/systemd/system/squidmanager-docker-autoupdate.service <<EOF
+[Unit]
+Description=SquidManager (Docker) - Comprobar y aplicar actualizacion aprobada
+
+[Service]
+Type=oneshot
+Environment=PROJECT_DIR=$PROJECT_DIR
+ExecStart=/usr/local/lib/squidmanager/docker-autoupdate-check.sh
+EOF
+
+    cat > /etc/systemd/system/squidmanager-docker-autoupdate.timer <<'EOF'
+[Unit]
+Description=SquidManager (Docker) - Revisar actualizaciones pendientes cada minuto
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl enable --now squidmanager-docker-autoupdate.timer >/dev/null 2>&1 \
+        && echo "OK: temporizador de actualizaciones activo (cada minuto)." \
+        || echo "AVISO: no se pudo activar el temporizador de actualizaciones (systemd no disponible aca?)."
+else
+    echo "AVISO: no se corre como root, se omite instalar/actualizar el temporizador de actualizaciones."
+fi
+
+echo
+echo "=== 4. Reconstruyendo y levantando los contenedores ==="
 # --build no es opcional: sin el, Docker reutiliza las imagenes que ya
 # tiene y el codigo nuevo no llega a ejecutarse aunque el git de arriba
 # haya ido bien.
 docker compose up -d --build
 
 echo
-echo "=== 4. Reconstruyendo los indices de la base ==="
+echo "=== 5. Reconstruyendo los indices de la base ==="
 # Hasta 0.21.0 la imagen de Postgres era postgres:16-alpine (musl); desde
 # 0.22.0 es pgvector/pgvector:pg16 (glibc). musl NO registra version de
 # collation, asi que al cambiar de imagen Postgres NO avisa de nada -no hay
@@ -207,7 +251,7 @@ else
 fi
 
 echo
-echo "=== 5. Verificando ==="
+echo "=== 6. Verificando ==="
 # Se comprueba el backend DESDE DENTRO del contenedor, no en
 # localhost:$WEB_PORT del host: ese puerto puede estar detras de un proxy
 # inverso (aaPanel, nginx del host) o incluso ocupado por otro servicio

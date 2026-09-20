@@ -3,22 +3,27 @@ el repositorio de GitHub del proyecto.
 
 Diseño deliberado, no accidental -léase antes de tocar este archivo-:
 
-- **Solo instalación nativa.** En Docker, el contenedor del backend no puede
-  reconstruirse ni reiniciar a sus hermanos sin el socket de Docker montado
-  (el mismo riesgo, ya activo y ya anotado, que evitamos sumar aquí). Cada
-  llamada de este servicio comprueba `settings.DEPLOY_MODE == "native"`
-  antes de hacer nada.
+- **Nativo y Docker, con el mismo diseño de fondo.** En ningún modo este
+  proceso ejecuta la actualización real con privilegios: solo lee GitHub
+  (sin credenciales, tráfico saliente) y escribe un archivo de estado
+  (`.update_state.json`, en el árbol del proyecto -en Docker, el mismo
+  volumen que ya está montado en el mismo path dentro y fuera del
+  contenedor, ver `docker-compose.yml`-). Un temporizador de systemd EN EL
+  HOST (`autoupdate-check.sh` para nativo, `docker-autoupdate-check.sh`
+  para Docker) es quien de verdad decide y aplica, sin confiar en haber
+  sido invocado con legitimidad: vuelve a comprobar por su cuenta si
+  corresponde actualizar antes de tocar nada. Aprobar una actualización
+  "para ahora" solo adelanta cuándo ese script se fija si debe actuar,
+  nunca le dice qué hacer -y en Docker, ni siquiera eso: el backend no
+  tiene forma de tocar systemd desde dentro del contenedor, así que ahí se
+  espera al próximo tic del temporizador (hasta 1 minuto), sin el "empujón"
+  inmediato que sí tiene nativo vía sudo.
 
-- **La web nunca ejecuta nada con privilegios.** Este proceso corre con el
-  mismo usuario restringido de siempre (`squidmgr`, sin sudo salvo 4 líneas
-  fijas en /etc/sudoers.d/squidmanager). Todo lo que hace esta capa es leer
-  GitHub (sin credenciales, solo tráfico saliente) y escribir un archivo de
-  estado. La única llamada con `sudo` invoca un script fijo, sin argumentos
-  variables, que ni siquiera confía en haber sido invocado con legitimidad:
-  vuelve a comprobar por su cuenta si corresponde actualizar antes de tocar
-  nada -ver `autoupdate-check.sh`-. Aprobar una actualización "para ahora"
-  solo adelanta cuándo ese script se fija si debe actuar, nunca le dice qué
-  hacer.
+- **La web nunca ejecuta nada con privilegios.** En nativo, la única
+  llamada con `sudo` invoca un script fijo, sin argumentos variables
+  (`autoupdate-check.sh`). En Docker, el backend ni siquiera intenta
+  eso -no hay sudo hacia el host desde dentro de un contenedor-, solo
+  escribe el archivo de estado y confía en el temporizador del host.
 
 - **El estado vive en un archivo, no en la base de datos.** El script que
   aplica la actualización corre como root, sin las credenciales de Postgres
@@ -216,16 +221,14 @@ def comprobar_actualizacion() -> dict:
     """Consulta GitHub y actualiza la sección "check" del estado.
 
     Sin privilegios, sin credenciales: la API de commits/compare de un repo
-    público no las necesita. Falla de forma silenciosa hacia el estado (se
-    guarda el error, no se lanza al llamador salvo que sea DEPLOY_MODE
-    distinto de nativo) porque la puede llamar tanto un admin a mano como el
-    hilo de fondo cada varias horas, y una falla de red pasajera no debería
-    verse como un error del panel.
+    público no las necesita, y funciona igual en nativo y en Docker -acá
+    todavía no hay que tocar nada del sistema, solo leer GitHub y comparar
+    contra `git rev-parse HEAD` del propio checkout. Falla de forma
+    silenciosa hacia el estado (se guarda el error, no se lanza al
+    llamador) porque la puede llamar tanto un admin a mano como el hilo de
+    fondo cada varias horas, y una falla de red pasajera no debería verse
+    como un error del panel.
     """
-    if not _es_nativo():
-        raise UpdateServiceError(
-            "La comprobación de actualizaciones solo está disponible en instalación nativa."
-        )
 
     estado = leer_estado()
     local = _commit_actual()
@@ -277,16 +280,15 @@ def aprobar_actualizacion(admin_username: str, programado_para: datetime | None)
     """Deja aprobada una actualización, para ahora (`programado_para=None`)
 
     o para una fecha/hora futura. Nunca ejecuta nada con privilegios por sí
-    misma: siempre dispara -con el único comando fijo que permite sudoers-
-    el script que confirma la condición y recién ahí actúa; si la fecha es
-    futura, ese disparo inmediato no hace nada todavía (el script vuelve a
-    comprobar por su cuenta), pero evita el peor caso de esperar hasta el
-    próximo tic del temporizador para una hora ya vencida o a punto de
-    cumplirse.
+    misma: en nativo, dispara -con el único comando fijo que permite
+    sudoers- el script que confirma la condición y recién ahí actúa; si la
+    fecha es futura, ese disparo inmediato no hace nada todavía (el script
+    vuelve a comprobar por su cuenta), pero evita el peor caso de esperar
+    hasta el próximo tic del temporizador para una hora ya vencida o a
+    punto de cumplirse. En Docker no hay ningún disparo posible desde acá
+    (no hay sudo hacia el host desde dentro del contenedor): el
+    temporizador del host la nota solo, en menos de un minuto.
     """
-    if not _es_nativo():
-        raise UpdateServiceError("La actualización solo está disponible en instalación nativa.")
-
     estado = leer_estado()
     if estado["apply"]["status"] in ("running", "verificando"):
         raise UpdateServiceError("Ya hay una actualización en curso.")
@@ -308,12 +310,11 @@ def aprobar_actualizacion(admin_username: str, programado_para: datetime | None)
     }
     _escribir_estado(estado)
 
-    # Siempre se dispara, sea "ahora" o programada: si programado_para ya
-    # está vencida o muy próxima, esto ahorra hasta 1 minuto de espera del
-    # temporizador; si es una fecha realmente futura, el script confirma
-    # que todavía no corresponde y no hace nada -disparar de más nunca
-    # rompe nada, ver autoupdate-check.sh-.
-    _disparar_verificacion_inmediata()
+    # Solo nativo: en Docker no hay sudo hacia el host desde el contenedor,
+    # así que no hay nada que disparar -el temporizador del host la nota
+    # solo en su próximo tic (hasta 1 minuto), ver la nota de diseño arriba.
+    if _es_nativo():
+        _disparar_verificacion_inmediata()
 
     return estado
 
@@ -372,7 +373,7 @@ def _checker_loop():
             finally:
                 db.close()
 
-            if _es_nativo() and (not config or config.check_enabled):
+            if not config or config.check_enabled:
                 comprobar_actualizacion()
         except Exception as e:
             logger.error(f"Error comprobando actualizaciones de SquidManager: {e}")

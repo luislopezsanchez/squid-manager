@@ -223,9 +223,9 @@ export default function Actualizaciones() {
       )}
 
       {!estado.es_nativo && (
-        <div className="card p-4 mb-6 note-warn">
+        <div className="card p-4 mb-6 note-info">
           <p className="text-sm text-ink-2">
-            {traducir("Esta instalación corre en modo Docker: la comprobación y aplicación automática de actualizaciones solo está disponible en instalación nativa por ahora. Usa upgrade-docker.sh manualmente.")}
+            {traducir("Esta instalación corre en modo Docker: un temporizador del servidor revisa cada minuto si aprobaste una actualización, en vez de aplicarla al instante como en instalación nativa. La diferencia práctica es de hasta un minuto.")}
           </p>
         </div>
       )}
@@ -265,15 +265,13 @@ export default function Actualizaciones() {
           )}
         </p>
 
-        {estado.es_nativo && (
-          <button onClick={handleComprobar} disabled={comprobando} className="btn btn-ghost mt-4 disabled:opacity-50">
-            {comprobando ? traducir('Comprobando…') : traducir('Comprobar ahora')}
-          </button>
-        )}
+        <button onClick={handleComprobar} disabled={comprobando} className="btn btn-ghost mt-4 disabled:opacity-50">
+          {comprobando ? traducir('Comprobando…') : traducir('Comprobar ahora')}
+        </button>
       </div>
 
       {/* Actualización disponible */}
-      {check.update_available && estado.es_nativo && (
+      {check.update_available && (
         <div className="card p-6 mb-6">
           <div className="flex items-center gap-2 mb-4">
             <IconBell className="w-5 h-5 text-brand-600" />
@@ -312,7 +310,9 @@ export default function Actualizaciones() {
               </div>
               {request.atrasada ? (
                 <p className="text-xs text-danger mt-2">
-                  {traducir("Ya pasó bastante de la hora programada y todavía no se aplicó — el temporizador que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: systemctl status squidmanager-autoupdate.timer).")}
+                  {traducir("Ya pasó bastante de la hora programada y todavía no se aplicó — el temporizador que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: systemctl status {unidad}).", {
+                    unidad: estado.es_nativo ? 'squidmanager-autoupdate.timer' : 'squidmanager-docker-autoupdate.timer',
+                  })}
                 </p>
               ) : (
                 <p className="text-xs text-ink-3 mt-2">

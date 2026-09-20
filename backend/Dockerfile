@@ -3,6 +3,13 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Instalar dependencias del sistema
+#
+# git: hace falta para que update_service.py sepa que commit/rama tiene
+# desplegados (mismo mecanismo que instalacion nativa, `git rev-parse HEAD` /
+# `git branch --show-current` sobre el propio repo, que en Docker esta
+# montado en el mismo path que en el host -ver docker-compose.yml-). Sin
+# esto, la comprobacion de actualizaciones nunca detecta ninguna: el commit
+# local queda vacio y la comparacion contra GitHub nunca puede ser distinta.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
@@ -11,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     gnupg \
     gosu \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Cliente de Docker y plugin de Compose.

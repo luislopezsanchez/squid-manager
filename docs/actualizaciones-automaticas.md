@@ -2,8 +2,9 @@
 
 Comprueba si hay una versión nueva de SquidManager publicada en GitHub, muestra
 qué cambió, y permite aprobarla —de inmediato o programada para una fecha y
-hora concretas— sin tener que entrar por SSH. Solo para **instalación
-nativa** por ahora (ver la nota al final).
+hora concretas— sin tener que entrar por SSH. Funciona igual en instalación
+nativa y en Docker; la única diferencia real está en cuánto tarda en
+arrancar una aprobación "ahora" (ver la nota al final).
 
 ---
 
@@ -42,9 +43,11 @@ consultar el estado, no aprobar nada.
    a la comprobación automática, cada 6 horas).
 3. Revisá la lista de **"Novedades"**: son los commits reales, con su mensaje,
    entre lo que tenés instalado y lo último publicado.
-4. Pulsá **"Actualizar ahora"**. Queda aprobada al instante y se aplica en
-   los segundos siguientes (no hace falta esperar al temporizador: aprobar
-   "ahora" lo adelanta).
+4. Pulsá **"Actualizar ahora"**. Queda aprobada al instante. En instalación
+   nativa se aplica en los segundos siguientes (aprobar "ahora" adelanta el
+   temporizador vía sudo); en Docker, el backend no tiene forma de tocar
+   systemd desde dentro del contenedor, así que el temporizador del host la
+   nota sola en su próximo ciclo (hasta 1 minuto).
 5. Mientras se aplica, la tarjeta muestra "Actualización en curso…" — el
    panel puede quedarse sin responder un momento (reinicia sus propios
    servicios). Cuando termina, aparece un aviso en la parte superior de
@@ -64,22 +67,34 @@ Mismos pasos 1 a 3 de arriba, y después:
    hasta un minuto después de lo elegido en arrancar. Si pasan más de 3
    minutos sin arrancar, la tarjeta lo marca como **"atrasada"** — señal de
    que el temporizador del servidor no está corriendo, hay que revisarlo por
-   SSH (`systemctl status squidmanager-autoupdate.timer`).
+   SSH (`systemctl status squidmanager-autoupdate.timer` en nativo,
+   `systemctl status squidmanager-docker-autoupdate.timer` en Docker).
 7. Igual que aplicar "ahora": al terminar, aparece el aviso de "Recargar" en
    cualquier página.
 
 ## Por qué es seguro: separar "decidir cuándo" de "ejecutar"
 
-El backend web corre con el mismo usuario restringido de siempre (sin ser
-superusuario de su propia base de datos, y con exactamente 4 líneas fijas de
-`sudoers` — ninguna genérica). Aprobar una actualización, desde el panel, solo
+El backend web corre con el mismo usuario restringido de siempre (en nativo,
+sin ser superusuario de su propia base de datos y con exactamente 4 líneas
+fijas de `sudoers` — ninguna genérica; en Docker, sin ningún permiso nuevo
+sobre el host en absoluto). Aprobar una actualización, desde el panel, solo
 escribe un archivo de estado (igual de privilegios que guardar cualquier otro
-ajuste). Un temporizador de systemd, corriendo como root cada minuto —o
-adelantado al toque con la única orden de sudo que existe para esto, sin
-argumentos—, es quien de verdad decide si corresponde actuar y, si es así,
-invoca el mismo script de actualización (`upgrade-nativo.sh`) que ya se usa a
-mano desde hace tiempo, en una unidad de systemd aparte —para que reiniciar el
-panel a mitad de la actualización no la mate a mitad de camino—.
+ajuste; en Docker, ese archivo vive en el mismo volumen del proyecto que ya
+está montado en el mismo path dentro y fuera del contenedor, así que el host
+lo ve sin ningún mecanismo nuevo). Un temporizador de systemd **en el host**,
+corriendo como root cada minuto, es quien de verdad decide si corresponde
+actuar:
+
+- **Nativo**: puede además adelantarse al toque con la única orden de sudo
+  que existe para esto, sin argumentos, e invoca `upgrade-nativo.sh` en una
+  unidad de systemd aparte —para que reiniciar el panel a mitad de la
+  actualización no la mate a mitad de camino—.
+- **Docker**: no hay ningún "adelantar" posible desde el panel (no hay sudo
+  hacia el host desde dentro de un contenedor), así que siempre espera al
+  próximo tic. Al no compartir cgroup con ningún servicio que la
+  actualización vaya a reiniciar (el temporizador ya es un proceso del
+  host, ajeno a los contenedores), invoca `upgrade-docker.sh` directo, sin
+  necesitar la unidad aparte que sí hace falta en nativo.
 
 ## Si una programación no arranca a tiempo
 
@@ -88,11 +103,18 @@ debería empezar dentro del minuto de la hora elegida. Si pasan más de 3
 minutos sin que arranque, el panel lo marca como "atrasada" y avisa —no se
 cancela sola, pero deja de mostrar "programada" en silencio para siempre.
 Suele significar que el temporizador está caído: `systemctl status
-squidmanager-autoupdate.timer` en el servidor.
+squidmanager-autoupdate.timer` (nativo) o `systemctl status
+squidmanager-docker-autoupdate.timer` (Docker) en el servidor.
 
-## Solo instalación nativa
+## Diferencias entre nativo y Docker
 
-En Docker, el contenedor del backend no puede reconstruirse ni reiniciar a
-sus hermanos sin el socket de Docker montado —el mismo riesgo, ya conocido,
-que evitamos sumar acá—. Para Docker sigue existiendo `upgrade-docker.sh`,
-a mano, como hasta ahora.
+| | Nativo | Docker |
+|---|---|---|
+| Comprobar y aprobar desde el panel | Sí | Sí |
+| Demora de "actualizar ahora" | Segundos | Hasta 1 minuto |
+| Quién aplica de verdad | `autoupdate-check.sh` + `upgrade-nativo.sh` | `docker-autoupdate-check.sh` + `upgrade-docker.sh` |
+| Instalado por | `install-nativo.sh` | `install.sh`, y se repara solo en la siguiente corrida de `upgrade-docker.sh` si faltara |
+
+En ambos casos el panel web nunca gana la capacidad de ejecutar algo con
+privilegios de root: solo escribe el mismo archivo de estado que ya escribía
+antes de que este mecanismo existiera para cualquier otro ajuste.
