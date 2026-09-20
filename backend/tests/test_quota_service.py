@@ -366,3 +366,37 @@ def test_acumula_bytes_solo_de_usuarios_con_cuota_configurada(monkeypatch):
     qs._acumular_consumo(db, ["con_cuota", "sin_cuota", "con_cuota"])
 
     assert con_cuota.quota_bytes_used == 100 + 500 + 500
+
+
+# --- Cuotas en riesgo (KPI del dashboard) -----------------------------------
+
+def _db_con_cuotas(*cuotas):
+    from app.models.navigation_quota import NavigationQuota
+    db = FakeDB()
+    db._model_map[NavigationQuota] = "quotas"
+    db.quotas = list(cuotas)
+    return db
+
+
+def test_contar_cuotas_en_riesgo_sin_db_devuelve_cero():
+    assert qs.contar_cuotas_en_riesgo(None) == 0
+
+
+def test_cuenta_solo_las_que_superan_el_umbral():
+    db = _db_con_cuotas(
+        FakeQuota(quota_bytes=1000, quota_bytes_used=850),  # 85%, en riesgo
+        FakeQuota(quota_bytes=1000, quota_bytes_used=200),  # 20%, tranquila
+    )
+    assert qs.contar_cuotas_en_riesgo(db) == 1
+
+
+def test_no_cuenta_las_que_ya_se_aplicaron(monkeypatch):
+    """Ya cortada/limitada: se ve en la fila del usuario, no hace falta
+    duplicarla como "en riesgo" en el dashboard."""
+    db = _db_con_cuotas(FakeQuota(quota_bytes=1000, quota_bytes_used=950, quota_action_applied=True))
+    assert qs.contar_cuotas_en_riesgo(db) == 0
+
+
+def test_cuota_sin_limite_configurado_no_revienta():
+    db = _db_con_cuotas(FakeQuota(quota_bytes=0, quota_bytes_used=0))
+    assert qs.contar_cuotas_en_riesgo(db) == 0

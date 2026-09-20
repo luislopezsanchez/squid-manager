@@ -925,6 +925,8 @@ def get_volumen_por_periodo(seconds: int | None = None) -> dict:
 
 def get_dashboard(db=None) -> dict:
     """Dashboard completo: todas las métricas en una sola llamada."""
+    from app.services.quota_service import contar_cuotas_en_riesgo
+
     traffic = get_realtime_traffic()
     return {
         "traffic": traffic,
@@ -935,4 +937,8 @@ def get_dashboard(db=None) -> dict:
         "system": get_system_metrics(),
         "timeline": get_traffic_timeline(),
         "connections": get_recent_connections(10),
+        # Cuenta simple, no la lista de nombres: esto se pinta en el
+        # dashboard principal, no es el lugar para señalar personas -el
+        # detalle de quién ya está ahí en Gestión > Usuarios.
+        "quotas_en_riesgo": contar_cuotas_en_riesgo(db),
     }

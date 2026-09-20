@@ -1,6 +1,7 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
-import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconDashboard, IconGauge, IconLink } from '../components/Icons'
+import { Link } from 'react-router-dom'
+import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconDashboard, IconGauge, IconLink, IconUsers } from '../components/Icons'
 import { api, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
 import { formatBytes, formatRate, formatNumber } from '../utils/format'
@@ -57,6 +58,7 @@ interface DashboardData {
     time: string; ip: string; user: string; method: string
     domain: string; status: number; bytes: number; denied: boolean
   }[]
+  quotas_en_riesgo: number
 }
 
 // monotonePath/niceCeilBytes se movieron a utils/chart.ts: Tendencias.tsx
@@ -287,6 +289,27 @@ export default function Dashboard() {
             </button>
           )}
         </div>
+      )}
+
+      {/* Aviso de cuotas por agotarse: solo aparece si hay alguien en esa
+          situación -a diferencia de las 4 tarjetas de arriba, que siempre
+          se muestran, esto ocuparía espacio en blanco la mayor parte del
+          tiempo si fuera una tarjeta fija. */}
+      {data.quotas_en_riesgo > 0 && (
+        <Link to="/users" className="card p-4 mb-6 flex items-center gap-3 border hover:brightness-95 transition"
+              style={{ borderColor: 'var(--warn)', background: 'var(--warn-soft)' }}>
+          <span className="stat-icon flex-none" style={{ background: 'transparent', color: 'var(--warn)' }}>
+            <IconUsers />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--warn)' }}>
+              {data.quotas_en_riesgo === 1
+                ? traducir("1 usuario está por agotar su cuota de navegación")
+                : traducir("{n} usuarios están por agotar su cuota de navegación", { n: data.quotas_en_riesgo })}
+            </p>
+            <p className="text-xs text-ink-2">{traducir("Ya consumieron 80% o más de su límite del periodo. Ver en Gestión → Usuarios.")}</p>
+          </div>
+        </Link>
       )}
 
       {/* Métricas principales - 4 tarjetas con tendencia */}

@@ -58,6 +58,26 @@ _SISTEMA = "Cuota de navegación"
 PERIODOS_VALIDOS = ("daily", "weekly", "monthly")
 ACCIONES_VALIDAS = ("cut", "throttle")
 
+# A partir de que porcentaje del limite se avisa en el dashboard que un
+# usuario esta por agotar su cuota -umbral orientativo, no configurable
+# todavia: "cerca de" antes de que la accion ya se haya aplicado, no
+# despues (eso ya se ve en la propia fila del usuario en Gestion > Usuarios).
+UMBRAL_RIESGO = 0.8
+
+
+def contar_cuotas_en_riesgo(db) -> int:
+    """Cuantos usuarios con cuota activa ya consumieron 80% o mas de su
+    limite, sin que la accion se haya aplicado todavia -para el dashboard."""
+    if db is None:
+        return 0
+    en_riesgo = 0
+    for q in db.query(NavigationQuota).all():
+        if q.quota_action_applied or not q.quota_bytes:
+            continue
+        if (q.quota_bytes_used or 0) / q.quota_bytes >= UMBRAL_RIESGO:
+            en_riesgo += 1
+    return en_riesgo
+
 
 def _load_offset() -> int:
     try:
