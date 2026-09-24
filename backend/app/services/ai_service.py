@@ -775,7 +775,16 @@ def preguntar_agentico(db: Session, config: AiConfig, pregunta: str) -> dict:
         herramientas_usadas.append(nombre)
         try:
             salida = ejecutar_herramienta(db, config, nombre, argumentos)
-        except ValueError as e:
+        except Exception as e:
+            # No solo ValueError (nombre de herramienta desconocido): un
+            # fallo real de una herramienta -Jina AI caído a mitad de
+            # buscar_documentacion, un error de base de datos puntual- no
+            # debe tirar abajo toda la conversación. Se le devuelve el
+            # error al modelo como parte del resultado de ESA llamada, para
+            # que pueda decidir cómo seguir (reintentar, avisar, usar otra
+            # herramienta) en vez de que la pregunta entera termine en una
+            # excepción sin ninguna respuesta.
+            logger.warning(f"Herramienta '{nombre}' falló en modo agéntico: {e}")
             return {"error": str(e)}
         if salida.get("__propuesta__"):
             propuesta = {"accion": salida["accion"], "argumentos": salida["argumentos"]}
@@ -821,6 +830,19 @@ def preguntar_agentico(db: Session, config: AiConfig, pregunta: str) -> dict:
                     "role": "tool", "tool_call_id": ll["id"],
                     "content": json.dumps(salida, ensure_ascii=False),
                 })
+
+    # Se agotaron las iteraciones sin que el modelo diera una respuesta de
+    # texto final. Si ya había armado una propuesta en el camino, no
+    # descartarla -sería tirar a la basura lo único útil que sí se logró-:
+    # se devuelve igual, con una respuesta genérica en vez de la del modelo.
+    if propuesta is not None:
+        return {
+            "respuesta": (
+                "No pude terminar de redactar una respuesta, pero sí llegué a armar "
+                "la propuesta de abajo -revisala antes de confirmarla."
+            ),
+            "fuentes": [], "propuesta": propuesta, "herramientas_usadas": herramientas_usadas,
+        }
 
     raise AiServiceError(
         "El asistente no pudo terminar de responder tras varios pasos consultando "

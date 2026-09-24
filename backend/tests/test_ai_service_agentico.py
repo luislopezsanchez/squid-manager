@@ -174,3 +174,43 @@ def test_groq_argumentos_json_invalidos_no_revienta(monkeypatch):
     monkeypatch.setattr(httpx, "post", _secuencia_post([malformado, _openai_texto("Listo.")]))
     resultado = preguntar_agentico(db=FakeDB(), config=FakeConfig(provider="groq"), pregunta="algo")
     assert resultado["respuesta"] == "Listo."
+
+
+# --- Fallos reales encontrados en revisión de código -----------------------
+
+def test_error_de_una_herramienta_no_tumba_la_conversacion(monkeypatch):
+    """Antes de este fix, un fallo real de una herramienta (Jina AI caído en
+    buscar_documentacion, un error de base de datos) propagaba y reventaba
+    toda la conversación en vez de devolverse como parte del resultado de
+    esa llamada, para que el modelo pueda seguir."""
+    import app.services.ai_tools as ai_tools
+
+    def _falla(db, config, nombre, argumentos):
+        raise AiServiceError("Jina AI no está disponible en este momento (503).")
+
+    monkeypatch.setattr(ai_tools, "ejecutar_herramienta", _falla)
+    respuestas = [
+        _gemini_tool_call("buscar_documentacion", {"pregunta": "algo"}),
+        _gemini_texto("No pude buscar en la documentación en este momento."),
+    ]
+    monkeypatch.setattr(httpx, "post", _secuencia_post(respuestas))
+
+    resultado = preguntar_agentico(db=FakeDB(), config=FakeConfig(provider="gemini"), pregunta="algo")
+    assert resultado["respuesta"] == "No pude buscar en la documentación en este momento."
+
+
+def test_propuesta_no_se_pierde_si_se_agotan_las_iteraciones(monkeypatch):
+    """Antes de este fix, si el modelo armaba una propuesta y después seguía
+    pidiendo herramientas sin nunca dar una respuesta de texto final, la
+    propuesta ya armada se perdía -el admin solo veía un error genérico."""
+    respuestas = [
+        _gemini_tool_call("proponer_crear_acl", {"name": "redes_sociales", "type": "dstdomain", "value": ".facebook.com"}),
+    ] + [_gemini_tool_call("ver_estado_aplicacion", {})] * 5  # nunca da texto final
+    monkeypatch.setattr(httpx, "post", _secuencia_post(respuestas))
+
+    resultado = preguntar_agentico(db=FakeDB(), config=FakeConfig(provider="gemini"), pregunta="creá una ACL")
+    assert resultado["propuesta"] == {
+        "accion": "proponer_crear_acl",
+        "argumentos": {"name": "redes_sociales", "type": "dstdomain", "value": ".facebook.com"},
+    }
+    assert "revisala antes de confirmarla" in resultado["respuesta"]
