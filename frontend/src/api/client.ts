@@ -311,10 +311,12 @@ export const api = {
   // pagina de "Actividad de red".
   getTopUsers: (limit = 20, ventana?: string, sortBy?: 'bytes' | 'requests') =>
     request<any>(`/panel/top-users?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}${sortBy ? `&sort_by=${sortBy}` : ''}`),
-  getTopDomains: (limit = 20, denied = false, ventana?: string) =>
-    request<any>(`/panel/top-domains?limit=${limit}&denied=${denied}${ventana ? `&ventana=${ventana}` : ''}`),
+  getTopDomains: (limit = 20, denied = false, ventana?: string, sortBy?: 'bytes' | 'requests') =>
+    request<any>(`/panel/top-domains?limit=${limit}&denied=${denied}${ventana ? `&ventana=${ventana}` : ''}${sortBy ? `&sort_by=${sortBy}` : ''}`),
   getTopBlockedUsers: (limit = 20, ventana?: string) =>
     request<any>(`/panel/top-blocked-users?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}`),
+  getIpsCompartidas: (limit = 20, ventana?: string) =>
+    request<any>(`/panel/ips-compartidas?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}`),
   getTotalesActividad: (ventana?: string) =>
     request<any>(`/panel/totales-actividad${ventana ? `?ventana=${ventana}` : ''}`),
   actividadExportPdfUrl: (ventana?: string) =>

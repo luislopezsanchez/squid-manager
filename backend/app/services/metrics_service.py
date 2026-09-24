@@ -766,7 +766,20 @@ def get_top_blocked_users(limit: int = 10, db=None, seconds: int | None = None) 
     }
 
 
-def get_top_domains(limit: int = 10, denied_only: bool = False, seconds: int | None = None) -> list[dict]:
+def get_top_domains(
+    limit: int = 10, denied_only: bool = False, seconds: int | None = None,
+    sort_by: str = "requests",
+) -> list[dict]:
+    """Top dominios por número de peticiones o por bytes transferidos.
+
+    Antes ordenaba siempre por peticiones aunque el dato de bytes por
+    dominio ya se calculaba acá mismo (`domain_bytes`) -el frontend lo
+    mostraba pero no lo usaba para ordenar. Un dominio con pocas peticiones
+    pero descargas grandes (un instalador, un backup) podía quedar afuera
+    del top por peticiones sin que hubiera forma de verlo ordenado por lo
+    que de verdad importa en ese caso: cuánto tráfico generó. Mismo criterio
+    que ya tiene get_top_users con su `sort_by`.
+    """
     entries = _read_window(seconds)
     if denied_only:
         entries = [e for e in entries if e["denied"]]
@@ -775,10 +788,40 @@ def get_top_domains(limit: int = 10, denied_only: bool = False, seconds: int | N
     for e in entries:
         if e["domain"]:
             domain_bytes[e["domain"]] += e["bytes"]
+
+    metrica = domain_bytes if sort_by == "bytes" else domain_count
     return [
-        {"domain": d, "requests": c, "bytes": domain_bytes[d]}
-        for d, c in domain_count.most_common(limit)
+        {"domain": d, "requests": domain_count[d], "bytes": domain_bytes[d]}
+        for d, _ in sorted(metrica.items(), key=lambda x: x[1], reverse=True)[:limit]
     ]
+
+
+def get_ips_compartidas(limit: int = 10, seconds: int | None = None) -> list[dict]:
+    """IPs que generaron tráfico con más de un usuario autenticado distinto.
+
+    Señal de seguridad, no un veredicto: una IP con varios usuarios puede
+    ser un equipo compartido de verdad (una sala, un kiosco) o credenciales
+    que circulan entre personas -esa lectura la hace el admin, acá solo se
+    saca a la luz dónde pasa, algo que hoy no se puede ver de ningún otro
+    lado del panel sin repasar el access.log a mano. No cuenta el tráfico
+    sin usuario (ruido de fondo del navegador): eso es la norma, no una
+    señal de nada.
+    """
+    entries = _read_window(seconds)
+    usuarios_por_ip: dict[str, set[str]] = defaultdict(set)
+    requests_por_ip: dict[str, int] = defaultdict(int)
+    for e in entries:
+        if e["user"]:
+            usuarios_por_ip[e["client_ip"]].add(e["user"])
+            requests_por_ip[e["client_ip"]] += 1
+
+    compartidas = [
+        {"ip": ip, "usuarios": sorted(usuarios), "requests": requests_por_ip[ip]}
+        for ip, usuarios in usuarios_por_ip.items()
+        if len(usuarios) >= 2
+    ]
+    compartidas.sort(key=lambda x: (len(x["usuarios"]), x["requests"]), reverse=True)
+    return compartidas[:limit]
 
 
 def get_latencia(limit: int = 10, seconds: int | None = None) -> dict:

@@ -14,6 +14,7 @@ type FilaUsuario = { user: string; bytes: number; requests: number }
 type FilaDominio = { domain: string; requests: number; bytes: number }
 type FilaBloqueado = { user: string; blocked_requests: number; account_status: 'enabled' | 'disabled' | 'unknown' }
 type RespuestaBloqueados = { users: FilaBloqueado[]; anonymous_blocked: number }
+type FilaIpCompartida = { ip: string; usuarios: string[]; requests: number }
 type Totales = {
   usuarios: { count: number; bytes: number; requests: number }
   dominios: { count: number; requests: number; bytes: number }
@@ -21,13 +22,14 @@ type Totales = {
   usuarios_bloqueados_requests: number
 }
 
-type Pestana = 'usuarios' | 'dominios' | 'bloqueados-dominio' | 'bloqueados-usuario'
+type Pestana = 'usuarios' | 'dominios' | 'bloqueados-dominio' | 'bloqueados-usuario' | 'ips-compartidas'
 
 const COLORES: Record<Pestana, string> = {
   usuarios: '#0B497C',
   dominios: '#2E93BC',
   'bloqueados-dominio': '#C0392B',
   'bloqueados-usuario': '#C0392B',
+  'ips-compartidas': '#E0A036',
 }
 
 // Por que importa cada vista -no es solo "una tabla mas": cada una responde
@@ -45,17 +47,21 @@ const EXPLICACIONES: Record<Pestana, string> = {
   'bloqueados-usuario': traducir(
     "Quién insiste más contra la política. Unos pocos bloqueos son ruido normal (un enlace viejo, una redirección); una cifra alta y sostenida de la misma persona sí amerita una conversación."
   ),
+  'ips-compartidas': traducir(
+    "Direcciones IP desde las que navegó más de un usuario autenticado distinto. No es un veredicto -puede ser un equipo compartido de verdad (una sala, un kiosco)-, pero es una señal que vale la pena revisar: credenciales que circulan entre personas se ven así."
+  ),
 }
 
 export default function ActividadRed() {
   const [pestana, setPestana] = useState<Pestana>('usuarios')
   const [ventana, setVentana] = useState<Ventana>('')
-  const [porDatos, setPorDatos] = useState(true) // solo aplica a la pestana "usuarios"
+  const [porDatos, setPorDatos] = useState(true) // aplica a "usuarios" y "dominios"
   const [usuarios, setUsuarios] = useState<FilaUsuario[] | null>(null)
   const [dominios, setDominios] = useState<FilaDominio[] | null>(null)
   const [bloqueadosDominio, setBloqueadosDominio] = useState<FilaDominio[] | null>(null)
   const [bloqueadosUsuario, setBloqueadosUsuario] = useState<FilaBloqueado[] | null>(null)
   const [anonimosBloqueados, setAnonimosBloqueados] = useState(0)
+  const [ipsCompartidas, setIpsCompartidas] = useState<FilaIpCompartida[] | null>(null)
   const [totales, setTotales] = useState<Totales | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -68,18 +74,20 @@ export default function ActividadRed() {
     const v = ventana || undefined
     Promise.all([
       api.getTopUsers(10, v, porDatos ? 'bytes' : 'requests'),
-      api.getTopDomains(10, false, v),
+      api.getTopDomains(10, false, v, porDatos ? 'bytes' : 'requests'),
       api.getTopDomains(10, true, v),
       api.getTopBlockedUsers(10, v),
       api.getTotalesActividad(v),
+      api.getIpsCompartidas(10, v),
     ])
-      .then(([u, d, bd, bu, t]: [FilaUsuario[], FilaDominio[], FilaDominio[], RespuestaBloqueados, Totales]) => {
+      .then(([u, d, bd, bu, t, ips]: [FilaUsuario[], FilaDominio[], FilaDominio[], RespuestaBloqueados, Totales, FilaIpCompartida[]]) => {
         setUsuarios(u)
         setDominios(d)
         setBloqueadosDominio(bd)
         setBloqueadosUsuario(bu.users)
         setAnonimosBloqueados(bu.anonymous_blocked)
         setTotales(t)
+        setIpsCompartidas(ips)
         setError(null)
       })
       .catch((e: any) => setError(e.message))
@@ -134,6 +142,7 @@ export default function ActividadRed() {
     { id: 'dominios', label: traducir("Sitios visitados") },
     { id: 'bloqueados-dominio', label: traducir("Sitios bloqueados") },
     { id: 'bloqueados-usuario', label: traducir("Usuarios con más bloqueos") },
+    { id: 'ips-compartidas', label: traducir("IPs compartidas") },
   ]
 
   if (loading) return <LoadingState />
@@ -158,9 +167,9 @@ export default function ActividadRed() {
   } else if (pestana === 'dominios' && dominios) {
     filas = dominios.map(d => ({
       etiqueta: d.domain,
-      subEtiqueta: formatBytes(d.bytes),
-      valor: d.requests,
-      valorFormateado: formatNumber(d.requests),
+      subEtiqueta: porDatos ? `${formatNumber(d.requests)} ${traducir("req")}` : formatBytes(d.bytes),
+      valor: porDatos ? d.bytes : d.requests,
+      valorFormateado: porDatos ? formatBytes(d.bytes) : formatNumber(d.requests),
       onClick: () => abrirDetalle({ domain: d.domain }, d.domain),
     }))
   } else if (pestana === 'bloqueados-dominio' && bloqueadosDominio) {
@@ -195,7 +204,7 @@ export default function ActividadRed() {
   if (pestana === 'usuarios' && totales) {
     total = porDatos ? totales.usuarios.bytes : totales.usuarios.requests
   } else if (pestana === 'dominios' && totales) {
-    total = totales.dominios.requests
+    total = porDatos ? totales.dominios.bytes : totales.dominios.requests
   } else if (pestana === 'bloqueados-dominio' && totales) {
     total = totales.dominios_bloqueados.requests
   } else if (pestana === 'bloqueados-usuario' && totales) {
@@ -204,7 +213,7 @@ export default function ActividadRed() {
 
   const top3 = filas.slice(0, 3).reduce((acc, f) => acc + f.valor, 0)
   const pctTop3 = total > 0 ? (top3 / total) * 100 : 0
-  const totalFormateado = pestana === 'usuarios' && porDatos ? formatBytes(total) : formatNumber(total)
+  const totalFormateado = (pestana === 'usuarios' || pestana === 'dominios') && porDatos ? formatBytes(total) : formatNumber(total)
 
   return (
     <div className="p-6 md:p-8">
@@ -242,7 +251,7 @@ export default function ActividadRed() {
         <div className="flex items-center gap-3">
           <SelectorVentana value={ventana} onChange={setVentana} />
 
-          {pestana === 'usuarios' && (
+          {(pestana === 'usuarios' || pestana === 'dominios') && (
             <div className="flex gap-1 bg-line-soft p-1 rounded-lg">
               <button
                 onClick={() => setPorDatos(true)}
@@ -267,43 +276,75 @@ export default function ActividadRed() {
 
       <p className="text-sm text-ink-2 mb-4 max-w-3xl">{EXPLICACIONES[pestana]}</p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+      {pestana === 'ips-compartidas' ? (
+        // No entra en el modelo de "ranking con un solo número" que usan las
+        // demás pestañas (FilaBarra + anillo de concentración): acá cada fila
+        // es una IP con VARIOS usuarios, no un valor que se pueda comparar
+        // contra un máximo. Lista propia, sin el anillo al costado.
         <div className="card p-5">
-          {filas.length === 0 ? (
-            <p className="text-sm text-ink-3 text-center py-8">{traducir("Sin datos todavía.")}</p>
+          {!ipsCompartidas || ipsCompartidas.length === 0 ? (
+            <p className="text-sm text-ink-3 text-center py-8">{traducir("No se detectaron IPs con más de un usuario en esta ventana.")}</p>
           ) : (
-            <div className="flex flex-col">
-              {filas.map((f, i) => (
-                <FilaBarra
-                  key={f.etiqueta}
-                  posicion={i + 1}
-                  etiqueta={f.etiqueta}
-                  subEtiqueta={f.subEtiqueta}
-                  valor={f.valor}
-                  valorFormateado={f.valorFormateado}
-                  maximo={maximo}
-                  color={color}
-                  onClick={f.onClick}
-                />
+            <div className="divide-y divide-line-soft">
+              {ipsCompartidas.map((row, i) => (
+                <div key={row.ip} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="w-6 h-6 rounded-full text-xs flex items-center justify-center text-white flex-none mt-0.5" style={{ backgroundColor: color }}>{i + 1}</span>
+                    <div className="min-w-0">
+                      <p className="font-mono text-sm text-ink">{row.ip}</p>
+                      <p className="text-xs text-ink-3 mt-0.5 truncate">{row.usuarios.join(', ')}</p>
+                    </div>
+                  </div>
+                  <div className="text-right flex-none">
+                    <p className="text-sm font-semibold tabular text-ink">
+                      {traducir("{n} usuarios", { n: row.usuarios.length })}
+                    </p>
+                    <p className="text-xs text-ink-3 tabular">{formatNumber(row.requests)} {traducir("req")}</p>
+                  </div>
+                </div>
               ))}
             </div>
           )}
-          {pestana === 'bloqueados-usuario' && anonimosBloqueados > 0 && (
-            <p className="text-[11px] text-ink-3 mt-3 pt-3 border-t border-line-soft">
-              {traducir(
-                "+ {n} bloqueos sin usuario identificado (tráfico de fondo del navegador, sin credenciales)",
-                { n: anonimosBloqueados },
-              )}
-            </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+          <div className="card p-5">
+            {filas.length === 0 ? (
+              <p className="text-sm text-ink-3 text-center py-8">{traducir("Sin datos todavía.")}</p>
+            ) : (
+              <div className="flex flex-col">
+                {filas.map((f, i) => (
+                  <FilaBarra
+                    key={f.etiqueta}
+                    posicion={i + 1}
+                    etiqueta={f.etiqueta}
+                    subEtiqueta={f.subEtiqueta}
+                    valor={f.valor}
+                    valorFormateado={f.valorFormateado}
+                    maximo={maximo}
+                    color={color}
+                    onClick={f.onClick}
+                  />
+                ))}
+              </div>
+            )}
+            {pestana === 'bloqueados-usuario' && anonimosBloqueados > 0 && (
+              <p className="text-[11px] text-ink-3 mt-3 pt-3 border-t border-line-soft">
+                {traducir(
+                  "+ {n} bloqueos sin usuario identificado (tráfico de fondo del navegador, sin credenciales)",
+                  { n: anonimosBloqueados },
+                )}
+              </p>
+            )}
+          </div>
+
+          {filas.length > 0 && (
+            <div className="card p-5 flex flex-col items-center justify-center gap-3 w-full lg:w-64">
+              <AnilloConcentracion pct={pctTop3} color={color} total={total} totalFormateado={totalFormateado} />
+            </div>
           )}
         </div>
-
-        {filas.length > 0 && (
-          <div className="card p-5 flex flex-col items-center justify-center gap-3 w-full lg:w-64">
-            <AnilloConcentracion pct={pctTop3} color={color} total={total} totalFormateado={totalFormateado} />
-          </div>
-        )}
-      </div>
+      )}
 
       {detalle && (
         <ModalDetalle

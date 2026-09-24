@@ -27,7 +27,7 @@ from app.services.metrics_service import (
     get_system_metrics, get_traffic_timeline, get_recent_connections,
     get_dashboard, get_top_blocked_users, get_latencia, get_http_errors,
     get_detalle, VENTANAS_SEGUNDOS, get_totales_actividad, get_tendencia_trafico,
-    get_volumen_por_periodo,
+    get_volumen_por_periodo, get_ips_compartidas,
 )
 from app.services.pdf_report_service import generar_pdf_actividad
 from app.utils import utcnow
@@ -63,10 +63,11 @@ def top_domains(
     limit: int = Query(10, ge=1, le=50),
     denied: bool = Query(False),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
+    sort_by: str = Query("requests", pattern="^(bytes|requests)$"),
     _: Admin = Depends(get_current_admin),
 ):
     """Top dominios visitados o bloqueados (desde access.log)."""
-    return get_top_domains(limit, denied_only=denied, seconds=_ventana_a_segundos(ventana))
+    return get_top_domains(limit, denied_only=denied, seconds=_ventana_a_segundos(ventana), sort_by=sort_by)
 
 
 @router.get("/top-blocked-users")
@@ -79,6 +80,16 @@ def top_blocked_users(
     """Usuarios con más peticiones denegadas (desde access.log), cruzado
     contra si la cuenta está realmente deshabilitada o no."""
     return get_top_blocked_users(limit, db=db, seconds=_ventana_a_segundos(ventana))
+
+
+@router.get("/ips-compartidas")
+def ips_compartidas(
+    limit: int = Query(10, ge=1, le=50),
+    ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
+    _: Admin = Depends(get_current_admin),
+):
+    """IPs con más de un usuario autenticado distinto (desde access.log)."""
+    return get_ips_compartidas(limit, seconds=_ventana_a_segundos(ventana))
 
 
 @router.get("/totales-actividad")

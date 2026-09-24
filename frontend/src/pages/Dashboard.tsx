@@ -195,6 +195,7 @@ export default function Dashboard() {
   const [loadError, setLoadError] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [userSort, setUserSort] = useState<'bytes' | 'requests'>('bytes')
+  const [domainSort, setDomainSort] = useState<'bytes' | 'requests'>('requests')
   const [dirty, setDirty] = useState(false)
   const [applying, setApplying] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -210,7 +211,7 @@ export default function Dashboard() {
     Promise.all([
       api.getDashboard(),
       api.getTopUsers(10, '24h', 'bytes'),
-      api.getTopDomains(10, false, '24h'),
+      api.getTopDomains(10, false, '24h', domainSort),
       api.getTopDomains(10, true, '24h'),
       api.getTopBlockedUsers(10, '24h'),
     ]).then(([dash, users, domains, blocked, blockedUsers]) => {
@@ -261,7 +262,12 @@ export default function Dashboard() {
       intervalRef.current = setInterval(loadData, 5000)
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [autoRefresh])
+    // domainSort entra a propósito: igual que top_users ya hace con su
+    // propio sort_by, cambiar el orden pide de nuevo al backend en vez de
+    // reordenar en el cliente la misma lista de 10 -si no, un dominio con
+    // pocas peticiones pero muchos bytes (una descarga grande) seguía
+    // invisible porque nunca llegó a estar entre los 10 por peticiones.
+  }, [autoRefresh, domainSort])
 
   if (loading) return <LoadingState text={traducir("Cargando métricas...")} />
   if (!data) return <ErrorState text={traducir("No se pudieron cargar las métricas del panel. Revisá la conexión o volvé a intentar.")} onRetry={loadData} />
@@ -831,10 +837,28 @@ export default function Dashboard() {
           <div className="flex items-baseline justify-between mb-1">
             <div className="flex items-center gap-1.5">
               <h3 className="font-medium text-ink">{traducir("Top sitios visitados")}</h3>
-              <InfoTip text={traducir("Qué dominios se piden más veces. Sirve para decidir con datos reales si vale la pena sumar una ACL nueva: si algo no productivo aparece seguido aquí, es candidato a bloquear.")} />
+              <InfoTip text={traducir("Qué dominios se piden más veces o consumen más datos. Sirve para decidir con datos reales si vale la pena sumar una ACL nueva: si algo no productivo aparece seguido aquí, es candidato a bloquear.")} />
+            </div>
+            {/* Mismo criterio que "Top usuarios": antes solo se podía ordenar
+                por peticiones, aunque el backend ya traía los bytes de cada
+                dominio -un dominio con pocas peticiones pero una descarga
+                grande quedaba invisible sin forma de verlo. */}
+            <div className="flex text-xs rounded-md overflow-hidden border border-line">
+              <button
+                onClick={() => setDomainSort('bytes')}
+                className={`px-2 py-0.5 transition ${domainSort === 'bytes' ? 'bg-brand-700 text-white' : 'text-ink-3 hover:bg-brand-50'}`}
+              >{traducir("Datos")}</button>
+              <button
+                onClick={() => setDomainSort('requests')}
+                className={`px-2 py-0.5 transition ${domainSort === 'requests' ? 'bg-brand-700 text-white' : 'text-ink-3 hover:bg-brand-50'}`}
+              >{traducir("Peticiones")}</button>
             </div>
           </div>
-          <p className="text-[11px] text-ink-3 mb-4">{traducir("Por número de peticiones · últimas 24 horas")}</p>
+          <p className="text-[11px] text-ink-3 mb-4">
+            {domainSort === 'bytes'
+              ? traducir("Por datos transferidos · últimas 24 horas")
+              : traducir("Por número de peticiones · últimas 24 horas")}
+          </p>
           {data.top_domains.length === 0 ? (
             <p className="text-sm text-ink-3">{traducir("Sin datos")}</p>
           ) : (
@@ -845,7 +869,9 @@ export default function Dashboard() {
                     <span className="w-5 h-5 rounded-full text-xs flex items-center justify-center text-white flex-none" style={{ backgroundColor: '#48B3D0' }}>{i + 1}</span>
                     <span className="font-mono text-xs truncate">{d.domain}</span>
                   </div>
-                  <span className="text-xs text-ink-3 ml-2 tabular flex-none">{d.requests}</span>
+                  <span className="text-xs text-ink-3 ml-2 tabular flex-none">
+                    {domainSort === 'bytes' ? formatBytes(d.bytes) : d.requests}
+                  </span>
                 </div>
               ))}
             </div>
