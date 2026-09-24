@@ -73,3 +73,7 @@ backend/.update_result*
 # Idem para el buffer de métricas de red (metrics_service.py) -antes vivía
 # en /tmp, movido por el hallazgo 05-004 de la auditoría 2026-09-09.
 backend/.network_state.json
+
+# Estado local de Claude Code (locks de tareas programadas, etc.): es
+# runtime de esta sesión/máquina, no código ni configuración del proyecto.
+.claude/
