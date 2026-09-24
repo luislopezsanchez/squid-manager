@@ -224,6 +224,12 @@ entrada completa más abajo.
 | ✅ Implementado | Multi-nodo / escalabilidad | [Sincronizar configuración entre nodos](#evaluado-alcance-reducido-clustering-de-squid-para-balanceo-de-carga) — manual, a pedido, reutilizando el monitoreo centralizado; el balanceo de carga en sí sigue fuera de lo que Squid permite configurar |
 | ✅ Implementado | Asistente de IA | [Agente de IA más capaz (agéntico)](#agente-de-ia-más-capaz-agéntico) — solo lectura + propuestas que el administrador confirma a mano, nunca aplica nada solo |
 | ✅ Implementado | Plataforma / operaciones | [Actualizar instalaciones Docker desde el panel](#actualizar-instalaciones-docker-desde-el-propio-panel) — sin verificar en vivo por falta de un entorno Docker disponible |
+| ✅ Implementado | Dashboard / rendimiento | [Rediseño responsivo del Dashboard y saneamiento del backend](#dashboard-rediseño-responsivo-y-saneamiento-del-backend-2026-09-24) — Sistema al header, límite de tasa, rutas síncronas en todo `app/routes/`, chequeo de i18n en CI, code-splitting |
+| 🟡 Pendiente | Dashboard / rendimiento | Espacio libre junto a "Tráfico de red en tiempo real" (quedó vacío al sacar la tarjeta Sistema) — KPI a definir junto con las mejoras de Análisis |
+| 🟡 Pendiente | Dashboard / rendimiento | Latencia (mediana/p95) y Total transferido acumulado, que mostraba la tarjeta Sistema, no tienen lugar hoy — se perdieron, no se movieron |
+| 🟡 Pendiente | Plataforma / operaciones | `backend/app/routes/access_rules.py`, `admins.py`, `central.py` y `squid_config.py` ya tienen la corrección de rutas síncronas aplicada en el working tree, pero no comiteada — mezclada con trabajo pendiente de otra sesión en los mismos archivos, necesita revisión aparte antes de commitear |
+| 🟡 Pendiente | Plataforma / operaciones | `/central/dashboard` (Panel Central) tiene el mismo patrón de bloqueo que se corrigió hoy en el resto de rutas — no se tocó porque no se probó en esta sesión |
+| 🟡 Pendiente | Análisis de datos | Top dominios por bytes (el dato ya existe en `get_top_domains()`, falta el toggle en la UI), IPs compartidas por varios usuarios, rango de fechas libre en reportes, detección de anomalías por reglas simples — ver propuesta completa del 2026-09-24 más abajo |
 
 ---
 
@@ -1369,3 +1375,118 @@ propio lugar.
 `quotas_en_riesgo` (cuenta, no la lista de nombres -esto se pinta en un
 dashboard compartido, no es el lugar para señalar personas-). Nuevo
 `contar_cuotas_en_riesgo()` en `quota_service.py`, con `UMBRAL_RIESGO = 0.8`.
+
+### Dashboard: rediseño responsivo y saneamiento del backend (2026-09-24)
+
+Sesión larga a pedido del autor, arrancó revisando el layout del Dashboard
+en distintas resoluciones (27" vs. laptop estándar) y terminó destapando
+varios problemas de fondo del backend que no eran específicos de esa
+pantalla. Resumen de lo implementado, verificado y comiteado a `pruebas`:
+
+**Dashboard (frontend + `metrics_service.py`).** La tarjeta "Sistema"
+(CPU/RAM/Disco/SWAP) se saca de al lado del gráfico de tráfico -no entraba
+bien en anchos intermedios (~1280-1536px), cortando o envolviendo texto de
+forma dispareja- y pasa a una tira minimalista permanente en el header, en
+cualquier resolución. Las 5 tarjetas superiores ganan un modo compacto por
+debajo de 1536px (sin sparkline, texto/íconos reducidos). En el backend,
+`get_dashboard()` dejó de recalcular `top_users`/`top_domains`/
+`top_blocked_users` con una ventana que el frontend siempre reemplazaba
+-trabajo tirado a la basura en cada refresco de 5s-, se filtran los
+marcadores internos `error:*` de Squid para que no aparezcan como si fueran
+un dominio visitado, y "Salud de las peticiones" ahora contabiliza las
+peticiones sin código de respuesta en vez de que el total no cierre.
+
+**Rate limiting.** El límite general (120 peticiones/min por IP) no
+distinguía pestañas: dos pestañas del dashboard abiertas a la vez (cada
+una sondeando cada 5s) ya lo superaban, y ahí el backend devolvía 429 en
+todas las pestañas por igual sin que hubiera abuso real. Confirmado contra
+los logs de nginx (ráfagas de 7 peticiones cada ~2.5s, firma de dos
+pollers de 5s desfasados). Subido a 400/min; el límite de login no cambia.
+
+**Rutas síncronas en todo `app/routes/` (el hallazgo más importante).**
+`metrics.py` tenía 15 rutas `async def` sin ningún `await` real, haciendo
+trabajo bloqueante (parsear `access.log`, consultar el Cache Manager de
+Squid) directo sobre el único hilo del event loop -con un solo worker de
+uvicorn, eso congela el backend entero para todos los admins, no solo para
+quien hizo la petición-. Una auditoría con `ast` (no a mano) sobre los 114
+endpoints `async def` del proyecto encontró **92 más con el mismo patrón,
+en 24 archivos**. Se corrigieron 92: quitarles `async` alcanza (Starlette
+las manda solas a su threadpool) porque ninguna hacía `await` de verdad.
+Comiteados 19 archivos limpios; `access_rules.py`, `admins.py`,
+`central.py` y `squid_config.py` quedan con la corrección aplicada en el
+working tree pero sin commitear, porque ya tenían cambios pendientes de
+otra sesión mezclados en el mismo archivo -no pareció correcto arrastrar
+ese trabajo a un commit sin que se revise aparte-. `/central/dashboard`
+(Panel Central) tiene el mismo patrón y no se tocó por no ser parte de lo
+que se estaba probando esta sesión.
+
+**Estado de carga animado + reintento en toda la app.** Las ~30 páginas
+del panel mostraban el mismo texto estático "Cargando..." y la mayoría no
+manejaba el fallo de la carga inicial -encontrado en vivo en `Smtp.tsx` y
+`Notifications.tsx`: si la carga fallaba, la página se quedaba con el
+spinner colgado para siempre, porque la condición de salida dependía de un
+estado que nunca dejaba de ser `null`-. Nuevo componente compartido
+`AsyncState.tsx` (spinner animado + botón "Reintentar"), aplicado en las
+~26 páginas con el patrón viejo.
+
+**Chequeo de traducciones en CI.** `traducir("texto")` usa el propio texto
+en español como clave: un texto nuevo sin su entrada en `en.json`/
+`pt.json` no rompe nada visible en español, así que el hueco se
+descubría de a uno, a mano (esta sesión sola: "Aplicar ahora", "n/d",
+"Redir.", "errores", "Otros", y 21 más -casi todos los tooltips del
+Dashboard, que nunca se habían traducido- al correr el script recién
+escrito por primera vez). Nuevo `frontend/scripts/check-i18n.cjs`, sumado
+al workflow de CI justo después de `tsc --noEmit`.
+
+**Code-splitting por ruta.** El bundle inicial (823 KB) traía las ~30
+páginas del panel juntas sin importar cuál se fuera a mirar primero -Vite
+avisaba de esto en cada build ("chunks larger than 500 kB") y nunca se
+atendió-. Cada página pasa a `React.lazy()` con un `<Suspense>` que
+reutiliza el mismo spinner de arriba. El chunk inicial baja a 420 KB (139
+KB gzip, contra 247 KB antes).
+
+**Verificado antes de cada commit:** 596 tests de backend pasan, `tsc
+--noEmit` y `npm run check-i18n` limpios, `npm run build` sin warnings de
+chunk grande, servido en vivo contra la VM de pruebas después de cada
+cambio.
+
+**Pendiente explícito, no por olvido** (ver la tabla de arriba): el
+espacio que dejó libre la tarjeta Sistema, dónde mostrar Latencia/Total
+transferido, los 4 archivos de rutas sin commitear, y `/central/dashboard`
+con el mismo riesgo de bloqueo sin corregir todavía.
+
+#### Propuesta de análisis de datos (comparación con SquidStats, 2026-09-24)
+
+A pedido del autor, con capturas reales de SquidStats como referencia -sin
+copiar su diseño, analizando qué conceptos le faltan a SquidManager y
+verificando cada uno contra el código propio antes de anotarlo, mismo
+criterio que la comparación del 2026-09-18-:
+
+- **Top dominios por bytes transferidos** (no solo por cantidad de
+  peticiones): el backend ya calcula `domain_bytes` en `get_top_domains()`;
+  solo falta el mismo toggle Datos/Peticiones que "Top usuarios" ya tiene.
+  Costo muy bajo.
+- **IPs compartidas por varios usuarios**: señal de seguridad real (cuenta
+  compartida o mismo equipo con varias cuentas). El cruce usuario+IP ya
+  está disponible por línea de log, encajaría en Auditoría sin pantalla
+  nueva. Costo bajo.
+- **Reporte con rango de fechas libre** (no solo ventanas fijas
+  1h/24h/7d/30d): se apoya en `historical_log_service.py`, que ya existe.
+  Costo medio.
+- **Detección de anomalías por reglas simples** (pico de tráfico inusual,
+  un usuario contra 10+ sitios bloqueados en poco tiempo) -explícitamente
+  no "IA opaca", encaja con `notification_service.py`. Costo medio.
+- **Descartado a propósito:** historial de recursos del sistema
+  (CPU/RAM/SWAP en el tiempo) -es trabajo de una herramienta de monitoreo
+  de infraestructura (Grafana/Zabbix/Netdata), no de un panel de gestión
+  de proxy; reconstruirlo adentro sería justo el tipo de función que
+  sobrecarga el producto sin aportar algo específico de Squid. Reportes
+  programados y export CSV/Excel también quedan afuera por ahora: mismo
+  criterio que ya aplicó el proyecto con los KPIs del dashboard -esperar
+  un caso real antes de construir.
+- Verificado además que las dos propuestas de
+  `squid-manager-propuesta-mejoras.md` (autenticación Digest y sistema de
+  logs históricos) **ya estaban implementadas por completo**
+  (`digest_ha1`/`write_digest_file` en el backend,
+  `historical_log_service.py` + `HistoricalLogs.tsx` + tests) -ese
+  documento no tiene nada pendiente.
