@@ -4,6 +4,7 @@ import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import RequiereAplicar from '../components/RequiereAplicar'
 import { IconRefresh, IconUpload, IconEdit, IconTrash } from '../components/Icons'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 import { normalizarNombreAcl } from '../utils/aclNames'
 
 interface Categoria {
@@ -24,6 +25,7 @@ interface Categoria {
 export default function Categorias() {
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showBulk, setShowBulk] = useState(false)
   const [editingCat, setEditingCat] = useState<Categoria | null>(null)
@@ -32,8 +34,8 @@ export default function Categorias() {
   const { showToast, ToastContainer } = useToast()
 
   const cargar = () => {
-    api.listAcls({ isCategory: true }).then(setCategorias)
-      .catch(() => showToast(traducir("Error al cargar las categorías"), 'error'))
+    api.listAcls({ isCategory: true }).then(r => { setCategorias(r); setLoadError(false) })
+      .catch(() => { showToast(traducir("Error al cargar las categorías"), 'error'); setLoadError(true) })
       .finally(() => setLoading(false))
   }
 
@@ -337,7 +339,9 @@ export default function Categorias() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
+        <LoadingState />
+      ) : loadError && categorias.length === 0 ? (
+        <ErrorState onRetry={cargar} />
       ) : (
         <div className="card overflow-hidden">
           <table className="table-panel">

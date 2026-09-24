@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import { formatRate, formatNumber } from '../utils/format'
 import { IconRefresh, IconEdit, IconTrash, IconGlobe, IconUpload } from '../components/Icons'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 interface Node {
   id: number
@@ -40,6 +41,7 @@ export default function PanelCentral() {
   const [nodes, setNodes] = useState<Node[]>([])
   const [estado, setEstado] = useState<NodeStatus[]>([])
   const [loadingEstado, setLoadingEstado] = useState(true)
+  const [estadoError, setEstadoError] = useState(false)
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -56,8 +58,8 @@ export default function PanelCentral() {
 
   const loadEstado = () => {
     api.getCentralDashboard()
-      .then(r => { setEstado(r.nodes); setUltimaActualizacion(new Date()) })
-      .catch(() => showToast(traducir("Error al consultar el estado de los nodos"), 'error'))
+      .then(r => { setEstado(r.nodes); setUltimaActualizacion(new Date()); setEstadoError(false) })
+      .catch(() => { showToast(traducir("Error al consultar el estado de los nodos"), 'error'); setEstadoError(true) })
       .finally(() => setLoadingEstado(false))
   }
 
@@ -93,7 +95,14 @@ export default function PanelCentral() {
     setTestResult(null)
     try {
       const password = form.password || '***'
-      const resultado = await api.testCentralNode({ url: form.url, username: form.username, password })
+      const resultado = await api.testCentralNode({
+        url: form.url, username: form.username, password,
+        // Si la contraseña no se reescribió (queda "***"), esto le permite
+        // al backend resolverla contra la guardada de este nodo -sin esto,
+        // probar un nodo existente sin tocar la contraseña mandaba el
+        // placeholder literal y la prueba fallaba siempre.
+        id: editingId ?? undefined,
+      })
       setTestResult(resultado)
     } catch (e: any) {
       setTestResult({ status: 'error', message: e.message })
@@ -182,7 +191,9 @@ export default function PanelCentral() {
       )}
 
       {loadingEstado ? (
-        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
+        <LoadingState />
+      ) : estadoError && estado.length === 0 ? (
+        <ErrorState onRetry={loadEstado} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {estado.map((n, i) => (

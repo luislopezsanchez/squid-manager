@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { IconChevronLeft, IconChevronRight, IconDownload } from '../components/Icons'
 import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState } from '../components/AsyncState'
 
 interface LogEntry {
   timestamp: number
@@ -132,6 +133,13 @@ export default function LogsViewer() {
   const handleResetFilters = () => {
     setFUser(''); setFStatus(''); setFDomain(''); setFDenied(false); setOffset(0)
   }
+
+  // Solo bloquea con el spinner la primera carga -antes esta página no
+  // mostraba ningún indicador (`loading` se guardaba pero nunca se leía) y la
+  // tabla arrancaba vacía sin explicación durante ese primer instante. Los
+  // refrescos posteriores (auto-actualizar, cambiar de filtro) no deben
+  // tapar la tabla: siguen mostrando lo último cargado mientras llega lo nuevo.
+  if (loading && entries.length === 0) return <LoadingState />
 
   return (
     <div className="p-6 md:p-7">

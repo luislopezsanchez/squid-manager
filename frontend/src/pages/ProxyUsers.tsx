@@ -2,6 +2,7 @@ import { traducir } from '../i18n'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 import { formatBytes } from '../utils/format'
 import { normalizarUsername } from '../utils/usernames'
 
@@ -377,6 +378,7 @@ export default function ProxyUsers() {
   const [localUsers, setLocalUsers] = useState<LocalUser[]>([])
   const [ldapUsers, setLdapUsers] = useState<LdapUserRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [newUser, setNewUser] = useState({ username: '', password: '' })
   const [error, setError] = useState('')
@@ -421,9 +423,18 @@ export default function ProxyUsers() {
   const { showToast, ToastContainer } = useToast()
 
   const loadUsers = () => {
+    setLoading(true)
+    // Cada llamada absorbe su propio error (que LDAP falle no debería tapar
+    // la lista local, ni al revés) -pero eso significa que un fallo total
+    // (los 4 servicios caídos a la vez, ej. bajo el límite de peticiones)
+    // antes se veía como "no hay usuarios", sin ninguna pista de que en
+    // realidad la carga falló. `usersFailed` distingue ambos casos: solo
+    // importa si las dos listas de usuarios (no grupos/cuotas, que son
+    // metadata secundaria) fallaron de verdad.
+    let usersFailed = false
     Promise.all([
-      api.listUsers().catch(() => []),
-      api.listLdapUsers().catch(() => []),
+      api.listUsers().catch(() => { usersFailed = true; return [] }),
+      api.listLdapUsers().catch(() => { usersFailed = true; return [] }),
       api.listGroups().catch(() => []),
       api.listQuotas().catch(() => []),
     ]).then(([local, ldap, groups, quotas]) => {
@@ -441,6 +452,7 @@ export default function ProxyUsers() {
       setGroupsByUser(map)
 
       setQuotasByUser(new Map((quotas as Quota[]).map(q => [q.username, q])))
+      setLoadError(usersFailed && local.length === 0 && ldap.length === 0)
     }).finally(() => setLoading(false))
   }
 
@@ -673,7 +685,9 @@ export default function ProxyUsers() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
+        <LoadingState />
+      ) : loadError ? (
+        <ErrorState onRetry={loadUsers} />
       ) : (
         <div className="card overflow-hidden">
           <table className="table-panel">

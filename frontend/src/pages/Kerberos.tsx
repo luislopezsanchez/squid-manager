@@ -2,11 +2,13 @@ import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
 import { api, notificarCambioPendiente, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
 
 export default function Kerberos() {
   const [config, setConfig] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -14,7 +16,8 @@ export default function Kerberos() {
   const keytabRef = useRef<HTMLInputElement>(null)
   const { showToast, ToastContainer } = useToast()
 
-  const cargar = () => api.getKerberosConfig().then(setConfig).catch(() => showToast(traducir("Error al cargar la configuración de Kerberos"), 'error'))
+  const cargar = () => api.getKerberosConfig().then(r => { setConfig(r); setLoadError(false) })
+    .catch(() => { showToast(traducir("Error al cargar la configuración de Kerberos"), 'error'); setLoadError(true) })
 
   useEffect(() => {
     cargar().finally(() => setLoading(false))
@@ -100,7 +103,8 @@ export default function Kerberos() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (loadError && !config) return <ErrorState onRetry={cargar} />
   if (!config) return <div className="p-8 text-center text-ink-3">{traducir("No se pudo cargar la configuración")}</div>
 
   return (

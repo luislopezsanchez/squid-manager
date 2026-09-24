@@ -1,9 +1,10 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
-import { api } from '../api/client'
+import { api, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
 import { IconAssistant } from '../components/Icons'
 import { Markdown } from '../components/Markdown'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 const PROVEEDORES = [
   { value: 'gemini', label: 'Gemini (Google)', ejemploModelo: 'gemini-flash-latest' },
@@ -43,6 +44,7 @@ function cargarConversacion(): Turno[] {
 export default function Asistente() {
   const [config, setConfig] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [reindexando, setReindexando] = useState(false)
   const [preguntando, setPreguntando] = useState(false)
@@ -59,7 +61,8 @@ export default function Asistente() {
   const [probandoEmbeddings, setProbandoEmbeddings] = useState(false)
   const [embeddingsOk, setEmbeddingsOk] = useState<number | null>(null)
 
-  const cargar = () => api.getAiConfig().then(setConfig).catch(() => showToast(traducir("Error al cargar la configuración del asistente"), 'error'))
+  const cargar = () => api.getAiConfig().then(r => { setConfig(r); setLoadError(false) })
+    .catch(() => { showToast(traducir("Error al cargar la configuración del asistente"), 'error'); setLoadError(true) })
 
   useEffect(() => {
     cargar().finally(() => setLoading(false))
@@ -210,6 +213,13 @@ export default function Asistente() {
           description: a.description || '', enabled: true,
         })
         showToast(traducir('ACL "{n}" creada', { n: a.name }), 'success')
+      } else {
+        // Defensivo: si algún día se suma una herramienta "proponer_*" nueva
+        // y se olvida agregarle su rama acá, mejor avisar con claridad que
+        // marcarla como "aplicada" sin haber hecho nada -eso engañaría al
+        // administrador haciéndole creer que el cambio ya está en efecto.
+        showToast(traducir('No sé cómo aplicar esta propuesta ("{accion}") todavía.', { accion: turno.propuesta.accion }), 'error')
+        return
       }
       setConversacion(prev => prev.map((t, i) => i === indice ? { ...t, propuestaEstado: 'aplicada' } : t))
     } catch (e: any) {
@@ -221,7 +231,8 @@ export default function Asistente() {
     setConversacion(prev => prev.map((t, i) => i === indice ? { ...t, propuestaEstado: 'descartada' } : t))
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (loadError && !config) return <ErrorState onRetry={cargar} />
   if (!config) return <div className="p-8 text-center text-ink-3">{traducir("No se pudo cargar la configuración")}</div>
 
   const proveedorActual = PROVEEDORES.find(p => p.value === config.provider)
@@ -454,7 +465,7 @@ export default function Asistente() {
                           <p className="text-xs text-ok font-medium mt-2">✓ {traducir("Aplicada")}</p>
                         ) : turno.propuestaEstado === 'descartada' ? (
                           <p className="text-xs text-ink-3 mt-2">{traducir("Descartada")}</p>
-                        ) : (
+                        ) : canWrite() ? (
                           <div className="flex gap-2 mt-2">
                             <button onClick={() => handleAplicarPropuesta(i)} className="btn btn-primary btn-sm">
                               {traducir("Aplicar")}
@@ -463,6 +474,15 @@ export default function Asistente() {
                               {traducir("Descartar")}
                             </button>
                           </div>
+                        ) : (
+                          // Preguntar está abierto también a cuentas de solo lectura
+                          // (ver routes/ai.py), pero aplicar una propuesta termina
+                          // llamando a un endpoint que exige permisos de escritura
+                          // -mejor decirlo acá que dejar clickear "Aplicar" y
+                          // mostrar un 403 crudo.
+                          <p className="text-xs text-ink-3 mt-2">
+                            {traducir("Tu cuenta es de solo lectura: pedile a un administrador con permisos de escritura que la aplique.")}
+                          </p>
                         )}
                       </div>
                     </div>

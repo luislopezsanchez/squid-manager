@@ -6,6 +6,7 @@ import {
   FilaBarra, AnilloConcentracion, ModalDetalle, SelectorVentana, VENTANAS,
   type FilaDetalle, type Ventana,
 } from '../components/ReportWidgets'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 type Latencia = {
   latency_avg_ms: number | null
@@ -87,7 +88,8 @@ export default function RendimientoErrores() {
     { id: 'errores', label: traducir("Errores HTTP") },
   ]
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (error && !latencia && !errores) return <ErrorState text={error} onRetry={cargar} />
 
   const colorLatencia = '#B8860B'
 

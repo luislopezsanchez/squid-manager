@@ -2,6 +2,7 @@ import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 interface Setting {
   value: string
@@ -38,6 +39,7 @@ const ENUM_SETTINGS: Record<string, { value: string; label: string }[]> = {
 export default function Settings() {
   const [settings, setSettings] = useState<Record<string, Setting>>({})
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [testingDns, setTestingDns] = useState(false)
@@ -59,7 +61,9 @@ export default function Settings() {
   }
 
   const loadSettings = () => {
-    api.getSettings().then(setSettings).catch(e => showToast(traducir("Error al cargar configuración"), 'error')).finally(() => setLoading(false))
+    api.getSettings().then(r => { setSettings(r); setLoadError(false) })
+      .catch(e => { showToast(traducir("Error al cargar configuración"), 'error'); setLoadError(true) })
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => { loadSettings() }, [])
@@ -84,7 +88,8 @@ export default function Settings() {
     setSettings({ ...settings, [key]: { ...settings[key], value } })
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (loadError && Object.keys(settings).length === 0) return <ErrorState onRetry={loadSettings} />
 
   return (
     <div className="p-6 md:p-7">

@@ -3,20 +3,27 @@ import { useState, useEffect } from 'react'
 import { IconCheck, IconClose } from '../components/Icons'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 const FACILITIES = ['local0', 'local1', 'local2', 'local3', 'local4', 'local5', 'local6', 'local7', 'user', 'daemon', 'syslog']
 
 export default function SyslogConfig() {
   const [config, setConfig] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const { showToast, ToastContainer } = useToast()
 
-  useEffect(() => {
-    api.getSyslogConfig().then(setConfig).catch(() => showToast(traducir("Error al cargar la configuración de syslog"), 'error')).finally(() => setLoading(false))
-  }, [])
+  const cargar = () => {
+    setLoading(true)
+    api.getSyslogConfig().then(r => { setConfig(r); setLoadError(false) })
+      .catch(() => { showToast(traducir("Error al cargar la configuración de syslog"), 'error'); setLoadError(true) })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { cargar() }, [])
 
   const handleSave = async () => {
     setSaving(true)
@@ -43,7 +50,8 @@ export default function SyslogConfig() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (loadError && !config) return <ErrorState onRetry={cargar} />
   if (!config) return <div className="p-8 text-center text-ink-3">{traducir("No se pudo cargar la configuración")}</div>
 
   return (

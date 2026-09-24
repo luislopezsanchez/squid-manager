@@ -2,6 +2,7 @@ import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 interface AuditEntry {
   id: number
@@ -47,6 +48,7 @@ export default function AuditLog() {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [filterEntity, setFilterEntity] = useState('')
   const [filterAction, setFilterAction] = useState('')
   const [total, setTotal] = useState(0)
@@ -59,7 +61,9 @@ export default function AuditLog() {
     api.request(url).then((data: any) => {
       setEntries(data.entries)
       setTotal(data.total)
-    }).catch(e => showToast(traducir("Error al cargar auditoría"), 'error')).finally(() => setLoading(false))
+      setLoadError(false)
+    }).catch(e => { showToast(traducir("Error al cargar auditoría"), 'error'); setLoadError(true) })
+      .finally(() => setLoading(false))
 
     api.auditStats().then(setStats).catch(console.error)
   }
@@ -138,7 +142,9 @@ export default function AuditLog() {
 
       {/* Tabla */}
       {loading ? (
-        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
+        <LoadingState />
+      ) : loadError && entries.length === 0 ? (
+        <ErrorState onRetry={loadAudit} />
       ) : (
         <div className="card overflow-hidden">
           <table className="table-panel">

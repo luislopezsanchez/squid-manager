@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api, isSuperadmin } from '../api/client'
 import { useToast } from '../components/Toast'
 import { IconBell, IconSpinner } from '../components/Icons'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 // La página vive incluso para quien no es superadmin (puede consultar el
 // estado, igual que cualquier otra pantalla de solo lectura), pero las
@@ -32,6 +33,7 @@ function formatearFecha(iso: string | null): string {
 export default function Actualizaciones() {
   const [estado, setEstado] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [comprobando, setComprobando] = useState(false)
   const [aprobando, setAprobando] = useState(false)
   const [fechaProgramada, setFechaProgramada] = useState('')
@@ -56,7 +58,8 @@ export default function Actualizaciones() {
   // estar en el checkout), pero el commit que /health reporta no miente.
   const [commitVigilado, setCommitVigilado] = useState<string | null>(null)
 
-  const cargar = () => api.getUpdateStatus().then(setEstado).catch(() => showToast(traducir("Error al cargar el estado de actualizaciones"), 'error'))
+  const cargar = () => api.getUpdateStatus().then(r => { setEstado(r); setLoadError(false) })
+    .catch(() => { showToast(traducir("Error al cargar el estado de actualizaciones"), 'error'); setLoadError(true) })
 
   // Sondeo silencioso: no muestra error si el backend no responde -es
   // exactamente lo esperable mientras el servicio se está reiniciando a
@@ -189,7 +192,8 @@ export default function Actualizaciones() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (loadError && !estado) return <ErrorState onRetry={cargar} />
   if (!estado) return <div className="p-8 text-center text-ink-3">{traducir("No se pudo cargar el estado")}</div>
 
   const { check, request, apply } = estado

@@ -2,6 +2,7 @@ import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
 
 interface Config {
@@ -31,17 +32,21 @@ const VACIA: Config = {
 export default function ParentProxy() {
   const [config, setConfig] = useState<Config>(VACIA)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [resultado, setResultado] = useState<{ ok: boolean; message: string } | null>(null)
   const { showToast, ToastContainer } = useToast()
 
-  useEffect(() => {
+  const cargar = () => {
+    setLoading(true)
     api.getParentProxy()
-      .then((d: Config) => setConfig({ ...VACIA, ...d }))
-      .catch(() => showToast(traducir("Error al cargar la configuración"), 'error'))
+      .then((d: Config) => { setConfig({ ...VACIA, ...d }); setLoadError(false) })
+      .catch(() => { showToast(traducir("Error al cargar la configuración"), 'error'); setLoadError(true) })
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { cargar() }, [])
 
   const set = (campo: keyof Config, valor: any) => {
     setConfig(c => ({ ...c, [campo]: valor }))
@@ -111,7 +116,8 @@ export default function ParentProxy() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (loadError) return <ErrorState onRetry={cargar} />
 
   return (
     <div className="p-6 md:p-7 max-w-3xl">

@@ -2,6 +2,7 @@ import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 interface SmtpConfigData {
   smtp_host: string | null
@@ -15,15 +16,21 @@ interface SmtpConfigData {
 export default function Smtp() {
   const [config, setConfig] = useState<SmtpConfigData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [smtpPassword, setSmtpPassword] = useState('')
   const [destinatarioPrueba, setDestinatarioPrueba] = useState('')
   const [testing, setTesting] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
-  useEffect(() => {
-    api.getSmtpConfig().then(setConfig).catch(e => showToast(e.message, 'error')).finally(() => setLoading(false))
-  }, [])
+  const cargar = () => {
+    setLoading(true)
+    api.getSmtpConfig().then(r => { setConfig(r); setLoadError(false) })
+      .catch(e => { showToast(e.message, 'error'); setLoadError(true) })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { cargar() }, [])
 
   const save = async () => {
     if (!config) return
@@ -74,7 +81,8 @@ export default function Smtp() {
 
   const esGmail = (config?.smtp_host || '').toLowerCase().includes('gmail')
 
-  if (loading || !config) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (loadError || !config) return <ErrorState onRetry={cargar} />
 
   return (
     <div className="p-8 max-w-3xl">

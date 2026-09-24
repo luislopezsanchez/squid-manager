@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { traducir } from '../i18n'
 import { api } from '../api/client'
 import { IconGauge, IconDashboard, IconArchive, IconEye } from '../components/Icons'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 type InfoCache = {
   version: string | null
@@ -113,7 +114,8 @@ export default function CacheStats() {
     return () => clearInterval(interval)
   }, [])
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (error && !datos) return <ErrorState text={error} onRetry={cargar} />
 
   const info = datos?.info
   const storedir = datos?.storedir

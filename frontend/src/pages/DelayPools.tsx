@@ -2,6 +2,7 @@ import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
 import { normalizarNombreAcl } from '../utils/aclNames'
 
@@ -168,6 +169,7 @@ export default function DelayPools() {
   const [groups, setGroups] = useState<Group[]>([])
   const [proxyUsers, setProxyUsers] = useState<ProxyUser[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showRawEditor, setShowRawEditor] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -195,7 +197,9 @@ export default function DelayPools() {
   const { showToast, ToastContainer } = useToast()
 
   const loadPools = () => {
-    api.listDelayPools().then(setPools).catch(() => showToast(traducir("Error al cargar delay pools"), 'error')).finally(() => setLoading(false))
+    api.listDelayPools().then(r => { setPools(r); setLoadError(false) })
+      .catch(() => { showToast(traducir("Error al cargar delay pools"), 'error'); setLoadError(true) })
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => {
@@ -545,7 +549,9 @@ export default function DelayPools() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
+        <LoadingState />
+      ) : loadError && pools.length === 0 ? (
+        <ErrorState onRetry={loadPools} />
       ) : (
         <div className="card overflow-hidden">
           <table className="table-panel">

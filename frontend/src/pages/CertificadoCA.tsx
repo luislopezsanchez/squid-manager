@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { IconApple, IconDownload, IconFirefox, IconLinux, IconWindows } from '../components/Icons'
 import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState } from '../components/AsyncState'
 
 export default function CertificadoCA() {
   // El proxy corre en la misma maquina que sirve este panel.
@@ -55,7 +56,7 @@ export default function CertificadoCA() {
       .catch(e => showToast(`Error: ${e.message}`, 'error'))
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
 
   return (
     <div className="p-6 md:p-7">

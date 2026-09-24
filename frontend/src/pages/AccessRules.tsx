@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { IconChevronDown, IconChevronUp, IconUsers } from '../components/Icons'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
 
 interface AccessRule {
@@ -27,6 +28,7 @@ export default function AccessRules() {
   const [acls, setAcls] = useState<Acl[]>([])
   const [groups, setGroups] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState({ action: 'allow', acl_names: '', order: 0, description: '', enabled: true })
@@ -34,7 +36,9 @@ export default function AccessRules() {
   const { showToast, ToastContainer } = useToast()
 
   const loadRules = () => {
-    api.listAccessRules().then(setRules).catch(e => showToast(traducir("Error al cargar reglas"), 'error')).finally(() => setLoading(false))
+    api.listAccessRules().then(r => { setRules(r); setLoadError(false) })
+      .catch(e => { showToast(traducir("Error al cargar reglas"), 'error'); setLoadError(true) })
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => {
@@ -178,7 +182,9 @@ export default function AccessRules() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
+        <LoadingState />
+      ) : loadError && rules.length === 0 ? (
+        <ErrorState onRetry={loadRules} />
       ) : (
         <div className="space-y-3">
           <div className="bg-line-soft rounded-xl p-4 border border-line">

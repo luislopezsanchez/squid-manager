@@ -2,6 +2,7 @@ import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
 import { normalizarNombreAcl } from '../utils/aclNames'
 
@@ -19,6 +20,7 @@ interface Group {
 export default function Groups() {
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [newGroup, setNewGroup] = useState({
     name: '', description: '', no_bump: false,
@@ -32,7 +34,9 @@ export default function Groups() {
   const { showToast, ToastContainer } = useToast()
 
   const loadGroups = () => {
-    api.listGroups().then(setGroups).catch(e => showToast(traducir("Error al cargar grupos"), 'error')).finally(() => setLoading(false))
+    api.listGroups().then(r => { setGroups(r); setLoadError(false) })
+      .catch(e => { showToast(traducir("Error al cargar grupos"), 'error'); setLoadError(true) })
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => {
@@ -268,7 +272,9 @@ export default function Groups() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-ink-3">{traducir("Cargando...")}</div>
+        <LoadingState />
+      ) : loadError && groups.length === 0 ? (
+        <ErrorState onRetry={loadGroups} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {groups.map(group => (

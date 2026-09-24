@@ -5,6 +5,7 @@ import { formatBytes, formatNumber } from '../utils/format'
 import { niceCeilBytes, niceCeil } from '../utils/chart'
 import { SelectorVentana, type Ventana } from '../components/ReportWidgets'
 import { LineAreaChart } from '../components/LineAreaChart'
+import { LoadingState } from '../components/AsyncState'
 
 type Granularidad = 'minuto' | 'hora' | 'dia'
 type Punto = { timestamp: number; bytes: number; requests: number }
@@ -95,7 +96,7 @@ function VolumenPorPeriodo() {
       </p>
 
       {loading ? (
-        <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+        <LoadingState />
       ) : total === 0 ? (
         <div className="card p-8 border border-line-soft text-center text-ink-3">{traducir("Sin datos todavía.")}</div>
       ) : (

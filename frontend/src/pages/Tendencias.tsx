@@ -7,6 +7,7 @@ import { niceCeilBytes, niceCeil } from '../utils/chart'
 import { SelectorVentana, type Ventana } from '../components/ReportWidgets'
 import { LineAreaChart } from '../components/LineAreaChart'
 import { IconActivity } from '../components/Icons'
+import { LoadingState } from '../components/AsyncState'
 
 type Punto = { timestamp: number; bytes: number; requests: number }
 type Tendencia = { points: Punto[]; user: string | null; domain: string | null }
@@ -106,7 +107,7 @@ export default function Tendencias() {
           <p className="text-ink-2">{traducir("Elige un usuario o dominio para ver su evolución en el tiempo.")}</p>
         </div>
       ) : loading ? (
-        <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+        <LoadingState />
       ) : puntos.length === 0 ? (
         <div className="card p-8 border border-line-soft text-center text-ink-3">
           {traducir("Sin datos todavía.")}

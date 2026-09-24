@@ -2,6 +2,7 @@ import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 interface AdminUser {
   id: number
@@ -16,13 +17,16 @@ interface AdminUser {
 export default function Admins() {
   const [admins, setAdmins] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<AdminUser | null>(null)
   const [formData, setFormData] = useState({ username: '', password: '', email: '', role: 'admin' })
   const { showToast, ToastContainer } = useToast()
 
   const load = () => {
-    api.listAdmins().then(setAdmins).catch(e => showToast(e.message, 'error')).finally(() => setLoading(false))
+    api.listAdmins().then(r => { setAdmins(r); setLoadError(false) })
+      .catch(e => { showToast(e.message, 'error'); setLoadError(true) })
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
@@ -88,7 +92,8 @@ export default function Admins() {
     return <span className={`pill ${colors[role] || colors.admin}`}>{labels[role] || role}</span>
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (loadError && admins.length === 0) return <ErrorState onRetry={load} />
 
   return (
     <div className="p-6 md:p-7">

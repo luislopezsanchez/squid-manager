@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { IconChevronLeft, IconChevronRight, IconDownload, IconArchive } from '../components/Icons'
 import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 interface MesIndice {
   year: number
@@ -55,6 +56,7 @@ function statusColor(status: number): string {
 export default function HistoricalLogs() {
   const [meses, setMeses] = useState<MesIndice[]>([])
   const [loadingMeses, setLoadingMeses] = useState(true)
+  const [mesesError, setMesesError] = useState(false)
   const [seleccion, setSeleccion] = useState<{ year: number; month: number } | null>(null)
 
   const [entries, setEntries] = useState<EntradaHistorica[]>([])
@@ -71,13 +73,18 @@ export default function HistoricalLogs() {
   const limit = 100
   const { showToast, ToastContainer } = useToast()
 
+  const cargarMeses = () => {
+    setLoadingMeses(true)
+    api.getHistoricalMonths()
+      .then(r => { setMeses(r); setMesesError(false) })
+      .catch(() => { showToast(traducir("Error al cargar los meses históricos"), 'error'); setMesesError(true) })
+      .finally(() => setLoadingMeses(false))
+  }
+
   useEffect(() => {
     // Sin polling a propósito: un mes cerrado no cambia, no tiene sentido
     // repetir esta consulta cada pocos segundos como sí hace el visor en vivo.
-    api.getHistoricalMonths()
-      .then(setMeses)
-      .catch(() => showToast(traducir("Error al cargar los meses históricos"), 'error'))
-      .finally(() => setLoadingMeses(false))
+    cargarMeses()
   }, [])
 
   const cargarEntradas = useCallback(() => {
@@ -127,7 +134,8 @@ export default function HistoricalLogs() {
 
   const mesActivo = seleccion ? meses.find(m => m.year === seleccion.year && m.month === seleccion.month) : null
 
-  if (loadingMeses) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loadingMeses) return <LoadingState />
+  if (mesesError && meses.length === 0) return <ErrorState onRetry={cargarMeses} />
 
   return (
     <div className="p-6 md:p-7">

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { IconCheck, IconClose } from '../components/Icons'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 
 /**
  * Valores de partida por tipo de directorio. Son un punto de partida, no una
@@ -29,6 +30,7 @@ export default function LdapConfig() {
   const navigate = useNavigate()
   const [config, setConfig] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResults, setTestResults] = useState<any[]>([])
@@ -37,10 +39,15 @@ export default function LdapConfig() {
   const [syncing, setSyncing] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
-  useEffect(() => {
-    api.getLdapConfig().then(setConfig).catch(e => showToast(traducir("Error al cargar config LDAP"), 'error')).finally(() => setLoading(false))
+  const cargar = () => {
+    setLoading(true)
+    api.getLdapConfig().then(r => { setConfig(r); setLoadError(false) })
+      .catch(e => { showToast(traducir("Error al cargar config LDAP"), 'error'); setLoadError(true) })
+      .finally(() => setLoading(false))
     api.listLdapUsers().then(u => setLdapUserCount(u.length)).catch(() => {})
-  }, [])
+  }
+
+  useEffect(() => { cargar() }, [])
 
   const handleSync = async () => {
     setSyncing(true)
@@ -89,7 +96,8 @@ export default function LdapConfig() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  if (loadError && !config) return <ErrorState onRetry={cargar} />
   if (!config) return <div className="p-8 text-center text-ink-3">{traducir("No se pudo cargar la configuración")}</div>
 
   return (

@@ -4,6 +4,7 @@ import { api, getToken } from '../api/client'
 import { formatBytes, formatNumber } from '../utils/format'
 import { useToast } from '../components/Toast'
 import { IconDownload } from '../components/Icons'
+import { LoadingState, ErrorState } from '../components/AsyncState'
 import {
   FilaBarra, AnilloConcentracion, ModalDetalle, SelectorVentana, VENTANAS,
   type FilaDetalle, type Ventana,
@@ -135,7 +136,13 @@ export default function ActividadRed() {
     { id: 'bloqueados-usuario', label: traducir("Usuarios con más bloqueos") },
   ]
 
-  if (loading) return <div className="p-8 text-center text-ink-3">{traducir("Cargando...")}</div>
+  if (loading) return <LoadingState />
+  // Si la primera carga falla del todo (nunca hubo `totales`), mostrar
+  // tablas vacías + el banner rojo de abajo se leía como "no hay actividad",
+  // no como "falló la carga". Si ya había datos de un ciclo anterior (esta
+  // página se refresca sola cada 30s), el banner inline alcanza y no hace
+  // falta tapar todo -ver más abajo.
+  if (error && !totales) return <ErrorState text={error} onRetry={cargar} />
 
   const color = COLORES[pestana]
 
