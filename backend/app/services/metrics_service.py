@@ -10,6 +10,7 @@ De dónde salen esos contadores depende del despliegue y lo resuelve el runtime
 Aquí solo se interpretan, y el formato del texto es el mismo en los dos casos.
 """
 
+import gzip
 import re
 import time
 import logging
@@ -399,6 +400,50 @@ def _resumen_latencia(entries: list[dict]) -> dict:
     }
 
 
+def _rotated_log_files() -> list[str]:
+    """Rutas de los access.log ya rotados, del más reciente al más viejo.
+
+    `dateext`/`dateformat -%Y%m%d` (ver squid-logrotate.native) los nombra
+    `access.log-YYYYMMDD` o `access.log-YYYYMMDD.gz` -sin comprimir el más
+    reciente por `delaycompress`, comprimidos los demás. No incluye el
+    activo (`ACCESS_LOG_PATH`), ese lo lee `iter_lines_reverse` aparte.
+    """
+    archive_dir = Path(ACCESS_LOG_PATH).parent / "archive"
+    if not archive_dir.is_dir():
+        return []
+    candidatos = []
+    patron = re.compile(r"^access\.log-(\d{8})(\.gz)?$")
+    for p in archive_dir.iterdir():
+        m = patron.match(p.name)
+        if m:
+            candidatos.append((m.group(1), str(p)))
+    candidatos.sort(reverse=True)
+    return [ruta for _, ruta in candidatos]
+
+
+def _iter_rotated_lines_reverse():
+    """Líneas de los access.log rotados, más recientes primero, dentro de
+    cada archivo también de la última a la primera -mismo orden que
+    `iter_lines_reverse` da para el activo, para poder encadenar los dos
+    sin alterar el criterio de corte de quien llama.
+
+    A diferencia del activo (que puede seguir escribiéndose y ser grande:
+    de ahí la lectura por bloques de `iter_lines_reverse`), un archivo ya
+    rotado está cerrado y es de un solo día -leerlo entero a memoria es
+    seguro y simple; en la práctica son cientos de KB, no gigabytes.
+    """
+    for ruta in _rotated_log_files():
+        try:
+            abrir = gzip.open if ruta.endswith(".gz") else open
+            with abrir(ruta, "rt", encoding="utf-8", errors="replace") as f:
+                lineas = f.readlines()
+        except OSError as e:
+            logger.warning(f"No se pudo leer el log rotado {ruta}: {e}")
+            continue
+        for linea in reversed(lineas):
+            yield linea.rstrip("\n")
+
+
 def _read_last_n_lines(n: int = 1000) -> list[dict]:
     """Últimas n entradas del access.log, de la más antigua a la más reciente.
 
@@ -432,21 +477,39 @@ def _read_recent_logs(seconds: int = 60, max_lines: int = 50_000) -> list[dict]:
     más lineas de las que conviene leer en una sola petición del panel -se
     sube el tope segun la ventana pedida (ver _read_window), no de forma
     ilimitada.
+
+    Bug real encontrado el 2026-09-24: con rotación diaria (ver
+    squid-logrotate.native), `access.log` activo casi nunca tiene más de
+    ~24-36h de datos -pedir "7d" o "30d" agotaba el archivo activo sin
+    llegar nunca al corte, y la función devolvía en silencio solo ese día
+    largo, como si fuera la ventana completa pedida. Ahora, si el activo se
+    termina sin llegar al corte, sigue leyendo los rotados (más recientes
+    primero) hasta cubrir la ventana real o quedarse sin archivos.
     """
     from app.services.log_service import iter_lines_reverse
 
     now = time.time()
     cutoff = now - seconds
     entries = []
-    for line in iter_lines_reverse(ACCESS_LOG_PATH, max_lines=max_lines):
-        entry = _parse_log_line(line)
-        if not entry or entry["interno"]:  # ver nota en _read_last_n_lines
-            continue
-        # El fichero se recorre hacia atrás: al pasar el corte, lo que queda
-        # es todavía más antiguo.
-        if entry["timestamp"] < cutoff:
-            break
-        entries.append(entry)
+
+    def _consumir(lineas) -> bool:
+        """Agrega entradas hasta el corte o el tope. Devuelve True si llegó
+        al corte (no hace falta seguir con archivos más viejos)."""
+        for line in lineas:
+            entry = _parse_log_line(line)
+            if not entry or entry["interno"]:  # ver nota en _read_last_n_lines
+                continue
+            if entry["timestamp"] < cutoff:
+                return True
+            entries.append(entry)
+            if len(entries) >= max_lines:
+                return True
+        return False
+
+    llego_al_corte = _consumir(iter_lines_reverse(ACCESS_LOG_PATH, max_lines=max_lines))
+    if not llego_al_corte:
+        _consumir(_iter_rotated_lines_reverse())
+
     entries.reverse()
     return entries
 
