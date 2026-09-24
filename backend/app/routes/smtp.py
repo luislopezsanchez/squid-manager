@@ -43,7 +43,7 @@ def _get_or_create_config(db: Session) -> SmtpConfig:
 
 
 @router.get("/config")
-async def get_config(
+def get_config(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -60,7 +60,7 @@ async def get_config(
 
 
 @router.put("/config")
-async def update_config(
+def update_config(
     data: SmtpConfigIn,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -90,7 +90,7 @@ async def update_config(
 
 
 @router.post("/test")
-async def test_smtp_endpoint(
+def test_smtp_endpoint(
     data: TestSmtpIn,
     db: Session = Depends(get_db),
     _: Admin = Depends(require_writer),

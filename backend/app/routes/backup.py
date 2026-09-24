@@ -165,7 +165,7 @@ def build_backup_dict(db: Session, exported_by: str) -> dict:
 
 
 @router.get("/export")
-async def export_backup(
+def export_backup(
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_writer),
 ):
@@ -465,7 +465,7 @@ async def restore_backup(
 # ============================================
 
 @router.get("/squid-conf")
-async def download_squid_conf(
+def download_squid_conf(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -570,7 +570,7 @@ async def analyze_squid_conf(
 
 
 @router.post("/apply-squid-import")
-async def apply_squid_import(
+def apply_squid_import(
     token: str = Form(...),
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_writer),

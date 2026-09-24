@@ -53,7 +53,7 @@ class KerberosConfigIn(BaseModel):
 
 
 @router.get("/config")
-async def get_config(
+def get_config(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -74,7 +74,7 @@ async def get_config(
 
 
 @router.put("/config")
-async def update_config(
+def update_config(
     data: KerberosConfigIn,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -155,7 +155,7 @@ pause
 
 
 @router.get("/ad-setup-script")
-async def get_ad_setup_script(
+def get_ad_setup_script(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -256,7 +256,7 @@ async def upload_keytab(
 
 
 @router.delete("/keytab")
-async def delete_keytab(
+def delete_keytab(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
 ):

@@ -88,7 +88,7 @@ async def post_comprobar(
 
 
 @router.put("/config")
-async def put_config(
+def put_config(
     data: dict,
     db: Session = Depends(get_db),
     _: Admin = Depends(require_superadmin),

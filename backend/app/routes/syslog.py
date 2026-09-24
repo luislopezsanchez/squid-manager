@@ -44,7 +44,7 @@ def _get_or_create_config(db: Session) -> SyslogConfig:
 
 
 @router.get("/config")
-async def get_config(
+def get_config(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -62,7 +62,7 @@ async def get_config(
 
 
 @router.put("/config")
-async def update_config(
+def update_config(
     data: SyslogConfigIn,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -104,7 +104,7 @@ async def update_config(
 
 
 @router.post("/test")
-async def test_syslog(
+def test_syslog(
     data: SyslogTestIn,
     _: Admin = Depends(require_writer),
 ):

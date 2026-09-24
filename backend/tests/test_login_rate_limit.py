@@ -10,8 +10,6 @@ límite ahora solo se aplica DESPUÉS de comprobar la contraseña, y solo a los
 intentos que ya son incorrectos: uno correcto siempre pasa.
 """
 
-import asyncio
-
 import pytest
 from fastapi import HTTPException
 
@@ -51,7 +49,10 @@ class _DBFalsa:
 def _ejecutar_login(username: str, password: str, admin_service, monkeypatch):
     monkeypatch.setattr("app.routes.auth.authenticate_admin", admin_service)
     form = _FormDataFalso(username, password)
-    return asyncio.run(login_route(form_data=form, db=_DBFalsa()))
+    # login() es sync desde que las rutas de solo trabajo bloqueante dejaron
+    # de declararse async def (ver metrics.py y el resto de app/routes/):
+    # se llama directo, sin asyncio.run().
+    return login_route(form_data=form, db=_DBFalsa())
 
 
 # --- El núcleo del bug: contraseña correcta nunca debe bloquearse ----------

@@ -25,7 +25,7 @@ class DisconnectRequest(BaseModel):
 
 
 @router.post("/disconnect")
-async def disconnect_client(
+def disconnect_client(
     data: DisconnectRequest,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),

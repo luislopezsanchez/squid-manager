@@ -206,7 +206,7 @@ async def historical_entries(
 
 
 @router.get("/historical/{year}/{month}/export")
-async def historical_export(
+def historical_export(
     year: int, month: int,
     format: Literal["csv", "ndjson"] = Query("csv"),
     user: str | None = Query(None),

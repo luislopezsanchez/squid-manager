@@ -106,7 +106,7 @@ def _upsert(db: Session, current_admin: Admin, username: str, data: QuotaSet) ->
 
 
 @router.get("/", response_model=list[QuotaResponse])
-async def list_quotas(
+def list_quotas(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -114,7 +114,7 @@ async def list_quotas(
 
 
 @router.put("/{username}", response_model=QuotaResponse)
-async def set_quota(
+def set_quota(
     username: str,
     data: QuotaSet,
     db: Session = Depends(get_db),
@@ -125,7 +125,7 @@ async def set_quota(
 
 
 @router.post("/bulk", response_model=QuotaBulkResult)
-async def set_quota_bulk(
+def set_quota_bulk(
     data: QuotaBulkSet,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -146,7 +146,7 @@ async def set_quota_bulk(
 
 
 @router.delete("/{username}", status_code=204)
-async def remove_quota(
+def remove_quota(
     username: str,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),

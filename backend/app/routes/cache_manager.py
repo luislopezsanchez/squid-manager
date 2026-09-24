@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.get("/stats")
-async def cache_stats(
+def cache_stats(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -25,7 +25,7 @@ async def cache_stats(
 
 
 @router.get("/active-connections")
-async def active_connections(
+def active_connections(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):

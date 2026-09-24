@@ -65,7 +65,7 @@ def _obtener_o_crear(db: Session) -> ParentProxy:
 
 
 @router.get("/config")
-async def get_config(
+def get_config(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -87,7 +87,7 @@ async def get_config(
 
 
 @router.put("/config")
-async def update_config(
+def update_config(
     data: ParentProxyIn,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -181,7 +181,7 @@ async def update_config(
 
 
 @router.post("/test")
-async def test_config(
+def test_config(
     data: ParentProxyTest,
     db: Session = Depends(get_db),
     _: Admin = Depends(require_writer),

@@ -18,7 +18,7 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=Token)
-async def login(
+def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
@@ -73,6 +73,6 @@ async def login(
 
 
 @router.get("/me", response_model=AdminResponse)
-async def get_me(current_admin: Admin = Depends(get_current_admin)):
+def get_me(current_admin: Admin = Depends(get_current_admin)):
     """Información del admin autenticado."""
     return current_admin

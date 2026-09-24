@@ -48,7 +48,7 @@ class LdapConfigUpdate(BaseModel):
 
 
 @router.get("/config")
-async def get_ldap_config(
+def get_ldap_config(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -77,7 +77,7 @@ async def get_ldap_config(
 
 
 @router.put("/config")
-async def update_ldap_config(
+def update_ldap_config(
     data: LdapConfigUpdate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -157,7 +157,7 @@ class LdapTestRequest(BaseModel):
 
 
 @router.post("/test")
-async def test_ldap_connection(
+def test_ldap_connection(
     data: LdapTestRequest,
     db: Session = Depends(get_db),
     _: Admin = Depends(require_writer),
@@ -265,7 +265,7 @@ def _raiz_dominio(search_base: str) -> str:
 
 
 @router.get("/groups")
-async def list_ldap_groups(
+def list_ldap_groups(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -346,7 +346,7 @@ def _sync_ldap_files(db: Session):
 
 
 @router.get("/users", response_model=list[LdapUserResponse])
-async def list_ldap_users(
+def list_ldap_users(
     limit: int = Query(1000, ge=1, le=5000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -367,7 +367,7 @@ async def list_ldap_users(
 
 
 @router.post("/sync")
-async def sync_ldap_users(
+def sync_ldap_users(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
 ):
@@ -456,7 +456,7 @@ async def sync_ldap_users(
 
 
 @router.patch("/users/{user_id}/toggle", response_model=LdapUserResponse)
-async def toggle_ldap_user(
+def toggle_ldap_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),

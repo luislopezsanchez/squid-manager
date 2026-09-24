@@ -127,7 +127,7 @@ def _sync_passwd(db: Session):
 
 
 @router.get("/", response_model=list[ProxyUserResponse])
-async def list_proxy_users(
+def list_proxy_users(
     limit: int = Query(1000, ge=1, le=5000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -154,7 +154,7 @@ async def list_proxy_users(
 
 
 @router.post("/", response_model=ProxyUserResponse, status_code=201)
-async def create_proxy_user(
+def create_proxy_user(
     data: ProxyUserCreate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -203,7 +203,7 @@ async def create_proxy_user(
 
 
 @router.put("/{user_id}", response_model=ProxyUserResponse)
-async def update_proxy_user(
+def update_proxy_user(
     user_id: int,
     data: ProxyUserUpdate,
     db: Session = Depends(get_db),
@@ -255,7 +255,7 @@ async def update_proxy_user(
 
 
 @router.delete("/{user_id}", status_code=204)
-async def delete_proxy_user(
+def delete_proxy_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -291,7 +291,7 @@ async def delete_proxy_user(
 
 
 @router.patch("/{user_id}/toggle", response_model=ProxyUserResponse)
-async def toggle_proxy_user(
+def toggle_proxy_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -325,7 +325,7 @@ async def toggle_proxy_user(
 
 
 @router.post("/sync")
-async def sync_passwd_endpoint(
+def sync_passwd_endpoint(
     db: Session = Depends(get_db),
     _: Admin = Depends(require_writer),
 ):
@@ -344,7 +344,7 @@ async def sync_passwd_endpoint(
 
 
 @router.post("/{user_id}/reset-password")
-async def reset_password(
+def reset_password(
     user_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),

@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.get("/")
-async def list_audit_log(
+def list_audit_log(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     entity: str | None = Query(None, description="Filtrar por entidad"),
@@ -54,7 +54,7 @@ async def list_audit_log(
 
 
 @router.get("/stats")
-async def audit_stats(
+def audit_stats(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):

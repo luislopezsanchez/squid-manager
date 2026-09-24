@@ -44,7 +44,7 @@ class DelayPoolResponse(BaseModel):
 
 
 @router.get("/", response_model=list[DelayPoolResponse])
-async def list_delay_pools(
+def list_delay_pools(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -53,7 +53,7 @@ async def list_delay_pools(
 
 
 @router.post("/", response_model=DelayPoolResponse, status_code=201)
-async def create_delay_pool(
+def create_delay_pool(
     data: DelayPoolCreate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -85,7 +85,7 @@ async def create_delay_pool(
 
 
 @router.put("/{pool_id}", response_model=DelayPoolResponse)
-async def update_delay_pool(
+def update_delay_pool(
     pool_id: int,
     data: DelayPoolUpdate,
     db: Session = Depends(get_db),
@@ -123,7 +123,7 @@ async def update_delay_pool(
 
 
 @router.delete("/{pool_id}", status_code=204)
-async def delete_delay_pool(
+def delete_delay_pool(
     pool_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),

@@ -62,7 +62,7 @@ async def _leer_archivo_subido(file: UploadFile) -> bytes:
 
 
 @router.get("/", response_model=list[AclResponse])
-async def list_acls(
+def list_acls(
     limit: int = Query(1000, ge=1, le=5000),
     offset: int = Query(0, ge=0),
     is_category: bool | None = Query(None, description="Filtra por categorías de dominio (true) o ACLs técnicas (false). Sin filtro por defecto."),
@@ -89,7 +89,7 @@ async def list_acls(
 
 
 @router.get("/unused", response_model=list[str])
-async def list_unused_acls(
+def list_unused_acls(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -103,7 +103,7 @@ async def list_unused_acls(
 
 
 @router.post("/", response_model=AclResponse, status_code=201)
-async def create_acl(
+def create_acl(
     data: AclCreate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -141,7 +141,7 @@ async def create_acl(
 
 
 @router.put("/{acl_id}", response_model=AclResponse)
-async def update_acl(
+def update_acl(
     acl_id: int,
     data: AclUpdate,
     db: Session = Depends(get_db),
@@ -238,7 +238,7 @@ async def update_acl(
 
 
 @router.delete("/{acl_id}", status_code=204)
-async def delete_acl(
+def delete_acl(
     acl_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -334,7 +334,7 @@ async def cargar_dominios_masivo(
 
 
 @router.post("/hagezi-preset")
-async def cargar_categorias_hagezi(
+def cargar_categorias_hagezi(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
 ):
@@ -352,7 +352,7 @@ async def cargar_categorias_hagezi(
 
 
 @router.post("/{acl_id}/sync-now", response_model=AclResponse)
-async def sincronizar_categoria_ahora(
+def sincronizar_categoria_ahora(
     acl_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),

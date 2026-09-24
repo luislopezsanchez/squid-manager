@@ -66,7 +66,7 @@ def _obtener_o_crear(db: Session) -> AiConfig:
 
 
 @router.get("/config")
-async def get_config(
+def get_config(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -88,7 +88,7 @@ async def get_config(
 
 
 @router.put("/config")
-async def update_config(
+def update_config(
     data: AiConfigIn,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
