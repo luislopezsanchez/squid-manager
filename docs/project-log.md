@@ -229,7 +229,8 @@ entrada completa más abajo.
 | 🟡 Pendiente | Dashboard / rendimiento | Latencia (mediana/p95) y Total transferido acumulado, que mostraba la tarjeta Sistema, no tienen lugar hoy — se perdieron, no se movieron |
 | 🟡 Pendiente | Plataforma / operaciones | `backend/app/routes/access_rules.py`, `admins.py`, `central.py` y `squid_config.py` ya tienen la corrección de rutas síncronas aplicada en el working tree, pero no comiteada — mezclada con trabajo pendiente de otra sesión en los mismos archivos, necesita revisión aparte antes de commitear |
 | 🟡 Pendiente | Plataforma / operaciones | `/central/dashboard` (Panel Central) tiene el mismo patrón de bloqueo que se corrigió hoy en el resto de rutas — no se tocó porque no se probó en esta sesión |
-| 🟡 Pendiente | Análisis de datos | Top dominios por bytes (el dato ya existe en `get_top_domains()`, falta el toggle en la UI), IPs compartidas por varios usuarios, rango de fechas libre en reportes, detección de anomalías por reglas simples — ver propuesta completa del 2026-09-24 más abajo |
+| ✅ Implementado | Análisis de datos | [Top dominios por bytes e IPs compartidas](#dashboard-rediseño-responsivo-y-saneamiento-del-backend-2026-09-24) — Fase 1 de la propuesta del 2026-09-24 |
+| 🟡 Pendiente | Análisis de datos | Rango de fechas libre en reportes, detección de anomalías por reglas simples — Fase 2 de la propuesta del 2026-09-24, ver más abajo |
 
 ---
 
@@ -1466,10 +1467,20 @@ criterio que la comparación del 2026-09-18-:
   peticiones): el backend ya calcula `domain_bytes` en `get_top_domains()`;
   solo falta el mismo toggle Datos/Peticiones que "Top usuarios" ya tiene.
   Costo muy bajo.
+  **Actualización (2026-09-24) — implementado.** `get_top_domains()` suma
+  `sort_by`; toggle Datos/Peticiones en "Top sitios visitados" del Dashboard
+  y en la pestaña "Sitios visitados" de Actividad de red.
 - **IPs compartidas por varios usuarios**: señal de seguridad real (cuenta
   compartida o mismo equipo con varias cuentas). El cruce usuario+IP ya
   está disponible por línea de log, encajaría en Auditoría sin pantalla
   nueva. Costo bajo.
+  **Actualización (2026-09-24) — implementado, como pestaña nueva en
+  Actividad de red en vez de en Auditoría** (encaja mejor temáticamente:
+  es comportamiento de red, no historial de cambios de configuración).
+  Nueva `get_ips_compartidas()`, con su propio render en el frontend -no
+  entra en el modelo de ranking de un solo número que usan las demás
+  pestañas, cada fila es una IP con varios usuarios-. 8 tests nuevos
+  (primeros de metrics_service.py, que no tenía ninguno).
 - **Reporte con rango de fechas libre** (no solo ventanas fijas
   1h/24h/7d/30d): se apoya en `historical_log_service.py`, que ya existe.
   Costo medio.
