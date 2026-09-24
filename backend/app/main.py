@@ -359,6 +359,9 @@ async def lifespan(app: FastAPI):
     from app.services.quota_service import start_quota_tracker
     start_quota_tracker()
 
+    from app.services.anomaly_service import start_anomaly_detector
+    start_anomaly_detector()
+
     yield
     logger.info("Deteniendo SquidManager Backend...")
 

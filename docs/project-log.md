@@ -230,7 +230,7 @@ entrada completa más abajo.
 | 🟡 Pendiente | Plataforma / operaciones | `backend/app/routes/access_rules.py`, `admins.py`, `central.py` y `squid_config.py` ya tienen la corrección de rutas síncronas aplicada en el working tree, pero no comiteada — mezclada con trabajo pendiente de otra sesión en los mismos archivos, necesita revisión aparte antes de commitear |
 | 🟡 Pendiente | Plataforma / operaciones | `/central/dashboard` (Panel Central) tiene el mismo patrón de bloqueo que se corrigió hoy en el resto de rutas — no se tocó porque no se probó en esta sesión |
 | ✅ Implementado | Análisis de datos | [Top dominios por bytes e IPs compartidas](#dashboard-rediseño-responsivo-y-saneamiento-del-backend-2026-09-24) — Fase 1 de la propuesta del 2026-09-24 |
-| 🟡 Pendiente | Análisis de datos | Rango de fechas libre en reportes, detección de anomalías por reglas simples — Fase 2 de la propuesta del 2026-09-24, ver más abajo |
+| ✅ Implementado | Análisis de datos | [Rango de fechas libre y detección de anomalías por reglas simples](#dashboard-rediseño-responsivo-y-saneamiento-del-backend-2026-09-24) — Fase 2 de la propuesta del 2026-09-24 |
 
 ---
 
@@ -1484,9 +1484,36 @@ criterio que la comparación del 2026-09-18-:
 - **Reporte con rango de fechas libre** (no solo ventanas fijas
   1h/24h/7d/30d): se apoya en `historical_log_service.py`, que ya existe.
   Costo medio.
+  **Actualización (2026-09-24) — implementado**, en Actividad de red (opción
+  "Personalizado..." en el selector de ventana compartido, con fecha desde/
+  hasta). El backend gana `_read_rango()`/`_entradas()` en
+  `metrics_service.py`, usados por `top_users`, `top_domains`,
+  `top_blocked_users`, `ips_compartidas` y `totales_actividad` -mismo
+  camino que ya sigue a los logs rotados si el rango pedido excede lo que
+  tiene el access.log activo (ver el fix de rotación más abajo). Quedan
+  fuera a propósito, para no ampliar el alcance de esta pasada: el
+  drill-down y la exportación a PDF de esa misma página (caen a "últimas
+  1.000" si el rango libre está activo), y las otras dos páginas que
+  comparten el mismo selector (Rendimiento/errores, Tendencias).
 - **Detección de anomalías por reglas simples** (pico de tráfico inusual,
   un usuario contra 10+ sitios bloqueados en poco tiempo) -explícitamente
   no "IA opaca", encaja con `notification_service.py`. Costo medio.
+  **Actualización (2026-09-24) — implementado**, en un `anomaly_service.py`
+  nuevo: un hilo de fondo (mismo patrón que `quota_service.py`) evalúa cada
+  5 minutos los últimos 10 de access.log contra 3 reglas -fuerza bruta (IP
+  con 5+ 407 seguidos), bloqueos en racha (usuario con 10+ denegadas) y
+  pico de tráfico (bytes de la ventana muy por encima del promedio de las
+  ventanas anteriores, sin umbral fijo)-, con enfriamiento de una hora por
+  entidad para no repetir la misma alerta en cada tick. Se dispara bajo el
+  evento `security_alert` de Notificaciones, el mismo toggle
+  `notify_on_security_alert` que existía en la pantalla de Notificaciones
+  desde antes **sin que nada lo disparara jamás** -la regla de fuerza
+  bruta reutiliza además la lógica que ya vivía sin usar en
+  `routes/logs.py::security_alerts`. No suma ninguna tarjeta nueva al
+  dashboard, a propósito: la idea es avisar activamente, no otro lugar más
+  para ir a mirar por las dudas. Verificado en producción: al primer
+  arranque en la VM ya detectó y logueó una IP real con 8 fallos de
+  autenticación en 10 minutos.
 - **Descartado a propósito:** historial de recursos del sistema
   (CPU/RAM/SWAP en el tiempo) -es trabajo de una herramienta de monitoreo
   de infraestructura (Grafana/Zabbix/Netdata), no de un panel de gestión

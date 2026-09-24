@@ -39,30 +39,51 @@ def _snapshot_config(notif_config, smtp_config) -> SimpleNamespace:
     )
 
 
-def queue_notification(background_tasks, db, event_type: str, subject: str, message: str):
-    """Encarga el envío de una notificación en segundo plano si está habilitada.
-
-    - Verifica que el evento esté habilitado en la config (notify_on_*).
-    - Verifica que al menos un canal (email o Telegram) esté habilitado.
-    - Si corresponde, agrega un background task para enviar sin bloquear la petición.
+def _snapshot_si_habilitado(db, event_type: str) -> SimpleNamespace | None:
+    """Verifica que el evento esté habilitado en la config (notify_on_*) y
+    que al menos un canal (email o Telegram) esté habilitado; si es así,
+    devuelve el snapshot listo para `notify()`, si no, None.
     """
     from app.models.notification_config import NotificationConfig
     from app.models.smtp_config import SmtpConfig
 
     config = db.query(NotificationConfig).first()
     if not config:
-        return
+        return None
 
     attr = EVENT_CONFIG_MAP.get(event_type)
     if attr and not getattr(config, attr, False):
-        return
+        return None
 
     if not (config.email_enabled or config.telegram_enabled):
-        return
+        return None
 
     smtp_config = db.query(SmtpConfig).first()
-    snapshot = _snapshot_config(config, smtp_config)
-    background_tasks.add_task(notify, snapshot, subject, message)
+    return _snapshot_config(config, smtp_config)
+
+
+def queue_notification(background_tasks, db, event_type: str, subject: str, message: str):
+    """Encarga el envío de una notificación en segundo plano si está habilitada.
+
+    Si corresponde, agrega un background task para enviar sin bloquear la
+    petición -para eso hace falta el `background_tasks` de una request en
+    curso (ver `notify_now` para el caso sin request, ej. un hilo de fondo).
+    """
+    snapshot = _snapshot_si_habilitado(db, event_type)
+    if snapshot:
+        background_tasks.add_task(notify, snapshot, subject, message)
+
+
+def notify_now(db, event_type: str, subject: str, message: str) -> None:
+    """Igual que `queue_notification`, pero para cuando no hay una request
+    HTTP de por medio -no existe un `BackgroundTasks` de FastAPI fuera de
+    una petición-, como el detector de anomalías (ver anomaly_service.py),
+    que ya corre en su propio hilo de fondo y puede mandar la notificación
+    directo sin bloquear nada ajeno.
+    """
+    snapshot = _snapshot_si_habilitado(db, event_type)
+    if snapshot:
+        notify(snapshot, subject, message)
 
 
 def _enviar_smtp(config, destinatarios: list[str], subject: str, body: str, reply_to: str | None = None) -> tuple[bool, str]:

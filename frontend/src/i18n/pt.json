@@ -46,6 +46,7 @@
   "Al menos 8 caracteres": "Pelo menos 8 caracteres",
   "Al pulsar «Aplicar cambios» se comprueba que el proxy padre responde. Si no lo hace, el cambio se rechaza en lugar de dejar a todos sin navegación.": "Ao pressionar \"Aplicar alterações\" verifica-se que o proxy pai responde. Se não responder, a alteração é rejeitada em vez de deixar todos sem navegação.",
   "Alertas de seguridad": "Alertas de segurança",
+  "Fuerza bruta, bloqueos en racha o picos de tráfico detectados automáticamente": "Força bruta, bloqueios em série ou picos de tráfego detectados automaticamente",
   "Algo se modificó (ACLs, reglas, grupos o configuración) y todavía no se aplicó a Squid: lo que ves en este dashboard puede no coincidir con lo que el proxy está usando ahora mismo.": "Algo foi modificado (ACLs, regras, grupos ou configuração) e ainda não foi aplicado ao Squid: o que você vê neste painel pode não corresponder ao que o proxy está usando agora.",
   "Ancho de banda": "Largura de banda",
   "Anterior": "Anterior",

@@ -191,7 +191,7 @@ export default function Notifications() {
             { key: 'notify_on_user_change', label: traducir("Cambios en usuarios del proxy"), desc: 'Crear, editar o eliminar usuarios' },
             { key: 'notify_on_acl_change', label: traducir("Cambios en ACLs"), desc: 'Crear, editar o eliminar ACLs' },
             { key: 'notify_on_rule_change', label: traducir("Cambios en reglas de acceso"), desc: 'Crear, editar, reordenar o eliminar reglas' },
-            { key: 'notify_on_security_alert', label: traducir("Alertas de seguridad"), desc: 'Intentos de acceso fallidos repetidos' },
+            { key: 'notify_on_security_alert', label: traducir("Alertas de seguridad"), desc: traducir("Fuerza bruta, bloqueos en racha o picos de tráfico detectados automáticamente") },
           ].map(item => (
             <label key={item.key} className="flex items-start gap-3 cursor-pointer">
               <input type="checkbox"
