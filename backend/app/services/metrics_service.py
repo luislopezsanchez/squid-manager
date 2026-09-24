@@ -294,7 +294,14 @@ def _parse_log_line(line: str) -> dict | None:
 
     url = m.group(8)
     domain = ""
-    if url.startswith("http://") or url.startswith("https://"):
+    if url.startswith("error:"):
+        # Squid escribe esto como URL cuando la transaccion se corta antes de
+        # completarse (ej. "error:transaction-end-before-headers"): no es un
+        # sitio real, es un marcador interno de error. Sin este filtro
+        # aparecia como si fuera un dominio mas en "Top sitios visitados" y
+        # "Top sitios bloqueados".
+        domain = ""
+    elif url.startswith("http://") or url.startswith("https://"):
         try:
             domain = url.split("/")[2]
         except IndexError:
@@ -491,6 +498,29 @@ def get_realtime_traffic() -> dict:
     avg_rx = sum(p["rx_bytes_per_second"] for p in recent) / len(recent) if recent else 0
     avg_tx = sum(p["tx_bytes_per_second"] for p in recent) / len(recent) if recent else 0
 
+    # Distribucion de codigos HTTP en los ultimos 60s: 2xx, 3xx, 4xx, 5xx.
+    # No distingue 401/403/407 (bloqueos de politica) de otros 4xx: eso ya
+    # esta en "Top sitios bloqueados". Esto es para ver de un vistazo si
+    # hay muchos errores de servidor (5xx) o redirecciones (3xx).
+    http_codes = {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "other": 0}
+    for e in log_entries:
+        code = e["status"]
+        if 200 <= code < 300:
+            http_codes["2xx"] += 1
+        elif 300 <= code < 400:
+            http_codes["3xx"] += 1
+        elif 400 <= code < 500:
+            http_codes["4xx"] += 1
+        elif 500 <= code < 600:
+            http_codes["5xx"] += 1
+        else:
+            http_codes["other"] += 1
+
+    # RPM: tasa normalizada de peticiones por minuto. total_requests_60s es
+    # el conteo de los ultimos 60 segundos, asi que RPM = ese conteo (ya es
+    # por minuto). Se redondea a 1 decimal.
+    rpm = round(len(log_entries), 1)
+
     return {
         "rx_bytes_per_second": current["rx_bytes_per_second"],
         "tx_bytes_per_second": current["tx_bytes_per_second"],
@@ -502,6 +532,8 @@ def get_realtime_traffic() -> dict:
         # De access.log (metadata)
         "total_requests_60s": len(log_entries),
         "denied_requests_60s": denied_60s,
+        "requests_per_minute": rpm,
+        "http_codes": http_codes,
         **cache,
         **latencia,
         "active_ips": active_ips[:20],
@@ -585,6 +617,29 @@ def get_system_metrics() -> dict:
         }
     except Exception:
         pass
+
+    # SWAP del sistema: si el servidor swapea, el proxy se arruina. Se lee
+    # de /proc/meminfo igual que la RAM -- SwapTotal y SwapFree.
+    try:
+        with open("/proc/meminfo", "r") as f:
+            swapinfo = {}
+            for line in f:
+                parts = line.split(":")
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    if key in ("SwapTotal", "SwapFree"):
+                        swapinfo[key] = int(parts[1].strip().split()[0]) * 1024
+            swap_total = swapinfo.get("SwapTotal", 0)
+            swap_free = swapinfo.get("SwapFree", 0)
+            swap_used = swap_total - swap_free
+            metrics["swap"] = {
+                "total": swap_total,
+                "used": swap_used,
+                "free": swap_free,
+                "percent": round(swap_used / swap_total * 100, 1) if swap_total > 0 else 0,
+            }
+    except Exception:
+        metrics["swap"] = {"total": 0, "used": 0, "free": 0, "percent": 0}
 
     return metrics
 
@@ -923,20 +978,42 @@ def get_volumen_por_periodo(seconds: int | None = None) -> dict:
     return {"granularidad": granularidad, "puntos": puntos}
 
 
+def _get_squid_uptime(db) -> float | None:
+    """Uptime de Squid en segundos, desde el Cache Manager (mgr:info).
+
+    Se consulta aqui y no en get_realtime_traffic porque ya hay un servicio
+    que parsea este reporte (cache_manager_service), y consultar el Cache
+    Manager en cada peticion de 5s seria innecesario -- el uptime cambia
+    lentamente. Se devuelve None si Squid no responde: el dashboard muestra
+    "sin datos" en ese caso, no un 0 que se leeria como "acaba de arrancar".
+    """
+    try:
+        from app.services.cache_manager_service import _pedir_reporte, _numero, _PATRONES_INFO
+        info_text = _pedir_reporte(db, "info")
+        return _numero(info_text, _PATRONES_INFO["uptime_segundos"])
+    except Exception:
+        return None
+
+
 def get_dashboard(db=None) -> dict:
-    """Dashboard completo: todas las métricas en una sola llamada."""
+    """Dashboard completo: todas las métricas en una sola llamada.
+
+    NO incluye top_users/top_domains/top_blocked/top_blocked_users: son
+    rankings acumulativos (Dashboard.tsx los pide aparte con ventana de 24h,
+    ver loadData) y no tiene sentido recalcularlos aquí con otra ventana
+    distinta -ese resultado se descartaría siempre en el frontend. Antes se
+    calculaban igual, tirando a la basura 4 lecturas de log en cada refresco
+    (cada 5s con auto-actualizar activado): era trabajo real, solo que nunca
+    se usaba.
+    """
     from app.services.quota_service import contar_cuotas_en_riesgo
 
-    traffic = get_realtime_traffic()
     return {
-        "traffic": traffic,
-        "top_users": get_top_users(10),
-        "top_domains": get_top_domains(10, denied_only=False),
-        "top_blocked": get_top_domains(10, denied_only=True),
-        "top_blocked_users": get_top_blocked_users(10, db=db),
+        "traffic": get_realtime_traffic(),
         "system": get_system_metrics(),
         "timeline": get_traffic_timeline(),
         "connections": get_recent_connections(10),
+        "squid_uptime": _get_squid_uptime(db),
         # Cuenta simple, no la lista de nombres: esto se pinta en el
         # dashboard principal, no es el lugar para señalar personas -el
         # detalle de quién ya está ahí en Gestión > Usuarios.
