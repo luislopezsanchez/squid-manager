@@ -19,7 +19,16 @@ logger = logging.getLogger(__name__)
 
 # Ventana de tiempo y máximo de peticiones por IP
 WINDOW_SECONDS = 60
-MAX_REQUESTS_PER_WINDOW = 120  # el dashboard hace polling; margen holgado
+# El límite es por IP, no por pestaña ni por sesión: dos pestañas del
+# Dashboard abiertas a la vez (cada una sondeando cada 5s, aunque sea el
+# mismo admin en el mismo navegador) ya generan ~168 peticiones/min entre
+# las dos, por encima de los 120 que había antes -y ahí las 5 llamadas del
+# dashboard empezaban a volver 429 en TODAS las pestañas a la vez, aunque no
+# hubiera nada raro pasando. Reportado en vivo, 2026-09-24. 400 deja margen
+# para varias pestañas simultáneas del mismo admin sin acercarse a lo que
+# necesitaría un abuso real (miles/min); el login tiene su propio límite
+# mucho más estricto (ver LOGIN_MAX_REQUESTS/LOGIN_MAX_PER_USER) y no cambia.
+MAX_REQUESTS_PER_WINDOW = 400
 
 # Rate limit más estricto para el login (anti fuerza bruta)
 LOGIN_MAX_REQUESTS = 10  # por IP y minuto
