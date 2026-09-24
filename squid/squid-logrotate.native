@@ -1,3 +1,6 @@
+# Gestionado por SquidManagerPro -no editar a mano, se reescribe en cada
+# instalacion/actualizacion (ver install-nativo.sh).
+#
 # Rotacion de los logs de Squid en una instalacion del sistema.
 #
 # Es la version para systemd del fichero `squid-logrotate` que usa la imagen

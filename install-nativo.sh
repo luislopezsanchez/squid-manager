@@ -575,9 +575,17 @@ chown -R proxy:proxy /var/log/squid /var/spool/squid
 
 # Rotacion de logs. El fichero del paquete se aparta: el nuestro es el que
 # fuerza a Squid a reabrir el log, sin lo cual el panel se queda a cero.
+#
+# La copia del paquete NO se guarda dentro de /etc/logrotate.d/: logrotate
+# procesa TODOS los ficheros de ese directorio, marcador "SquidManager" o
+# no -guardarla ahi como "squid.dpkg-orig" (bug real encontrado en la
+# auditoria QA 2026-09-20) hacia que logrotate viera dos secciones para
+# /var/log/squid/*.log y fallara entero con "duplicate log entry", dejando
+# el timer diario en estado failed indefinidamente.
 if [ -f /etc/logrotate.d/squid ] && ! grep -q "SquidManager" /etc/logrotate.d/squid 2>/dev/null; then
-    mv /etc/logrotate.d/squid /etc/logrotate.d/squid.dpkg-orig
-    info "El logrotate del paquete se guardo como /etc/logrotate.d/squid.dpkg-orig"
+    mkdir -p /etc/squid/backups
+    mv /etc/logrotate.d/squid /etc/squid/backups/logrotate.squid.dpkg-orig
+    info "El logrotate del paquete se guardo como /etc/squid/backups/logrotate.squid.dpkg-orig"
 fi
 install -o root -g root -m 644 "$INSTALL_DIR/squid/squid-logrotate.native" /etc/logrotate.d/squid
 ok "Rotacion diaria de logs configurada"

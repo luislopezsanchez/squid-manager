@@ -128,6 +128,23 @@ os.replace(tmp, '$ESTADO')
 "
 }
 
+# Si esta corrida arranco, cualquier "running" que ya estuviera en el
+# estado es de una corrida ANTERIOR que nunca llego a escribir su
+# resultado final (murio a mitad de camino: reinicio del host, OOM,
+# systemctl stop, kill -9). No puede ser la corrida actual todavia -recien
+# se llega a escribir "running" mas abajo-, y tampoco puede ser una
+# corrida hermana en curso: esta es una unidad Type=oneshot con un
+# temporizador que rearma solo cuando la anterior ya termino, systemd
+# nunca lanza una segunda mientras la primera sigue activa. Sin este
+# chequeo, un corte a mitad de una actualizacion dejaba "Actualizacion en
+# curso" en el panel para siempre, sin ningun camino para salir de ahi
+# salvo editar el JSON a mano (bug real, encontrado en revision de
+# codigo, no en vivo).
+if [ "$(leer_campo apply.status)" = "running" ]; then
+    log "Se encontro una actualizacion 'running' de una corrida anterior que no termino -se marca como interrumpida"
+    escribir_apply "error" "" "La actualizacion se interrumpio antes de terminar (reinicio del host u otro corte). Revisa el estado del servidor a mano antes de reintentar."
+fi
+
 APROBADO="$(leer_campo request.approved)"
 [ "$APROBADO" = "True" ] || exit 0
 
