@@ -46,6 +46,13 @@ class NodeTest(BaseModel):
     url: str
     username: str
     password: str
+    # Si se está probando un nodo ya guardado y la contraseña no se
+    # reescribió (llega como "***"), esto permite resolverla contra la
+    # guardada -sin esto, probar la conexión de un nodo existente sin
+    # tocar la contraseña mandaba el placeholder "***" tal cual como si
+    # fuera la contraseña real, y la prueba fallaba siempre por
+    # "credenciales rechazadas" aunque las guardadas fueran correctas.
+    id: int | None = None
 
 
 def _validar_url(url: str) -> str:
@@ -67,7 +74,7 @@ def _to_response(node: MonitoredNode) -> dict:
 
 
 @router.get("/nodes")
-async def list_nodes(
+def list_nodes(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -75,7 +82,7 @@ async def list_nodes(
 
 
 @router.post("/nodes")
-async def create_node(
+def create_node(
     data: NodeCreate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -99,7 +106,7 @@ async def create_node(
 
 
 @router.put("/nodes/{node_id}")
-async def update_node(
+def update_node(
     node_id: int,
     data: NodeUpdate,
     db: Session = Depends(get_db),
@@ -130,7 +137,7 @@ async def update_node(
 
 
 @router.delete("/nodes/{node_id}", status_code=204)
-async def delete_node(
+def delete_node(
     node_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -148,26 +155,32 @@ async def delete_node(
 
 
 @router.post("/test")
-async def test_node(
+def test_node(
     data: NodeTest,
+    db: Session = Depends(get_db),
     _: Admin = Depends(require_writer),
 ):
     """Prueba login + dashboard contra un nodo sin necesidad de guardarlo
     antes -mismo patrón que POST /api/ldap/test."""
+    password_a_usar = data.password
+    if password_a_usar == _MASCARA and data.id is not None:
+        existente = db.query(MonitoredNode).filter(MonitoredNode.id == data.id).first()
+        if existente:
+            password_a_usar = existente.password
 
     class _NodoTemporal:
         id = 0
         name = "(prueba)"
         url = data.url
         username = data.username
-        password = data.password
+        password = password_a_usar
 
     resultado = consultar_nodo(_NodoTemporal())
     return resultado
 
 
 @router.get("/dashboard")
-async def central_dashboard(
+def central_dashboard(
     request: Request,
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
@@ -188,7 +201,7 @@ async def central_dashboard(
 
 
 @router.post("/nodes/{node_id}/sync")
-async def sync_node(
+def sync_node(
     node_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),

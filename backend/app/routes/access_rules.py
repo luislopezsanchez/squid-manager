@@ -24,7 +24,7 @@ class ReorderRequest(BaseModel):
 
 
 @router.get("/", response_model=list[AccessRuleResponse])
-async def list_access_rules(
+def list_access_rules(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -33,7 +33,7 @@ async def list_access_rules(
 
 
 @router.post("/", response_model=AccessRuleResponse, status_code=201)
-async def create_access_rule(
+def create_access_rule(
     data: AccessRuleCreate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -67,22 +67,38 @@ async def create_access_rule(
 
 # IMPORTANTE: /reorder debe ir ANTES de /{rule_id} para que no sea capturado
 @router.put("/reorder", response_model=list[AccessRuleResponse])
-async def reorder_rules(
+def reorder_rules(
     data: ReorderRequest,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
     background_tasks: BackgroundTasks = None,
 ):
     """Reordena las reglas de acceso. Recibe una lista de IDs en el nuevo orden."""
+    # Bugs reales encontrados en la auditoría QA 2026-09-20: una lista vacía
+    # devolvía 200 sin avisar que no hizo nada (probablemente un bug del
+    # frontend, no una operación intencional), y un ID inexistente se
+    # ignoraba en silencio (`if rule:`) sin que el llamador se enterara.
+    if not data.rule_ids:
+        raise HTTPException(400, detail="La lista de reglas a reordenar no puede estar vacía.")
+
+    reglas = {
+        r.id: r
+        for r in db.query(AccessRule).filter(AccessRule.id.in_(data.rule_ids)).all()
+    }
+    faltantes = [rid for rid in data.rule_ids if rid not in reglas]
+    if faltantes:
+        raise HTTPException(
+            400,
+            detail=f"No existen reglas con id: {', '.join(str(i) for i in faltantes)}.",
+        )
+
     before = [
         f"{r.action} {r.acl_names}"
         for r in db.query(AccessRule).order_by(AccessRule.order, AccessRule.id).all()
     ]
 
     for new_order, rule_id in enumerate(data.rule_ids):
-        rule = db.query(AccessRule).filter(AccessRule.id == rule_id).first()
-        if rule:
-            rule.order = new_order
+        reglas[rule_id].order = new_order
 
     after = [
         f"{r.action} {r.acl_names}"
@@ -106,7 +122,7 @@ async def reorder_rules(
 
 
 @router.put("/{rule_id}", response_model=AccessRuleResponse)
-async def update_access_rule(
+def update_access_rule(
     rule_id: int,
     data: AccessRuleUpdate,
     db: Session = Depends(get_db),
@@ -142,7 +158,7 @@ async def update_access_rule(
 
 
 @router.delete("/{rule_id}", status_code=204)
-async def delete_access_rule(
+def delete_access_rule(
     rule_id: int,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),

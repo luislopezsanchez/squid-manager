@@ -3,7 +3,8 @@
 import pytest
 from fastapi import HTTPException
 
-from app.routes.central import _validar_url, _to_response
+import app.routes.central as central
+from app.routes.central import _validar_url, _to_response, test_node as _ruta_test_node, NodeTest
 from app.models.monitored_node import MonitoredNode
 
 
@@ -36,3 +37,75 @@ def test_respuesta_enmascara_la_contrasena():
     resp = _to_response(nodo)
     assert resp["password"] == "***"
     assert "secreta_de_verdad" not in str(resp)
+
+
+# --- POST /central/test: resolución de la contraseña enmascarada ----------
+#
+# Bug real encontrado en revisión de código: probar la conexión de un nodo
+# YA GUARDADO sin reescribir la contraseña mandaba el placeholder "***"
+# literal como si fuera la contraseña real, y la prueba fallaba siempre por
+# "credenciales rechazadas" aunque las guardadas fueran correctas.
+
+class _FakeQueryUnNodo:
+    def __init__(self, nodo):
+        self._nodo = nodo
+
+    def filter(self, *a, **k):
+        return self
+
+    def first(self):
+        return self._nodo
+
+
+class FakeDBConNodo:
+    def __init__(self, nodo):
+        self._nodo = nodo
+
+    def query(self, model):
+        return _FakeQueryUnNodo(self._nodo)
+
+
+def test_probar_con_mascara_y_id_usa_la_contrasena_guardada(monkeypatch):
+    nodo = MonitoredNode(id=7, name="Norte", url="http://10.0.0.5:8000",
+                          username="viewer", password="la_de_verdad", enabled=True)
+    capturado = {}
+
+    def _consultar_falso(nodo_temporal):
+        capturado["password"] = nodo_temporal.password
+        return {"status": "ok"}
+
+    monkeypatch.setattr(central, "consultar_nodo", _consultar_falso)
+    data = NodeTest(url="http://10.0.0.5:8000", username="viewer", password="***", id=7)
+    _ruta_test_node(data=data, db=FakeDBConNodo(nodo), _=None)
+    assert capturado["password"] == "la_de_verdad"
+
+
+def test_probar_con_mascara_sin_id_no_revienta(monkeypatch):
+    """Un nodo nuevo (todavía sin guardar) no tiene id -no debería intentar
+    resolver nada, solo mandar la máscara tal cual (y que el proveedor
+    remoto la rechace, que es el comportamiento correcto ahí)."""
+    capturado = {}
+
+    def _consultar_falso(nodo_temporal):
+        capturado["password"] = nodo_temporal.password
+        return {"status": "error"}
+
+    monkeypatch.setattr(central, "consultar_nodo", _consultar_falso)
+    data = NodeTest(url="http://10.0.0.5:8000", username="viewer", password="***", id=None)
+    _ruta_test_node(data=data, db=FakeDBConNodo(None), _=None)
+    assert capturado["password"] == "***"
+
+
+def test_probar_con_contrasena_nueva_no_toca_la_guardada(monkeypatch):
+    nodo = MonitoredNode(id=7, name="Norte", url="http://10.0.0.5:8000",
+                          username="viewer", password="la_vieja", enabled=True)
+    capturado = {}
+
+    def _consultar_falso(nodo_temporal):
+        capturado["password"] = nodo_temporal.password
+        return {"status": "ok"}
+
+    monkeypatch.setattr(central, "consultar_nodo", _consultar_falso)
+    data = NodeTest(url="http://10.0.0.5:8000", username="viewer", password="una_nueva", id=7)
+    _ruta_test_node(data=data, db=FakeDBConNodo(nodo), _=None)
+    assert capturado["password"] == "una_nueva"

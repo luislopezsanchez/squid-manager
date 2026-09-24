@@ -53,6 +53,8 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
             "The value of «ssl_bump_enabled» must be \"true\" or \"false\".",
         "La carga masiva es solo para ACLs de dominio (dstdomain/dstdom_regex).":
             "Bulk upload is only for domain ACLs (dstdomain/dstdom_regex).",
+        "La lista de reglas a reordenar no puede estar vacía.":
+            "The list of rules to reorder cannot be empty.",
         "No se puede activar Digest con LDAP habilitado: Digest solo "
         "autentica usuarios locales del proxy, no hay forma estándar de "
         "guardar el hash que necesita en un directorio LDAP/Active "
@@ -74,6 +76,8 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
             "in Settings before creating groups.",
         "El grupo ya existe": "The group already exists",
         "El nombre de usuario ya existe": "That username already exists",
+        "El puerto debe ser un número entre 1 y 65535.":
+            "The port must be a number between 1 and 65535.",
         "El puerto del proxy padre no es un número": "The parent proxy port is not a number",
         "El superadmin principal no puede ser degradado":
             "The main superadmin cannot be demoted",
@@ -201,6 +205,8 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
             "O valor de «ssl_bump_enabled» deve ser \"true\" ou \"false\".",
         "La carga masiva es solo para ACLs de dominio (dstdomain/dstdom_regex).":
             "O carregamento em massa é só para ACLs de domínio (dstdomain/dstdom_regex).",
+        "La lista de reglas a reordenar no puede estar vacía.":
+            "A lista de regras a reordenar não pode estar vazia.",
         "No se puede activar Digest con LDAP habilitado: Digest solo "
         "autentica usuarios locales del proxy, no hay forma estándar de "
         "guardar el hash que necesita en un directorio LDAP/Active "
@@ -223,6 +229,8 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
             "grupos.",
         "El grupo ya existe": "O grupo já existe",
         "El nombre de usuario ya existe": "Esse nome de usuário já existe",
+        "El puerto debe ser un número entre 1 y 65535.":
+            "A porta deve ser um número entre 1 e 65535.",
         "El puerto del proxy padre no es un número": "A porta do proxy pai não é um número",
         "El superadmin principal no puede ser degradado":
             "O superadmin principal não pode ser rebaixado",

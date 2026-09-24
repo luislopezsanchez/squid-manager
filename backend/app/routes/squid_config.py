@@ -36,7 +36,7 @@ class SettingUpdate(BaseModel):
 
 
 @router.get("/settings")
-async def get_settings(
+def get_settings(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -46,7 +46,7 @@ async def get_settings(
 
 
 @router.put("/settings")
-async def update_setting(
+def update_setting(
     data: SettingUpdate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
@@ -121,6 +121,26 @@ async def update_setting(
     # contrario de lo que alguien escribiendo "false" a mano querría.
     if data.key == "ssl_bump_enabled" and data.value.strip().lower() not in ("true", "false"):
         raise HTTPException(400, detail='El valor de «ssl_bump_enabled» debe ser "true" o "false".')
+
+    # http_port es el puerto en el que escucha TODO Squid: un valor no
+    # numérico o fuera de rango no se nota al guardar (bug real encontrado
+    # en la auditoría QA 2026-09-20 -guardaba "abc" sin error), y recién
+    # revienta al aplicar, con un mensaje de "squid -k parse" que no dice
+    # qué campo lo causó.
+    if data.key == "http_port":
+        valor = data.value.strip()
+        if not valor.isdigit() or not (1 <= int(valor) <= 65535):
+            raise HTTPException(400, detail="El puerto debe ser un número entre 1 y 65535.")
+
+    # cache_mem/maximum_object_size: mismo caso que http_port -Squid espera
+    # "<número> <unidad>" (bytes, KB, MB o GB); cualquier otra cosa recién se
+    # nota al aplicar.
+    if data.key in ("cache_mem", "maximum_object_size"):
+        if not re.fullmatch(r"\d+\s*(bytes|KB|MB|GB)?", data.value.strip(), re.IGNORECASE):
+            raise HTTPException(
+                400,
+                detail=f'El valor de «{data.key}» debe ser un número seguido de una unidad (ej: "128 MB").',
+            )
 
     # El resto de valores se interpolan tal cual en squid.conf (visible_hostname,
     # cache_dir, refresh_pattern, auth_realm, access_log, etc.): sin esto, un
@@ -202,7 +222,7 @@ async def apply_config(
 
 
 @router.get("/apply-progress")
-async def apply_progress_status(_: Admin = Depends(get_current_admin)):
+def apply_progress_status(_: Admin = Depends(get_current_admin)):
     """En qué paso va el "Aplicar cambios" en curso, para que el panel
     pueda mostrar una barra de progreso mientras espera la respuesta de
     POST /apply -esa petición puede tardar varios minutos con una ACL de
@@ -223,7 +243,7 @@ class DnsTest(BaseModel):
 
 
 @router.post("/dns/test")
-async def test_dns(
+def test_dns(
     data: DnsTest,
     _: Admin = Depends(require_writer),
 ):
@@ -250,13 +270,13 @@ async def test_dns(
 
 
 @router.get("/status")
-async def get_status(_: Admin = Depends(get_current_admin)):
+def get_status(_: Admin = Depends(get_current_admin)):
     """Estado del servicio Squid."""
     return get_squid_status()
 
 
 @router.get("/preview")
-async def preview_config(
+def preview_config(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
@@ -266,7 +286,7 @@ async def preview_config(
 
 
 @router.get("/pending")
-async def pending_changes(
+def pending_changes(
     _: Admin = Depends(get_current_admin),
 ):
     """Indica si hay cambios en la BD que aún no se han aplicado a Squid."""
@@ -274,7 +294,7 @@ async def pending_changes(
 
 
 @router.get("/ca-cert")
-async def download_ca_cert(_: Admin = Depends(get_current_admin)):
+def download_ca_cert(_: Admin = Depends(get_current_admin)):
     """Descarga el certificado CA de Squid para instalar en los clientes."""
     from fastapi import Response
     ca_path = "/etc/squid/ssl_cert/squid-ca.crt"
@@ -300,7 +320,7 @@ async def download_ca_cert(_: Admin = Depends(get_current_admin)):
 
 
 @router.get("/ca-deploy/install-cert.bat")
-async def download_bat_installer(_: Admin = Depends(get_current_admin)):
+def download_bat_installer(_: Admin = Depends(get_current_admin)):
     """Descarga el instalador .bat (Windows) con el certificado embebido."""
     from fastapi import Response
     from app.services.cert_deploy_service import generate_bat_installer, CaCertNotFound
@@ -316,7 +336,7 @@ async def download_bat_installer(_: Admin = Depends(get_current_admin)):
 
 
 @router.get("/ca-deploy/deploy-gpo.ps1")
-async def download_gpo_script(_: Admin = Depends(get_current_admin)):
+def download_gpo_script(_: Admin = Depends(get_current_admin)):
     """Descarga el script PowerShell para desplegar el certificado vía GPO."""
     from fastapi import Response
     from app.services.cert_deploy_service import generate_gpo_script, CaCertNotFound
@@ -332,7 +352,7 @@ async def download_gpo_script(_: Admin = Depends(get_current_admin)):
 
 
 @router.get("/ca-deploy/cert.mobileconfig")
-async def download_mobileconfig(_: Admin = Depends(get_current_admin)):
+def download_mobileconfig(_: Admin = Depends(get_current_admin)):
     """Descarga el perfil .mobileconfig para iOS/macOS."""
     from fastapi import Response
     from app.services.cert_deploy_service import generate_mobileconfig, CaCertNotFound

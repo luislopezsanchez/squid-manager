@@ -71,7 +71,7 @@ def _audit(db: Session, actor: Admin, action: str, target: Admin | None,
 
 
 @router.get("/", response_model=list[AdminResponse])
-async def list_admins(
+def list_admins(
     db: Session = Depends(get_db),
     _: Admin = Depends(require_superadmin),
 ):
@@ -79,8 +79,8 @@ async def list_admins(
     return db.query(Admin).order_by(Admin.id).all()
 
 
-@router.post("/", response_model=AdminResponse)
-async def create_admin(
+@router.post("/", response_model=AdminResponse, status_code=201)
+def create_admin(
     data: AdminCreate,
     db: Session = Depends(get_db),
     current: Admin = Depends(require_superadmin),
@@ -110,7 +110,7 @@ async def create_admin(
 
 
 @router.put("/change-password")
-async def change_password(
+def change_password(
     data: PasswordChange,
     db: Session = Depends(get_db),
     current: Admin = Depends(get_current_admin),
@@ -136,7 +136,7 @@ async def change_password(
 
 
 @router.put("/{admin_id}", response_model=AdminResponse)
-async def update_admin(
+def update_admin(
     admin_id: int,
     data: AdminUpdate,
     db: Session = Depends(get_db),
@@ -178,8 +178,8 @@ async def update_admin(
     return admin
 
 
-@router.delete("/{admin_id}")
-async def delete_admin(
+@router.delete("/{admin_id}", status_code=204)
+def delete_admin(
     admin_id: int,
     db: Session = Depends(get_db),
     current: Admin = Depends(require_superadmin),
@@ -198,4 +198,3 @@ async def delete_admin(
     _audit(db, current, "delete", admin, old_value=f"{username} ({admin.role})")
     db.delete(admin)
     db.commit()
-    return {"status": "ok", "message": f"Administrador '{username}' eliminado"}

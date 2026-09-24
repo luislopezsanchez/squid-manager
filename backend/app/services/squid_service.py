@@ -565,11 +565,38 @@ _apply_lock = threading.Lock()
 def apply_squid_config(db) -> dict:
     """Aplica la configuración de Squid, serializado: una ejecución a la vez."""
     from app.services import apply_progress
+    from app.services.config_state import mark_dirty
 
     with _apply_lock:
         apply_progress.iniciar()
         try:
             return _apply_squid_config(db)
+        except Exception as e:
+            # Nada de lo que hace este pipeline (leer la BD, renderizar la
+            # plantilla, escribir archivos, hablar con Squid) está bajo un
+            # único lock salvo el propio apply: una ACL puede borrarse desde
+            # OTRA petición mientras esta ya leyó la lista de ACLs pero
+            # todavía no renderizó la plantilla -que recién ahí, de forma
+            # diferida (ver defer(Acl.value) en config_generator), pide la
+            # columna `value` de cada una. Si esa ACL puntual ya no existe,
+            # SQLAlchemy tira ObjectDeletedError. Bug real encontrado en QA
+            # 2026-09-20 (auditoría) reproducido como una carrera: se
+            # confirmó en vivo que dos peticiones concurrentes (borrar una
+            # ACL + aplicar cambios) bastan para dispararlo. Se trata como
+            # cualquier otro fallo del pipeline: no se aplicó nada, queda
+            # pendiente y se informa -en vez de tumbar el request con un 500
+            # crudo.
+            logger.error(f"Fallo inesperado aplicando la configuración de Squid: {e}", exc_info=True)
+            mark_dirty()
+            return {
+                "status": "error",
+                "message": (
+                    "No se pudo aplicar la configuración por un error interno "
+                    f"inesperado (probablemente otro cambio en curso al mismo "
+                    f"tiempo): {e}\n\nQuedó pendiente -podés reintentar."
+                ),
+                "needs_restart": False,
+            }
         finally:
             apply_progress.finalizar()
 
