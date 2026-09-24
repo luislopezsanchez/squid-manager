@@ -1,4 +1,20 @@
-"""Rutas de métricas del proxy en tiempo real."""
+"""Rutas de métricas del proxy en tiempo real.
+
+Todas las funciones de este archivo son `def`, no `async def`, a propósito:
+cada una hace trabajo bloqueante de verdad -leer y parsear el access.log
+(hasta 400.000 líneas en una ventana de 7 días), o una llamada HTTP síncrona
+al Cache Manager de Squid (`cache_manager_service`, hasta 10s de timeout)-
+y ninguna hace `await` de nada. Uvicorn corre un solo worker (ver
+squidmanager.service) con un único event loop: si estas funciones fueran
+`async def`, ese trabajo bloqueante se ejecutaría directamente sobre ese
+event loop y congelaría el backend ENTERO -para todos los usuarios, en
+cualquier pantalla- mientras dura. Con `def` a secas, Starlette las manda
+solas a su threadpool y el event loop queda libre para atender todo lo demás
+mientras tanto. El dashboard es el caso que más lo sufre: dispara 5 de estas
+llamadas en paralelo cada 5 segundos con auto-actualizar activado, así que
+cualquier lentitud puntual (Cache Manager lento, ventana de 7 días grande) se
+notaba en todo el panel, no solo en la tarjeta que la pidió.
+"""
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -26,13 +42,13 @@ router = APIRouter()
 
 
 @router.get("/traffic")
-async def traffic(_: Admin = Depends(get_current_admin)):
+def traffic(_: Admin = Depends(get_current_admin)):
     """Tráfico REAL en tiempo real desde Docker network stats."""
     return get_realtime_traffic()
 
 
 @router.get("/top-users")
-async def top_users(
+def top_users(
     limit: int = Query(10, ge=1, le=50),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
     sort_by: str = Query("bytes", pattern="^(bytes|requests)$"),
@@ -43,7 +59,7 @@ async def top_users(
 
 
 @router.get("/top-domains")
-async def top_domains(
+def top_domains(
     limit: int = Query(10, ge=1, le=50),
     denied: bool = Query(False),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
@@ -54,7 +70,7 @@ async def top_domains(
 
 
 @router.get("/top-blocked-users")
-async def top_blocked_users(
+def top_blocked_users(
     limit: int = Query(10, ge=1, le=50),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
     db: Session = Depends(get_db),
@@ -66,7 +82,7 @@ async def top_blocked_users(
 
 
 @router.get("/totales-actividad")
-async def totales_actividad(
+def totales_actividad(
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
     _: Admin = Depends(get_current_admin),
 ):
@@ -76,7 +92,7 @@ async def totales_actividad(
 
 
 @router.get("/actividad/export-pdf")
-async def actividad_export_pdf(
+def actividad_export_pdf(
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
@@ -94,7 +110,7 @@ async def actividad_export_pdf(
 
 
 @router.get("/detalle")
-async def detalle(
+def detalle(
     user: str | None = Query(None),
     domain: str | None = Query(None),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
@@ -109,7 +125,7 @@ async def detalle(
 
 
 @router.get("/tendencia-trafico")
-async def tendencia_trafico(
+def tendencia_trafico(
     user: str | None = Query(None),
     domain: str | None = Query(None),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
@@ -124,7 +140,7 @@ async def tendencia_trafico(
 
 
 @router.get("/volumen-por-periodo")
-async def volumen_por_periodo(
+def volumen_por_periodo(
     ventana: str | None = Query(None, description="1h, 24h, 7d, 30d — vacío = últimas 1000 peticiones"),
     _: Admin = Depends(get_current_admin),
 ):
@@ -134,7 +150,7 @@ async def volumen_por_periodo(
 
 
 @router.get("/latencia")
-async def latencia(
+def latencia(
     limit: int = Query(10, ge=1, le=50),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
     _: Admin = Depends(get_current_admin),
@@ -144,7 +160,7 @@ async def latencia(
 
 
 @router.get("/errores-http")
-async def errores_http(
+def errores_http(
     limit: int = Query(10, ge=1, le=50),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
     _: Admin = Depends(get_current_admin),
@@ -154,19 +170,19 @@ async def errores_http(
 
 
 @router.get("/system")
-async def system(_: Admin = Depends(get_current_admin)):
+def system(_: Admin = Depends(get_current_admin)):
     """Métricas del sistema (CPU, RAM, disco) desde Docker stats."""
     return get_system_metrics()
 
 
 @router.get("/timeline")
-async def timeline(_: Admin = Depends(get_current_admin)):
+def timeline(_: Admin = Depends(get_current_admin)):
     """Timeline de tráfico REAL desde buffer de Docker network stats."""
     return get_traffic_timeline()
 
 
 @router.get("/connections")
-async def connections(
+def connections(
     limit: int = Query(20, ge=1, le=100),
     _: Admin = Depends(get_current_admin),
 ):
@@ -175,6 +191,6 @@ async def connections(
 
 
 @router.get("/dashboard")
-async def dashboard_all(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
+def dashboard_all(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
     """Dashboard completo: todas las métricas en una sola llamada."""
     return get_dashboard(db=db)
