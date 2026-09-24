@@ -1,6 +1,14 @@
 import { idiomaActual, traducir } from '../i18n'
 const API_BASE = '/api'
 
+/** Rango de fechas libre (timestamps unix), alternativa a las ventanas fijas
+ * (1h/24h/7d/30d) para los reportes de Actividad de red. */
+export type RangoFechas = { desde: number; hasta: number }
+
+function _rangoQuery(rango?: RangoFechas): string {
+  return rango ? `&desde=${rango.desde}&hasta=${rango.hasta}` : ''
+}
+
 export function getToken(): string | null {
   return localStorage.getItem('token')
 }
@@ -309,16 +317,21 @@ export const api = {
   // Mismos endpoints que ya alimentan las tarjetas "Top" del dashboard
   // (con limit=10, fijo) -aca con el limit que pida quien llama, para la
   // pagina de "Actividad de red".
-  getTopUsers: (limit = 20, ventana?: string, sortBy?: 'bytes' | 'requests') =>
-    request<any>(`/panel/top-users?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}${sortBy ? `&sort_by=${sortBy}` : ''}`),
-  getTopDomains: (limit = 20, denied = false, ventana?: string, sortBy?: 'bytes' | 'requests') =>
-    request<any>(`/panel/top-domains?limit=${limit}&denied=${denied}${ventana ? `&ventana=${ventana}` : ''}${sortBy ? `&sort_by=${sortBy}` : ''}`),
-  getTopBlockedUsers: (limit = 20, ventana?: string) =>
-    request<any>(`/panel/top-blocked-users?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}`),
-  getIpsCompartidas: (limit = 20, ventana?: string) =>
-    request<any>(`/panel/ips-compartidas?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}`),
-  getTotalesActividad: (ventana?: string) =>
-    request<any>(`/panel/totales-actividad${ventana ? `?ventana=${ventana}` : ''}`),
+  getTopUsers: (limit = 20, ventana?: string, sortBy?: 'bytes' | 'requests', rango?: RangoFechas) =>
+    request<any>(`/panel/top-users?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}${sortBy ? `&sort_by=${sortBy}` : ''}${_rangoQuery(rango)}`),
+  getTopDomains: (limit = 20, denied = false, ventana?: string, sortBy?: 'bytes' | 'requests', rango?: RangoFechas) =>
+    request<any>(`/panel/top-domains?limit=${limit}&denied=${denied}${ventana ? `&ventana=${ventana}` : ''}${sortBy ? `&sort_by=${sortBy}` : ''}${_rangoQuery(rango)}`),
+  getTopBlockedUsers: (limit = 20, ventana?: string, rango?: RangoFechas) =>
+    request<any>(`/panel/top-blocked-users?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}${_rangoQuery(rango)}`),
+  getIpsCompartidas: (limit = 20, ventana?: string, rango?: RangoFechas) =>
+    request<any>(`/panel/ips-compartidas?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}${_rangoQuery(rango)}`),
+  getTotalesActividad: (ventana?: string, rango?: RangoFechas) => {
+    const params = [
+      ventana ? `ventana=${ventana}` : '',
+      rango ? `desde=${rango.desde}&hasta=${rango.hasta}` : '',
+    ].filter(Boolean).join('&')
+    return request<any>(`/panel/totales-actividad${params ? `?${params}` : ''}`)
+  },
   actividadExportPdfUrl: (ventana?: string) =>
     `${API_BASE}/panel/actividad/export-pdf${ventana ? `?ventana=${ventana}` : ''}`,
   getVolumenPorPeriodo: (ventana?: string) =>

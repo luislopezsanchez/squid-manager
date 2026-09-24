@@ -132,3 +132,41 @@ def test_respeta_max_lines_entre_activo_y_rotados(monkeypatch):
 
     resultado = metrics_service._read_recent_logs(seconds=30 * 86400, max_lines=5)
     assert len(resultado) == 5
+
+
+# --- _read_rango() / _entradas() (rango de fechas libre) --------------------
+
+def test_read_rango_filtra_por_desde_y_hasta(monkeypatch):
+    lineas = [_linea(100), _linea(200), _linea(300), _linea(400)]
+    monkeypatch.setattr(
+        "app.services.log_service.iter_lines_reverse",
+        lambda path, max_lines: reversed(lineas),
+    )
+    monkeypatch.setattr(metrics_service, "_iter_rotated_lines_reverse", lambda: iter(()))
+
+    resultado = metrics_service._read_rango(desde=150, hasta=350)
+    assert [e["timestamp"] for e in resultado] == [200, 300]
+
+
+def test_read_rango_sigue_en_rotados_si_desde_es_mas_viejo_que_el_activo(monkeypatch):
+    lineas_activo = [_linea(300), _linea(400)]
+    monkeypatch.setattr(
+        "app.services.log_service.iter_lines_reverse",
+        lambda path, max_lines: reversed(lineas_activo),
+    )
+    lineas_rotadas = [_linea(200), _linea(100)]
+    monkeypatch.setattr(metrics_service, "_iter_rotated_lines_reverse", lambda: iter(lineas_rotadas))
+
+    resultado = metrics_service._read_rango(desde=150, hasta=1000)
+    assert [e["timestamp"] for e in resultado] == [200, 300, 400]
+
+
+def test_entradas_usa_rango_solo_si_estan_los_dos_extremos(monkeypatch):
+    monkeypatch.setattr(metrics_service, "_read_window", lambda seconds: [{"marca": "ventana", "seconds": seconds}])
+    monkeypatch.setattr(metrics_service, "_read_rango", lambda desde, hasta: [{"marca": "rango"}])
+
+    # Sin desde/hasta (o con uno solo): usa la ventana relativa de siempre.
+    assert metrics_service._entradas(seconds=3600) == [{"marca": "ventana", "seconds": 3600}]
+    assert metrics_service._entradas(seconds=3600, desde=100) == [{"marca": "ventana", "seconds": 3600}]
+    # Con los dos extremos: rango libre, sin importar que tambien venga seconds.
+    assert metrics_service._entradas(seconds=3600, desde=100, hasta=200) == [{"marca": "rango"}]

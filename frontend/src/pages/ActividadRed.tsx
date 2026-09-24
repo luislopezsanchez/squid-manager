@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { traducir } from '../i18n'
-import { api, getToken } from '../api/client'
+import { api, getToken, type RangoFechas } from '../api/client'
 import { formatBytes, formatNumber } from '../utils/format'
 import { useToast } from '../components/Toast'
 import { IconDownload } from '../components/Icons'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import {
   FilaBarra, AnilloConcentracion, ModalDetalle, SelectorVentana, VENTANAS,
-  type FilaDetalle, type Ventana,
+  type FilaDetalle, type Ventana, type RangoFechasInput,
 } from '../components/ReportWidgets'
 
 type FilaUsuario = { user: string; bytes: number; requests: number }
@@ -55,6 +55,7 @@ const EXPLICACIONES: Record<Pestana, string> = {
 export default function ActividadRed() {
   const [pestana, setPestana] = useState<Pestana>('usuarios')
   const [ventana, setVentana] = useState<Ventana>('')
+  const [rangoInput, setRangoInput] = useState<RangoFechasInput>({ desde: '', hasta: '' })
   const [porDatos, setPorDatos] = useState(true) // aplica a "usuarios" y "dominios"
   const [usuarios, setUsuarios] = useState<FilaUsuario[] | null>(null)
   const [dominios, setDominios] = useState<FilaDominio[] | null>(null)
@@ -70,15 +71,31 @@ export default function ActividadRed() {
   const [exportando, setExportando] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
+  // Rango libre: solo se arma (y solo reemplaza a la ventana relativa) una
+  // vez que las DOS fechas están cargadas -mientras falte una, se sigue
+  // viendo el comportamiento por defecto (últimas 1.000) en vez de mandar un
+  // pedido con un extremo vacío. "hasta" toma el final del día elegido
+  // (23:59:59), no su comienzo, para incluir ese día completo.
+  const rango: RangoFechas | undefined = ventana === 'custom' && rangoInput.desde && rangoInput.hasta
+    ? {
+        desde: Math.floor(new Date(`${rangoInput.desde}T00:00:00`).getTime() / 1000),
+        hasta: Math.floor(new Date(`${rangoInput.hasta}T23:59:59`).getTime() / 1000),
+      }
+    : undefined
+
   const cargar = () => {
-    const v = ventana || undefined
+    // "custom" es un valor interno del selector, no una ventana real del
+    // backend (ver VENTANAS_SEGUNDOS): si todavía no hay rango válido, cae
+    // al comportamiento de siempre (últimas 1.000) en vez de mandar
+    // "ventana=custom", que el backend no reconoce.
+    const v = ventana !== 'custom' ? (ventana || undefined) : undefined
     Promise.all([
-      api.getTopUsers(10, v, porDatos ? 'bytes' : 'requests'),
-      api.getTopDomains(10, false, v, porDatos ? 'bytes' : 'requests'),
-      api.getTopDomains(10, true, v),
-      api.getTopBlockedUsers(10, v),
-      api.getTotalesActividad(v),
-      api.getIpsCompartidas(10, v),
+      api.getTopUsers(10, v, porDatos ? 'bytes' : 'requests', rango),
+      api.getTopDomains(10, false, v, porDatos ? 'bytes' : 'requests', rango),
+      api.getTopDomains(10, true, v, undefined, rango),
+      api.getTopBlockedUsers(10, v, rango),
+      api.getTotalesActividad(v, rango),
+      api.getIpsCompartidas(10, v, rango),
     ])
       .then(([u, d, bd, bu, t, ips]: [FilaUsuario[], FilaDominio[], FilaDominio[], RespuestaBloqueados, Totales, FilaIpCompartida[]]) => {
         setUsuarios(u)
@@ -104,14 +121,19 @@ export default function ActividadRed() {
     // get_top_users en el backend. Sin refetch, el toggle mostraba el
     // mismo ranking (por bytes) con otro numero al lado, no un ranking
     // distinto de verdad -reportado en vivo por el usuario, 2026-09-12.
-  }, [ventana, porDatos])
+    // rangoInput.desde/hasta entran por lo mismo: cambiar el rango libre
+    // debe refetchear, no solo re-renderizar con datos viejos.
+  }, [ventana, porDatos, rangoInput.desde, rangoInput.hasta])
 
   const abrirDetalle = (opts: { user?: string; domain?: string }, titulo: string) => {
     const tendenciaHref = opts.user
       ? `/reportes/tendencias?tipo=user&valor=${encodeURIComponent(opts.user)}`
       : `/reportes/tendencias?tipo=domain&valor=${encodeURIComponent(opts.domain || '')}`
     setDetalle({ titulo, filas: [], cargando: true, tendenciaHref })
-    api.getDetalle({ ...opts, ventana: ventana || undefined, limit: 50 })
+    // El drill-down y el PDF no soportan todavía el rango libre (fuera de
+    // alcance de esta pasada): con "custom" caen a "últimas 1.000" en vez de
+    // mandar un "ventana=custom" que el backend no reconoce.
+    api.getDetalle({ ...opts, ventana: ventana !== 'custom' ? (ventana || undefined) : undefined, limit: 50 })
       .then((filas: FilaDetalle[]) => setDetalle({ titulo, filas, cargando: false, tendenciaHref }))
       .catch(() => setDetalle({ titulo, filas: [], cargando: false, tendenciaHref }))
   }
@@ -119,7 +141,7 @@ export default function ActividadRed() {
   const exportarPdf = () => {
     setExportando(true)
     const token = getToken()
-    fetch(api.actividadExportPdfUrl(ventana || undefined), { headers: { Authorization: `Bearer ${token}` } })
+    fetch(api.actividadExportPdfUrl(ventana !== 'custom' ? (ventana || undefined) : undefined), { headers: { Authorization: `Bearer ${token}` } })
       .then(r => {
         if (!r.ok) throw new Error('export failed')
         return r.blob()
@@ -226,7 +248,9 @@ export default function ActividadRed() {
         </button>
       </div>
       <p className="text-sm text-ink-3 mb-6">
-        {ventana
+        {rango
+          ? traducir("Filtrado del {desde} al {hasta} — se refresca solo, cada 30 s.", { desde: rangoInput.desde, hasta: rangoInput.hasta })
+          : ventana && ventana !== 'custom'
           ? traducir("Filtrado por: {ventana} — se refresca solo, cada 30 s.", { ventana: VENTANAS.find(v => v.id === ventana)?.label || '' })
           : traducir("De las últimas 1.000 peticiones registradas — se refresca solo, cada 30 s.")}
       </p>
@@ -249,7 +273,7 @@ export default function ActividadRed() {
         </div>
 
         <div className="flex items-center gap-3">
-          <SelectorVentana value={ventana} onChange={setVentana} />
+          <SelectorVentana value={ventana} onChange={setVentana} rango={rangoInput} onRangoChange={setRangoInput} />
 
           {(pestana === 'usuarios' || pestana === 'dominios') && (
             <div className="flex gap-1 bg-line-soft p-1 rounded-lg">

@@ -161,10 +161,12 @@ export function ModalDetalle({ titulo, filas, cargando, onClose, tendenciaHref }
   )
 }
 
-/** Selector de ventana de tiempo compartido: mismas 4 opciones en cada
- * pagina de Analisis que filtra por fecha, para que el admin no tenga que
- * reaprender el control en cada pantalla. */
-export type Ventana = '' | '1h' | '24h' | '7d' | '30d'
+/** Selector de ventana de tiempo compartido: mismas opciones en cada pagina
+ * de Analisis que filtra por fecha, para que el admin no tenga que
+ * reaprender el control en cada pantalla. "custom" habilita un rango de
+ * fechas libre (ver RangoFechasInput) en vez de una de las ventanas
+ * relativas fijas. */
+export type Ventana = '' | '1h' | '24h' | '7d' | '30d' | 'custom'
 
 export const VENTANAS: { id: Ventana; label: string }[] = [
   { id: '', label: traducir("Recientes (últimas 1.000)") },
@@ -172,17 +174,49 @@ export const VENTANAS: { id: Ventana; label: string }[] = [
   { id: '24h', label: traducir("Últimas 24 horas") },
   { id: '7d', label: traducir("Últimos 7 días") },
   { id: '30d', label: traducir("Últimos 30 días") },
+  { id: 'custom', label: traducir("Personalizado...") },
 ]
 
-export function SelectorVentana({ value, onChange }: { value: Ventana; onChange: (v: Ventana) => void }) {
+/** Rango elegido en los inputs de fecha (formato "YYYY-MM-DD", el nativo de
+ * <input type="date">) -quien llama lo convierte a timestamps unix recien
+ * al armar el pedido a la API (ver ActividadRed.tsx). */
+export type RangoFechasInput = { desde: string; hasta: string }
+
+export function SelectorVentana({ value, onChange, rango, onRangoChange }: {
+  value: Ventana; onChange: (v: Ventana) => void
+  rango?: RangoFechasInput; onRangoChange?: (r: RangoFechasInput) => void
+}) {
   return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value as Ventana)}
-      className="input text-sm bg-white py-1.5"
-      aria-label={traducir("Ventana de tiempo")}
-    >
-      {VENTANAS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
-    </select>
+    <div className="flex items-center gap-2 flex-wrap">
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value as Ventana)}
+        className="input text-sm bg-white py-1.5"
+        aria-label={traducir("Ventana de tiempo")}
+      >
+        {VENTANAS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+      </select>
+      {value === 'custom' && onRangoChange && (
+        <>
+          <input
+            type="date"
+            value={rango?.desde ?? ''}
+            max={rango?.hasta || undefined}
+            onChange={e => onRangoChange({ desde: e.target.value, hasta: rango?.hasta ?? '' })}
+            className="input text-sm bg-white py-1.5"
+            aria-label={traducir("Desde")}
+          />
+          <span className="text-xs text-ink-3">{traducir("hasta")}</span>
+          <input
+            type="date"
+            value={rango?.hasta ?? ''}
+            min={rango?.desde || undefined}
+            onChange={e => onRangoChange({ desde: rango?.desde ?? '', hasta: e.target.value })}
+            className="input text-sm bg-white py-1.5"
+            aria-label={traducir("Hasta")}
+          />
+        </>
+      )}
+    </div>
   )
 }

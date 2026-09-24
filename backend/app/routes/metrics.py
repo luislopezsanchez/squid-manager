@@ -47,15 +47,21 @@ def traffic(_: Admin = Depends(get_current_admin)):
     return get_realtime_traffic()
 
 
+_DESDE_DESC = "Timestamp unix de inicio de un rango libre. Junto con hasta, reemplaza a ventana."
+_HASTA_DESC = "Timestamp unix de fin de un rango libre. Junto con desde, reemplaza a ventana."
+
+
 @router.get("/top-users")
 def top_users(
     limit: int = Query(10, ge=1, le=50),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
     sort_by: str = Query("bytes", pattern="^(bytes|requests)$"),
+    desde: float | None = Query(None, description=_DESDE_DESC),
+    hasta: float | None = Query(None, description=_HASTA_DESC),
     _: Admin = Depends(get_current_admin),
 ):
     """Top usuarios por bytes transferidos o por cantidad de peticiones (desde access.log)."""
-    return get_top_users(limit, seconds=_ventana_a_segundos(ventana), sort_by=sort_by)
+    return get_top_users(limit, seconds=_ventana_a_segundos(ventana), sort_by=sort_by, desde=desde, hasta=hasta)
 
 
 @router.get("/top-domains")
@@ -64,42 +70,53 @@ def top_domains(
     denied: bool = Query(False),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
     sort_by: str = Query("requests", pattern="^(bytes|requests)$"),
+    desde: float | None = Query(None, description=_DESDE_DESC),
+    hasta: float | None = Query(None, description=_HASTA_DESC),
     _: Admin = Depends(get_current_admin),
 ):
     """Top dominios visitados o bloqueados (desde access.log)."""
-    return get_top_domains(limit, denied_only=denied, seconds=_ventana_a_segundos(ventana), sort_by=sort_by)
+    return get_top_domains(
+        limit, denied_only=denied, seconds=_ventana_a_segundos(ventana), sort_by=sort_by,
+        desde=desde, hasta=hasta,
+    )
 
 
 @router.get("/top-blocked-users")
 def top_blocked_users(
     limit: int = Query(10, ge=1, le=50),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
+    desde: float | None = Query(None, description=_DESDE_DESC),
+    hasta: float | None = Query(None, description=_HASTA_DESC),
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
     """Usuarios con más peticiones denegadas (desde access.log), cruzado
     contra si la cuenta está realmente deshabilitada o no."""
-    return get_top_blocked_users(limit, db=db, seconds=_ventana_a_segundos(ventana))
+    return get_top_blocked_users(limit, db=db, seconds=_ventana_a_segundos(ventana), desde=desde, hasta=hasta)
 
 
 @router.get("/ips-compartidas")
 def ips_compartidas(
     limit: int = Query(10, ge=1, le=50),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
+    desde: float | None = Query(None, description=_DESDE_DESC),
+    hasta: float | None = Query(None, description=_HASTA_DESC),
     _: Admin = Depends(get_current_admin),
 ):
     """IPs con más de un usuario autenticado distinto (desde access.log)."""
-    return get_ips_compartidas(limit, seconds=_ventana_a_segundos(ventana))
+    return get_ips_compartidas(limit, seconds=_ventana_a_segundos(ventana), desde=desde, hasta=hasta)
 
 
 @router.get("/totales-actividad")
 def totales_actividad(
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
+    desde: float | None = Query(None, description=_DESDE_DESC),
+    hasta: float | None = Query(None, description=_HASTA_DESC),
     _: Admin = Depends(get_current_admin),
 ):
     """Totales reales (todos los usuarios/dominios, no solo el top N) para
     el % de concentración y el "Total" de Actividad de red."""
-    return get_totales_actividad(seconds=_ventana_a_segundos(ventana))
+    return get_totales_actividad(seconds=_ventana_a_segundos(ventana), desde=desde, hasta=hasta)
 
 
 @router.get("/actividad/export-pdf")

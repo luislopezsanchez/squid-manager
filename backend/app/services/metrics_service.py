@@ -532,6 +532,57 @@ def _read_window(seconds: int | None) -> list[dict]:
     return _read_recent_logs(seconds, max_lines=tope)
 
 
+def _read_rango(desde: float, hasta: float, max_lines: int = 400_000) -> list[dict]:
+    """Entradas del log con timestamp en [desde, hasta], de la más vieja a
+    la más nueva -mismo orden que devuelve _read_window.
+
+    A diferencia de _read_recent_logs (ventana relativa a "ahora"), un
+    rango libre puede caer enteramente en el pasado (ej. "la semana antes
+    de la anterior"), así que no puede asumir que el archivo activo
+    alcanza: recorre el activo y, si hace falta, sigue en los rotados
+    -mismo mecanismo que _read_recent_logs usa para 7d/30d- hasta cubrir
+    "desde" o quedarse sin archivos. Si "hasta" ya quedó completamente
+    atrás (un rango viejo), las líneas del activo/rotados más recientes se
+    descartan sin agregarse, pero igual hay que pasarlas para llegar a las
+    que sí importan.
+    """
+    from app.services.log_service import iter_lines_reverse
+
+    entries = []
+
+    def _consumir(lineas) -> bool:
+        """Agrega las entradas dentro de [desde, hasta]. Devuelve True si
+        ya se puede parar -se pasó de "desde", o se llegó al tope-."""
+        for line in lineas:
+            entry = _parse_log_line(line)
+            if not entry or entry["interno"]:
+                continue
+            if entry["timestamp"] < desde:
+                return True
+            if entry["timestamp"] <= hasta:
+                entries.append(entry)
+                if len(entries) >= max_lines:
+                    return True
+        return False
+
+    llego_al_corte = _consumir(iter_lines_reverse(ACCESS_LOG_PATH, max_lines=max_lines))
+    if not llego_al_corte:
+        _consumir(_iter_rotated_lines_reverse())
+
+    entries.reverse()
+    return entries
+
+
+def _entradas(seconds: int | None = None, desde: float | None = None, hasta: float | None = None) -> list[dict]:
+    """Punto único de lectura para los reportes: ventana relativa
+    (_read_window) o rango absoluto (_read_rango) cuando se pasan ambos
+    extremos -desde/hasta siempre ganan si están presentes, ventana queda
+    como el modo por defecto que ya usaban todos los llamadores."""
+    if desde is not None and hasta is not None:
+        return _read_rango(desde, hasta)
+    return _read_window(seconds)
+
+
 # ============================================
 # API pública
 # ============================================
@@ -707,7 +758,10 @@ def get_system_metrics() -> dict:
     return metrics
 
 
-def get_top_users(limit: int = 10, seconds: int | None = None, sort_by: str = "bytes") -> list[dict]:
+def get_top_users(
+    limit: int = 10, seconds: int | None = None, sort_by: str = "bytes",
+    desde: float | None = None, hasta: float | None = None,
+) -> list[dict]:
     """Top usuarios por bytes o por cantidad de peticiones -no son lo mismo:
     pocas peticiones pueden pesar mucho (una descarga grande) y muchas
     peticiones pueden pesar poco (navegación normal). Antes se pedia siempre
@@ -716,8 +770,12 @@ def get_top_users(limit: int = 10, seconds: int | None = None, sort_by: str = "b
     bytes aunque se mirara "por peticiones", y ademas un usuario con muchas
     peticiones pero pocos bytes podia quedar afuera del top directamente.
     Reportado en vivo por el usuario, 2026-09-12.
+
+    desde/hasta (timestamps unix): rango de fechas libre, alternativa a
+    `seconds` para cuando el admin elige "Personalizado" en vez de una
+    ventana relativa -ver _entradas().
     """
-    entries = _read_window(seconds)
+    entries = _entradas(seconds, desde, hasta)
     user_bytes = defaultdict(int)
     user_requests = defaultdict(int)
     for e in entries:
@@ -732,7 +790,9 @@ def get_top_users(limit: int = 10, seconds: int | None = None, sort_by: str = "b
     ]
 
 
-def get_totales_actividad(seconds: int | None = None) -> dict:
+def get_totales_actividad(
+    seconds: int | None = None, desde: float | None = None, hasta: float | None = None,
+) -> dict:
     """Totales reales (todos los usuarios/dominios, no solo el top N) para
     la ventana pedida -Actividad de red los usa para el % de concentración
     y el "Total" junto al anillo: antes ese número sumaba solo las filas del
@@ -740,7 +800,7 @@ def get_totales_actividad(seconds: int | None = None) -> dict:
     mostrado no era el total de verdad. Reportado en vivo por el usuario,
     2026-09-12.
     """
-    entries = _read_window(seconds)
+    entries = _entradas(seconds, desde, hasta)
 
     usuarios_bytes = usuarios_requests = 0
     usuarios_vistos: set[str] = set()
@@ -775,7 +835,10 @@ def get_totales_actividad(seconds: int | None = None) -> dict:
     }
 
 
-def get_top_blocked_users(limit: int = 10, db=None, seconds: int | None = None) -> dict:
+def get_top_blocked_users(
+    limit: int = 10, db=None, seconds: int | None = None,
+    desde: float | None = None, hasta: float | None = None,
+) -> dict:
     """Usuarios con mas peticiones denegadas: quien choca mas con la politica.
 
     Complementa a "top sitios bloqueados", que dice que se bloquea pero no
@@ -792,7 +855,7 @@ def get_top_blocked_users(limit: int = 10, db=None, seconds: int | None = None) 
     usuario para que la diferencia con "top sitios bloqueados" no se lea
     como un fallo de esta tarjeta.
     """
-    denegadas = [e for e in _read_window(seconds) if e["denied"]]
+    denegadas = [e for e in _entradas(seconds, desde, hasta) if e["denied"]]
     con_usuario = [e for e in denegadas if e["user"]]
     conteo = Counter(e["user"] for e in con_usuario)
     top = conteo.most_common(limit)
@@ -832,6 +895,7 @@ def get_top_blocked_users(limit: int = 10, db=None, seconds: int | None = None) 
 def get_top_domains(
     limit: int = 10, denied_only: bool = False, seconds: int | None = None,
     sort_by: str = "requests",
+    desde: float | None = None, hasta: float | None = None,
 ) -> list[dict]:
     """Top dominios por número de peticiones o por bytes transferidos.
 
@@ -843,7 +907,7 @@ def get_top_domains(
     que de verdad importa en ese caso: cuánto tráfico generó. Mismo criterio
     que ya tiene get_top_users con su `sort_by`.
     """
-    entries = _read_window(seconds)
+    entries = _entradas(seconds, desde, hasta)
     if denied_only:
         entries = [e for e in entries if e["denied"]]
     domain_count = Counter(e["domain"] for e in entries if e["domain"])
@@ -859,7 +923,10 @@ def get_top_domains(
     ]
 
 
-def get_ips_compartidas(limit: int = 10, seconds: int | None = None) -> list[dict]:
+def get_ips_compartidas(
+    limit: int = 10, seconds: int | None = None,
+    desde: float | None = None, hasta: float | None = None,
+) -> list[dict]:
     """IPs que generaron tráfico con más de un usuario autenticado distinto.
 
     Señal de seguridad, no un veredicto: una IP con varios usuarios puede
@@ -870,7 +937,7 @@ def get_ips_compartidas(limit: int = 10, seconds: int | None = None) -> list[dic
     sin usuario (ruido de fondo del navegador): eso es la norma, no una
     señal de nada.
     """
-    entries = _read_window(seconds)
+    entries = _entradas(seconds, desde, hasta)
     usuarios_por_ip: dict[str, set[str]] = defaultdict(set)
     requests_por_ip: dict[str, int] = defaultdict(int)
     for e in entries:
