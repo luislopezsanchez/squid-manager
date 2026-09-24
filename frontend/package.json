@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit -p .",
+    "check-i18n": "node scripts/check-i18n.cjs",
     "preview": "vite preview"
   },
   "dependencies": {

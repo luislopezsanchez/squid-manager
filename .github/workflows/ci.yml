@@ -82,6 +82,16 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
+      # traducir("texto") usa el propio texto en español como clave (ver
+      # src/i18n/index.ts): un texto nuevo sin su entrada en en.json/pt.json
+      # no rompe nada visible en español, así que se descubría en inglés o
+      # portugués, de a uno (sesión 2026-09-24: "Aplicar ahora", "n/d",
+      # "Redir.", "Otros" y otros más, encontrados a mano en una sola
+      # pantalla). Este paso falla el build si falta una clave.
+      - name: Verificar traducciones
+        working-directory: frontend
+        run: npm run check-i18n
+
       - name: Build
         working-directory: frontend
         run: npm run build
