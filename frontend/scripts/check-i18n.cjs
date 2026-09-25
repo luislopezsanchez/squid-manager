@@ -40,14 +40,31 @@ function listSourceFiles(dir) {
   return out
 }
 
-// Une un string entrecomillado tal como lo escribiría JS/TS (respeta \" \\ \n
-// etc.) para poder comparar exactamente contra la clave real del JSON.
+// Convierte las secuencias de escape de un string de JS/TS (\" \' \\ \n etc.)
+// a su caracter literal, para comparar contra la clave real del JSON.
+//
+// Antes esto delegaba en JSON.parse('"' + raw + '"'), que ANDA MAL apenas
+// `raw` viene de un string con comilla simple que contiene una comilla doble
+// sin escapar (traducir('Nuevo · reemplaza a "Usuarios con más bloqueos"')
+// es JS valido, pero al envolverlo en comillas dobles para el JSON.parse
+// revienta por la comilla doble suelta de adentro) -el catch silenciaba el
+// error y la clave se perdia del todo, sin figurar ni siquiera como
+// "faltante": el chequeo pasaba en verde con una traduccion realmente
+// faltante. Bug real, encontrado en vivo (2026-09-25) mientras se agregaba
+// justo un texto asi -y habia otro caso identico, ya en produccion, en
+// Categorias.tsx, que este chequeo nunca detecto por lo mismo.
 function unescapeJsString(raw) {
-  try {
-    return JSON.parse('"' + raw.replace(/\\'/g, "'") + '"')
-  } catch {
-    return null
-  }
+  return raw.replace(/\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)/gs, (entero, esc) => {
+    if (esc[0] === 'u' || esc[0] === 'x') {
+      try {
+        return JSON.parse('"\\' + esc + '"')
+      } catch {
+        return entero
+      }
+    }
+    const mapa = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', '0': '\0' }
+    return esc in mapa ? mapa[esc] : esc
+  })
 }
 
 // Busca traducir(...) y, si el primer argumento es un string literal
@@ -69,8 +86,7 @@ function extraerLlamadas(contenido) {
       claves.push(raw)
       continue
     }
-    const clave = quote === "'" ? unescapeJsString(raw) : JSON.parse('"' + raw + '"')
-    if (clave !== null) claves.push(clave)
+    claves.push(unescapeJsString(raw))
   }
   return { claves, dinamicas }
 }
