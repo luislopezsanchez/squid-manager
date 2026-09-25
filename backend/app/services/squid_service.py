@@ -832,3 +832,20 @@ def _apply_squid_config(db) -> dict:
 def get_squid_status() -> dict:
     """Obtiene el estado del servicio Squid."""
     return get_runtime().status()
+
+
+def start_squid() -> tuple[bool, str]:
+    """Arranca Squid si está caído -el botón "Iniciar Squid" del dashboard
+    cuando `get_squid_status()` reporta `running: False`.
+
+    No hay una operación "start" separada de "restart" en ninguno de los dos
+    runtimes (ver runtime/base.py: reconfigure/restart/status/apply_port, nada
+    más) -un `restart` sobre un servicio ya detenido lo arranca igual, así que
+    no hace falta una tercera primitiva en la interfaz solo para este caso.
+    """
+    ok, msg = get_runtime().restart()
+    if ok:
+        logger.info("Squid iniciado desde el dashboard")
+    else:
+        logger.error(f"Error iniciando Squid desde el dashboard: {msg}")
+    return ok, msg

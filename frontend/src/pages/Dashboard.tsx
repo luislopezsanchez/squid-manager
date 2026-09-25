@@ -1,7 +1,7 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo } from '../components/Icons'
+import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo, IconRefresh, IconShield, IconSearch } from '../components/Icons'
 import { api, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
@@ -36,6 +36,7 @@ interface DashboardData {
     http_codes: { '2xx': number; '3xx': number; '4xx': number; '5xx': number; 'other': number }
     active_ips: string[]
     active_users: string[]
+    active_users_detalle: { user: string; conectado_desde_segundos: number }[]
     cache_hits: number
     cache_misses: number
     cache_hit_ratio: number | null
@@ -47,10 +48,7 @@ interface DashboardData {
   top_users: { user: string; bytes: number; requests: number }[]
   top_domains: { domain: string; requests: number; bytes: number }[]
   top_blocked: { domain: string; requests: number; bytes: number }[]
-  top_blocked_users: {
-    users: { user: string; blocked_requests: number; account_status: 'enabled' | 'disabled' | 'unknown' }[]
-    anonymous_blocked: number
-  }
+  ips_compartidas: { ip: string; usuarios: string[]; requests: number }[]
   system: {
     cpu: { percent: number; load_1?: number; load_5?: number; load_15?: number }
     memory: { total: number; used: number; percent: number }
@@ -64,6 +62,7 @@ interface DashboardData {
   }[]
   squid_uptime: number | null
   quotas_en_riesgo: number
+  total_proxy_users: number
 }
 
 // monotonePath/niceCeilBytes se movieron a utils/chart.ts: Tendencias.tsx
@@ -178,6 +177,108 @@ function MultiGauge({ segments, total, label, detail, Icon }: {
   )
 }
 
+/** Umbral de color para un porcentaje de uso de sistema (CPU/RAM/Disco/SWAP):
+ * por encima de cierto uso el número deja de ser un dato neutro y pasa a ser
+ * un aviso -antes un 97% de disco se veía exactamente igual que un 10%, sin
+ * ninguna señal de que hiciera falta mirarlo. */
+function sysColor(pct: number): string {
+  if (pct >= 90) return 'var(--danger)'
+  if (pct >= 75) return 'var(--warn)'
+  return 'var(--ink-2)'
+}
+
+/** Una métrica de sistema del header (icono + valor + etiqueta), coloreada
+ * según sysColor -antes era JSX repetido 4 veces (CPU/RAM/Disco/SWAP) sin
+ * ningún umbral; sacarla a una función evita que el umbral se aplique
+ * distinto en una de las cuatro por copiar y pegar mal. */
+function SysMetric({ Icon, pct, label }: {
+  Icon: (p: { className?: string }) => JSX.Element; pct: number; label: string
+}) {
+  return (
+    <span className="flex items-center gap-1" style={{ color: sysColor(pct) }}>
+      <Icon className="w-3.5 h-3.5" />
+      <span className="font-bold tabular">{pct}%</span>
+      <span className="text-[10px]">{label}</span>
+    </span>
+  )
+}
+
+/** Anillo compacto para "% de usuarios conectados ahora" -mismo criterio
+ * visual que MultiGauge (arco redondeado sobre pista gris), pero más chico
+ * y de un solo segmento: acá no hace falta desglosar por color, solo dar
+ * una lectura rápida de qué proporción de las cuentas habilitadas está
+ * conectada en este momento. */
+function MiniDonut({ pct }: { pct: number }) {
+  // viewBox 0-100 (no px fijos): el tamaño real lo da el contenedor
+  // (w-full + aspect-square, ver donde se usa) -así aprovecha el alto que
+  // tenga disponible en vez de quedar un círculo chico con espacio en
+  // blanco alrededor, sin importar cuánto mida la columna a cada lado.
+  const radius = 42
+  const circumference = 2 * Math.PI * radius
+  const dash = (Math.min(Math.max(pct, 0), 100) / 100) * circumference
+  return (
+    // El % va como <text> del propio SVG (no un <span> superpuesto): así
+    // escala en conjunto con el círculo -en un HTML aparte, el tamaño de
+    // fuente no tiene de qué porcentaje tomar para seguirle el tamaño real
+    // al contenedor.
+    <div className="relative w-full aspect-square">
+      <svg viewBox="0 0 100 100" className="w-full h-full">
+        <g transform="rotate(-90 50 50)">
+          <circle cx="50" cy="50" r={radius} fill="none" stroke="var(--line-soft)" strokeWidth="9" />
+          <circle cx="50" cy="50" r={radius} fill="none" stroke="var(--ok)" strokeWidth="9"
+                  strokeLinecap="round" strokeDasharray={`${dash} ${circumference - dash}`}
+                  style={{ transition: 'stroke-dasharray .6s ease' }} />
+        </g>
+        <text x="50" y="52" textAnchor="middle" dominantBaseline="middle" fontSize="20" fontWeight="800" fill="var(--ink)" className="tabular">
+          {Math.round(pct)}%
+        </text>
+      </svg>
+    </div>
+  )
+}
+
+/** "Conectado desde hace X" de una fila de Usuarios conectados ahora -mismas
+ * claves de traducción que ya usa el eje temporal del gráfico de tráfico,
+ * para no duplicar "hace N segundos/minutos" con otra redacción. */
+function formatDesde(segundos: number): string {
+  if (segundos < 60) return traducir("Hace {n} s", { n: Math.round(segundos) })
+  const min = Math.round(segundos / 60)
+  if (min < 60) return traducir("Hace {n} min", { n: min })
+  const h = Math.floor(min / 60)
+  return traducir("Hace {n}h {m}m", { n: h, m: min % 60 })
+}
+
+/** Etiqueta flotante sobre el borde superior de un aviso, identificando de
+ * qué tipo es la notificación (Squid caído, anomalías) -antes las dos
+ * decían "Nuevo" sin distinguir "esto es solo informativo" de "esto es
+ * serio y hay que mirarlo ya". El color (`tone`) es lo que marca esa
+ * diferencia: "danger" para lo urgente, "warn" para lo que conviene
+ * revisar pronto.
+ *
+ * Se probó -y se descartó- usar la misma etiqueta como reemplazo del
+ * <h3> en las 13 tarjetas de contenido del dashboard: con una sola
+ * tarjeta se notaba, pero con todas repitiendo el mismo chip azul dejaba
+ * de leerse como una señal y competía con los datos en vez de acompañarlos
+ * -exactamente lo que se quería evitar (priorizar el gráfico sobre el
+ * texto). El tono "brand" queda definido por si en el futuro hace falta
+ * para otro aviso informativo, pero ninguna tarjeta de contenido debería
+ * volver a usar este componente. */
+function CardBadge({ text, tone = 'brand' }: { text: string; tone?: 'brand' | 'danger' | 'warn' }) {
+  const estilo = {
+    brand: { bg: 'var(--brand-700)', sombra: 'rgba(11,73,124,.6)' },
+    danger: { bg: 'var(--danger)', sombra: 'rgba(192,57,47,.6)' },
+    warn: { bg: 'var(--warn)', sombra: 'rgba(224,160,54,.6)' },
+  }[tone]
+  return (
+    <span
+      className="absolute -top-2 left-3 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wide text-white whitespace-nowrap z-10"
+      style={{ background: estilo.bg, boxShadow: `0 2px 6px -2px ${estilo.sombra}` }}
+    >
+      {text}
+    </span>
+  )
+}
+
 /** Formatea segundos de uptime como "Xd Yh Zm" o "Yh Zm" o "Zm". */
 function formatUptime(segundos: number | null | undefined): string {
   if (segundos == null || segundos < 0) return '—'
@@ -198,7 +299,20 @@ export default function Dashboard() {
   const [domainSort, setDomainSort] = useState<'bytes' | 'requests'>('requests')
   const [dirty, setDirty] = useState(false)
   const [applying, setApplying] = useState(false)
+  const [squidStatus, setSquidStatus] = useState<{ running: boolean } | null>(null)
+  const [startingSquid, setStartingSquid] = useState(false)
+  const [anomalias, setAnomalias] = useState<{ ts: number; asunto: string; mensaje: string }[]>([])
+  const [buscarConectado, setBuscarConectado] = useState('')
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // "Usuarios conectados ahora" toma este alto por JS, no por flexbox: con
+  // stretch normal, ambas tarjetas dependen una de la otra (Tráfico se
+  // estira para igualar a Usuarios si esta tiene muchos usuarios, aunque su
+  // propio contenido no llene ese alto) -un ida y vuelta que con solo
+  // min-h-0 no se corta del todo. Midiendo el alto real del gráfico y
+  // aplicándoselo directo a la otra tarjeta, manda una sola punta: la lista
+  // de usuarios escrolea adentro de lo que le toca, nunca al revés.
+  const trafficCardRef = useRef<HTMLDivElement>(null)
+  const [trafficCardHeight, setTrafficCardHeight] = useState<number | null>(null)
   const { showToast, ToastContainer } = useToast()
 
   const loadData = () => {
@@ -213,14 +327,14 @@ export default function Dashboard() {
       api.getTopUsers(10, '24h', 'bytes'),
       api.getTopDomains(10, false, '24h', domainSort),
       api.getTopDomains(10, true, '24h'),
-      api.getTopBlockedUsers(10, '24h'),
-    ]).then(([dash, users, domains, blocked, blockedUsers]) => {
+      api.getIpsCompartidas(4, '24h'),
+    ]).then(([dash, users, domains, blocked, compartidas]) => {
       setData({
         ...dash,
         top_users: users,
         top_domains: domains,
         top_blocked: blocked,
-        top_blocked_users: blockedUsers,
+        ips_compartidas: compartidas,
       })
       setLoadError(false)
     }).catch(e => {
@@ -234,6 +348,28 @@ export default function Dashboard() {
     // tráfico, y conviene poder refrescarlo también justo después de aplicar
     // sin esperar al siguiente ciclo de las métricas.
     api.getPending().then(r => setDirty(r.dirty)).catch(() => {})
+    // Estado real del servicio (systemctl/contenedor), no algo que se pueda
+    // inferir de las métricas: el access.log puede seguir teniendo tráfico
+    // "viejo" un rato después de que Squid se cae, así que solo esto dice de
+    // verdad si está corriendo ahora mismo.
+    api.getSquidStatus().then(setSquidStatus).catch(() => {})
+    // Anomalías ya notificadas por email/Telegram (ver anomaly_service.py):
+    // esto es para que se vean también acá, para quien no tiene esos canales
+    // configurados o no los revisa.
+    api.getAnomaliasRecientes(24, 5).then(setAnomalias).catch(() => {})
+  }
+
+  const handleStartSquid = async () => {
+    setStartingSquid(true)
+    try {
+      const result = await api.startSquid()
+      showToast(result.message, result.ok ? 'success' : 'warning')
+    } catch (e: any) {
+      showToast(e.message, 'error')
+    } finally {
+      setStartingSquid(false)
+      loadData()
+    }
   }
 
   const handleApply = async () => {
@@ -255,6 +391,26 @@ export default function Dashboard() {
       setApplying(false)
     }
   }
+
+  useEffect(() => {
+    const el = trafficCardRef.current
+    if (!el) return
+    // getBoundingClientRect(), no entries[0].contentRect: contentRect mide
+    // solo el área de contenido, SIN el padding (p-6 = 24px arriba y abajo)
+    // ni el borde -por eso la tarjeta de al lado quedaba ~50px más baja
+    // que "Tráfico" en vez de igualarla: se le estaba pasando la altura de
+    // adentro, no la altura real (de borde a borde) que hay que igualar.
+    const ro = new ResizeObserver(() => {
+      setTrafficCardHeight(el.getBoundingClientRect().height)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+    // !!data (no `data`) a propósito: `data` cambia de referencia en CADA
+    // sondeo de 5s, así que dependiendo de eso este efecto desconectaría y
+    // reconectaría el observer sin necesidad en cada refresco -solo hace
+    // falta re-engancharlo una vez, cuando el ref pasa de null (mientras
+    // carga) a existir de verdad (ya con la tarjeta montada).
+  }, [!!data])
 
   useEffect(() => {
     loadData()
@@ -284,6 +440,46 @@ export default function Dashboard() {
   const sparkTraffic = timeline.map(p => p.total_bytes)
   const sparkRequests = timeline.map(p => p.requests)
   const sparkConnections = timeline.map(p => p.connections)
+
+  // Lista de "Usuarios conectados ahora": active_users_detalle no siempre
+  // trae a TODOS los de active_users (el tracking en memoria de
+  // metrics_service recién arranca a contar desde que el dashboard empieza
+  // a sondear a alguien -ver _actualizar_conectados), así que a los que
+  // todavía no tienen detalle se los agrega igual, sin tiempo ("Recién").
+  // Del más reciente al más antiguo (el backend los da al revés, para otro
+  // uso): los que no tienen detalle todavía son, por definición, los más
+  // nuevos -van primero-, y el resto ordenado ascendente por segundos
+  // conectado (menos segundos = se conectó hace menos rato).
+  const conectadosDetalle = [
+    ...t.active_users
+      .filter(u => !t.active_users_detalle.some(d => d.user === u))
+      .map(user => ({ user, conectado_desde_segundos: null as number | null })),
+    ...[...t.active_users_detalle].sort((a, b) => a.conectado_desde_segundos - b.conectado_desde_segundos),
+  ]
+  const filtroConectados = buscarConectado.trim().toLowerCase()
+  const conectadosFiltrados = filtroConectados
+    ? conectadosDetalle.filter(d => d.user.toLowerCase().includes(filtroConectados))
+    : conectadosDetalle
+
+  // Cuántas filas entran sin scroll, según el alto real medido de "Tráfico"
+  // (ver ResizeObserver más arriba): la idea es "lo que no entra, con un
+  // aviso de que hay más" en vez de una barra de desplazamiento -que además
+  // acá afeaba la tarjeta más que ayudaba. Los números (header, buscador,
+  // alto de fila) son los mismos que ya define el JSX de abajo; si esos
+  // cambian, hay que actualizarlos acá también.
+  const ALTO_FILA_CONECTADO = 24
+  const filasQueEntran = trafficCardHeight
+    ? Math.max(1, Math.floor((trafficCardHeight - 32 - 28 - 8 - 30 - 8) / ALTO_FILA_CONECTADO))
+    : 6
+  const hayMasSinBuscar = !filtroConectados && conectadosDetalle.length > filasQueEntran
+  const conectadosAMostrar = filtroConectados
+    ? conectadosFiltrados
+    : conectadosDetalle.slice(0, hayMasSinBuscar ? filasQueEntran - 1 : filasQueEntran)
+  const ocultosSinBuscar = hayMasSinBuscar ? conectadosDetalle.length - (filasQueEntran - 1) : 0
+
+  const pctConectados = data.total_proxy_users > 0
+    ? (t.active_users.length / data.total_proxy_users) * 100
+    : 0
   // Los tramos sin peticiones cacheables llegan como null. Dibujarlos como 0
   // se ve como una caída real a "0% de aciertos", cuando en realidad no hubo
   // nada que cachear — así que se arrastra el último valor real conocido en
@@ -341,31 +537,15 @@ export default function Dashboard() {
               por-métrica: a este tamaño (14px) un círculo de progreso no se
               lee, así que se prioriza el número. */}
           <div className="flex items-center gap-2.5 text-ink-3 text-xs bg-line-soft border border-line rounded-full px-3 py-1.5">
-            <span className="flex items-center gap-1">
-              <IconBolt className="w-3.5 h-3.5" />
-              <span className="font-bold text-ink-2 tabular">{s.cpu.percent}%</span>
-              <span className="text-[10px]">CPU</span>
-            </span>
+            <SysMetric Icon={IconBolt} pct={s.cpu.percent} label="CPU" />
             <span className="w-px h-3.5 bg-line" />
-            <span className="flex items-center gap-1">
-              <IconActivity className="w-3.5 h-3.5" />
-              <span className="font-bold text-ink-2 tabular">{s.memory.percent}%</span>
-              <span className="text-[10px]">RAM</span>
-            </span>
+            <SysMetric Icon={IconActivity} pct={s.memory.percent} label="RAM" />
             <span className="w-px h-3.5 bg-line" />
-            <span className="flex items-center gap-1">
-              <IconBackup className="w-3.5 h-3.5" />
-              <span className="font-bold text-ink-2 tabular">{s.disk.percent}%</span>
-              <span className="text-[10px]">{traducir("Disco")}</span>
-            </span>
+            <SysMetric Icon={IconBackup} pct={s.disk.percent} label={traducir("Disco")} />
             {s.swap && s.swap.total > 0 && (
               <>
                 <span className="w-px h-3.5 bg-line" />
-                <span className="flex items-center gap-1">
-                  <IconActivity className="w-3.5 h-3.5" />
-                  <span className="font-bold text-ink-2 tabular">{s.swap.percent}%</span>
-                  <span className="text-[10px]">SWAP</span>
-                </span>
+                <SysMetric Icon={IconActivity} pct={s.swap.percent} label="SWAP" />
               </>
             )}
             <span className="w-px h-3.5 bg-line" />
@@ -389,6 +569,58 @@ export default function Dashboard() {
             />{traducir("Auto-actualizar (5s)")}</label>
         </div>
       </div>
+
+      {/* Aviso de Squid caído: el más urgente posible -si el proxy no está
+          corriendo, nadie navega, sin importar qué digan las demás métricas.
+          Va primero, antes que cualquier otro aviso. */}
+      {squidStatus && !squidStatus.running && (
+        <div className="relative card p-4 mt-2 mb-6 flex items-center gap-3 border"
+             style={{ borderColor: 'var(--danger)', background: 'var(--danger-soft)' }}>
+          <CardBadge text={traducir('Alerta crítica')} tone="danger" />
+          <span className="stat-icon flex-none" style={{ background: 'transparent', color: 'var(--danger)' }}>
+            <IconAlert />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--danger)' }}>{traducir("Squid no está respondiendo")}</p>
+            <p className="text-xs text-ink-2">{traducir("El servicio del proxy está detenido: nadie puede navegar a través de él mientras tanto.")}</p>
+          </div>
+          {canWrite() && (
+            <button
+              onClick={handleStartSquid}
+              disabled={startingSquid}
+              className="flex-none flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white transition disabled:opacity-60"
+              style={{ background: 'var(--danger)' }}
+            >
+              <IconRefresh className="w-4 h-4" />
+              {startingSquid ? traducir('Iniciando…') : traducir('Iniciar Squid')}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Aviso de anomalías: lo mismo que ya se manda por email/Telegram si
+          esos canales están configurados (ver anomaly_service.py), para que
+          también se note acá sin depender de revisar el correo. */}
+      {anomalias.length > 0 && (
+        <div className="relative card p-4 mt-2 mb-6 flex items-center gap-3 border"
+             style={{ borderColor: 'var(--warn)', background: 'var(--warn-soft)' }}>
+          <CardBadge text={traducir('Alerta de seguridad')} tone="warn" />
+          <span className="stat-icon flex-none" style={{ background: 'transparent', color: 'var(--warn)' }}>
+            <IconAlert />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--warn)' }}>
+              {anomalias.length === 1
+                ? traducir("1 anomalía detectada recientemente")
+                : traducir("{n} anomalías detectadas recientemente", { n: anomalias.length })}
+            </p>
+            <p className="text-xs text-ink-2 truncate">
+              {anomalias[0].mensaje}
+              {anomalias.length > 1 && ` ${traducir("+ {n} más", { n: anomalias.length - 1 })}`}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Aviso de refresco fallido: si ya había datos en pantalla, un fallo
           puntual (red, timeout) no debe tirar todo el dashboard -se sigue
@@ -656,16 +888,22 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Tráfico de red en tiempo real: ancho completo.
-          Antes compartía esta fila con la tarjeta "Sistema" (CPU/RAM/Disco/
-          SWAP). Esa tarjeta se sacó de acá: sus datos ahora viven de forma
-          permanente en el header, junto a "EN VIVO" (ver más arriba) -en
-          cualquier resolución, no solo en las angostas. El espacio que
-          liberó queda pendiente: cuando se implementen las mejoras de
-          Análisis, conviene revisar qué KPI de esa sección tiene sentido
-          traer acá, al lado del gráfico, en vez de dejarlo vacío para
-          siempre. */}
-      <div className="card p-6 flex flex-col mb-6">
+      {/* Tráfico de red en tiempo real + columna nueva a la derecha.
+          Antes esta tarjeta ocupaba todo el ancho -compartía la fila con
+          "Sistema" (CPU/RAM/Disco/SWAP), que se sacó de acá y ahora vive de
+          forma permanente en el header (ver más arriba). El espacio que
+          liberó se repartió entre el gráfico (que ya no necesita todo el
+          ancho para leerse bien) y dos tarjetas que antes se pedían y
+          nunca se mostraban en ningún lado: usuarios conectados ahora mismo
+          y latencia/ahorro por caché. */}
+      {/* lg (1024px), no xl (1280px): a xl estas dos tarjetas se apilaban
+          en una laptop de 19" con la ventana no maximizada -bastante
+          común-, cuando de sobra entran una al lado de la otra achicando
+          un poco cada una (el resto de la fila de abajo ya usa este mismo
+          corte para "2 columnas en vez de 1", ver el grid de Top
+          usuarios/sitios más abajo). */}
+      <div className="flex flex-col lg:flex-row gap-4 mb-6">
+      <div ref={trafficCardRef} className="card p-6 flex flex-col lg:flex-[1.6] min-w-0">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-1.5">
               <h3 className="font-medium text-ink">{traducir("Tráfico de red en tiempo real")}</h3>
@@ -772,8 +1010,111 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Usuarios conectados ahora: reusa active_users/active_users_detalle
+            que /panel/dashboard ya traía en cada ciclo de 5s y que hasta
+            ahora se pedían y se descartaban sin mostrarse en ningún lado.
+            La tarjeta "Rendimiento" (latencia/caché) que vivía acá al lado
+            se sacó del dashboard -esos datos ya tienen su propia pantalla
+            en Análisis → Latencia y errores, y esta es la tarjeta
+            importante de verdad en una empresa con muchos usuarios
+            habituales: mejor que se quede con todo el alto disponible. */}
+        <div className="flex flex-col gap-4 lg:flex-1 lg:min-w-[280px] min-h-0">
+          {/* min-h-0 en este contenedor (y en la tarjeta y filas de abajo)
+              es lo que de verdad fija el alto: sin él, un div normal se
+              niega a encogerse por debajo del alto natural de su
+              contenido -acá, la lista de usuarios sin recortar-, y ESE
+              alto inflado es el que la fila de más arriba (align-items:
+              stretch por defecto) le contagiaba de vuelta a "Tráfico de
+              red en tiempo real", agrandándola también aunque su propio
+              contenido no llenara ese espacio. Con la cadena de min-h-0
+              cerrada de punta a punta, quien manda es el contenido de
+              Tráfico (fijo, no depende de cuántos usuarios haya conectados)
+              y esta tarjeta se ajusta a lo que le sobra, con scroll interno
+              en la lista en vez de crecer. */}
+          <div
+            className="card p-4 flex flex-col gap-2 min-h-0 overflow-hidden"
+            style={trafficCardHeight ? { height: trafficCardHeight } : undefined}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium text-ink text-sm">{traducir("Usuarios conectados ahora")}</h3>
+              <span className="pill-ok px-2 py-0.5 rounded-full text-[10px] font-bold">
+                {traducir("{n} en línea", { n: t.active_users.length })}
+              </span>
+            </div>
 
-      {/* Top usuarios + Top dominios + Top bloqueados + Top usuarios bloqueados */}
+            {/* Buscador: en una empresa con cientos de usuarios habituales,
+                la lista completa no sirve para responder rápido "¿fulano
+                está conectado ahora?" -este filtro sí. Filtra por coincidencia
+                parcial del nombre, sin distinguir mayúsculas. */}
+            <div className="relative flex-none">
+              <IconSearch className="w-3.5 h-3.5 text-ink-3 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={buscarConectado}
+                onChange={e => setBuscarConectado(e.target.value)}
+                placeholder={traducir("Buscar usuario conectado...")}
+                className="input w-full pl-8 pr-2 py-1 text-xs"
+              />
+            </div>
+
+            <div className="flex flex-1 min-h-0 gap-4">
+              {/* Sin scroll a propósito -afeaba más de lo que ayudaba-: se
+                  muestran solo las filas que entran de verdad en el alto
+                  disponible (filasQueEntran, calculado más arriba a partir
+                  del alto real de "Tráfico"), de la conexión más reciente a
+                  la más vieja, con un aviso de cuántas quedan afuera. El
+                  buscador sigue filtrando sobre la lista COMPLETA
+                  (conectadosFiltrados), no solo sobre lo visible -para eso
+                  está, para encontrar a alguien que no entra en el top. */}
+              <div className="flex flex-col gap-2 flex-1 min-w-0 overflow-hidden">
+                {conectadosAMostrar.length === 0 ? (
+                  <p className="text-xs text-ink-3">
+                    {filtroConectados
+                      ? traducir("«{q}» no está conectado ahora", { q: buscarConectado })
+                      : traducir("Nadie autenticado en este momento")}
+                  </p>
+                ) : conectadosAMostrar.map(d => (
+                  <div key={d.user} className="flex items-center gap-2 text-xs text-ink-2 flex-none">
+                    <span className="w-1.5 h-1.5 rounded-full flex-none animate-pulse" style={{ background: 'var(--ok)' }} />
+                    {/* Nombre con flex-1 (no un maxWidth fijo): reparte todo
+                        el ancho de la fila entre el nombre y la hora, que
+                        queda pegada al final -contra el separador del
+                        anillo-, en vez de los dos apretados a la izquierda
+                        dejando un hueco vacío antes del gráfico. */}
+                    <span className="font-medium truncate flex-1 min-w-0">{d.user}</span>
+                    <span className="text-[10.5px] text-ink-3 flex-none tabular">
+                      {d.conectado_desde_segundos != null ? formatDesde(d.conectado_desde_segundos) : traducir("Recién")}
+                    </span>
+                  </div>
+                ))}
+                {ocultosSinBuscar > 0 && (
+                  <p className="text-[11px] text-ink-3 flex-none">
+                    {traducir("+ {n} más — buscalos arriba", { n: ocultosSinBuscar })}
+                  </p>
+                )}
+              </div>
+
+              {/* Anillo de % conectados vs. cuentas habilitadas: solo con
+                  ancho de sobra (2xl+, monitor grande) -es el mismo espacio
+                  que antes quedaba vacío a la derecha de cada fila. En
+                  pantallas más chicas se prioriza que la lista y el
+                  buscador tengan todo el ancho para sí. w-[150px] (en vez
+                  del ancho angosto que tenía antes, apenas el del círculo
+                  chico de 60px) es lo que le da a MiniDonut margen real
+                  para crecer -w-full ahí adentro escala con esto, no con
+                  un tamaño fijo en píxeles. */}
+              <div className="hidden 2xl:flex flex-col items-center justify-center flex-none w-[150px] border-l border-line-soft pl-5 gap-2">
+                <MiniDonut pct={pctConectados} />
+                <span className="text-[10.5px] text-ink-3 text-center tabular leading-tight w-full">
+                  {traducir("{n} de {total} habilitados", { n: t.active_users.length, total: data.total_proxy_users })}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Top usuarios + Top dominios + Top bloqueados + Cuentas en un mismo equipo */}
       <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 gap-4 mb-6">
         <div className="card p-6">
           <div className="flex items-baseline justify-between mb-1">
@@ -903,56 +1244,40 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Complementa a "Top sitios bloqueados": esa dice QUÉ se bloquea,
-            esta dice QUIÉN choca más con la política.
-
-            Ojo con el nombre: esto cuenta PETICIONES DENEGADAS (407/403), no
-            "cuentas bloqueadas". Son cosas distintas que comparten la palabra
-            "bloqueado" por casualidad del idioma — una petición puede
-            denegarse por credenciales viejas cacheadas en el navegador o por
-            una política de grupo, sin que la cuenta esté deshabilitada. Por
-            eso cada fila lleva una insignia con el estado REAL de la cuenta,
-            cruzado contra Usuarios, para no dejar la duda. */}
-        <div className="card p-6">
+        {/* Reemplaza a "Usuarios con más peticiones denegadas": mismo dato
+            que ya se armó para la pestaña "IPs compartidas" de Actividad de
+            red (get_ips_compartidas), acá solo el top 4 con link a la vista
+            completa -es una señal de seguridad real (cuenta compartida,
+            credenciales que circulan), no otro ranking de bloqueos más. */}
+        <div className="card p-6 flex flex-col">
           <div className="flex items-baseline justify-between mb-1">
             <div className="flex items-center gap-1.5">
-              <h3 className="font-medium text-ink">{traducir("Usuarios con más peticiones denegadas")}</h3>
-              <InfoTip text={traducir("Quién insiste más contra la política. Unos pocos bloqueos son ruido normal (un enlace viejo, una redirección). Una cifra alta y sostenida de la misma persona sí amerita revisar su acceso. No implica que la cuenta esté deshabilitada: las denegaciones pueden ser por credenciales viejas o por política de grupo.")} />
+              <IconShield className="w-4 h-4 text-ink-3" />
+              <h3 className="font-medium text-ink">{traducir("Cuentas en un mismo equipo")}</h3>
+              <InfoTip text={traducir("Direcciones IP desde las que navegó más de un usuario autenticado distinto. No es un veredicto -puede ser un equipo compartido de verdad-, pero es una señal que vale la pena revisar: credenciales que circulan entre personas se ven así.")} />
             </div>
           </div>
-          <p className="text-[11px] text-ink-3 mb-4">{traducir("Últimas 24 horas · no implica que la cuenta esté deshabilitada")}</p>
-          {data.top_blocked_users.users.length === 0 ? (
-            <p className="text-sm text-ink-3">{traducir("Sin peticiones denegadas")}</p>
+          <p className="text-[11px] text-ink-3 mb-4">{traducir("Mismo equipo (IP), más de una cuenta autenticada · últimas 24 horas")}</p>
+          {data.ips_compartidas.length === 0 ? (
+            <p className="text-sm text-ink-3">{traducir("No se detectaron IPs con más de un usuario en esta ventana.")}</p>
           ) : (
-            <div className="space-y-2">
-              {data.top_blocked_users.users.map((u, i) => (
-                <div key={i} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-5 h-5 rounded-full text-xs flex items-center justify-center text-white bg-red-500 flex-none">{i + 1}</span>
-                    <span className="font-medium truncate">{u.user}</span>
-                    {u.account_status === 'disabled' && (
-                      <span className="pill-danger px-1.5 py-0.5 text-[10px] font-semibold rounded-full flex-none"
-                            title={traducir("La cuenta está deshabilitada en Usuarios: por eso no navega, no solo por estos intentos")}>{traducir("cuenta deshabilitada")}</span>
-                    )}
+            <div className="space-y-3 flex-1">
+              {data.ips_compartidas.map((row, i) => (
+                <div key={row.ip} className="flex items-center justify-between text-sm gap-2">
+                  <div className="min-w-0">
+                    <span className="font-mono text-xs text-ink-2">{row.ip}</span>
+                    <p className="text-[11px] text-ink-3 truncate">{row.usuarios.join(', ')}</p>
                   </div>
-                  <span className="text-xs text-ink-3 ml-2 tabular flex-none">{u.blocked_requests}x</span>
+                  <span className="pill-warn px-2 py-0.5 rounded-full text-[10px] font-bold flex-none">
+                    {traducir("{n} cuentas", { n: row.usuarios.length })}
+                  </span>
                 </div>
               ))}
             </div>
           )}
-          {/* La mayoría de los bloqueos suele venir de tráfico de fondo del
-              navegador (telemetría, sondas de conectividad) que nunca manda
-              credenciales — sin esta línea, la diferencia con "Top sitios
-              bloqueados" se lee como que esta tarjeta está mal, no como lo
-              que es: la mayoría de esos bloqueos no tiene usuario. */}
-          {data.top_blocked_users.anonymous_blocked > 0 && (
-            <p className="text-[11px] text-ink-3 mt-3 pt-3 border-t border-line-soft">
-              {traducir(
-                "+ {n} bloqueos sin usuario identificado (tráfico de fondo del navegador, sin credenciales)",
-                { n: data.top_blocked_users.anonymous_blocked },
-              )}
-            </p>
-          )}
+          <Link to="/reportes/actividad" className="text-[11px] font-semibold mt-3 pt-3 border-t border-line-soft" style={{ color: 'var(--brand-700)' }}>
+            {traducir("Ver todas en Actividad de red →")}
+          </Link>
         </div>
       </div>
 

@@ -18,7 +18,7 @@ from app.models.squid_settings import SquidSetting
 from app.models.audit_log import AuditLog
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_generator import generate_squid_config
-from app.services.squid_service import reload_squid, get_squid_status, restart_squid, write_ldap_aux_files, apply_squid_config
+from app.services.squid_service import reload_squid, get_squid_status, restart_squid, start_squid, write_ldap_aux_files, apply_squid_config
 from app.services.notification_service import queue_notification
 from app.services.config_state import mark_dirty, mark_clean, is_dirty
 from app.config import settings
@@ -273,6 +273,33 @@ def test_dns(
 def get_status(_: Admin = Depends(get_current_admin)):
     """Estado del servicio Squid."""
     return get_squid_status()
+
+
+@router.post("/start")
+async def start(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_writer),
+    background_tasks: BackgroundTasks = None,
+):
+    """Arranca Squid -botón "Iniciar Squid" del aviso del dashboard cuando el
+    servicio está caído. `get_runtime().restart()` es bloqueante (systemctl o
+    recreación del contenedor): al threadpool, mismo motivo que /apply."""
+    ok, mensaje = await run_in_threadpool(start_squid)
+    if not ok:
+        return {"ok": False, "message": mensaje}
+
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="start", entity="squid_config", new_value="Squid iniciado desde el dashboard",
+    ))
+    db.commit()
+
+    if background_tasks:
+        queue_notification(background_tasks, db, "apply",
+                           "Squid iniciado",
+                           f"El admin {current_admin.username} inició Squid desde el dashboard.")
+
+    return {"ok": True, "message": mensaje}
 
 
 @router.get("/preview")

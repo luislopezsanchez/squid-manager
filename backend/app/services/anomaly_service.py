@@ -59,6 +59,12 @@ _historial_bytes: deque[float] = deque(maxlen=12)
 # f"{regla}:{entidad}" -> timestamp de la última vez que se avisó.
 _ultima_alerta: dict[str, float] = {}
 
+# Últimas anomalías que de verdad se notificaron (no cada tick: solo cuando
+# _aplicar_cooldown las deja pasar) -lo que consulta el aviso del dashboard,
+# para quien no tiene email/Telegram configurado (o no los revisa) también
+# vea que algo se detectó, sin tener que sumar una tabla en la BD para esto.
+_historial: deque[dict] = deque(maxlen=50)
+
 
 def _formatear_bytes(n: float) -> str:
     for unidad in ("B", "KB", "MB", "GB", "TB"):
@@ -146,8 +152,18 @@ def _tick() -> None:
         for clave, asunto, mensaje in pendientes:
             logger.warning(f"Anomalía detectada ({clave}): {mensaje}")
             notify_now(db, "security_alert", asunto, mensaje)
+            _historial.append({"ts": ahora, "clave": clave, "asunto": asunto, "mensaje": mensaje})
     finally:
         db.close()
+
+
+def get_anomalias_recientes(horas: float = 24, limit: int = 20) -> list[dict]:
+    """Anomalías notificadas dentro de las últimas `horas` -lo que muestra el
+    aviso del dashboard. Ordenadas de la más nueva a la más vieja."""
+    corte = time.time() - horas * 3600
+    recientes = [a for a in _historial if a["ts"] >= corte]
+    recientes.sort(key=lambda a: a["ts"], reverse=True)
+    return recientes[:limit]
 
 
 def _loop() -> None:

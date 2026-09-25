@@ -137,3 +137,47 @@ def test_tick_no_repite_la_misma_alerta_en_el_siguiente_tick(monkeypatch):
     asvc._tick()
 
     assert len(llamadas) == 1
+
+
+def test_tick_agrega_al_historial_lo_que_notifica(monkeypatch):
+    entries = [_entrada(ip="4.4.4.4", status=407) for _ in range(asvc._UMBRAL_AUTH_FALLIDA)]
+    monkeypatch.setattr(asvc, "get_recent_entries", lambda seconds: entries)
+    monkeypatch.setattr(asvc, "_historial_bytes", asvc._historial_bytes.__class__(maxlen=12))
+    monkeypatch.setattr(asvc, "_ultima_alerta", {})
+    monkeypatch.setattr(asvc, "_historial", asvc._historial.__class__(maxlen=50))
+    monkeypatch.setattr(asvc, "notify_now", lambda db, event_type, subject, message: None)
+
+    asvc._tick()
+
+    recientes = asvc.get_anomalias_recientes()
+    assert len(recientes) == 1
+    assert "4.4.4.4" in recientes[0]["mensaje"]
+
+
+# --- get_anomalias_recientes -------------------------------------------------
+
+def test_get_anomalias_recientes_filtra_por_antiguedad(monkeypatch):
+    ahora = 1_000_000.0
+    monkeypatch.setattr(asvc.time, "time", lambda: ahora)
+    monkeypatch.setattr(asvc, "_historial", asvc._historial.__class__([
+        {"ts": ahora - 3600, "clave": "a", "asunto": "reciente", "mensaje": "hace 1h"},
+        {"ts": ahora - 90000, "clave": "b", "asunto": "vieja", "mensaje": "hace 25h"},
+    ], maxlen=50))
+
+    recientes = asvc.get_anomalias_recientes(horas=24)
+
+    assert len(recientes) == 1
+    assert recientes[0]["asunto"] == "reciente"
+
+
+def test_get_anomalias_recientes_ordena_de_la_mas_nueva_a_la_mas_vieja(monkeypatch):
+    ahora = 1_000_000.0
+    monkeypatch.setattr(asvc.time, "time", lambda: ahora)
+    monkeypatch.setattr(asvc, "_historial", asvc._historial.__class__([
+        {"ts": ahora - 500, "clave": "a", "asunto": "vieja", "mensaje": "..."},
+        {"ts": ahora - 10, "clave": "b", "asunto": "nueva", "mensaje": "..."},
+    ], maxlen=50))
+
+    recientes = asvc.get_anomalias_recientes()
+
+    assert [r["asunto"] for r in recientes] == ["nueva", "vieja"]
