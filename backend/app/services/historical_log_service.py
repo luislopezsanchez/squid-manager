@@ -16,9 +16,11 @@ concreto, bajo demanda, nunca en un polling.
 import gzip
 import json
 import logging
+import subprocess
 from pathlib import Path
 
 from app.services.log_service import parse_line
+from app.services.runtime.native_runtime import _sudo_prefix
 
 
 def _matches(entry: dict, user, status, domain, ip, denied_only) -> bool:
@@ -93,6 +95,49 @@ def list_months() -> list[dict]:
 
 def _mes_dir(year: int, month: int) -> Path:
     return HISTORICAL_DIR / str(year) / f"{month:02d}"
+
+
+# Script privilegiado que hace el borrado de verdad (ver ese archivo): este
+# backend corre sin permiso de escritura en /var/log/squid a propósito (ver
+# backend/entrypoint.sh), así que un shutil.rmtree() directo acá fallaría con
+# PermissionError contra una instalación real -no es un detalle de
+# configuración de un entorno en particular, es la misma razón por la que
+# reconfigurar/reiniciar Squid tampoco se hace directo, más abajo en
+# runtime/native_runtime.py.
+_SCRIPT_BORRADO = "/usr/local/lib/squidmanager/delete_historical_month.sh"
+
+
+def delete_month(year: int, month: int) -> bool:
+    """Borra un mes histórico entero (el .gz consolidado, su index.json y el
+    directorio AAAA/MM) desde el panel. False si ese mes no existe.
+
+    El borrado en sí -incluido el criterio de retirar también el directorio
+    AAAA si se queda sin meses, igual que la purga por retención de
+    consolidate-monthly-logs.sh- vive en _SCRIPT_BORRADO, no acá: ver el
+    comentario de arriba sobre por qué este proceso no puede escribir ahí
+    directamente.
+    """
+    if not _mes_dir(year, month).is_dir():
+        return False
+
+    try:
+        resultado = subprocess.run(
+            _sudo_prefix() + [_SCRIPT_BORRADO, str(year), f"{month:02d}"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except FileNotFoundError:
+        # sudo no está instalado (imagen mínima de Docker, por ejemplo): un
+        # mensaje claro de "esto no está soportado en este modo todavía" es
+        # mejor que dejar subir un FileNotFoundError crudo hasta el panel.
+        raise RuntimeError(
+            "El borrado de logs históricos no está disponible en esta instalación "
+            "(falta sudo o el script privilegiado -ver instalación nativa vs. Docker)."
+        )
+    if resultado.returncode != 0:
+        raise RuntimeError(
+            f"No se pudo borrar el log histórico de {year}-{month:02d}: {resultado.stderr.strip()}"
+        )
+    return True
 
 
 def get_month_index(year: int, month: int) -> dict | None:

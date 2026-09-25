@@ -113,6 +113,62 @@ def test_iter_historical_lines_respeta_filtros(mes_de_prueba):
     assert len(entradas) == 2
 
 
+def test_delete_month_invoca_el_script_privilegiado_con_mes_de_2_digitos(mes_de_prueba, monkeypatch):
+    """El borrado en sí lo hace _SCRIPT_BORRADO vía sudo, no este proceso
+    directo -ver el comentario junto a delete_month(): el backend corre sin
+    permiso de escritura en /var/log/squid a propósito."""
+    llamadas = []
+
+    def _run_falso(cmd, **kwargs):
+        llamadas.append(cmd)
+        class Resultado:
+            returncode = 0
+            stderr = ""
+        return Resultado()
+
+    monkeypatch.setattr(hls.subprocess, "run", _run_falso)
+    monkeypatch.setattr(hls, "_sudo_prefix", lambda: ["sudo", "-n"])
+
+    assert hls.delete_month(2026, 3) is True
+    assert len(llamadas) == 1
+    assert llamadas[0] == ["sudo", "-n", hls._SCRIPT_BORRADO, "2026", "03"]
+
+
+def test_delete_month_mes_inexistente_no_llega_a_invocar_el_script(tmp_path, monkeypatch):
+    monkeypatch.setattr(hls, "HISTORICAL_DIR", tmp_path)
+    llamado = []
+    monkeypatch.setattr(hls.subprocess, "run", lambda *a, **k: llamado.append(1))
+
+    assert hls.delete_month(2020, 1) is False
+    assert llamado == []
+
+
+def test_delete_month_da_un_mensaje_claro_si_no_hay_sudo(mes_de_prueba, monkeypatch):
+    """P. ej. una imagen Docker mínima sin sudo instalado: mejor un mensaje
+    explícito que un FileNotFoundError crudo subiendo hasta el panel."""
+    def _run_sin_sudo(cmd, **kwargs):
+        raise FileNotFoundError("sudo")
+
+    monkeypatch.setattr(hls.subprocess, "run", _run_sin_sudo)
+
+    with pytest.raises(RuntimeError, match="no está disponible en esta instalación"):
+        hls.delete_month(2026, 3)
+
+
+def test_delete_month_propaga_el_error_si_el_script_falla(mes_de_prueba, monkeypatch):
+    """Un sudoers sin configurar (o roto) no debe reportarse como éxito."""
+    def _run_falso(cmd, **kwargs):
+        class Resultado:
+            returncode = 1
+            stderr = "sudo: a password is required"
+        return Resultado()
+
+    monkeypatch.setattr(hls.subprocess, "run", _run_falso)
+
+    with pytest.raises(RuntimeError, match="a password is required"):
+        hls.delete_month(2026, 3)
+
+
 def test_no_importa_nada_de_log_service_mas_alla_de_parse_line():
     """La separación entre capa activa e histórica es el punto central del
     diseño: si este módulo empieza a importar caché, TTLs o el path del

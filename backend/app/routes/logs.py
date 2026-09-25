@@ -12,10 +12,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.admin import Admin
-from app.services.auth_service import get_current_admin
+from app.models.audit_log import AuditLog
+from app.services.auth_service import get_current_admin, require_writer
 from app.services.log_service import get_logs, get_log_stats, get_recent_entries
 from app.services.historical_log_service import (
     list_months, get_month_index, get_historical_entries, iter_historical_lines,
+    delete_month,
 )
 
 router = APIRouter()
@@ -178,6 +180,37 @@ async def historical_month_summary(
         from fastapi import HTTPException
         raise HTTPException(404, detail=f"No hay log consolidado para {year}-{month:02d}")
     return indice
+
+
+@router.delete("/historical/{year}/{month}")
+async def historical_delete(
+    year: int, month: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_writer),
+):
+    """Borra un mes histórico entero -irreversible, por eso require_writer
+    (un viewer no puede) y queda en Auditoría: es historial de navegación
+    real, el dato más sensible que maneja el proyecto (ver docs/production.md)."""
+    from fastapi import HTTPException
+
+    try:
+        borrado = await run_in_threadpool(delete_month, year, month)
+    except RuntimeError as e:
+        # El script privilegiado falló (sudoers no configurado, permisos
+        # rotos en el filesystem, etc.): un 502 -"la parte de atrás no
+        # respondió bien"- describe mejor esto que un 500 genérico, y el
+        # detail trae el motivo real para no dejar al admin adivinando.
+        raise HTTPException(502, detail=str(e))
+    if not borrado:
+        raise HTTPException(404, detail=f"No hay log consolidado para {year}-{month:02d}")
+
+    db.add(AuditLog(
+        admin_id=current_admin.id, admin_username=current_admin.username,
+        action="delete", entity="historical_log", old_value=f"{year}-{month:02d}",
+    ))
+    db.commit()
+
+    return {"ok": True, "message": f"Log histórico de {year}-{month:02d} eliminado"}
 
 
 @router.get("/historical/{year}/{month}/entries")

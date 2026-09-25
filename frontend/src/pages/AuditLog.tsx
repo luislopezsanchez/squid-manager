@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
+import { IconChevronLeft, IconChevronRight } from '../components/Icons'
 
 interface AuditEntry {
   id: number
@@ -52,10 +53,12 @@ export default function AuditLog() {
   const [filterEntity, setFilterEntity] = useState('')
   const [filterAction, setFilterAction] = useState('')
   const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const limit = 50
   const { showToast, ToastContainer } = useToast()
 
   const loadAudit = () => {
-    let url = `/audit/?limit=100`
+    let url = `/audit/?limit=${limit}&offset=${offset}`
     if (filterEntity) url += `&entity=${filterEntity}`
     if (filterAction) url += `&action=${filterAction}`
     api.request(url).then((data: any) => {
@@ -68,7 +71,13 @@ export default function AuditLog() {
     api.auditStats().then(setStats).catch(console.error)
   }
 
-  useEffect(() => { loadAudit() }, [filterEntity, filterAction])
+  useEffect(() => { loadAudit() }, [filterEntity, filterAction, offset])
+
+  // Un filtro nuevo vuelve siempre a la primera página: si no, cambiar de
+  // entidad/acción con offset>0 podía dejar la vista mostrando "página 3"
+  // de un resultado filtrado que capaz ni llega a esa página.
+  const handleFilterEntity = (v: string) => { setFilterEntity(v); setOffset(0) }
+  const handleFilterAction = (v: string) => { setFilterAction(v); setOffset(0) }
 
   return (
     <div className="p-6 md:p-7">
@@ -108,7 +117,7 @@ export default function AuditLog() {
 
       {/* Filtros */}
       <div className="flex gap-4 mb-6">
-        <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)}
+        <select value={filterEntity} onChange={e => handleFilterEntity(e.target.value)}
           className="px-4 py-2 border border-line rounded-lg bg-white text-sm">
           <option value="">{traducir("Todas las entidades")}</option>
           <option value="proxy_user">{traducir("Usuarios del Proxy")}</option>
@@ -122,7 +131,7 @@ export default function AuditLog() {
           <option value="backup">{traducir("Backup")}</option>
           <option value="squid_conf">{traducir("Configuración de Squid")}</option>
         </select>
-        <select value={filterAction} onChange={e => setFilterAction(e.target.value)}
+        <select value={filterAction} onChange={e => handleFilterAction(e.target.value)}
           className="px-4 py-2 border border-line rounded-lg bg-white text-sm">
           <option value="">{traducir("Todas las acciones")}</option>
           <option value="create">{traducir("Crear")}</option>
@@ -183,11 +192,24 @@ export default function AuditLog() {
               )}
             </tbody>
           </table>
-          {total > 100 && (
-            <div className="p-4 text-center text-sm text-ink-3 border-t border-line-soft">
-              Mostrando 100 de {total} registros
-            </div>
-          )}
+        </div>
+      )}
+
+      {!loading && total > 0 && (
+        <div className="flex items-center justify-between mt-4 text-sm">
+          <span className="text-ink-3">
+            {traducir("Mostrando")} {offset + 1}–{Math.min(offset + limit, total)} {traducir("de")} {total}
+          </span>
+          <div className="flex gap-2">
+            <button onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}
+              className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5">
+              <IconChevronLeft className="w-3.5 h-3.5" />{traducir("Anterior")}
+            </button>
+            <button onClick={() => setOffset(offset + limit)} disabled={offset + limit >= total}
+              className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5">
+              {traducir("Siguiente")}<IconChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
     </div>

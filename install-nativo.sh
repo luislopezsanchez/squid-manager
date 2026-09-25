@@ -603,6 +603,14 @@ install -o root -g root -m 755 "$INSTALL_DIR/squid/consolidate-monthly-logs.sh" 
 mkdir -p /usr/local/lib/squidmanager
 install -o root -g root -m 755 "$INSTALL_DIR/squid/build_monthly_index.py" \
     /usr/local/lib/squidmanager/build_monthly_index.py
+
+# Borrado de un mes historico desde el panel (boton "eliminar" en la pantalla
+# de Historico): el backend corre sin permiso de escritura en
+# /var/log/squid a proposito (ver backend/entrypoint.sh), asi que esto se
+# hace via sudo -n contra un script angosto y validado, no con un rm directo
+# del propio backend. Mismo directorio que el indexador de arriba.
+install -o root -g root -m 755 "$INSTALL_DIR/squid/delete_historical_month.sh" \
+    /usr/local/lib/squidmanager/delete_historical_month.sh
 ok "Consolidacion mensual de logs archivados configurada"
 
 # ============================================
@@ -630,10 +638,14 @@ ${APP_USER} ALL=(root) NOPASSWD: /usr/sbin/conntrack -D -s *
 # dejo- se fija esa condicion. Sin argumentos: no hay forma de pedirle otra
 # cosa distinta de "revisa ahora".
 ${APP_USER} ALL=(root) NOPASSWD: /usr/local/lib/squidmanager/autoupdate-check.sh
+# Borrado de un mes historico de logs (ver el script: valida year/month antes
+# de tocar nada, y confirma que la ruta resuelta sigue dentro de
+# archive/historical antes del rm -rf).
+${APP_USER} ALL=(root) NOPASSWD: /usr/local/lib/squidmanager/delete_historical_month.sh *
 EOF
 chmod 440 /etc/sudoers.d/squidmanager
 visudo -cf /etc/sudoers.d/squidmanager >/dev/null || fail "El fichero de sudoers generado no es valido."
-ok "sudoers: 5 ordenes concedidas a $APP_USER"
+ok "sudoers: 6 ordenes concedidas a $APP_USER"
 
 # El script que de verdad aplica la actualizacion (root, invocado por el
 # temporizador de abajo o bajo demanda via la linea de sudoers de arriba).

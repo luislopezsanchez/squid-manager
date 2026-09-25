@@ -1,7 +1,7 @@
 import { traducir } from '../i18n'
-import { useState, useEffect, useCallback } from 'react'
-import { IconChevronLeft, IconChevronRight, IconDownload, IconArchive } from '../components/Icons'
-import { api, getToken } from '../api/client'
+import { useState, useEffect, useCallback, type MouseEvent } from 'react'
+import { IconChevronLeft, IconChevronRight, IconDownload, IconArchive, IconTrash } from '../components/Icons'
+import { api, getToken, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 
@@ -70,7 +70,8 @@ export default function HistoricalLogs() {
   const [fDomain, setFDomain] = useState('')
   const [fDenied, setFDenied] = useState(false)
 
-  const limit = 100
+  const limit = 50
+  const [borrando, setBorrando] = useState<string | null>(null)
   const { showToast, ToastContainer } = useToast()
 
   const cargarMeses = () => {
@@ -108,6 +109,25 @@ export default function HistoricalLogs() {
     setSeleccion({ year: m.year, month: m.month })
     setOffset(0)
     setFUser(''); setFStatus(''); setFDomain(''); setFDenied(false)
+  }
+
+  const handleDeleteMes = (e: MouseEvent, m: MesIndice) => {
+    // stopPropagation: la tarjeta entera es un <button> que selecciona el
+    // mes -sin esto, tocar "eliminar" también lo seleccionaba primero.
+    e.stopPropagation()
+    const nombre = `${NOMBRES_MES[m.month]} ${m.year}`
+    if (!confirm(traducir("¿Eliminar el log histórico de {mes}? Esto borra ese mes por completo -el .gz consolidado y su resumen- y no se puede deshacer.", { mes: nombre }))) return
+
+    const clave = `${m.year}-${m.month}`
+    setBorrando(clave)
+    api.deleteHistoricalMonth(m.year, m.month)
+      .then(() => {
+        setMeses(prev => prev.filter(x => !(x.year === m.year && x.month === m.month)))
+        if (seleccion?.year === m.year && seleccion?.month === m.month) setSeleccion(null)
+        showToast(traducir("Log histórico de {mes} eliminado", { mes: nombre }))
+      })
+      .catch(err => showToast(err.message, 'error'))
+      .finally(() => setBorrando(null))
   }
 
   const handleExport = () => {
@@ -154,25 +174,44 @@ export default function HistoricalLogs() {
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
           {meses.map(m => {
             const activo = seleccion?.year === m.year && seleccion?.month === m.month
+            const clave = `${m.year}-${m.month}`
             return (
-              <button
-                key={`${m.year}-${m.month}`}
-                onClick={() => seleccionarMes(m)}
-                className={`card p-4 text-left hover:border-primary-500 transition-colors ${activo ? 'ring-2 ring-primary-500' : ''}`}
+              // No es un solo <button>: adentro va el botón de eliminar
+              // también, y un <button> no puede anidar otro -HTML inválido
+              // y el click de "eliminar" terminaría también seleccionando
+              // la tarjeta. El contenido sigue siendo un <button> propio
+              // para la selección; "eliminar" es un botón hermano, flotante
+              // en la esquina.
+              <div
+                key={clave}
+                className={`relative card p-4 transition-colors hover:border-primary-500 ${activo ? 'ring-2 ring-primary-500' : ''}`}
               >
-                <div className="font-bold text-ink">{NOMBRES_MES[m.month]} {m.year}</div>
-                {m.sin_indice ? (
-                  <p className="text-xs text-ink-3 mt-1">{traducir("Sin resumen (instalación anterior al indexador)")}</p>
-                ) : (
-                  <>
-                    <p className="text-xs text-ink-3 mt-1">{m.total_lines?.toLocaleString()} {traducir("peticiones")}</p>
-                    <p className="text-xs text-ink-3">{formatBytes(m.size_bytes)} {traducir("comprimido")}</p>
-                    {!!m.denied_count && (
-                      <p className="text-xs text-danger mt-1">{m.denied_count.toLocaleString()} {traducir("denegadas")}</p>
-                    )}
-                  </>
+                <button onClick={() => seleccionarMes(m)} className="w-full text-left pr-6">
+                  <div className="font-bold text-ink">{NOMBRES_MES[m.month]} {m.year}</div>
+                  {m.sin_indice ? (
+                    <p className="text-xs text-ink-3 mt-1">{traducir("Sin resumen (instalación anterior al indexador)")}</p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-ink-3 mt-1">{m.total_lines?.toLocaleString()} {traducir("peticiones")}</p>
+                      <p className="text-xs text-ink-3">{formatBytes(m.size_bytes)} {traducir("comprimido")}</p>
+                      {!!m.denied_count && (
+                        <p className="text-xs text-danger mt-1">{m.denied_count.toLocaleString()} {traducir("denegadas")}</p>
+                      )}
+                    </>
+                  )}
+                </button>
+                {canWrite() && (
+                  <button
+                    onClick={e => handleDeleteMes(e, m)}
+                    disabled={borrando === clave}
+                    className="absolute top-2 right-2 p-1.5 rounded-md text-ink-3 hover:text-danger hover:bg-danger-soft transition disabled:opacity-50"
+                    title={traducir("Eliminar este mes")}
+                    aria-label={traducir("Eliminar este mes")}
+                  >
+                    <IconTrash className="w-3.5 h-3.5" />
+                  </button>
                 )}
-              </button>
+              </div>
             )
           })}
         </div>

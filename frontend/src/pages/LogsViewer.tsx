@@ -53,7 +53,7 @@ export default function LogsViewer() {
   const [offset, setOffset] = useState(0)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [exportFormat, setExportFormat] = useState<'csv' | 'ndjson' | 'raw'>('csv')
-  const limit = 100
+  const limit = 50
 
   // Filtros
   const [fUser, setFUser] = useState('')
