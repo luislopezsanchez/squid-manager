@@ -297,6 +297,28 @@ def test_arbol_nodo_viejo_sin_endpoint_cae_a_dashboard_plano(monkeypatch):
     assert resultado["data"]["traffic"]["total_bytes_per_second"] == 500
 
 
+def test_arbol_nodo_version_intermedia_sin_self_cae_a_dashboard_plano(monkeypatch):
+    """Un SquidManager con una versión intermedia -de antes de existir
+    self+children- YA tiene /api/central/dashboard, así que responde 200,
+    no 404: pero con el esquema viejo de esa ruta ({"nodes": [...]}, sin
+    "self"). Sin este chequeo, remoto.get("self") daba None y el resultado
+    quedaba con status "ok" fabricado y todos los campos vacíos -bug real,
+    visto en pruebas en vivo contra un nodo con esa versión, 2026-09-25."""
+    def _get(url, **k):
+        if "central/dashboard" in url:
+            return FakeResponse(200, json_data={"nodes": [{"id": 0, "name": "(este servidor)"}]})
+        return FakeResponse(200, json_data={"traffic": {"total_bytes_per_second": 777}})
+
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(200, json_data={"access_token": "tok"}))
+    monkeypatch.setattr(central_monitor_service.httpx, "get", _get)
+    resultado = consultar_arbol(FakeNode())
+    assert resultado["status"] == "ok"
+    assert resultado["children"] == []
+    assert resultado["instance_id"] is None
+    assert resultado["squid_port"] is None
+    assert resultado["data"]["traffic"]["total_bytes_per_second"] == 777
+
+
 def test_arbol_nodo_viejo_no_se_loguea_dos_veces(monkeypatch):
     """La caída a /api/metrics/dashboard reusa el login ya hecho para pedir
     /api/central/dashboard -antes se loguaba una segunda vez contra el mismo

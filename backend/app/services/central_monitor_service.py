@@ -138,13 +138,27 @@ def consultar_arbol(node, profundidad_restante: int = PROFUNDIDAD_DEFECTO) -> di
     mentir sobre sus propios datos.
 
     Nodo remoto con una version de SquidManager anterior a este endpoint
-    (404): cae a consultar_nodo(), sin hijos -sigue mostrando ese nodo,
-    sin jerarquia, en vez de romperse."""
+    (404), o con una version intermedia que YA tiene /api/central/dashboard
+    pero con el esquema viejo de esa ruta (de antes de existir la jerarquia
+    self+children, un simple {"nodes": [...]} -asi que responde 200, no
+    404): en los dos casos cae a consultar_nodo() plano, sin hijos -sigue
+    mostrando ese nodo, sin jerarquia, en vez de fingir que todo salio bien
+    con status "ok" y los datos vacios. Este segundo caso es real, no
+    hipotetico: encontrado en vivo 2026-09-25 contra un nodo con esa version
+    intermedia."""
     base = _base(node.url)
     token, error = _login(node, base)
     if error:
         error["children"] = []
         return error
+
+    def _fallback_plano() -> dict:
+        # Reusa el token ya obtenido arriba -no vuelve a loguearse.
+        plano = _pedir_dashboard_plano(node, base, token)
+        plano["children"] = []
+        plano["instance_id"] = None
+        plano["squid_port"] = None
+        return plano
 
     try:
         resp = httpx.get(
@@ -159,12 +173,7 @@ def consultar_arbol(node, profundidad_restante: int = PROFUNDIDAD_DEFECTO) -> di
         return error
 
     if resp.status_code == 404:
-        # Reusa el token ya obtenido arriba -no vuelve a loguearse.
-        plano = _pedir_dashboard_plano(node, base, token)
-        plano["children"] = []
-        plano["instance_id"] = None
-        plano["squid_port"] = None
-        return plano
+        return _fallback_plano()
 
     if resp.status_code != 200:
         error = _error(node, f"El nodo respondió {resp.status_code} al pedir el dashboard")
@@ -178,7 +187,10 @@ def consultar_arbol(node, profundidad_restante: int = PROFUNDIDAD_DEFECTO) -> di
         error["children"] = []
         return error
 
-    self_remoto = remoto.get("self") or {}
+    self_remoto = remoto.get("self")
+    if not isinstance(self_remoto, dict) or "data" not in self_remoto:
+        return _fallback_plano()
+
     return {
         "id": node.id,
         "name": node.name,

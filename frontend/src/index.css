@@ -348,7 +348,17 @@ h1, h2, h3, h4 {
    /::after, que se extienden hacia ARRIBA dentro de ese mismo hueco) miden
    lo mismo y quedan a la misma altura sin coordinarse por separado. La
    regla ".tree ul" (con espacio) nunca matchea la raíz ".tree" en sí -un
-   <ul> tiene que ser DESCENDIENTE de .tree, no el propio elemento. */
+   <ul> tiene que ser DESCENDIENTE de .tree, no el propio elemento.
+
+   Ese hueco de 28px se reparte en dos tramos, no es una sola pieza: los
+   primeros 12px son el "tallo" que baja del padre (ul::before, más abajo),
+   los otros 16px son la "pata" propia de cada hijo hacia su tarjeta
+   (li::before/::after) -el cruce entre ambos (donde nace la barra
+   horizontal entre hermanos) queda a los 12px, ni pegado a la tarjeta de
+   arriba ni a la de abajo. Antes los dos tramos medían 28px cada uno,
+   superpuestos: la barra nacía exactamente en el borde inferior de la
+   tarjeta padre, sin ningún tramo de línea visible antes -bug real, visto
+   en pruebas en vivo con dos hijos reales, 2026-09-25. */
 .tree ul {
   position: relative;
   padding-top: 28px;
@@ -357,13 +367,20 @@ h1, h2, h3, h4 {
 .tree li::after {
   content: '';
   position: absolute;
-  top: -28px;
+  top: -16px;
   width: 50%;
-  height: 28px;
+  height: 16px;
   border-top: 2px solid var(--line);
 }
+/* Cada mitad aporta, además de su tramo horizontal, el tallo vertical
+   propio hacia SU hijo (border-right en la mitad izquierda, border-left en
+   la derecha -ambos caen exactamente en el centro del <li>, uno encima del
+   otro). Sin border-left acá, un hijo en la punta izquierda (que pierde su
+   ::before entero por ser :first-child, ver más abajo) se quedaba sin
+   ningún trazo vertical propio hacia su tarjeta -bug real, visto en
+   pruebas en vivo con dos hijos reales, 2026-09-25. */
 .tree li::before { left: 0; border-right: 2px solid var(--line); }
-.tree li::after  { right: 0; }
+.tree li::after  { right: 0; border-left: 2px solid var(--line); }
 .tree li:only-child::before,
 .tree li:only-child::after {
   display: none;
@@ -373,13 +390,15 @@ h1, h2, h3, h4 {
 .tree li:last-child::before { border-radius: 0 0 0 6px; }
 .tree li:first-child::after { border-radius: 0 0 6px 0; }
 /* Tallo vertical del padre hacia el hueco de SU fila de hijos -uno solo
-   por <ul>, centrado, sin importar cuántos hijos tenga esa fila. */
+   por <ul>, centrado, sin importar cuántos hijos tenga esa fila. Solo el
+   primer tramo (12px): el resto del hueco es la pata de cada hijo, ver
+   arriba. */
 .tree ul::before {
   content: '';
   position: absolute;
   top: 0;
   left: 50%;
   width: 0;
-  height: 28px;
+  height: 12px;
   border-left: 2px solid var(--line);
 }
