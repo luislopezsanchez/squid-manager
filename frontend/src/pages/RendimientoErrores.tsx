@@ -54,7 +54,7 @@ export default function RendimientoErrores() {
   const [errores, setErrores] = useState<ErroresHttp | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [detalle, setDetalle] = useState<{ titulo: string; filas: FilaDetalle[]; cargando: boolean; tendenciaHref: string } | null>(null)
+  const [detalle, setDetalle] = useState<{ titulo: string; filas: FilaDetalle[]; cargando: boolean; tendenciaHref: string; filtro?: 'errores' } | null>(null)
 
   const cargar = () => {
     const v = ventana || undefined
@@ -75,12 +75,18 @@ export default function RendimientoErrores() {
     return () => clearInterval(interval)
   }, [ventana])
 
-  const abrirDetalleDominio = (domain: string) => {
+  const abrirDetalleDominio = (domain: string, soloErrores = false) => {
     const tendenciaHref = `/reportes/tendencias?tipo=domain&valor=${encodeURIComponent(domain)}`
-    setDetalle({ titulo: domain, filas: [], cargando: true, tendenciaHref })
-    api.getDetalle({ domain, ventana: ventana || undefined, limit: 50 })
-      .then((filas: FilaDetalle[]) => setDetalle({ titulo: domain, filas, cargando: false, tendenciaHref }))
-      .catch(() => setDetalle({ titulo: domain, filas: [], cargando: false, tendenciaHref }))
+    const filtro = soloErrores ? 'errores' as const : undefined
+    setDetalle({ titulo: domain, filas: [], cargando: true, tendenciaHref, filtro })
+    // errors=soloErrores: desde "Por dominio" (pestaña Errores HTTP) tiene
+    // que mostrar los errores reales de ese dominio, no sus últimas
+    // peticiones sin filtrar -mismo bug que "Usuarios con más bloqueos" en
+    // Actividad de red, mismo día (2026-09-25). Desde "Dominios más lentos"
+    // (pestaña Latencia) no aplica: ahí sí interesa ver el tráfico general.
+    api.getDetalle({ domain, ventana: ventana || undefined, limit: 50, errors: soloErrores })
+      .then((filas: FilaDetalle[]) => setDetalle({ titulo: domain, filas, cargando: false, tendenciaHref, filtro }))
+      .catch(() => setDetalle({ titulo: domain, filas: [], cargando: false, tendenciaHref, filtro }))
   }
 
   const PESTANAS: { id: Pestana; label: string }[] = [
@@ -109,7 +115,7 @@ export default function RendimientoErrores() {
 
   const filasErroresDominio = (errores?.by_domain || []).map(d => ({
     etiqueta: d.domain, valor: d.count, valorFormateado: formatNumber(d.count),
-    onClick: () => abrirDetalleDominio(d.domain),
+    onClick: () => abrirDetalleDominio(d.domain, true),
   }))
   const maxErroresDominio = Math.max(...filasErroresDominio.map(f => f.valor), 1)
   const top3Dominio = filasErroresDominio.slice(0, 3).reduce((acc, f) => acc + f.valor, 0)
@@ -227,6 +233,7 @@ export default function RendimientoErrores() {
           cargando={detalle.cargando}
           onClose={() => setDetalle(null)}
           tendenciaHref={detalle.tendenciaHref}
+          filtro={detalle.filtro}
         />
       )}
     </div>

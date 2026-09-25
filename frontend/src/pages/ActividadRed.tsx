@@ -67,7 +67,7 @@ export default function ActividadRed() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [detalle, setDetalle] = useState<{ titulo: string; filas: FilaDetalle[]; cargando: boolean; tendenciaHref: string } | null>(null)
+  const [detalle, setDetalle] = useState<{ titulo: string; filas: FilaDetalle[]; cargando: boolean; tendenciaHref: string; filtro?: 'bloqueadas' } | null>(null)
   const [exportando, setExportando] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
@@ -125,17 +125,21 @@ export default function ActividadRed() {
     // debe refetchear, no solo re-renderizar con datos viejos.
   }, [ventana, porDatos, rangoInput.desde, rangoInput.hasta])
 
-  const abrirDetalle = (opts: { user?: string; domain?: string }, titulo: string) => {
+  const abrirDetalle = (opts: { user?: string; domain?: string }, titulo: string, soloBloqueadas = false) => {
     const tendenciaHref = opts.user
       ? `/reportes/tendencias?tipo=user&valor=${encodeURIComponent(opts.user)}`
       : `/reportes/tendencias?tipo=domain&valor=${encodeURIComponent(opts.domain || '')}`
-    setDetalle({ titulo, filas: [], cargando: true, tendenciaHref })
+    const filtro = soloBloqueadas ? 'bloqueadas' as const : undefined
+    setDetalle({ titulo, filas: [], cargando: true, tendenciaHref, filtro })
     // El drill-down y el PDF no soportan todavía el rango libre (fuera de
     // alcance de esta pasada): con "custom" caen a "últimas 1.000" en vez de
     // mandar un "ventana=custom" que el backend no reconoce.
-    api.getDetalle({ ...opts, ventana: ventana !== 'custom' ? (ventana || undefined) : undefined, limit: 50 })
-      .then((filas: FilaDetalle[]) => setDetalle({ titulo, filas, cargando: false, tendenciaHref }))
-      .catch(() => setDetalle({ titulo, filas: [], cargando: false, tendenciaHref }))
+    api.getDetalle({
+      ...opts, ventana: ventana !== 'custom' ? (ventana || undefined) : undefined,
+      limit: 50, denied: soloBloqueadas,
+    })
+      .then((filas: FilaDetalle[]) => setDetalle({ titulo, filas, cargando: false, tendenciaHref, filtro }))
+      .catch(() => setDetalle({ titulo, filas: [], cargando: false, tendenciaHref, filtro }))
   }
 
   const exportarPdf = () => {
@@ -199,7 +203,11 @@ export default function ActividadRed() {
       etiqueta: d.domain,
       valor: d.requests,
       valorFormateado: formatNumber(d.requests),
-      onClick: () => abrirDetalle({ domain: d.domain }, d.domain),
+      // soloBloqueadas=true: este ranking es de bloqueos, así que el
+      // detalle debe mostrar las peticiones bloqueadas a este dominio, no
+      // las últimas N sin filtrar (que para un dominio con algo de tráfico
+      // permitido mezclado eran casi todas 200 -reportado en vivo, 2026-09-25).
+      onClick: () => abrirDetalle({ domain: d.domain }, d.domain, true),
     }))
   } else if (pestana === 'bloqueados-usuario' && bloqueadosUsuario) {
     filas = bloqueadosUsuario.map(b => ({
@@ -209,7 +217,7 @@ export default function ActividadRed() {
       etiqueta: b.account_status === 'disabled' ? `${b.user} (${traducir("deshabilitado")})` : b.user,
       valor: b.blocked_requests,
       valorFormateado: formatNumber(b.blocked_requests),
-      onClick: () => abrirDetalle({ user: b.user }, b.user),
+      onClick: () => abrirDetalle({ user: b.user }, b.user, true),
     }))
   }
 
@@ -377,6 +385,7 @@ export default function ActividadRed() {
           cargando={detalle.cargando}
           onClose={() => setDetalle(null)}
           tendenciaHref={detalle.tendenciaHref}
+          filtro={detalle.filtro}
         />
       )}
 

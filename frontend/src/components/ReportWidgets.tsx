@@ -100,16 +100,32 @@ export function statusColor(status: number): string {
  * explican ese numero agregado. Mismo patron de modal que Admins.tsx /
  * ProxyUsers.tsx -overlay + tarjeta blanca, sin componente Modal generico
  * en el proyecto todavia. */
-export function ModalDetalle({ titulo, filas, cargando, onClose, tendenciaHref }: {
+export function ModalDetalle({ titulo, filas, cargando, onClose, tendenciaHref, filtro }: {
   titulo: string; filas: FilaDetalle[]; cargando: boolean; onClose: () => void; tendenciaHref?: string
+  // Qué recorte de get_detalle() está aplicado, si alguno: sin esto, un
+  // drill-down desde un ranking de bloqueos o de errores se leía igual que
+  // uno sin filtrar -mostrar solo una parte sin decirlo parece que el
+  // filtro no funcionó, no que es a propósito (bug real, reportado en vivo
+  // 2026-09-25; ver el fix de fondo en get_detalle, backend).
+  filtro?: 'bloqueadas' | 'errores'
 }) {
+  const textoSubtitulo = filtro === 'bloqueadas'
+    ? traducir("Últimas {n} peticiones bloqueadas", { n: filas.length })
+    : filtro === 'errores'
+      ? traducir("Últimos {n} errores", { n: filas.length })
+      : traducir("Últimas {n} peticiones", { n: filas.length })
+  const textoSinDatos = filtro === 'bloqueadas'
+    ? traducir("Sin bloqueos en esta ventana.")
+    : filtro === 'errores'
+      ? traducir("Sin errores en esta ventana.")
+      : traducir("Sin datos todavía.")
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl w-full max-w-4xl max-h-[80vh] flex flex-col shadow-lg overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-line-soft flex-none">
           <div>
             <h2 className="text-lg font-bold text-ink">{titulo}</h2>
-            <p className="text-xs text-ink-3">{traducir("Últimas {n} peticiones", { n: filas.length })}</p>
+            <p className="text-xs text-ink-3">{textoSubtitulo}</p>
           </div>
           <div className="flex items-center gap-2">
             {tendenciaHref && (
@@ -125,7 +141,7 @@ export function ModalDetalle({ titulo, filas, cargando, onClose, tendenciaHref }
         {cargando ? (
           <p className="text-sm text-ink-3 text-center py-12">{traducir("Cargando...")}</p>
         ) : filas.length === 0 ? (
-          <p className="text-sm text-ink-3 text-center py-12">{traducir("Sin datos todavía.")}</p>
+          <p className="text-sm text-ink-3 text-center py-12">{textoSinDatos}</p>
         ) : (
           <div className="overflow-auto">
             <table className="table-panel">
@@ -186,6 +202,15 @@ export function SelectorVentana({ value, onChange, rango, onRangoChange }: {
   value: Ventana; onChange: (v: Ventana) => void
   rango?: RangoFechasInput; onRangoChange?: (r: RangoFechasInput) => void
 }) {
+  // "Personalizado..." solo si quien llama de verdad lo soporta (pasa
+  // onRangoChange): Actividad de red es la única página con el mecanismo de
+  // rango libre armado de punta a punta (ver _read_rango en el backend).
+  // Sin este filtro, Tendencias/Panorama/Rendimiento y errores mostraban la
+  // opción igual -al elegirla no aparecía ningún selector de fechas (esos
+  // inputs están adentro de este mismo componente, pero condicionados a
+  // onRangoChange) y la ventana quedaba silenciosamente en "últimas 1000
+  // peticiones" sin ningún aviso: un callejón sin salida real en el menú.
+  const opciones = onRangoChange ? VENTANAS : VENTANAS.filter(v => v.id !== 'custom')
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <select
@@ -194,7 +219,7 @@ export function SelectorVentana({ value, onChange, rango, onRangoChange }: {
         className="input text-sm bg-white py-1.5"
         aria-label={traducir("Ventana de tiempo")}
       >
-        {VENTANAS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+        {opciones.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
       </select>
       {value === 'custom' && onRangoChange && (
         <>

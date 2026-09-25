@@ -30,6 +30,7 @@ from app.services.metrics_service import (
     get_volumen_por_periodo, get_ips_compartidas,
 )
 from app.services.pdf_report_service import generar_pdf_actividad
+from app.services.anomaly_service import get_anomalias_recientes
 from app.utils import utcnow
 
 # Traduce la ventana elegida en el filtro global ("1h"/"24h"/"7d") a segundos.
@@ -143,13 +144,18 @@ def detalle(
     domain: str | None = Query(None),
     ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
     limit: int = Query(50, ge=1, le=200),
+    denied: bool = Query(False, description="Solo peticiones bloqueadas -drill-down desde un ranking de bloqueos"),
+    errors: bool = Query(False, description="Solo errores HTTP reales (4xx/5xx sin contar 401/403/407) -drill-down desde Errores HTTP"),
     _: Admin = Depends(get_current_admin),
 ):
     """Detalle de peticiones de un usuario o dominio puntual (drill-down
     desde un ranking de Actividad de red)."""
     if not user and not domain:
         return []
-    return get_detalle(user=user, domain=domain, seconds=_ventana_a_segundos(ventana), limit=limit)
+    return get_detalle(
+        user=user, domain=domain, seconds=_ventana_a_segundos(ventana),
+        limit=limit, denied_only=denied, errors_only=errors,
+    )
 
 
 @router.get("/tendencia-trafico")
@@ -222,3 +228,15 @@ def connections(
 def dashboard_all(db: Session = Depends(get_db), _: Admin = Depends(get_current_admin)):
     """Dashboard completo: todas las métricas en una sola llamada."""
     return get_dashboard(db=db)
+
+
+@router.get("/anomalias-recientes")
+def anomalias_recientes(
+    horas: float = Query(24, ge=1, le=168),
+    limit: int = Query(10, ge=1, le=50),
+    _: Admin = Depends(get_current_admin),
+):
+    """Anomalías detectadas por reglas simples (ver anomaly_service.py) en las
+    últimas `horas` -para el aviso del dashboard, aparte de lo que ya se haya
+    mandado por email/Telegram si esos canales están configurados."""
+    return get_anomalias_recientes(horas=horas, limit=limit)

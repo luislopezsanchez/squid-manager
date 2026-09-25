@@ -32,6 +32,52 @@ _network_buffer = []
 _network_buffer_lock = threading.Lock()
 _prev_network = {"timestamp": 0, "rx_bytes": 0, "tx_bytes": 0}
 _MAX_BUFFER = 120  # 10 minutos a 5s por punto
+
+# ============================================
+# "Conectado desde" de los usuarios activos (server-side, en memoria)
+# ============================================
+# No es una sesion real con logica de corte por inactividad -solo hace cunata
+# esta este backend viendo al usuario activo de forma consecutiva, sondeo a
+# sondeo. Se actualiza cada vez que se pide el trafico en tiempo real (cada
+# 5s con el dashboard abierto y auto-actualizar activado), asi que no hace
+# falta releer minutos de access.log en cada ciclo solo para esto -si nadie
+# tiene el dashboard abierto, esta cuenta simplemente no avanza (no hay a
+# quien mostrarsela), y si el backend reinicia, arranca de cero: el peor caso
+# es que un usuario que ya llevaba rato conectado se vea como "recien" una
+# vez, no un dato incorrecto grave.
+_ultima_vez_activo: dict[str, float] = {}
+_conectado_desde: dict[str, float] = {}
+_HUECO_MAX_SEGUNDOS = 90  # sin aparecer por mas que esto, la proxima vez cuenta como una conexion nueva
+_OLVIDAR_TRAS_SEGUNDOS = _HUECO_MAX_SEGUNDOS * 4
+
+
+def _actualizar_conectados(activos_ahora: set[str]) -> list[dict]:
+    """Actualiza el "conectado desde" y devuelve el detalle para los
+    usuarios activos ahora mismo, ordenado del que lleva mas tiempo al que
+    acaba de aparecer."""
+    ahora = time.time()
+    with _network_buffer_lock:
+        for user in activos_ahora:
+            ultima = _ultima_vez_activo.get(user)
+            if ultima is None or (ahora - ultima) > _HUECO_MAX_SEGUNDOS:
+                _conectado_desde[user] = ahora
+            _ultima_vez_activo[user] = ahora
+
+        # Housekeeping: los que llevan mucho sin aparecer no hace falta
+        # seguir recordandolos -sin esto, cualquier usuario que paso una vez
+        # por el proxy quedaria en memoria para siempre.
+        for user in list(_ultima_vez_activo):
+            if ahora - _ultima_vez_activo[user] > _OLVIDAR_TRAS_SEGUNDOS:
+                del _ultima_vez_activo[user]
+                _conectado_desde.pop(user, None)
+
+        detalle = [
+            {"user": user, "conectado_desde_segundos": round(ahora - _conectado_desde[user])}
+            for user in activos_ahora
+            if user in _conectado_desde
+        ]
+    detalle.sort(key=lambda d: d["conectado_desde_segundos"], reverse=True)
+    return detalle
 # Junto al resto del estado operativo del backend (mismo patron que
 # update_service.py con .update_state.json), no en /tmp: en el despliegue
 # nativo /tmp es compartido con el resto del sistema, y una ruta fija y
@@ -346,6 +392,14 @@ def _parse_log_line(line: str) -> dict | None:
 _ACIERTOS = ("TCP_HIT", "TCP_MEM_HIT", "TCP_IMS_HIT", "TCP_INM_HIT", "TCP_REFRESH_UNMODIFIED")
 _FALLOS = ("TCP_MISS", "TCP_REFRESH_MODIFIED", "TCP_CLIENT_REFRESH_MISS", "TCP_SWAPFAIL_MISS")
 
+# Códigos de política de acceso (401/403/407): get_http_errors() los excluye
+# porque ya están cubiertos por "Sitios/usuarios bloqueados" -contarlos ahí
+# también duplicaría el mismo dato bajo otro nombre. get_detalle(errors_only=)
+# comparte esta misma constante para que "Errores HTTP" y su drill-down
+# coincidan siempre en qué cuentan como error real, sin que un cambio en uno
+# de los dos lados se desincronice del otro.
+_CODIGOS_POLITICA = (401, 403, 407)
+
 
 def _clasificar_cache(action: str) -> str | None:
     """Devuelve 'hit', 'miss' o None si la peticion no es cacheable."""
@@ -635,6 +689,8 @@ def get_realtime_traffic() -> dict:
     # por minuto). Se redondea a 1 decimal.
     rpm = round(len(log_entries), 1)
 
+    active_users = list(set(e["user"] for e in log_entries if e["user"]))
+
     return {
         "rx_bytes_per_second": current["rx_bytes_per_second"],
         "tx_bytes_per_second": current["tx_bytes_per_second"],
@@ -651,7 +707,8 @@ def get_realtime_traffic() -> dict:
         **cache,
         **latencia,
         "active_ips": active_ips[:20],
-        "active_users": list(set(e["user"] for e in log_entries if e["user"])),
+        "active_users": active_users,
+        "active_users_detalle": _actualizar_conectados(set(active_users)),
     }
 
 
@@ -997,8 +1054,7 @@ def get_http_errors(limit: int = 10, seconds: int | None = None) -> dict:
     recortado.
     """
     entries = _read_window(seconds)
-    CODIGOS_POLITICA = (401, 403, 407)
-    errores = [e for e in entries if e["status"] >= 400 and e["status"] not in CODIGOS_POLITICA]
+    errores = [e for e in entries if e["status"] >= 400 and e["status"] not in _CODIGOS_POLITICA]
 
     por_codigo = Counter(e["status"] for e in errores)
     por_dominio = Counter(e["domain"] for e in errores if e["domain"])
@@ -1028,7 +1084,10 @@ def get_recent_connections(limit: int = 20) -> list[dict]:
     ]
 
 
-def get_detalle(user: str | None = None, domain: str | None = None, seconds: int | None = None, limit: int = 50) -> list[dict]:
+def get_detalle(
+    user: str | None = None, domain: str | None = None, seconds: int | None = None,
+    limit: int = 50, denied_only: bool = False, errors_only: bool = False,
+) -> list[dict]:
     """Detalle de peticiones de un usuario o dominio puntual (drill-down).
 
     Complementa a los rankings (top usuarios/dominios): ahi solo se ve el
@@ -1037,12 +1096,29 @@ def get_detalle(user: str | None = None, domain: str | None = None, seconds: int
     bloquea mas". Requiere exactamente uno de `user`/`domain`, no los dos:
     cruzarlos no aporta mas que filtrar por uno solo, y complica la firma
     para el caso de uso real (clic en UNA fila de UN ranking).
+
+    `denied_only`: el drill-down desde "Usuarios con mas bloqueos" o "Sitios
+    bloqueados" tiene que mostrar justamente eso -bloqueos-, no las ultimas
+    N peticiones de esa persona/dominio sin filtrar (que en la practica son
+    casi todas 200: los bloqueos, aunque muchos, siguen siendo una fraccion
+    del trafico total de alguien que SI navega). Sin este filtro el detalle
+    contradecia al ranking que lo abria -reportado en vivo, 2026-09-25.
+
+    `errors_only`: mismo problema, mismo dia, pero desde "Errores HTTP" →
+    "Por dominio": ese ranking cuenta fallos reales (ver get_http_errors,
+    misma _CODIGOS_POLITICA), y el drill-down debe mostrar esos fallos, no
+    el trafico general de un dominio que puede tener mucho mas trafico
+    bueno que malo.
     """
     entries = _read_window(seconds)
     if user:
         entries = [e for e in entries if e["user"] == user]
     if domain:
         entries = [e for e in entries if e["domain"] == domain]
+    if denied_only:
+        entries = [e for e in entries if e["denied"]]
+    if errors_only:
+        entries = [e for e in entries if e["status"] >= 400 and e["status"] not in _CODIGOS_POLITICA]
 
     entries = entries[-limit:]
     return [
@@ -1180,6 +1256,7 @@ def get_dashboard(db=None) -> dict:
     se usaba.
     """
     from app.services.quota_service import contar_cuotas_en_riesgo
+    from app.models.proxy_user import ProxyUser
 
     return {
         "traffic": get_realtime_traffic(),
@@ -1191,4 +1268,10 @@ def get_dashboard(db=None) -> dict:
         # dashboard principal, no es el lugar para señalar personas -el
         # detalle de quién ya está ahí en Gestión > Usuarios.
         "quotas_en_riesgo": contar_cuotas_en_riesgo(db),
+        # Solo habilitados: un usuario deshabilitado nunca va a poder
+        # aparecer como "conectado ahora", así que contarlo en el total
+        # del donut de "Usuarios conectados ahora" haría que el círculo
+        # nunca pueda llegar al 100% aunque estén todos los que SÍ pueden
+        # navegar en línea a la vez.
+        "total_proxy_users": db.query(ProxyUser).filter(ProxyUser.enabled == True).count() if db else 0,
     }
