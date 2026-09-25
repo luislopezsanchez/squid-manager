@@ -6,6 +6,7 @@ from fastapi import HTTPException
 import app.routes.central as central
 from app.routes.central import _validar_url, _to_response, test_node as _ruta_test_node, NodeTest
 from app.models.monitored_node import MonitoredNode
+from app.models.central_config import CentralMonitorConfig
 
 
 def test_url_valida_http():
@@ -57,11 +58,21 @@ class _FakeQueryUnNodo:
         return self._nodo
 
 
+# _requerir_habilitado() -que test_node() llama antes de hacer nada más-
+# consulta CentralMonitorConfig, no MonitoredNode: sin esto, estos tests
+# fallarían con un 403 antes de llegar a lo que en realidad quieren probar
+# (la resolución de la contraseña enmascarada). Habilitado a propósito, para
+# que esa parte no interfiera con lo que cada test realmente verifica.
+_CONFIG_HABILITADA = CentralMonitorConfig(id=1, enabled=True, instance_id="00000000-0000-0000-0000-000000000000")
+
+
 class FakeDBConNodo:
     def __init__(self, nodo):
         self._nodo = nodo
 
     def query(self, model):
+        if model is CentralMonitorConfig:
+            return _FakeQueryUnNodo(_CONFIG_HABILITADA)
         return _FakeQueryUnNodo(self._nodo)
 
 

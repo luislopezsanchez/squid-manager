@@ -321,3 +321,65 @@ h1, h2, h3, h4 {
   outline: 2px solid var(--brand-400);
   outline-offset: 2px;
 }
+
+/* ============================================================
+   Árbol de monitoreo centralizado (Panel Central)
+   Técnica clásica de "organigrama" con <ul>/<li> anidados y
+   pseudo-elementos como líneas de conexión -no hay librería de gráficos
+   en el proyecto, y esto soporta cualquier cantidad de niveles/hijos sin
+   coordenadas fijas.
+   ============================================================ */
+.tree, .tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+.tree li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  padding: 0 14px;
+}
+/* El hueco para los conectores de una fila de hijos lo reserva el propio
+   <ul> que los envuelve (no cada <li>): así el "tallo" que baja del padre
+   (ul::before) y las medias-líneas horizontales entre hermanos (li::before
+   /::after, que se extienden hacia ARRIBA dentro de ese mismo hueco) miden
+   lo mismo y quedan a la misma altura sin coordinarse por separado. La
+   regla ".tree ul" (con espacio) nunca matchea la raíz ".tree" en sí -un
+   <ul> tiene que ser DESCENDIENTE de .tree, no el propio elemento. */
+.tree ul {
+  position: relative;
+  padding-top: 28px;
+}
+.tree li::before,
+.tree li::after {
+  content: '';
+  position: absolute;
+  top: -28px;
+  width: 50%;
+  height: 28px;
+  border-top: 2px solid var(--line);
+}
+.tree li::before { left: 0; border-right: 2px solid var(--line); }
+.tree li::after  { right: 0; }
+.tree li:only-child::before,
+.tree li:only-child::after {
+  display: none;
+}
+.tree li:first-child::before { border: none; }
+.tree li:last-child::after { border: none; }
+.tree li:last-child::before { border-radius: 0 0 0 6px; }
+.tree li:first-child::after { border-radius: 0 0 6px 0; }
+/* Tallo vertical del padre hacia el hueco de SU fila de hijos -uno solo
+   por <ul>, centrado, sin importar cuántos hijos tenga esa fila. */
+.tree ul::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 28px;
+  border-left: 2px solid var(--line);
+}

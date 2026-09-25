@@ -175,6 +175,7 @@ export const api = {
 
   // Squid Config
   getSquidStatus: () => request<any>('/squid/status'),
+  startSquid: () => request<{ ok: boolean; message: string }>('/squid/start', { method: 'POST' }),
   previewConfig: () => request<any>('/squid/preview'),
   applyConfig: () => request<any>('/squid/apply', { method: 'POST' }),
   getApplyProgress: () => request<{ activo: boolean; paso: string; pct: number }>('/squid/apply-progress'),
@@ -287,15 +288,25 @@ export const api = {
   deleteDelayPool: (id: number) => request<void>(`/delay-pools/${id}`, { method: 'DELETE' }),
 
   // Monitoreo centralizado: nodos remotos de SquidManager que este panel
-  // consulta para ver sus métricas junto a las propias.
+  // consulta para ver sus métricas junto a las propias. Apagado por
+  // defecto (getCentralConfig/updateCentralConfig): con enabled=false el
+  // resto de estas rutas devuelve 403, no solo se ocultan en el frontend.
+  getCentralConfig: () => request<{ enabled: boolean; instance_id: string }>('/central/config'),
+  updateCentralConfig: (enabled: boolean) =>
+    request<{ enabled: boolean; instance_id: string }>('/central/config', { method: 'PUT', body: JSON.stringify({ enabled }) }),
   listCentralNodes: () => request<any[]>('/central/nodes'),
   createCentralNode: (data: any) => request<any>('/central/nodes', { method: 'POST', body: JSON.stringify(data) }),
   updateCentralNode: (id: number, data: any) => request<any>(`/central/nodes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCentralNode: (id: number) => request<void>(`/central/nodes/${id}`, { method: 'DELETE' }),
   testCentralNode: (data: { url: string; username: string; password: string; id?: number }) =>
     request<any>('/central/test', { method: 'POST', body: JSON.stringify(data) }),
-  getCentralDashboard: () => request<{ nodes: any[] }>('/central/dashboard'),
+  // { self: {instance_id, name, status, data}, children: [{...igual, + children propios}] }
+  getCentralDashboard: (profundidad?: number) =>
+    request<{ self: any; children: any[] }>(`/central/dashboard${profundidad != null ? `?profundidad=${profundidad}` : ''}`),
   syncCentralNode: (id: number) => request<any>(`/central/nodes/${id}/sync`, { method: 'POST' }),
+  // Top usuarios/dominios y últimas conexiones de un nodo remoto, para el
+  // modal "Ver más" del árbol -bajo demanda, no en cada refresco del árbol.
+  getCentralNodeDetalle: (id: number) => request<any>(`/central/nodes/${id}/detalle`),
 
   // Audit
   listAudit: (limit = 100, offset = 0) => request<any>(`/audit/?limit=${limit}&offset=${offset}`),
@@ -334,6 +345,8 @@ export const api = {
   },
   actividadExportPdfUrl: (ventana?: string) =>
     `${API_BASE}/panel/actividad/export-pdf${ventana ? `?ventana=${ventana}` : ''}`,
+  getAnomaliasRecientes: (horas = 24, limit = 10) =>
+    request<any>(`/panel/anomalias-recientes?horas=${horas}&limit=${limit}`),
   getVolumenPorPeriodo: (ventana?: string) =>
     request<{ granularidad: 'minuto' | 'hora' | 'dia'; puntos: { timestamp: number; bytes: number; requests: number }[] }>(
       `/panel/volumen-por-periodo${ventana ? `?ventana=${ventana}` : ''}`
@@ -346,12 +359,14 @@ export const api = {
     qs.set('buckets', String(params.buckets || 20))
     return request<any>(`/panel/tendencia-trafico?${qs.toString()}`)
   },
-  getDetalle: (params: { user?: string; domain?: string; ventana?: string; limit?: number }) => {
+  getDetalle: (params: { user?: string; domain?: string; ventana?: string; limit?: number; denied?: boolean; errors?: boolean }) => {
     const qs = new URLSearchParams()
     if (params.user) qs.set('user', params.user)
     if (params.domain) qs.set('domain', params.domain)
     if (params.ventana) qs.set('ventana', params.ventana)
     qs.set('limit', String(params.limit || 50))
+    if (params.denied) qs.set('denied', 'true')
+    if (params.errors) qs.set('errors', 'true')
     return request<any>(`/panel/detalle?${qs.toString()}`)
   },
   getLatencia: (limit = 10, ventana?: string) =>
@@ -457,6 +472,8 @@ export const api = {
     if (params.denied) qs.append('denied', 'true')
     return `${API_BASE}/logs/historical/${year}/${month}/export?${qs.toString()}`
   },
+  deleteHistoricalMonth: (year: number, month: number) =>
+    request<{ ok: boolean; message: string }>(`/logs/historical/${year}/${month}`, { method: 'DELETE' }),
 
   // Notifications
   getNotificationConfig: () => request<any>('/notifications/config'),

@@ -21,6 +21,7 @@ from app.models.contact_message import ContactMessage
 from app.models.smtp_config import SmtpConfig
 from app.models.navigation_quota import NavigationQuota
 from app.models.monitored_node import MonitoredNode
+from app.models.central_config import CentralMonitorConfig
 
 __all__ = [
     "Admin",
@@ -45,4 +46,5 @@ __all__ = [
     "SmtpConfig",
     "NavigationQuota",
     "MonitoredNode",
+    "CentralMonitorConfig",
 ]
