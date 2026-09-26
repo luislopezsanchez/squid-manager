@@ -82,7 +82,7 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
   const enLinea = nodo.status === 'ok'
   const hostPuerto = hostPuertoDe(nodo)
   return (
-    <div className={`card p-4 text-left w-60 relative ${
+    <div className={`card p-4 text-left w-60 relative ${enLinea ? 'bg-ok-soft' : 'bg-danger-soft'} ${
       esRaiz ? 'border-brand-500 border-2' : enLinea ? '' : 'border-rose-200'
     }`}>
       {esRaiz && (
@@ -148,6 +148,117 @@ function ArbolNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
         </ul>
       )}
     </li>
+  )
+}
+
+const ZOOM_MINIMO = 0.25
+const ZOOM_MAXIMO = 2
+const PASO_ZOOM_RUEDA = 0.0015
+const PASO_ZOOM_BOTON = 0.15
+
+// Viewport de tamaño FIJO (nunca crece, nunca scrollea) para el árbol -antes,
+// si el árbol crecía a lo ancho aparecía una barra de scroll horizontal
+// dentro de la tarjeta (y una vertical si además crecía en niveles),
+// molesto en una laptop de resolución estándar. En vez de eso, el árbol se
+// reescala para entrar completo apenas cambia (loadEstado trae un árbol
+// nuevo, o la ventana cambia de tamaño), y el usuario puede acercar con la
+// rueda del mouse -centrado en el cursor, como Figma/Google Maps, no en el
+// centro de la pantalla- y arrastrar para moverse mientras está acercado.
+// Pedido en vivo, 2026-09-26.
+function ArbolConZoom({ children, dependenciaAjuste }: { children: React.ReactNode; dependenciaAjuste: unknown }) {
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const contenidoRef = useRef<HTMLDivElement>(null)
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const arrastreRef = useRef({ activo: false, x: 0, y: 0, panX: 0, panY: 0 })
+
+  const ajustarAPantalla = () => {
+    const viewport = viewportRef.current
+    const contenido = contenidoRef.current
+    if (!viewport || !contenido) return
+    // offsetWidth/Height del contenido son su tamaño de LAYOUT, que
+    // transform: scale no altera (solo cambia lo pintado) -por eso se puede
+    // medir así sin importar el zoom que ya esté aplicado.
+    const anchoNatural = contenido.offsetWidth
+    const altoNatural = contenido.offsetHeight
+    if (anchoNatural === 0 || altoNatural === 0) return
+    // Nunca se agranda solo porque sobra espacio (tope en 1): un árbol
+    // chico se ve a tamaño real, no estirado.
+    const escala = Math.min(1, viewport.clientWidth / anchoNatural, viewport.clientHeight / altoNatural)
+    setZoom(escala)
+    setPan({
+      x: (viewport.clientWidth - anchoNatural * escala) / 2,
+      y: (viewport.clientHeight - altoNatural * escala) / 2,
+    })
+  }
+
+  useEffect(() => {
+    ajustarAPantalla()
+    window.addEventListener('resize', ajustarAPantalla)
+    return () => window.removeEventListener('resize', ajustarAPantalla)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dependenciaAjuste])
+
+  const zoomHacia = (nuevoZoomSinTope: number, puntoX: number, puntoY: number) => {
+    const nuevoZoom = Math.min(ZOOM_MAXIMO, Math.max(ZOOM_MINIMO, nuevoZoomSinTope))
+    setZoom(z => {
+      const razon = nuevoZoom / z
+      setPan(p => ({ x: puntoX - (puntoX - p.x) * razon, y: puntoY - (puntoY - p.y) * razon }))
+      return nuevoZoom
+    })
+  }
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    const rect = viewportRef.current?.getBoundingClientRect()
+    if (!rect) return
+    zoomHacia(zoom * (1 - e.deltaY * PASO_ZOOM_RUEDA), e.clientX - rect.left, e.clientY - rect.top)
+  }
+
+  const zoomBoton = (delta: number) => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    zoomHacia(zoom + delta, viewport.clientWidth / 2, viewport.clientHeight / 2)
+  }
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    arrastreRef.current = { activo: true, x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
+  }
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!arrastreRef.current.activo) return
+    const a = arrastreRef.current
+    setPan({ x: a.panX + (e.clientX - a.x), y: a.panY + (e.clientY - a.y) })
+  }
+  const detenerArrastre = () => { arrastreRef.current.activo = false }
+
+  return (
+    <div className="relative">
+      <div
+        ref={viewportRef}
+        className="relative h-[440px] overflow-hidden rounded-lg bg-ground/60 cursor-grab active:cursor-grabbing select-none"
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={detenerArrastre}
+        onMouseLeave={detenerArrastre}
+      >
+        <div
+          ref={contenidoRef}
+          className="absolute top-0 left-0 inline-block"
+          style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}
+        >
+          {children}
+        </div>
+      </div>
+      <div className="absolute bottom-2 right-2 flex items-center gap-0.5 bg-white/95 backdrop-blur rounded-lg border border-line-soft shadow-sm px-1 py-1">
+        <button type="button" onClick={() => zoomBoton(-PASO_ZOOM_BOTON)} className="btn-icon w-7 h-7 text-base" title={traducir("Alejar")}>−</button>
+        <span className="text-xs text-ink-3 w-11 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
+        <button type="button" onClick={() => zoomBoton(PASO_ZOOM_BOTON)} className="btn-icon w-7 h-7 text-base" title={traducir("Acercar")}>+</button>
+        <button type="button" onClick={ajustarAPantalla} className="btn-icon text-xs px-2 w-auto" title={traducir("Ajustar a la pantalla")}>
+          {traducir("Ajustar")}
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -574,19 +685,19 @@ export default function PanelCentral() {
               {traducir("Actualizar")}
             </button>
           </div>
-          {/* pt-3: overflow-x-auto sin overflow-y explícito hace que el
-              navegador igual recorte el eje Y (no puede quedar "visible" si
-              el otro eje no lo es) -sin este margen arriba, la insignia
-              "Este servidor", que sobresale del borde de su tarjeta con
-              -top-2.5, quedaba cortada por ese recorte. */}
-          <div className="overflow-x-auto pb-2 pt-3">
-            <div className="flex justify-center min-w-max px-4">
+          <ArbolConZoom dependenciaAjuste={raiz}>
+            {/* pt-3: le da a la insignia "Este servidor" (que sobresale del
+                borde de su tarjeta con -top-2.5) un margen real, contado
+                adentro de lo que ArbolConZoom mide para encuadrar el árbol
+                -sin esto, la insignia queda justo en el borde superior y el
+                viewport (overflow: hidden) se la recorta. */}
+            <div className="flex justify-center px-4 pt-3">
               <ul className="tree">
                 <ArbolNodo nodo={raiz} esRaiz nivel={1} ruta={[]}
                   onVerMas={(nodo, ruta) => setNodoDetalle({ nodo, ruta })} />
               </ul>
             </div>
-          </div>
+          </ArbolConZoom>
         </div>
       ) : null}
 
