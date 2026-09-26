@@ -565,9 +565,18 @@ export default function ProxyUsers() {
   const [pagina, setPagina] = useState(0)
   useEffect(() => { setPagina(0) }, [search, sourceFilter, statusFilter])
   const totalPaginas = Math.max(1, Math.ceil(filteredUsers.length / USUARIOS_POR_PAGINA))
-  const paginaSegura = Math.min(pagina, totalPaginas - 1)
+  // Mantiene `pagina` siempre DENTRO de rango -no alcanza con acotarlo solo
+  // al leerlo (como hacía antes con una `paginaSegura` derivada aparte):
+  // crear o borrar usuarios (loadUsers) cambia el tamaño de la lista sin
+  // pasar por el efecto de arriba (que solo escucha búsqueda/filtros), y
+  // los botones "Anterior"/"Siguiente" manipulaban el valor crudo -podían
+  // quedar pisando un número de página que ya no correspondía a lo
+  // mostrado. Bug real, encontrado por /code-review, 2026-09-27.
+  useEffect(() => {
+    setPagina(p => Math.min(p, totalPaginas - 1))
+  }, [totalPaginas])
   const usuariosPagina = filteredUsers.slice(
-    paginaSegura * USUARIOS_POR_PAGINA, (paginaSegura + 1) * USUARIOS_POR_PAGINA,
+    pagina * USUARIOS_POR_PAGINA, (pagina + 1) * USUARIOS_POR_PAGINA,
   )
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -884,18 +893,18 @@ export default function ProxyUsers() {
       {filteredUsers.length > 0 && (
         <div className="flex items-center justify-between mt-4 text-sm">
           <span className="text-ink-3">
-            {traducir("Mostrando")} {paginaSegura * USUARIOS_POR_PAGINA + 1}–{Math.min((paginaSegura + 1) * USUARIOS_POR_PAGINA, filteredUsers.length)} {traducir("de")} {filteredUsers.length}
+            {traducir("Mostrando")} {pagina * USUARIOS_POR_PAGINA + 1}–{Math.min((pagina + 1) * USUARIOS_POR_PAGINA, filteredUsers.length)} {traducir("de")} {filteredUsers.length}
           </span>
           {totalPaginas > 1 && (
             <div className="flex gap-2">
-              <button onClick={() => setPagina(p => Math.max(0, p - 1))} disabled={paginaSegura === 0}
+              <button onClick={() => setPagina(p => Math.max(0, p - 1))} disabled={pagina === 0}
                 className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5">
                 <IconChevronLeft className="w-3.5 h-3.5" />{traducir("Anterior")}
               </button>
               <span className="text-ink-3 self-center">
-                {traducir("Página {n} de {m}", { n: String(paginaSegura + 1), m: String(totalPaginas) })}
+                {traducir("Página {n} de {m}", { n: String(pagina + 1), m: String(totalPaginas) })}
               </span>
-              <button onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))} disabled={paginaSegura >= totalPaginas - 1}
+              <button onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))} disabled={pagina >= totalPaginas - 1}
                 className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5">
                 {traducir("Siguiente")}<IconChevronRight className="w-3.5 h-3.5" />
               </button>

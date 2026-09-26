@@ -265,6 +265,26 @@ def test_base_de_certificados_en_el_volumen_persistente():
     assert "/tmp/ssl_crtd" not in config
 
 
+def test_shutdown_lifetime_corto_por_defecto():
+    """purge_credentials() hace un restart de verdad para vaciar la caché de
+    credenciales validadas -con el shutdown_lifetime de 30s por defecto de
+    Squid, cada borrado/deshabilitación de usuario desde el panel quedaba
+    bloqueado ese tiempo de más. Medido en vivo, 2026-09-27: un DELETE de
+    usuario tardaba 46s; con este default baja a unos pocos segundos."""
+    db = FakeDB(settings=[FakeSetting("http_port", "3128", "network")])
+    config = generate_squid_config(db)
+    assert "shutdown_lifetime 1 second" in config
+
+
+def test_shutdown_lifetime_configurable():
+    db = FakeDB(settings=[
+        FakeSetting("http_port", "3128", "network"),
+        FakeSetting("shutdown_lifetime", "5 seconds", "general"),
+    ])
+    config = generate_squid_config(db)
+    assert "shutdown_lifetime 5 seconds" in config
+
+
 # --- Grupos locales vs. grupos de LDAP/Active Directory --------------------
 
 def test_grupo_local_se_traduce_a_proxy_auth():

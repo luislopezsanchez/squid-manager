@@ -356,6 +356,16 @@ dns_nameservers {{ dns_nameservers|join(' ') }}
 {% endif %}
 
 # --- Misc ---
+# shutdown_lifetime: cuánto espera Squid a que cierren las conexiones activas
+# antes de terminar de apagarse. El default de Squid (30 segundos) se nota
+# mucho acá porque purge_credentials() (borrar/deshabilitar un usuario,
+# revocar una contraseña) hace un `systemctl restart squid` de verdad -no
+# alcanza con un reconfigure para vaciar la caché de credenciales validadas,
+# ver el docstring de purge_credentials en squid_service.py- y ESA acción,
+# iniciada por un admin desde el panel, quedaba bloqueada esos 30+ segundos
+# de más por cada restart. Medido en vivo, 2026-09-27: un DELETE de usuario
+# tardaba 46s de punta a punta; con este valor baja a unos pocos segundos.
+shutdown_lifetime {{ settings.get('shutdown_lifetime', '1 second') }}
 coredump_dir /var/spool/squid
 refresh_pattern {{ settings.get('refresh_pattern', '. 0 20% 4320') }}
 visible_hostname {{ settings.get('visible_hostname', 'squidmanager') }}
