@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import { formatRate, formatNumber, formatBytes } from '../utils/format'
-import { IconRefresh, IconEdit, IconTrash, IconGlobe, IconUpload, IconClose, IconBan, IconLink } from '../components/Icons'
+import { IconRefresh, IconEdit, IconTrash, IconGlobe, IconUpload, IconClose, IconBan, IconLink, IconInfo } from '../components/Icons'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 
 interface Node {
@@ -59,6 +59,33 @@ interface NodoDetalle {
   connections: { time: string; user: string; domain: string; status: number; bytes: number; denied: boolean }[] | null
 }
 
+/** Ícono ℹ con explicación al pasar el mouse o al hacer clic (clic para que
+ *  funcione igual de bien en pantallas táctiles, donde no hay "hover"). Se
+ *  cierra solo al perder el foco -clic en cualquier otro lado de la
+ *  página. */
+function InfoTipCentral({ children }: { children: React.ReactNode }) {
+  const [abierto, setAbierto] = useState(false)
+  return (
+    <span className="relative inline-flex items-center group ml-auto">
+      <button
+        type="button"
+        onClick={() => setAbierto(a => !a)}
+        onBlur={() => setAbierto(false)}
+        title={traducir("Más información")}
+        className="flex items-center justify-center text-ink-3 opacity-60 hover:opacity-100 cursor-help"
+      >
+        <IconInfo className="w-4 h-4" />
+      </button>
+      <span className={`absolute right-0 top-full mt-1.5 ${abierto ? 'block' : 'hidden group-hover:block'}
+                       bg-brand-900 text-white text-xs px-3 py-2 rounded-lg
+                       whitespace-normal shadow-lg z-30 pointer-events-none`}
+            style={{ maxWidth: '360px', minWidth: '260px' }}>
+        {children}
+      </span>
+    </span>
+  )
+}
+
 function hostPuertoDe(nodo: NodeStatus): string | null {
   if (!nodo.url) return null
   try {
@@ -92,8 +119,15 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
   // de SquidManager siga arriba y conteste perfecto. Bug real, reportado
   // en vivo 2026-09-26: un Squid detenido a propósito seguía viéndose "En
   // línea" en el árbol.
-  const squidActivo = enLinea && nodo.data?.squid_uptime != null
-  const squidCaido = enLinea && !squidActivo
+  //
+  // OJO: un nodo remoto con una versión vieja de SquidManager (de antes de
+  // que existiera este campo) tampoco manda la clave "squid_uptime" -ahí
+  // "in" da false. Eso NO es "Squid caído", es "no lo sabemos" -no hay que
+  // confundir "no tengo el dato" con "el dato vino null". Reportado en vivo
+  // 2026-09-26 contra el .116 (versión vieja, Squid corriendo de verdad).
+  const dashboardSoportaSquidUptime = enLinea && !!nodo.data && 'squid_uptime' in nodo.data
+  const squidActivo = enLinea && (!dashboardSoportaSquidUptime || nodo.data?.squid_uptime != null)
+  const squidCaido = enLinea && dashboardSoportaSquidUptime && !squidActivo
   const hostPuerto = hostPuertoDe(nodo)
   return (
     <div className={`card p-4 text-left w-60 relative ${
@@ -668,53 +702,57 @@ export default function PanelCentral() {
         </div>
       </div>
 
-      {/* Apagado por defecto, mismo patrón que LDAP: un banner con el
-          interruptor arriba de todo, y el resto de la página (nodos,
-          dashboard) recién aparece una vez habilitado -no es solo estético,
-          el backend también rechaza esas rutas (listar/crear/editar/borrar
-          nodos propios, probarlos, sincronizarlos) con 403 mientras esté
-          apagado (ver _requerir_habilitado en routes/central.py). Esto es
-          solo el lado SALIENTE -que otro SquidManager consulte a ESTE
-          servidor como nodo nunca depende de este interruptor, ver el
-          docstring de _requerir_habilitado. */}
-      <div className={`rounded-xl p-4 mb-6 border ${config?.enabled ? 'bg-green-50 border-green-200' : 'bg-brand-50 border-line'}`}>
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <span className={`inline-flex h-3 w-3 rounded-full ${config?.enabled ? 'bg-ok' : 'bg-ink-3'}`} />
-            <span className="text-sm font-medium text-ink">
-              {config?.enabled ? traducir('Monitoreo centralizado activado') : traducir('Monitoreo centralizado desactivado')}
-            </span>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer">
+      {/* Apagado por defecto, mismo patrón que LDAP: el interruptor arriba de
+          todo, y el resto de la página (nodos, dashboard) recién aparece una
+          vez habilitado -no es solo estético, el backend también rechaza esas
+          rutas (listar/crear/editar/borrar nodos propios, probarlos,
+          sincronizarlos) con 403 mientras esté apagado (ver
+          _requerir_habilitado en routes/central.py). Esto es solo el lado
+          SALIENTE -que otro SquidManager consulte a ESTE servidor como nodo
+          nunca depende de este interruptor, ver el docstring de
+          _requerir_habilitado.
+          Antes esto era dos tarjetas verdes con párrafos de texto siempre
+          visibles -le robaban altura al lienzo del árbol, que es lo que el
+          usuario más quiere ver de un vistazo. Ahora es una barra angosta con
+          los dos checkboxes en línea y el texto explicativo movido a un
+          tooltip (ícono ℹ, hover o clic): la explicación sigue ahí para quien
+          la necesite, pero no ocupa espacio permanente. Pedido en vivo,
+          2026-09-26. */}
+      <div className={`flex items-center gap-x-5 gap-y-1.5 flex-wrap rounded-lg px-4 py-2 mb-4 border text-sm ${config?.enabled ? 'bg-green-50 border-green-200' : 'bg-brand-50 border-line'}`}>
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex h-2.5 w-2.5 rounded-full flex-none ${config?.enabled ? 'bg-ok' : 'bg-ink-3'}`} />
+          <span className="font-medium text-ink whitespace-nowrap">
+            {traducir('Monitoreo centralizado')}
+          </span>
+        </div>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={config?.enabled ?? false}
+            disabled={!config || savingConfig}
+            onChange={e => handleToggleEnabled(e.target.checked)}
+          />
+          <span className="text-ink-2 whitespace-nowrap">{traducir("Habilitar")}</span>
+        </label>
+        {config?.enabled && (
+          <label className="flex items-center gap-1.5 cursor-pointer">
             <input
               type="checkbox"
-              checked={config?.enabled ?? false}
-              disabled={!config || savingConfig}
-              onChange={e => handleToggleEnabled(e.target.checked)}
+              checked={config?.monitorizar_hijos ?? true}
+              disabled={savingConfig}
+              onChange={e => handleToggleMonitorizarHijos(e.target.checked)}
             />
-            <span className="text-sm text-ink-2">{traducir("Habilitar")}</span>
+            <span className="text-ink-2 whitespace-nowrap">{traducir("Monitorizar mis propios nodos")}</span>
           </label>
-        </div>
-        <p className="text-xs text-ink-3 mt-2">
-          {traducir("Cada nodo se consulta con una cuenta propia del panel remoto (recomendado: un usuario con rol \"solo lectura\" dedicado a esto). No requiere ningún cambio en Squid ni que los nodos se conozcan entre sí. Mientras esté desactivado, no podés configurar ni consultar nodos propios desde acá -pero si OTRO SquidManager ya te tiene agregado como nodo a vos, te sigue viendo igual: dejarse monitorear nunca depende de este interruptor, solo de que esa cuenta sea válida.")}
-        </p>
-
-        {config?.enabled && (
-          <div className="mt-3 pt-3 border-t border-line-soft/70">
-            <label className="flex items-center gap-2 cursor-pointer w-fit">
-              <input
-                type="checkbox"
-                checked={config?.monitorizar_hijos ?? true}
-                disabled={savingConfig}
-                onChange={e => handleToggleMonitorizarHijos(e.target.checked)}
-              />
-              <span className="text-sm text-ink-2">{traducir("Monitorizar mis propios nodos")}</span>
-            </label>
-            <p className="text-xs text-ink-3 mt-1.5">
-              {traducir("Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo, esté prendido o apagado \"Habilitar\". Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.")}
-            </p>
-          </div>
         )}
+        <InfoTipCentral>
+          <p>
+            {traducir("Cada nodo se consulta con una cuenta propia del panel remoto (recomendado: un usuario con rol \"solo lectura\" dedicado a esto). No requiere ningún cambio en Squid ni que los nodos se conozcan entre sí. Mientras esté desactivado, no podés configurar ni consultar nodos propios desde acá -pero si OTRO SquidManager ya te tiene agregado como nodo a vos, te sigue viendo igual: dejarse monitorear nunca depende de este interruptor, solo de que esa cuenta sea válida.")}
+          </p>
+          <p className="mt-2 pt-2 border-t border-white/20">
+            {traducir("Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo, esté prendido o apagado \"Habilitar\". Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.")}
+          </p>
+        </InfoTipCentral>
       </div>
 
       {config?.enabled && (
