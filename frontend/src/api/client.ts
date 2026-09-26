@@ -304,7 +304,7 @@ export const api = {
   createCentralNode: (data: any) => request<any>('/central/nodes', { method: 'POST', body: JSON.stringify(data) }),
   updateCentralNode: (id: number, data: any) => request<any>(`/central/nodes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCentralNode: (id: number) => request<void>(`/central/nodes/${id}`, { method: 'DELETE' }),
-  testCentralNode: (data: { url: string; username: string; password: string; id?: number }) =>
+  testCentralNode: (data: { tipo?: string; url: string; username?: string; password?: string; id?: number }) =>
     request<any>('/central/test', { method: 'POST', body: JSON.stringify(data) }),
   // { self: {instance_id, name, status, data}, children: [{...igual, + children propios}] }
   getCentralDashboard: (profundidad?: number) =>

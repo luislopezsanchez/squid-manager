@@ -82,26 +82,45 @@ def _squid_port(db: Session) -> str | None:
     return str(setting.value).strip() if setting else None
 
 
+_TIPOS_VALIDOS = ("squidmanager", "squid_basico")
+
+
+def _validar_tipo(tipo: str) -> str:
+    if tipo not in _TIPOS_VALIDOS:
+        raise HTTPException(400, detail=f"Tipo de nodo inválido: {tipo!r}")
+    return tipo
+
+
 class NodeCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
+    # "squidmanager" (otra instancia de SquidManager, con login) o
+    # "squid_basico" (Squid puro, sin panel -se lee su Cache Manager
+    # directo, sin cuenta). Ver el docstring de MonitoredNode.
+    tipo: str = "squidmanager"
     url: str = Field(..., min_length=1, max_length=255)
-    username: str = Field(..., min_length=1, max_length=100)
-    password: str = Field(..., min_length=1)
+    # Solo obligatorios para "squidmanager" -un "squid_basico" no tiene
+    # cuenta que validar. Se valida en create_node/update_node, no acá:
+    # acá no se sabe todavía el `tipo` final en el momento en que Pydantic
+    # evalúa cada campo por separado.
+    username: str | None = Field(None, max_length=100)
+    password: str | None = None
     enabled: bool = True
 
 
 class NodeUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=100)
+    tipo: str | None = None
     url: str | None = Field(None, min_length=1, max_length=255)
-    username: str | None = Field(None, min_length=1, max_length=100)
+    username: str | None = Field(None, max_length=100)
     password: str | None = None
     enabled: bool | None = None
 
 
 class NodeTest(BaseModel):
+    tipo: str = "squidmanager"
     url: str
-    username: str
-    password: str
+    username: str | None = None
+    password: str | None = None
     # Si se está probando un nodo ya guardado y la contraseña no se
     # reescribió (llega como "***"), esto permite resolverla contra la
     # guardada -sin esto, probar la conexión de un nodo existente sin
@@ -119,12 +138,17 @@ def _validar_url(url: str) -> str:
 
 
 def _to_response(node: MonitoredNode) -> dict:
+    # node.tipo puede venir None en memoria (el default de la columna solo
+    # se aplica al insertar, ver Column(default=...) en el modelo) -por eso
+    # `or "squidmanager"`, no `node.tipo` a secas.
+    tipo = node.tipo or "squidmanager"
     return {
         "id": node.id,
         "name": node.name,
+        "tipo": tipo,
         "url": node.url,
         "username": node.username,
-        "password": _MASCARA,
+        "password": _MASCARA if tipo == "squidmanager" else None,
         "enabled": node.enabled,
     }
 
@@ -186,11 +210,18 @@ def create_node(
     current_admin: Admin = Depends(require_writer),
 ):
     _requerir_habilitado(db)
+    tipo = _validar_tipo(data.tipo)
+    if tipo == "squidmanager":
+        if not data.username or not data.username.strip():
+            raise HTTPException(400, detail="El usuario es obligatorio para un nodo de tipo SquidManager")
+        if not data.password:
+            raise HTTPException(400, detail="La contraseña es obligatoria para un nodo de tipo SquidManager")
     node = MonitoredNode(
         name=data.name.strip(),
+        tipo=tipo,
         url=_validar_url(data.url),
-        username=data.username.strip(),
-        password=data.password,
+        username=data.username.strip() if tipo == "squidmanager" else None,
+        password=data.password if tipo == "squidmanager" else None,
         enabled=data.enabled,
     )
     db.add(node)
@@ -218,6 +249,13 @@ def update_node(
 
     if data.name is not None:
         node.name = data.name.strip()
+    if data.tipo is not None:
+        node.tipo = _validar_tipo(data.tipo)
+        if node.tipo == "squid_basico":
+            # Sin cuenta que validar -limpia lo que hubiera de un tipo
+            # SquidManager anterior, no se queda una credencial vieja sin uso.
+            node.username = None
+            node.password = None
     if data.url is not None:
         node.url = _validar_url(data.url)
     if data.username is not None:
@@ -226,6 +264,9 @@ def update_node(
         node.password = data.password
     if data.enabled is not None:
         node.enabled = data.enabled
+
+    if node.tipo == "squidmanager" and (not node.username or not node.password):
+        raise HTTPException(400, detail="Usuario y contraseña son obligatorios para un nodo de tipo SquidManager")
 
     db.add(AuditLog(
         admin_id=current_admin.id, admin_username=current_admin.username,
@@ -267,8 +308,9 @@ def test_node(
     esto, la prueba decía "conexión exitosa" aunque el remoto fuera a
     rechazar después la consulta real del árbol."""
     _requerir_habilitado(db)
+    tipo = _validar_tipo(data.tipo)
     password_a_usar = data.password
-    if password_a_usar == _MASCARA and data.id is not None:
+    if tipo == "squidmanager" and password_a_usar == _MASCARA and data.id is not None:
         existente = db.query(MonitoredNode).filter(MonitoredNode.id == data.id).first()
         if existente:
             password_a_usar = existente.password
@@ -279,6 +321,8 @@ def test_node(
         url = data.url
         username = data.username
         password = password_a_usar
+
+    _NodoTemporal.tipo = tipo
 
     resultado = probar_nodo(_NodoTemporal())
     return resultado

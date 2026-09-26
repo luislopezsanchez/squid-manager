@@ -363,3 +363,105 @@ def test_dashboard_con_enabled_apagado_no_recorre_nodos_propios(monkeypatch):
         db=_FakeDBDashboard(config, [nodo]), _=None,
     )
     assert capturado["nodes"] == []
+
+
+# --- Nodos "squid_basico": sin usuario/contraseña que exigir ni enmascarar -
+#
+# Pedido en vivo, 2026-09-26: "no siempre el squid a monitorear será un
+# squidmanager". Un nodo squid_basico no tiene cuenta -_to_response no debe
+# fingir una máscara de contraseña que no existe, y create/update_node
+# deben exigir usuario+contraseña SOLO para el tipo squidmanager.
+
+from app.routes.central import create_node as _ruta_create_node, update_node as _ruta_update_node, NodeCreate, NodeUpdate
+
+
+class _FakeAdmin:
+    id = 1
+    username = "admin"
+
+
+class _FakeDBEscribible:
+    """DB falsa que además soporta add/flush/commit/refresh como no-ops
+    -create_node/update_node los llaman, a diferencia de las rutas de solo
+    lectura que ya cubre FakeDBConNodo."""
+    def __init__(self, nodo=None):
+        self._nodo = nodo
+
+    def query(self, model):
+        if model is CentralMonitorConfig:
+            return _FakeQueryUnNodo(_CONFIG_HABILITADA)
+        return _FakeQueryUnNodo(self._nodo)
+
+    def add(self, obj):
+        pass
+
+    def flush(self):
+        pass
+
+    def commit(self):
+        pass
+
+    def refresh(self, obj):
+        pass
+
+
+def test_to_response_de_nodo_squid_basico_no_finge_contrasena():
+    nodo = MonitoredNode(id=2, name="Sur", tipo="squid_basico", url="http://10.0.0.9:3128",
+                          username=None, password=None, enabled=True)
+    resp = _to_response(nodo)
+    assert resp["tipo"] == "squid_basico"
+    assert resp["username"] is None
+    assert resp["password"] is None
+
+
+def test_crear_nodo_squidmanager_sin_usuario_rechazado():
+    data = NodeCreate(name="Norte", tipo="squidmanager", url="http://10.0.0.5:8000")
+    with pytest.raises(HTTPException) as exc:
+        _ruta_create_node(data=data, db=_FakeDBEscribible(), current_admin=_FakeAdmin())
+    assert exc.value.status_code == 400
+
+
+def test_crear_nodo_squidmanager_sin_contrasena_rechazado():
+    data = NodeCreate(name="Norte", tipo="squidmanager", url="http://10.0.0.5:8000", username="viewer")
+    with pytest.raises(HTTPException) as exc:
+        _ruta_create_node(data=data, db=_FakeDBEscribible(), current_admin=_FakeAdmin())
+    assert exc.value.status_code == 400
+
+
+def test_crear_nodo_squid_basico_sin_usuario_ni_contrasena_ok():
+    data = NodeCreate(name="Sur", tipo="squid_basico", url="http://10.0.0.9:3128")
+    resp = _ruta_create_node(data=data, db=_FakeDBEscribible(), current_admin=_FakeAdmin())
+    assert resp["tipo"] == "squid_basico"
+    assert resp["username"] is None
+    assert resp["password"] is None
+
+
+def test_actualizar_nodo_a_squid_basico_limpia_credenciales():
+    nodo = MonitoredNode(id=7, name="Norte", tipo="squidmanager", url="http://10.0.0.5:8000",
+                          username="viewer", password="secreta", enabled=True)
+    resp = _ruta_update_node(node_id=7, data=NodeUpdate(tipo="squid_basico"),
+                              db=_FakeDBEscribible(nodo), current_admin=_FakeAdmin())
+    assert resp["tipo"] == "squid_basico"
+    assert nodo.username is None
+    assert nodo.password is None
+
+
+def test_actualizar_nodo_a_squidmanager_sin_credenciales_rechazado():
+    nodo = MonitoredNode(id=7, name="Sur", tipo="squid_basico", url="http://10.0.0.9:3128",
+                          username=None, password=None, enabled=True)
+    with pytest.raises(HTTPException) as exc:
+        _ruta_update_node(node_id=7, data=NodeUpdate(tipo="squidmanager"),
+                           db=_FakeDBEscribible(nodo), current_admin=_FakeAdmin())
+    assert exc.value.status_code == 400
+
+
+def test_actualizar_nodo_a_squidmanager_con_credenciales_nuevas_ok():
+    nodo = MonitoredNode(id=7, name="Sur", tipo="squid_basico", url="http://10.0.0.9:3128",
+                          username=None, password=None, enabled=True)
+    resp = _ruta_update_node(
+        node_id=7,
+        data=NodeUpdate(tipo="squidmanager", username="viewer", password="nueva_clave"),
+        db=_FakeDBEscribible(nodo), current_admin=_FakeAdmin(),
+    )
+    assert resp["tipo"] == "squidmanager"
+    assert resp["password"] == "***"

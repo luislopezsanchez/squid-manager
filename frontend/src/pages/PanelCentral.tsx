@@ -6,12 +6,18 @@ import { formatRate, formatNumber, formatBytes } from '../utils/format'
 import { IconRefresh, IconEdit, IconTrash, IconGlobe, IconUpload, IconClose, IconBan, IconLink, IconInfo } from '../components/Icons'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 
+// "squidmanager" (otra instancia con login) o "squid_basico" (Squid puro,
+// sin panel -se lee su Cache Manager directo). Ver MonitoredNode.tipo.
+type TipoNodo = 'squidmanager' | 'squid_basico'
+
 interface Node {
   id: number
   name: string
+  tipo: TipoNodo
   url: string
-  username: string
-  password: string
+  // null en un nodo squid_basico: no tiene cuenta que guardar.
+  username: string | null
+  password: string | null
   enabled: boolean
 }
 
@@ -20,6 +26,7 @@ interface NodeStatus {
   // tabla, no tiene fila propia que editar/borrar ni endpoint de detalle.
   id: number | null
   name: string
+  tipo?: TipoNodo
   url: string | null
   instance_id?: string | null
   squid_port?: string | null
@@ -31,21 +38,28 @@ interface NodeStatus {
   // el render recursivo no necesita `?? []` en cada punto de uso.
   children: NodeStatus[]
   data?: {
-    traffic: {
+    // Ausentes en un nodo squid_basico: no hay base de datos ni logs de
+    // SquidManager de los que sacar tráfico en tiempo real ni usuarios
+    // activos -un Squid puro no lleva esa cuenta.
+    traffic?: {
       total_bytes_per_second: number
       active_ips: string[]
       active_users: string[]
       denied_requests_60s: number
     }
-    system: {
+    system?: {
       cpu: { percent: number }
       memory: { percent: number }
     }
     // Sale del Cache Manager REAL de Squid (mgr:info), no de la API de
     // SquidManager -null si Squid no responde, sea cual sea el motivo.
     // Es la única forma de distinguir "el panel de SquidManager está
-    // arriba" de "Squid, el proxy de verdad, también lo está".
+    // arriba" de "Squid, el proxy de verdad, también lo está". En un nodo
+    // squid_basico es la fuente PRINCIPAL de datos, no un extra.
     squid_uptime?: number | null
+    // Solo presentes en un nodo squid_basico -ver consultar_nodo_basico.
+    squid_version?: string | null
+    clientes_conectados?: number | null
   }
 }
 
@@ -89,8 +103,13 @@ function InfoTipCentral({ children }: { children: React.ReactNode }) {
 function hostPuertoDe(nodo: NodeStatus): string | null {
   if (!nodo.url) return null
   try {
-    const host = new URL(nodo.url).hostname
-    return nodo.squid_port ? `${host}:${nodo.squid_port}` : host
+    const u = new URL(nodo.url)
+    // squid_port es el puerto que otro SquidManager reportó para SU Squid;
+    // un nodo squid_basico no lo tiene (no hay panel que lo reporte), pero
+    // su propia `url` YA es host:puerto de Squid, así que el puerto de la
+    // URL alcanza.
+    const puerto = nodo.squid_port || u.port
+    return puerto ? `${u.hostname}:${puerto}` : u.hostname
   } catch {
     return null
   }
@@ -129,6 +148,11 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
   const squidActivo = enLinea && (!dashboardSoportaSquidUptime || nodo.data?.squid_uptime != null)
   const squidCaido = enLinea && dashboardSoportaSquidUptime && !squidActivo
   const hostPuerto = hostPuertoDe(nodo)
+  // Un Squid puro no tiene tráfico en tiempo real ni usuarios activos que
+  // mostrar -eso sale de la base de datos y los logs de SquidManager, que
+  // acá no hay. Se muestra en cambio lo que SÍ sale del propio Squid: su
+  // versión y cuántos clientes tiene conectados ahora mismo.
+  const esBasico = nodo.tipo === 'squid_basico'
   return (
     <div className={`card p-4 text-left w-60 relative ${
       squidCaido ? 'bg-warn-soft' : enLinea ? 'bg-ok-soft' : 'bg-danger-soft'
@@ -151,19 +175,33 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
       </div>
       <p className="text-[10px] font-bold uppercase tracking-wide text-ink-3 mb-2">
         {traducir("Nivel {n}", { n: String(nivel) })}{esRaiz ? ` (${traducir("este panel")})` : ''}
+        {esBasico && <span className="pill-mute ml-1.5 normal-case tracking-normal">{traducir("Squid básico")}</span>}
       </p>
       {hostPuerto && <p className="text-xs text-ink-3 font-mono mb-2 truncate">{hostPuerto}</p>}
       {enLinea && nodo.data ? (
-        <div className="grid grid-cols-2 gap-2 text-sm mb-1">
-          <div>
-            <p className="text-ink-3 text-xs">{traducir("Tráfico actual")}</p>
-            <p className="font-medium">{formatRate(nodo.data.traffic.total_bytes_per_second)}</p>
+        esBasico ? (
+          <div className="grid grid-cols-2 gap-2 text-sm mb-1">
+            <div>
+              <p className="text-ink-3 text-xs">{traducir("Versión de Squid")}</p>
+              <p className="font-medium">{nodo.data.squid_version || '—'}</p>
+            </div>
+            <div>
+              <p className="text-ink-3 text-xs">{traducir("Clientes conectados")}</p>
+              <p className="font-medium">{formatNumber(nodo.data.clientes_conectados ?? 0)}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-ink-3 text-xs">{traducir("Usuarios activos")}</p>
-            <p className="font-medium">{formatNumber(nodo.data.traffic.active_users.length)}</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 text-sm mb-1">
+            <div>
+              <p className="text-ink-3 text-xs">{traducir("Tráfico actual")}</p>
+              <p className="font-medium">{formatRate(nodo.data.traffic!.total_bytes_per_second)}</p>
+            </div>
+            <div>
+              <p className="text-ink-3 text-xs">{traducir("Usuarios activos")}</p>
+              <p className="font-medium">{formatNumber(nodo.data.traffic!.active_users.length)}</p>
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <p className="text-xs text-rose-700 mb-1">{nodo.message}</p>
       )}
@@ -408,6 +446,9 @@ function ModalDetalleNodo({ nodo, ruta, onClose }: { nodo: NodeStatus; ruta: num
           </button>
         </div>
         {hostPuerto && <p className="px-6 pt-3 text-xs text-ink-3 font-mono">{hostPuerto}</p>}
+        {!cargando && !error && detalle?.message && (
+          <p className="px-6 pt-3 text-xs text-ink-3">{detalle.message}</p>
+        )}
 
         {cargando ? (
           <p className="text-sm text-ink-3 text-center py-12">{traducir("Cargando...")}</p>
@@ -484,7 +525,7 @@ function ModalDetalleNodo({ nodo, ruta, onClose }: { nodo: NodeStatus; ruta: num
   )
 }
 
-const FORM_VACIO = { name: '', url: '', username: '', password: '', enabled: true }
+const FORM_VACIO = { name: '', tipo: 'squidmanager' as TipoNodo, url: '', username: '', password: '', enabled: true }
 
 export default function PanelCentral() {
   const [config, setConfig] = useState<{ enabled: boolean; monitorizar_hijos: boolean; instance_id: string } | null>(null)
@@ -548,6 +589,7 @@ export default function PanelCentral() {
         setRaiz({
           id: null,
           name: r.self.name,
+          tipo: 'squidmanager',
           url: null,
           instance_id: r.self.instance_id,
           squid_port: r.self.squid_port,
@@ -584,14 +626,16 @@ export default function PanelCentral() {
   }
 
   const handleEdit = (node: Node) => {
-    setForm({ name: node.name, url: node.url, username: node.username, password: '', enabled: node.enabled })
+    setForm({ name: node.name, tipo: node.tipo, url: node.url, username: node.username ?? '', password: '', enabled: node.enabled })
     setEditingId(node.id)
     setTestResult(null)
     setShowForm(true)
   }
 
+  const esBasicoForm = form.tipo === 'squid_basico'
+
   const handleTest = async () => {
-    if (!form.url || !form.username || (!form.password && editingId === null)) {
+    if (!form.url || (!esBasicoForm && (!form.username || (!form.password && editingId === null)))) {
       showToast(traducir("Completa URL, usuario y contraseña para probar la conexión"), 'error')
       return
     }
@@ -600,7 +644,7 @@ export default function PanelCentral() {
     try {
       const password = form.password || '***'
       const resultado = await api.testCentralNode({
-        url: form.url, username: form.username, password,
+        tipo: form.tipo, url: form.url, username: esBasicoForm ? undefined : form.username, password: esBasicoForm ? undefined : password,
         // Si la contraseña no se reescribió (queda "***"), esto le permite
         // al backend resolverla contra la guardada de este nodo -sin esto,
         // probar un nodo existente sin tocar la contraseña mandaba el
@@ -619,8 +663,11 @@ export default function PanelCentral() {
     e.preventDefault()
     try {
       if (editingId !== null) {
-        const data: any = { name: form.name, url: form.url, username: form.username, enabled: form.enabled }
-        if (form.password) data.password = form.password
+        const data: any = { name: form.name, tipo: form.tipo, url: form.url, enabled: form.enabled }
+        if (!esBasicoForm) {
+          data.username = form.username
+          if (form.password) data.password = form.password
+        }
         await api.updateCentralNode(editingId, data)
         showToast(traducir("Nodo actualizado"))
       } else {
@@ -815,6 +862,28 @@ export default function PanelCentral() {
 
       {showForm && (
         <form onSubmit={handleSave} className="card p-6 mb-6">
+          <div className="mb-4">
+            <label className="field-label block mb-1.5">{traducir("Tipo de nodo")}</label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <label className={`flex-1 flex items-start gap-2 border rounded-lg px-3 py-2 cursor-pointer ${!esBasicoForm ? 'border-brand-500 bg-brand-50' : 'border-line-soft'}`}>
+                <input type="radio" name="node-tipo" className="mt-1" checked={!esBasicoForm}
+                  onChange={() => setForm({ ...form, tipo: 'squidmanager' })} />
+                <span>
+                  <span className="block text-sm font-medium text-ink">{traducir("SquidManager")}</span>
+                  <span className="block text-xs text-ink-3">{traducir("Otra instancia de este panel, con usuario y contraseña propios.")}</span>
+                </span>
+              </label>
+              <label className={`flex-1 flex items-start gap-2 border rounded-lg px-3 py-2 cursor-pointer ${esBasicoForm ? 'border-brand-500 bg-brand-50' : 'border-line-soft'}`}>
+                <input type="radio" name="node-tipo" className="mt-1" checked={esBasicoForm}
+                  onChange={() => setForm({ ...form, tipo: 'squid_basico' })} />
+                <span>
+                  <span className="block text-sm font-medium text-ink">{traducir("Squid básico")}</span>
+                  <span className="block text-xs text-ink-3">{traducir("Un Squid sin SquidManager, sin cuenta -se lee su Cache Manager directo.")}</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor="node-name" className="field-label block mb-1.5">{traducir("Nombre")}</label>
@@ -823,26 +892,48 @@ export default function PanelCentral() {
                 className="input" placeholder={traducir("ej: Sucursal Norte")} required />
             </div>
             <div>
-              <label htmlFor="node-url" className="field-label block mb-1.5">{traducir("URL del panel remoto")}</label>
+              <label htmlFor="node-url" className="field-label block mb-1.5">
+                {esBasicoForm ? traducir("Dirección de Squid") : traducir("URL del panel remoto")}
+              </label>
               <input id="node-url" type="text" value={form.url}
                 onChange={e => setForm({ ...form, url: e.target.value })}
-                className="input font-mono text-sm" placeholder="https://10.0.0.5:8443" required />
+                className="input font-mono text-sm" placeholder={esBasicoForm ? "http://10.0.0.9:3128" : "https://10.0.0.5:8443"} required />
+              {esBasicoForm && <p className="field-help mt-1">{traducir("Host y puerto donde escucha Squid -no un panel.")}</p>}
             </div>
-            <div>
-              <label htmlFor="node-username" className="field-label block mb-1.5">{traducir("Usuario")}</label>
-              <input id="node-username" type="text" value={form.username}
-                onChange={e => setForm({ ...form, username: e.target.value })}
-                className="input" required />
-              <p className="field-help mt-1">{traducir("Recomendado: una cuenta con rol \"Solo lectura\" dedicada a esto en el nodo remoto.")}</p>
-            </div>
-            <div>
-              <label htmlFor="node-password" className="field-label block mb-1.5">{traducir("Contraseña")}</label>
-              <input id="node-password" type="password" value={form.password}
-                onChange={e => setForm({ ...form, password: e.target.value })}
-                className="input" placeholder={editingId !== null ? traducir("Dejar en blanco para no cambiarla") : ''}
-                required={editingId === null} />
-            </div>
+            {!esBasicoForm && (
+              <>
+                <div>
+                  <label htmlFor="node-username" className="field-label block mb-1.5">{traducir("Usuario")}</label>
+                  <input id="node-username" type="text" value={form.username}
+                    onChange={e => setForm({ ...form, username: e.target.value })}
+                    className="input" required={!esBasicoForm} />
+                  <p className="field-help mt-1">{traducir("Recomendado: una cuenta con rol \"Solo lectura\" dedicada a esto en el nodo remoto.")}</p>
+                </div>
+                <div>
+                  <label htmlFor="node-password" className="field-label block mb-1.5">{traducir("Contraseña")}</label>
+                  <input id="node-password" type="password" value={form.password}
+                    onChange={e => setForm({ ...form, password: e.target.value })}
+                    className="input" placeholder={editingId !== null ? traducir("Dejar en blanco para no cambiarla") : ''}
+                    required={editingId === null} />
+                </div>
+              </>
+            )}
           </div>
+
+          {esBasicoForm && (
+            <div className="note note-warn mt-4">
+              <p className="note-text">
+                {traducir("Squid, por defecto, solo deja consultar su Cache Manager desde localhost. Para que este servidor pueda monitorearlo, agregá en su squid.conf (y recargá Squid):")}
+              </p>
+              <pre className="mt-2 text-xs bg-black/5 rounded p-2 overflow-x-auto whitespace-pre">
+{`acl monitoreo_central src <IP de este servidor>
+http_access allow manager monitoreo_central`}
+              </pre>
+              <p className="note-text mt-2">
+                {traducir("Esas dos líneas van ANTES del \"http_access deny manager\" ya existente en el squid.conf.")}
+              </p>
+            </div>
+          )}
 
           <label className="flex items-center gap-2 mt-4 cursor-pointer">
             <input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} />
@@ -888,8 +979,9 @@ export default function PanelCentral() {
                   <span className={node.enabled ? 'pill-ok' : 'pill-mute'}>
                     {node.enabled ? traducir("Habilitado") : traducir("Deshabilitado")}
                   </span>
+                  {node.tipo === 'squid_basico' && <span className="pill-mute">{traducir("Squid básico")}</span>}
                 </p>
-                <p className="text-xs text-ink-3 font-mono">{node.url} · {node.username}</p>
+                <p className="text-xs text-ink-3 font-mono">{node.url}{node.username ? ` · ${node.username}` : ''}</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => handleToggleNodeEnabled(node)} disabled={togglingId === node.id}
@@ -897,10 +989,12 @@ export default function PanelCentral() {
                   title={node.enabled ? traducir("Desconectar (dejar de monitorear sin borrarlo)") : traducir("Reconectar")}>
                   {node.enabled ? <IconBan className="w-4 h-4" /> : <IconLink className="w-4 h-4" />}
                 </button>
-                <button onClick={() => handleSync(node)} disabled={syncingId === node.id}
-                  className="btn-icon" title={traducir("Sincronizar configuración a este nodo")}>
-                  <IconUpload className="w-4 h-4" />
-                </button>
+                {node.tipo !== 'squid_basico' && (
+                  <button onClick={() => handleSync(node)} disabled={syncingId === node.id}
+                    className="btn-icon" title={traducir("Sincronizar configuración a este nodo")}>
+                    <IconUpload className="w-4 h-4" />
+                  </button>
+                )}
                 <button onClick={() => handleEdit(node)} className="btn-icon" title={traducir("Editar")}>
                   <IconEdit className="w-4 h-4" />
                 </button>

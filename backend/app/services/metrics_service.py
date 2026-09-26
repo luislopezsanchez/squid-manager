@@ -1234,14 +1234,34 @@ def _get_squid_uptime(db) -> float | None:
     que parsea este reporte (cache_manager_service), y consultar el Cache
     Manager en cada peticion de 5s seria innecesario -- el uptime cambia
     lentamente. Se devuelve None si Squid no responde: el dashboard muestra
-    "sin datos" en ese caso, no un 0 que se leeria como "acaba de arrancar".
+    "sin datos" en ese caso, no un 0 que se leeria como "acaba de arrancar"
+    -y Monitoreo Centralizado usa ese mismo None para marcar el nodo como
+    "Squid caido" en el arbol (ver TarjetaNodo en PanelCentral.tsx).
+
+    Justamente porque ese None dispara una etiqueta tan fuerte ("Squid
+    caido", no "sin datos"), un solo intento fallido no alcanza para
+    confiar en el resultado: es una llamada HTTP real a 127.0.0.1, y puede
+    fallar por un corte puntual (timeout, Squid recargando su config en
+    ese instante) sin que Squid este parado de verdad. Un reintento rapido
+    filtra ese ruido; si tambien falla, recien ahi se reporta "caido" -y
+    se deja registrado el motivo real en el log (antes se tragaba en
+    silencio, sin dejar rastro para diagnosticar por que). Reportado en
+    vivo, 2026-09-26: un Squid corriendo se veia "caido" contra un nodo
+    con http_port desactualizado en su configuracion.
     """
-    try:
-        from app.services.cache_manager_service import _pedir_reporte, _numero, _PATRONES_INFO
-        info_text = _pedir_reporte(db, "info")
-        return _numero(info_text, _PATRONES_INFO["uptime_segundos"])
-    except Exception:
-        return None
+    from app.services.cache_manager_service import _pedir_reporte, _numero, _PATRONES_INFO
+
+    ultimo_error: Exception | None = None
+    for intento in range(2):
+        if intento:
+            time.sleep(0.3)
+        try:
+            info_text = _pedir_reporte(db, "info")
+            return _numero(info_text, _PATRONES_INFO["uptime_segundos"])
+        except Exception as e:
+            ultimo_error = e
+    logger.warning("No se pudo leer el uptime de Squid via Cache Manager, tras reintentar: %s", ultimo_error)
+    return None
 
 
 def get_dashboard(db=None) -> dict:

@@ -48,9 +48,13 @@ def _base(url: str) -> str:
     return url.rstrip("/")
 
 
+def _tipo_de(node) -> str:
+    return getattr(node, "tipo", None) or "squidmanager"
+
+
 def _error(node, mensaje: str) -> dict:
     logger.warning(f"Monitoreo centralizado: nodo '{node.name}' ({node.url}) -> {mensaje}")
-    return {"id": node.id, "name": node.name, "url": node.url, "status": "error", "message": mensaje}
+    return {"id": node.id, "name": node.name, "tipo": _tipo_de(node), "url": node.url, "status": "error", "message": mensaje}
 
 
 def _login(node, base: str) -> tuple[str | None, dict | None]:
@@ -115,7 +119,7 @@ def _pedir_dashboard_plano(node, base: str, token: str) -> dict:
     except ValueError:
         return _error(node, "El dashboard del nodo no devolvió JSON válido")
 
-    return {"id": node.id, "name": node.name, "url": node.url, "status": "ok", "data": data}
+    return {"id": node.id, "name": node.name, "tipo": "squidmanager", "url": node.url, "status": "ok", "data": data}
 
 
 def consultar_nodo(node) -> dict:
@@ -123,11 +127,66 @@ def consultar_nodo(node) -> dict:
     caído, credenciales inválidas, timeout, no es un SquidManager) se
     devuelve como parte del resultado, para que un nodo offline no tumbe
     la vista de los demás."""
+    if _tipo_de(node) == "squid_basico":
+        return consultar_nodo_basico(node)
     base = _base(node.url)
     token, error = _login(node, base)
     if error:
         return error
     return _pedir_dashboard_plano(node, base, token)
+
+
+def consultar_nodo_basico(node) -> dict:
+    """Nodo "Squid básico" (sin SquidManager encima): sin login -no hay
+    cuenta que validar-, se lee directo el Cache Manager de Squid
+    (mgr:info) contra `node.url`, que acá es el host:puerto DEL PROPIO
+    SQUID, no de un panel. Mismo mecanismo que cada SquidManager usa
+    contra SU PROPIO Squid en 127.0.0.1 (ver runtime/native_runtime.py,
+    cache_manager_report), apuntando ahora a otra IP -por eso requiere que
+    el squid.conf remoto tenga una ACL que permita esta consulta desde
+    este servidor: Squid por defecto solo la permite desde localhost.
+
+    `data` trae mucho menos que un nodo SquidManager -ni tráfico en
+    tiempo real ni usuarios activos: eso sale de la base de datos y los
+    logs de SquidManager, que un Squid puro no tiene- pero sí lo esencial
+    para saber si está arriba: si responde, hace cuánto tiempo, su
+    versión, y cuántos clientes tiene conectados en este momento (dato
+    real del propio Squid, no inventado). Pedido en vivo, 2026-09-26:
+    "no siempre el squid a monitorear será un squidmanager"."""
+    base = _base(node.url)
+    try:
+        resp = httpx.get(
+            f"{base}/squid-internal-mgr/info",
+            headers={"Host": "localhost"},
+            timeout=_TIMEOUT,
+        )
+    except httpx.HTTPError as e:
+        return _error(node, f"No se pudo conectar: {e}")
+
+    if resp.status_code == 403:
+        return _error(
+            node,
+            "Squid rechazó la consulta al Cache Manager. Para monitorear un Squid básico, su "
+            "squid.conf necesita una ACL que permita esta consulta desde este servidor -por "
+            "defecto Squid solo la permite desde localhost. Por ejemplo: agregar "
+            "\"acl monitoreo_central src <IP de este servidor>\" y \"http_access allow manager "
+            "monitoreo_central\" ANTES del \"http_access deny manager\" ya existente, y recargar "
+            "Squid (squid -k reconfigure).",
+        )
+    if resp.status_code != 200:
+        return _error(node, f"Squid respondió {resp.status_code} al pedir el Cache Manager")
+
+    from app.services.cache_manager_service import _parsear_info
+    info = _parsear_info(resp.text)
+
+    return {
+        "id": node.id, "name": node.name, "tipo": "squid_basico", "url": node.url, "status": "ok",
+        "data": {
+            "squid_uptime": info.get("uptime_segundos"),
+            "squid_version": info.get("version"),
+            "clientes_conectados": info.get("clientes_activos"),
+        },
+    }
 
 
 def consultar_todos(nodes: list) -> list[dict]:
@@ -175,7 +234,14 @@ def probar_nodo(node) -> dict:
     real, reportado en vivo 2026-09-26 (se repitió al querer volver a
     agregar un nodo que antes andaba bien). Un solo login, reusado para
     los dos pedidos -mismo criterio que ya usa consultar_arbol() con su
-    fallback plano."""
+    fallback plano.
+
+    Un nodo "squid_basico" no tiene login que probar ni módulo de
+    monitoreo centralizado que chequear -consultar_nodo_basico() ya es en
+    sí mismo la prueba completa de conexión para ese tipo."""
+    if _tipo_de(node) == "squid_basico":
+        return consultar_nodo_basico(node)
+
     base = _base(node.url)
     token, error = _login(node, base)
     if error:
@@ -233,7 +299,19 @@ def consultar_arbol(node, profundidad_restante: int = PROFUNDIDAD_DEFECTO) -> di
     mostrando ese nodo, sin jerarquia, en vez de fingir que todo salio bien
     con status "ok" y los datos vacios. Este segundo caso es real, no
     hipotetico: encontrado en vivo 2026-09-25 contra un nodo con esa version
-    intermedia."""
+    intermedia.
+
+    Un nodo "squid_basico" nunca tiene /api/central/dashboard que pedir
+    -no es un SquidManager-, así que se resuelve directo con
+    consultar_nodo_basico() y `children` siempre vacío: un Squid puro no
+    tiene nodos propios que monitorear."""
+    if _tipo_de(node) == "squid_basico":
+        resultado = consultar_nodo_basico(node)
+        resultado["children"] = []
+        resultado["instance_id"] = None
+        resultado["squid_port"] = None
+        return resultado
+
     base = _base(node.url)
     token, error = _login(node, base)
     if error:
@@ -282,6 +360,7 @@ def consultar_arbol(node, profundidad_restante: int = PROFUNDIDAD_DEFECTO) -> di
     return {
         "id": node.id,
         "name": node.name,
+        "tipo": "squidmanager",
         "url": node.url,
         "instance_id": self_remoto.get("instance_id"),
         "squid_port": self_remoto.get("squid_port"),
@@ -306,7 +385,14 @@ def sincronizar_configuracion(node, backup: dict) -> dict:
     configuración del nodo remoto: hace falta que la cuenta guardada ahí
     tenga permisos de escritura (una cuenta "viewer" -la recomendada para
     solo monitorear- se rechaza acá con un 403, con un mensaje claro en
-    vez de fallar en silencio)."""
+    vez de fallar en silencio).
+
+    Un nodo "squid_basico" no tiene panel de SquidManager al que
+    restaurarle nada -es Squid puro-, así que esto se rechaza antes de
+    intentar ningún login (no tiene cuenta que usar)."""
+    if _tipo_de(node) == "squid_basico":
+        return _error(node, "Este nodo es un Squid básico: no tiene panel de SquidManager para sincronizarle configuración.")
+
     import json as _json
 
     base = _base(node.url)
@@ -349,7 +435,23 @@ def consultar_detalle_nodo(node) -> dict:
 
     Nunca lanza: un fallo puntual en uno de los tres pedidos (por ejemplo,
     un nodo tan viejo que todavía no tenía /top-domains) deja ese campo en
-    None sin tumbar los otros dos."""
+    None sin tumbar los otros dos.
+
+    Un nodo "squid_basico" no tiene esta API -ni base de datos propia de
+    usuarios/dominios que consultar-, así que los tres campos quedan en
+    None con un mensaje que lo explica, sin intentar loguearse (no tiene
+    cuenta que probar)."""
+    if _tipo_de(node) == "squid_basico":
+        return {
+            "id": node.id, "name": node.name, "status": "ok",
+            "message": (
+                "Este nodo es un Squid básico (sin SquidManager): no tiene usuarios, dominios ni "
+                "conexiones registrados para mostrar acá -esos datos los calcula SquidManager, y "
+                "este Squid no lo tiene instalado."
+            ),
+            "top_users": None, "top_domains": None, "connections": None,
+        }
+
     base = _base(node.url)
     token, error = _login(node, base)
     if error:
@@ -403,7 +505,17 @@ def consultar_detalle_relay(node, resto: list[int]) -> dict:
     necesite jamás las credenciales de nada más allá de sus propios nodos
     directos. `resto` nunca llega vacío acá: ese caso (último salto) lo
     resuelve la ruta directamente con consultar_detalle_nodo(), ver
-    routes/central.py."""
+    routes/central.py.
+
+    Un nodo "squid_basico" nunca puede ser este salto intermedio -nunca
+    tiene children, ver consultar_arbol()-, pero se cubre igual por las
+    dudas: no tiene login que hacer ni ruta propia que reenviar."""
+    if _tipo_de(node) == "squid_basico":
+        return _detalle_error(
+            node,
+            "Este nodo es un Squid básico: no tiene nodos propios, no puede reenviar el pedido.",
+        )
+
     base = _base(node.url)
     token, error = _login(node, base)
     if error:

@@ -9,7 +9,7 @@ import pytest
 import app.services.central_monitor_service as central_monitor_service
 from app.services.central_monitor_service import (
     consultar_nodo, consultar_todos, sincronizar_configuracion, consultar_arbol,
-    consultar_detalle_nodo, consultar_detalle_relay, probar_nodo,
+    consultar_detalle_nodo, consultar_detalle_relay, probar_nodo, consultar_nodo_basico,
 )
 
 
@@ -34,6 +34,19 @@ class FakeNode:
         self.url = url
         self.username = username
         self.password = password
+        self.enabled = enabled
+
+
+class FakeNodeBasico:
+    """Nodo "squid_basico": sin username/password, un Squid puro agregado
+    a mano -ver MonitoredNode.tipo."""
+    def __init__(self, id=2, name="Sucursal Sur (Squid puro)", url="http://10.0.0.9:3128", enabled=True):
+        self.id = id
+        self.name = name
+        self.tipo = "squid_basico"
+        self.url = url
+        self.username = None
+        self.password = None
         self.enabled = enabled
 
 
@@ -628,3 +641,127 @@ def test_probar_nodo_un_solo_login_para_los_dos_pedidos(monkeypatch):
     )
     probar_nodo(FakeNode())
     assert logins["n"] == 1
+
+
+# --- Nodo "squid_basico": sin SquidManager, se lee el Cache Manager de -----
+# Squid directo (mgr:info), sin login. Pedido en vivo, 2026-09-26: "no
+# siempre el squid a monitorear será un squidmanager".
+
+_MGR_INFO_TEXTO = """Squid Object Cache: Version 6.14
+Build Info: Ubuntu linux
+Service Name: squid
+Start Time:\tSat, 26 Sep 2026 15:10:57 GMT
+Current Time:\tSat, 26 Sep 2026 15:26:11 GMT
+Connection information for squid:
+\tNumber of clients accessing cache:\t3
+\tNumber of HTTP requests received:\t120
+Resource usage for squid:
+\tUP Time:\t914.143 seconds
+"""
+
+
+def test_consultar_nodo_basico_exito_parsea_uptime_version_y_clientes(monkeypatch):
+    llamadas = []
+
+    def _get(url, **k):
+        llamadas.append((url, k))
+        return FakeResponse(200, text=_MGR_INFO_TEXTO)
+
+    monkeypatch.setattr(central_monitor_service.httpx, "get", _get)
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("squid_basico no debería intentar login")))
+
+    resultado = consultar_nodo_basico(FakeNodeBasico())
+
+    assert resultado["status"] == "ok"
+    assert resultado["data"]["squid_uptime"] == 914.143
+    assert resultado["data"]["squid_version"] == "6.14"
+    assert resultado["data"]["clientes_conectados"] == 3
+    assert llamadas[0][0].endswith("/squid-internal-mgr/info")
+    assert llamadas[0][1]["headers"]["Host"] == "localhost"
+
+
+def test_consultar_nodo_basico_403_sugiere_la_acl_que_falta(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(403))
+
+    resultado = consultar_nodo_basico(FakeNodeBasico())
+
+    assert resultado["status"] == "error"
+    assert "ACL" in resultado["message"]
+    assert "http_access allow manager" in resultado["message"]
+
+
+def test_consultar_nodo_basico_otro_status_da_mensaje_claro(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(500))
+
+    resultado = consultar_nodo_basico(FakeNodeBasico())
+
+    assert resultado["status"] == "error"
+    assert "500" in resultado["message"]
+
+
+def test_consultar_nodo_basico_sin_conexion(monkeypatch):
+    def _get(*a, **k):
+        raise httpx.ConnectError("No route to host")
+
+    monkeypatch.setattr(central_monitor_service.httpx, "get", _get)
+
+    resultado = consultar_nodo_basico(FakeNodeBasico())
+
+    assert resultado["status"] == "error"
+    assert "No se pudo conectar" in resultado["message"]
+
+
+def test_consultar_nodo_despacha_a_basico_sin_loguearse(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(200, text=_MGR_INFO_TEXTO))
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no debería loguearse")))
+
+    resultado = consultar_nodo(FakeNodeBasico())
+    assert resultado["status"] == "ok"
+    assert resultado["data"]["squid_uptime"] == 914.143
+
+
+def test_probar_nodo_despacha_a_basico(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(200, text=_MGR_INFO_TEXTO))
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no debería loguearse")))
+
+    resultado = probar_nodo(FakeNodeBasico())
+    assert resultado["status"] == "ok"
+    # Un squid_basico no tiene módulo de monitoreo centralizado que chequear.
+    assert "monitoreo_centralizado_remoto" not in resultado
+
+
+def test_consultar_arbol_de_basico_nunca_trae_hijos(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(200, text=_MGR_INFO_TEXTO))
+
+    resultado = consultar_arbol(FakeNodeBasico())
+    assert resultado["status"] == "ok"
+    assert resultado["children"] == []
+    assert resultado["instance_id"] is None
+    assert resultado["squid_port"] is None
+
+
+def test_consultar_detalle_nodo_basico_no_intenta_loguearse(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("squid_basico no tiene cuenta que probar")))
+
+    resultado = consultar_detalle_nodo(FakeNodeBasico())
+    assert resultado["status"] == "ok"
+    assert resultado["top_users"] is None
+    assert resultado["top_domains"] is None
+    assert resultado["connections"] is None
+    assert "Squid básico" in resultado["message"]
+
+
+def test_sincronizar_configuracion_rechaza_nodo_basico_sin_loguearse(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("squid_basico no tiene cuenta que probar")))
+
+    resultado = sincronizar_configuracion(FakeNodeBasico(), backup={})
+    assert resultado["status"] == "error"
+    assert "Squid básico" in resultado["message"]
+
+
+def test_consultar_detalle_relay_rechaza_nodo_basico_como_salto_intermedio(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("squid_basico no tiene cuenta que probar")))
+
+    resultado = consultar_detalle_relay(FakeNodeBasico(), resto=[5])
+    assert resultado["status"] == "error"
+    assert resultado["top_users"] is None
