@@ -716,6 +716,23 @@ def test_consultar_nodo_basico_sin_conexion(monkeypatch):
     assert "No se pudo conectar" in resultado["message"]
 
 
+def test_consultar_nodo_basico_connection_refused_sugiere_revisar_el_puerto(monkeypatch):
+    """El error más común acá es de tipeo: poner el puerto del PANEL de un
+    SquidManager (3000) en vez del puerto donde escucha Squid mismo
+    (3128) -un Squid básico no tiene panel escuchando en ningún otro
+    puerto. Confundido en vivo, 2026-09-26."""
+    def _get(*a, **k):
+        raise httpx.ConnectError("[Errno 111] Connection refused")
+
+    monkeypatch.setattr(central_monitor_service.httpx, "get", _get)
+
+    resultado = consultar_nodo_basico(FakeNodeBasico())
+
+    assert resultado["status"] == "error"
+    assert "puerto" in resultado["message"].lower()
+    assert "panel" in resultado["message"].lower()
+
+
 def test_consultar_nodo_despacha_a_basico_sin_loguearse(monkeypatch):
     monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(200, text=_MGR_INFO_TEXTO))
     monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no debería loguearse")))

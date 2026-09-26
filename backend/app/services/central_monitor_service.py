@@ -176,7 +176,21 @@ def consultar_nodo_basico(node) -> dict:
             timeout=_TIMEOUT,
         )
     except httpx.HTTPError as e:
-        return _error(node, f"No se pudo conectar: {e}")
+        # "Connection refused" es, con diferencia, el motivo más común acá
+        # -y casi siempre por el mismo error de tipeo: poner el puerto del
+        # PANEL de un SquidManager (3000/8443, el que se usa para el resto
+        # de los nodos) en vez del puerto donde escucha SQUID mismo (3128
+        # típicamente, o el que tenga configurado). Un Squid básico no
+        # tiene panel -no hay nada escuchando en ese otro puerto-, así que
+        # el aviso lo dice explícito en vez de dejar que parezca "no
+        # conecta" sin más pista. Confundido en vivo, 2026-09-26.
+        return _error(
+            node,
+            f"No se pudo conectar: {e}. Si la IP es correcta, revisá el puerto: acá va el puerto "
+            "donde escucha SQUID (por ejemplo 3128), no el puerto del panel de administración "
+            "(el que usan los nodos de tipo SquidManager, por ejemplo 3000) -un Squid básico no "
+            "tiene panel escuchando en ningún otro puerto.",
+        )
 
     if resp.status_code != 200:
         # Cualquier respuesta HTTP -403 el caso típico- ya prueba que
