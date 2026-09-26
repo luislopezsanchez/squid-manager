@@ -13,6 +13,19 @@ from app.services.central_monitor_service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _cache_de_tokens_limpio():
+    """_login() ahora cachea el token por (url, username, password) -sin
+    limpiar esto entre tests, el primer test que loguea con éxito contra el
+    FakeNode() por defecto deja el token en cache, y CUALQUIER test
+    posterior con esos mismos valores por defecto reusaría ese token en vez
+    de llamar al httpx.post monkeypateado de ESE test, rompiendo el
+    aislamiento entre tests."""
+    central_monitor_service._cache_tokens.clear()
+    yield
+    central_monitor_service._cache_tokens.clear()
+
+
 class FakeNode:
     def __init__(self, id=1, name="Sucursal Norte", url="http://10.0.0.5:8000",
                  username="viewer", password="secreta", enabled=True):
@@ -59,6 +72,74 @@ def test_login_con_codigo_inesperado(monkeypatch):
     resultado = consultar_nodo(FakeNode())
     assert resultado["status"] == "error"
     assert "500" in resultado["message"]
+
+
+def test_login_con_429_da_mensaje_distinto_a_credenciales_rechazadas(monkeypatch):
+    """El propio nodo remoto limitando los logins (demasiados refrescos
+    seguidos) no es lo mismo que credenciales mal puestas -mensajes
+    distintos, para no hacer sospechar del usuario/contraseña en vano."""
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(429))
+    resultado = consultar_nodo(FakeNode())
+    assert resultado["status"] == "error"
+    assert "limitando" in resultado["message"].lower()
+    assert "contraseña" not in resultado["message"].lower()
+
+
+# --- Cache de tokens: no se loguea de nuevo en cada refresco ---------------
+#
+# Antes CADA refresco del árbol (el temporizador de 30s, cada clic en
+# "Actualizar", cada "Ver más") se logueaba de nuevo contra cada nodo. Unos
+# pocos minutos de uso activo del panel ya acumulan más de los 10 intentos
+# de login por IP y minuto que el propio proyecto acepta en el remoto -el
+# nodo terminaba respondiendo 429 sin que las credenciales tuvieran nada de
+# malo. Reportado en vivo, 2026-09-26.
+
+def test_segunda_consulta_al_mismo_nodo_no_vuelve_a_loguearse(monkeypatch):
+    logins = {"n": 0}
+
+    def _post(*a, **k):
+        logins["n"] += 1
+        return FakeResponse(200, json_data={"access_token": "tok123"})
+
+    monkeypatch.setattr(central_monitor_service.httpx, "post", _post)
+    monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(200, json_data={"traffic": {}}))
+    consultar_nodo(FakeNode())
+    consultar_nodo(FakeNode())
+    consultar_nodo(FakeNode())
+    assert logins["n"] == 1
+
+
+def test_nodo_distinto_no_comparte_el_token_cacheado(monkeypatch):
+    logins = {"n": 0}
+
+    def _post(*a, **k):
+        logins["n"] += 1
+        return FakeResponse(200, json_data={"access_token": "tok123"})
+
+    monkeypatch.setattr(central_monitor_service.httpx, "post", _post)
+    monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(200, json_data={"traffic": {}}))
+    consultar_nodo(FakeNode())
+    consultar_nodo(FakeNode(url="http://10.0.0.9:8000"))
+    assert logins["n"] == 2
+
+
+def test_token_cacheado_vence_pasado_el_ttl(monkeypatch):
+    logins = {"n": 0}
+
+    def _post(*a, **k):
+        logins["n"] += 1
+        return FakeResponse(200, json_data={"access_token": "tok123"})
+
+    monkeypatch.setattr(central_monitor_service.httpx, "post", _post)
+    monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(200, json_data={"traffic": {}}))
+
+    reloj = {"ahora": 1000.0}
+    monkeypatch.setattr(central_monitor_service.time, "monotonic", lambda: reloj["ahora"])
+
+    consultar_nodo(FakeNode())
+    reloj["ahora"] += central_monitor_service._TTL_CACHE_TOKEN + 1
+    consultar_nodo(FakeNode())
+    assert logins["n"] == 2
 
 
 def test_login_devuelve_json_sin_access_token(monkeypatch):

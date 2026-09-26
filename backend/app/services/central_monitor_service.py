@@ -14,12 +14,34 @@ demore la vista más que unos segundos.
 """
 
 import logging
+import time
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = httpx.Timeout(6.0, connect=4.0)
+
+# Cache de tokens de login por nodo, en memoria -sin esto, CADA refresco del
+# árbol (el temporizador de 30s, cada clic en "Actualizar", cada "Ver más")
+# se logueaba de nuevo contra cada nodo remoto. Unos pocos minutos de uso
+# activo del panel ya acumulan más de los 10 intentos de login por IP y
+# minuto que el propio proyecto acepta en el remoto (ver LOGIN_MAX_REQUESTS
+# en app/middleware/__init__.py) -no por credenciales mal puestas, sino por
+# demasiados refrescos LEGÍTIMOS seguidos. El nodo remoto quedaba viéndose
+# "Sin conexión" (429) sin que nada estuviera roto de verdad. Reportado en
+# vivo, 2026-09-26.
+#
+# TTL bien por debajo de las 8 horas de vida del JWT (ACCESS_TOKEN_EXPIRE_
+# MINUTES): 5 minutos alcanza de sobra para absorber cualquier ráfaga de
+# refrescos, y sigue siendo corto como para que un usuario/contraseña
+# editado en "Nodos configurados" tome efecto pronto, no recién en 8 horas.
+#
+# Clave (url, username, password): si cualquiera de los tres cambia -se
+# edita el nodo-, la clave cambia sola y la entrada vieja del cache
+# simplemente deja de usarse nunca más, sin necesitar invalidarla a mano.
+_TTL_CACHE_TOKEN = 300
+_cache_tokens: dict[tuple[str, str, str], tuple[str, float]] = {}
 
 
 def _base(url: str) -> str:
@@ -32,9 +54,15 @@ def _error(node, mensaje: str) -> dict:
 
 
 def _login(node, base: str) -> tuple[str | None, dict | None]:
-    """(token, None) si el login funcionó, o (None, error) si no -mismo
-    resultado de error que devuelve el resto de las funciones públicas de
-    este módulo, para poder simplemente `return error` si no es None."""
+    """(token, None) si el login funcionó (o ya había uno en cache vigente),
+    o (None, error) si no -mismo resultado de error que devuelve el resto
+    de las funciones públicas de este módulo, para poder simplemente
+    `return error` si no es None."""
+    clave = (node.url, node.username, node.password)
+    cacheado = _cache_tokens.get(clave)
+    if cacheado and cacheado[1] > time.monotonic():
+        return cacheado[0], None
+
     try:
         login = httpx.post(
             f"{base}/api/auth/login",
@@ -46,13 +74,21 @@ def _login(node, base: str) -> tuple[str | None, dict | None]:
 
     if login.status_code == 401:
         return None, _error(node, "Usuario o contraseña rechazados por el nodo")
+    if login.status_code == 429:
+        # El propio nodo remoto está frenando los logins -reintentar en el
+        # momento no ayuda, el mensaje debe ser distinto al de "credenciales
+        # rechazadas" para no hacer sospechar del usuario/contraseña.
+        return None, _error(node, "El nodo remoto está limitando los intentos de login (demasiados refrescos seguidos). Probá de nuevo en un minuto.")
     if login.status_code != 200:
         return None, _error(node, f"El nodo respondió {login.status_code} al iniciar sesión")
 
     try:
-        return login.json()["access_token"], None
+        token = login.json()["access_token"]
     except (ValueError, KeyError):
         return None, _error(node, "Respuesta de login inesperada -¿la URL es de un SquidManager?")
+
+    _cache_tokens[clave] = (token, time.monotonic() + _TTL_CACHE_TOKEN)
+    return token, None
 
 
 def _pedir_dashboard_plano(node, base: str, token: str) -> dict:

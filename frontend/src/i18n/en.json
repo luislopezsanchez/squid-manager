@@ -1183,5 +1183,8 @@
   "Alejar": "Zoom out",
   "Acercar": "Zoom in",
   "Ajustar a la pantalla": "Fit to screen",
-  "Ajustar": "Fit"
+  "Ajustar": "Fit",
+  "Squid caído": "Squid down",
+  "El panel de SquidManager responde, pero Squid (el proxy) no -su Cache Manager no contestó.": "The SquidManager panel responds, but Squid (the proxy) doesn't -its Cache Manager didn't answer.",
+  "Ctrl + rueda para acercar · clic y arrastrar para mover": "Ctrl + wheel to zoom · click and drag to move"
 }

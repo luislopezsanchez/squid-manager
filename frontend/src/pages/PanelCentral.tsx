@@ -41,6 +41,11 @@ interface NodeStatus {
       cpu: { percent: number }
       memory: { percent: number }
     }
+    // Sale del Cache Manager REAL de Squid (mgr:info), no de la API de
+    // SquidManager -null si Squid no responde, sea cual sea el motivo.
+    // Es la única forma de distinguir "el panel de SquidManager está
+    // arriba" de "Squid, el proxy de verdad, también lo está".
+    squid_uptime?: number | null
   }
 }
 
@@ -80,10 +85,21 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
   onVerMas: (n: NodeStatus, ruta: number[]) => void
 }) {
   const enLinea = nodo.status === 'ok'
+  // "En línea" antes solo significaba "el backend de SquidManager respondió
+  // al login" -no que Squid, el proxy de verdad, estuviera corriendo ahí.
+  // squid_uptime sale del Cache Manager REAL de Squid (no de la API), y da
+  // null exactamente cuando Squid no responde -sin importar que el panel
+  // de SquidManager siga arriba y conteste perfecto. Bug real, reportado
+  // en vivo 2026-09-26: un Squid detenido a propósito seguía viéndose "En
+  // línea" en el árbol.
+  const squidActivo = enLinea && nodo.data?.squid_uptime != null
+  const squidCaido = enLinea && !squidActivo
   const hostPuerto = hostPuertoDe(nodo)
   return (
-    <div className={`card p-4 text-left w-60 relative ${enLinea ? 'bg-ok-soft' : 'bg-danger-soft'} ${
-      esRaiz ? 'border-brand-500 border-2' : enLinea ? '' : 'border-rose-200'
+    <div className={`card p-4 text-left w-60 relative ${
+      squidCaido ? 'bg-warn-soft' : enLinea ? 'bg-ok-soft' : 'bg-danger-soft'
+    } ${
+      esRaiz ? 'border-brand-500 border-2' : squidCaido ? 'border-warn/30' : enLinea ? '' : 'border-rose-200'
     }`}>
       {esRaiz && (
         <span className="absolute -top-2.5 left-3.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-brand-700 text-white">
@@ -95,8 +111,8 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
           <IconGlobe className="w-4 h-4 text-ink-3 flex-none" />
           <span className="truncate" title={nodo.name}>{nodo.name}</span>
         </h3>
-        <span className={`flex-none ${enLinea ? 'pill-ok' : 'pill-danger'}`}>
-          {enLinea ? traducir("En línea") : traducir("Sin conexión")}
+        <span className={`flex-none ${squidCaido ? 'pill-warn' : enLinea ? 'pill-ok' : 'pill-danger'}`}>
+          {squidCaido ? traducir("Squid caído") : enLinea ? traducir("En línea") : traducir("Sin conexión")}
         </span>
       </div>
       <p className="text-[10px] font-bold uppercase tracking-wide text-ink-3 mb-2">
@@ -116,6 +132,11 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
         </div>
       ) : (
         <p className="text-xs text-rose-700 mb-1">{nodo.message}</p>
+      )}
+      {squidCaido && (
+        <p className="text-xs text-amber-800 mb-1">
+          {traducir("El panel de SquidManager responde, pero Squid (el proxy) no -su Cache Manager no contestó.")}
+        </p>
       )}
       {!esRaiz && (
         <div className="mt-2 pt-2 border-t border-line-soft text-right">
@@ -209,6 +230,12 @@ function ArbolConZoom({ children, dependenciaAjuste }: { children: React.ReactNo
   }
 
   const handleWheel = (e: React.WheelEvent) => {
+    // Solo con Ctrl/Cmd apretado: sin esto, cualquiera que solo quisiera
+    // bajar la página con la rueda -sin querer acercar nada- quedaba
+    // atrapado apenas el cursor pasaba sobre el árbol. Mismo criterio que
+    // Google Maps/Figma: la rueda sola sigue siendo scroll normal de la
+    // página, Ctrl+rueda es lo que acerca. Reportado en vivo, 2026-09-26.
+    if (!e.ctrlKey && !e.metaKey) return
     e.preventDefault()
     const rect = viewportRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -250,6 +277,9 @@ function ArbolConZoom({ children, dependenciaAjuste }: { children: React.ReactNo
           {children}
         </div>
       </div>
+      <span className="absolute bottom-2 left-2 text-[11px] text-ink-3 bg-white/80 backdrop-blur rounded px-1.5 py-0.5">
+        {traducir("Ctrl + rueda para acercar · clic y arrastrar para mover")}
+      </span>
       <div className="absolute bottom-2 right-2 flex items-center gap-0.5 bg-white/95 backdrop-blur rounded-lg border border-line-soft shadow-sm px-1 py-1">
         <button type="button" onClick={() => zoomBoton(-PASO_ZOOM_BOTON)} className="btn-icon w-7 h-7 text-base" title={traducir("Alejar")}>−</button>
         <span className="text-xs text-ink-3 w-11 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
