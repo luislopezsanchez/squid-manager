@@ -213,26 +213,33 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
       </p>
       {hostPuerto && <p className="text-xs text-ink-3 font-mono mb-2 truncate">{hostPuerto}</p>}
       {enLinea && nodo.data ? (
+        // Mismo grid, mismas clases, en los dos casos -incluido `truncate`
+        // en cada etiqueta y valor: una tarjeta de squid_basico con un
+        // rótulo más largo ("Clientes conectados") NO puede terminar más
+        // alta que sus vecinas por eso -todas las tarjetas del árbol están
+        // ancladas a la misma fila. Bug real, reportado en vivo,
+        // 2026-09-27: el texto se cortaba a dos líneas y agrandaba la
+        // tarjeta entera.
         esBasico ? (
           <div className="grid grid-cols-2 gap-2 text-sm mb-1">
-            <div>
-              <p className="text-ink-3 text-xs">{traducir("Versión de Squid")}</p>
-              <p className="font-medium">{nodo.data.squid_version || '—'}</p>
+            <div className="min-w-0">
+              <p className="text-ink-3 text-xs truncate">{traducir("Versión")}</p>
+              <p className="font-medium truncate">{nodo.data.squid_version || '—'}</p>
             </div>
-            <div>
-              <p className="text-ink-3 text-xs">{traducir("Clientes conectados")}</p>
-              <p className="font-medium">{nodo.data.clientes_conectados != null ? formatNumber(nodo.data.clientes_conectados) : '—'}</p>
+            <div className="min-w-0">
+              <p className="text-ink-3 text-xs truncate">{traducir("Clientes")}</p>
+              <p className="font-medium truncate">{nodo.data.clientes_conectados != null ? formatNumber(nodo.data.clientes_conectados) : '—'}</p>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2 text-sm mb-1">
-            <div>
-              <p className="text-ink-3 text-xs">{traducir("Tráfico actual")}</p>
-              <p className="font-medium">{formatRate(nodo.data.traffic!.total_bytes_per_second)}</p>
+            <div className="min-w-0">
+              <p className="text-ink-3 text-xs truncate">{traducir("Tráfico actual")}</p>
+              <p className="font-medium truncate">{formatRate(nodo.data.traffic!.total_bytes_per_second)}</p>
             </div>
-            <div>
-              <p className="text-ink-3 text-xs">{traducir("Usuarios activos")}</p>
-              <p className="font-medium">{formatNumber(nodo.data.traffic!.active_users.length)}</p>
+            <div className="min-w-0">
+              <p className="text-ink-3 text-xs truncate">{traducir("Usuarios activos")}</p>
+              <p className="font-medium truncate">{formatNumber(nodo.data.traffic!.active_users.length)}</p>
             </div>
           </div>
         )
