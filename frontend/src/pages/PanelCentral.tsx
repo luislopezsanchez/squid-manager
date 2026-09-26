@@ -85,14 +85,25 @@ interface NodoDetalle {
 /** Ícono ℹ con explicación al pasar el mouse o al hacer clic (clic para que
  *  funcione igual de bien en pantallas táctiles, donde no hay "hover"). Se
  *  cierra solo al perder el foco -clic en cualquier otro lado de la
- *  página. */
-function InfoTipCentral({ children }: { children: React.ReactNode }) {
+ *  página. `anclaje` decide de qué lado del ícono cuelga el globo: "right"
+ *  (default, el ícono queda a la derecha de lo que explica) o "left" (el
+ *  ícono queda a la IZQUIERDA de lo que explica, como en la tarjeta de un
+ *  nodo -angosta, w-60- donde colgar el globo hacia la izquierda lo
+ *  sacaría del lienzo). `ancho` angosta el globo para espacios chicos,
+ *  como esa misma tarjeta. */
+function InfoTipCentral({ children, anclaje = 'right', ancho }: {
+  children: React.ReactNode
+  anclaje?: 'left' | 'right'
+  ancho?: { min: number; max: number }
+}) {
   const [abierto, setAbierto] = useState(false)
+  const min = ancho?.min ?? 260
+  const max = ancho?.max ?? 360
   return (
     <span className="relative inline-flex items-center group">
       <button
         type="button"
-        // stopPropagation: este ícono ahora vive DENTRO de un <label> que
+        // stopPropagation: este ícono puede vivir DENTRO de un <label> que
         // envuelve un checkbox (uno por interruptor, en el banner de
         // Monitoreo Centralizado) -sin esto, el clic para abrir el
         // tooltip también le llegaría al <label> y tildaría/destildaría
@@ -104,10 +115,10 @@ function InfoTipCentral({ children }: { children: React.ReactNode }) {
       >
         <IconInfo className="w-4 h-4" />
       </button>
-      <span className={`absolute right-0 top-full mt-1.5 ${abierto ? 'block' : 'hidden group-hover:block'}
+      <span className={`absolute ${anclaje === 'left' ? 'left-0' : 'right-0'} top-full mt-1.5 ${abierto ? 'block' : 'hidden group-hover:block'}
                        bg-brand-900 text-white text-xs px-3 py-2 rounded-lg
                        whitespace-normal shadow-lg z-30 pointer-events-none`}
-            style={{ maxWidth: '360px', minWidth: '260px' }}>
+            style={{ maxWidth: `${max}px`, minWidth: `${min}px` }}>
         {children}
       </span>
     </span>
@@ -187,9 +198,18 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
           {squidCaido ? traducir("Squid caído") : enLinea ? traducir("En línea") : traducir("Sin conexión")}
         </span>
       </div>
-      <p className="text-[10px] font-bold uppercase tracking-wide text-ink-3 mb-2">
-        {traducir("Nivel {n}", { n: String(nivel) })}{esRaiz ? ` (${traducir("este panel")})` : ''}
-        {esBasico && <span className="pill-mute ml-1.5 normal-case tracking-normal">{traducir("Squid básico")}</span>}
+      <p className="text-[10px] font-bold uppercase tracking-wide text-ink-3 mb-2 flex items-center flex-wrap gap-1">
+        <span>{traducir("Nivel {n}", { n: String(nivel) })}{esRaiz ? ` (${traducir("este panel")})` : ''}</span>
+        {esBasico && <span className="pill-mute normal-case tracking-normal">{traducir("Squid básico")}</span>}
+        {/* Ícono + tooltip en vez de un párrafo largo adentro de la tarjeta
+            -el texto completo (versión/uptime no disponibles, la ACL es
+            opcional) deformaba el alto de todas las tarjetas del árbol por
+            igual, ancladas a la misma fila. Pedido en vivo, 2026-09-26. */}
+        {esBasico && enLinea && nodo.message && (
+          <InfoTipCentral anclaje="left" ancho={{ min: 220, max: 280 }}>
+            <p className="normal-case tracking-normal font-normal">{nodo.message}</p>
+          </InfoTipCentral>
+        )}
       </p>
       {hostPuerto && <p className="text-xs text-ink-3 font-mono mb-2 truncate">{hostPuerto}</p>}
       {enLinea && nodo.data ? (
@@ -223,9 +243,6 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
         <p className="text-xs text-amber-800 mb-1">
           {traducir("El panel de SquidManager responde, pero Squid (el proxy) no -su Cache Manager no contestó.")}
         </p>
-      )}
-      {esBasico && enLinea && nodo.message && (
-        <p className="text-xs text-ink-3 mb-1">{nodo.message}</p>
       )}
       {!esRaiz && (
         <div className="mt-2 pt-2 border-t border-line-soft text-right">
@@ -630,21 +647,6 @@ function ModalFormNodo({ form, setForm, editingId, testing, testResult, onTest, 
               </>
             )}
           </div>
-
-          {esBasicoForm && (
-            <div className="note note-ok mt-4">
-              <p className="note-text">
-                {traducir("No hace falta tocar el squid.conf remoto para agregarlo: alcanza con que Squid esté escuchando. Si además querés ver su versión, tiempo activo y clientes conectados, agregá esto en su squid.conf (y recargá Squid) -es opcional:")}
-              </p>
-              <pre className="mt-2 text-xs bg-black/5 rounded p-2 overflow-x-auto whitespace-pre">
-{`acl monitoreo_central src <IP de este servidor>
-http_access allow manager monitoreo_central`}
-              </pre>
-              <p className="note-text mt-2">
-                {traducir("Esas dos líneas van ANTES del \"http_access deny manager\" ya existente en el squid.conf.")}
-              </p>
-            </div>
-          )}
 
           <label className="flex items-center gap-2 mt-4 cursor-pointer">
             <input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} />
