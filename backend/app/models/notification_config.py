@@ -26,6 +26,12 @@ class NotificationConfig(Base):
     notify_on_acl_change = Column(Boolean, default=False, nullable=False)
     notify_on_rule_change = Column(Boolean, default=False, nullable=False)
     notify_on_security_alert = Column(Boolean, default=True, nullable=False)
+    # Un nodo de Monitoreo Centralizado (ver MonitoredNode) que deja de
+    # responder, o cuyo Squid deja de responder aunque el panel siga
+    # arriba -ver node_alert_service.py. Mismo criterio de default que
+    # notify_on_security_alert: es una condición detectada sola, no una
+    # acción deliberada de un admin (a diferencia de apply/user_change/etc).
+    notify_on_node_down = Column(Boolean, default=True, nullable=False)
 
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

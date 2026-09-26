@@ -24,6 +24,7 @@ from app.services.central_monitor_service import (
     PROFUNDIDAD_DEFECTO, PROFUNDIDAD_MAXIMA,
 )
 from app.services.metrics_service import get_dashboard
+from app.services.node_alert_service import get_alertas_nodos_recientes
 from app.routes.backup import build_backup_dict
 from app.i18n import idioma_de_cabecera, traducir
 
@@ -464,3 +465,18 @@ def node_detalle_por_ruta(
     if not resto:
         return consultar_detalle_nodo(node)
     return consultar_detalle_relay(node, resto)
+
+
+@router.get("/alertas-recientes")
+def alertas_recientes(
+    horas: float = Query(24, ge=1, le=168),
+    limit: int = Query(20, ge=1, le=50),
+    _: Admin = Depends(get_current_admin),
+):
+    """Transiciones de estado ("nodo caído"/"nodo recuperado") notificadas en
+    las últimas `horas` -ver node_alert_service.py- para el aviso en Panel
+    Central, aparte de lo que ya se haya mandado por email/Telegram si esos
+    canales están configurados. Mismo criterio que
+    GET /metrics/anomalias-recientes: sin _requerir_habilitado, alcanza con
+    estar logueado para ver el historial."""
+    return get_alertas_nodos_recientes(horas=horas, limit=limit)

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import { formatRate, formatNumber, formatBytes } from '../utils/format'
-import { IconRefresh, IconEdit, IconTrash, IconGlobe, IconUpload, IconClose, IconBan, IconLink, IconInfo } from '../components/Icons'
+import { IconRefresh, IconEdit, IconTrash, IconGlobe, IconUpload, IconClose, IconBan, IconLink, IconInfo, IconAlert } from '../components/Icons'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 
 // "squidmanager" (otra instancia con login) o "squid_basico" (Squid puro,
@@ -761,6 +761,12 @@ export default function PanelCentral() {
   const [testing, setTesting] = useState(false)
   const [syncingId, setSyncingId] = useState<number | null>(null)
   const [testResult, setTestResult] = useState<{ status: string; message?: string; monitoreo_centralizado_remoto?: boolean | null } | null>(null)
+  // Transiciones de estado ("nodo caído"/"nodo recuperado") ya notificadas
+  // por email/Telegram si esos canales están configurados -ver
+  // node_alert_service.py. No depende de que esta pestaña esté abierta en
+  // el momento en que pasó -el chequeo lo hace un hilo de fondo en el
+  // backend cada un minuto, esto solo muestra lo que ya detectó.
+  const [alertas, setAlertas] = useState<{ ts: number; node_name: string; estado: string; mensaje: string }[]>([])
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const { showToast, ToastContainer } = useToast()
 
@@ -831,6 +837,7 @@ export default function PanelCentral() {
     if (!config?.enabled) return
     loadNodes()
     loadEstado()
+    api.getCentralAlertasRecientes(24, 5).then(setAlertas).catch(() => {})
     // Cada nodo implica un login + un dashboard completo contra otra
     // instancia -no tiene sentido repetirlo cada pocos segundos como el
     // dashboard local, que solo lee de su propio proceso.
@@ -1025,6 +1032,31 @@ export default function PanelCentral() {
 
       {config?.enabled && (
       <>
+      {/* Aviso de alertas de nodos: lo mismo que ya se manda por
+          email/Telegram si esos canales están configurados (ver
+          node_alert_service.py), para que también se note acá sin
+          depender de revisar el correo -ni de tener esta pestaña abierta
+          en el momento en que pasó, a diferencia del estado en vivo del
+          árbol de abajo. Pedido en vivo, 2026-09-27. */}
+      {alertas.length > 0 && (
+        <div className="card p-4 mb-4 flex items-center gap-3 border"
+             style={{ borderColor: 'var(--warn)', background: 'var(--warn-soft)' }}>
+          <span className="flex-none" style={{ color: 'var(--warn)' }}>
+            <IconAlert className="w-5 h-5" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--warn)' }}>
+              {alertas.length === 1
+                ? traducir("1 cambio de estado detectado recientemente")
+                : traducir("{n} cambios de estado detectados recientemente", { n: alertas.length })}
+            </p>
+            <p className="text-xs text-ink-2 truncate">
+              {alertas[0].mensaje}
+              {alertas.length > 1 && ` ${traducir("+ {n} más", { n: alertas.length - 1 })}`}
+            </p>
+          </div>
+        </div>
+      )}
       {loadingEstado ? (
         <LoadingState />
       ) : estadoError && !raiz ? (

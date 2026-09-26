@@ -318,6 +318,11 @@ export const api = {
   // sus propias credenciales. Ver GET /central/nodes/detalle-por-ruta.
   getCentralNodeDetallePorRuta: (ruta: number[]) =>
     request<any>(`/central/nodes/detalle-por-ruta?ruta=${ruta.join(',')}`),
+  // Transiciones de estado ("nodo caído"/"nodo recuperado") ya notificadas
+  // por email/Telegram si esos canales están configurados -ver
+  // node_alert_service.py. Mismo patrón que getAnomaliasRecientes.
+  getCentralAlertasRecientes: (horas = 24, limit = 10) =>
+    request<any>(`/central/alertas-recientes?horas=${horas}&limit=${limit}`),
 
   // Audit
   listAudit: (limit = 100, offset = 0) => request<any>(`/audit/?limit=${limit}&offset=${offset}`),

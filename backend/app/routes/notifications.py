@@ -28,6 +28,7 @@ class NotificationConfigIn(BaseModel):
     notify_on_acl_change: bool = False
     notify_on_rule_change: bool = False
     notify_on_security_alert: bool = True
+    notify_on_node_down: bool = True
 
 
 class TestEmailIn(BaseModel):
@@ -70,6 +71,7 @@ def get_config(
         "notify_on_acl_change": config.notify_on_acl_change,
         "notify_on_rule_change": config.notify_on_rule_change,
         "notify_on_security_alert": config.notify_on_security_alert,
+        "notify_on_node_down": config.notify_on_node_down,
     }
 
 
@@ -96,6 +98,7 @@ def update_config(
     config.notify_on_acl_change = data.notify_on_acl_change
     config.notify_on_rule_change = data.notify_on_rule_change
     config.notify_on_security_alert = data.notify_on_security_alert
+    config.notify_on_node_down = data.notify_on_node_down
 
     db.add(AuditLog(
         admin_id=current_admin.id, admin_username=current_admin.username,

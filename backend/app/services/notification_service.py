@@ -17,6 +17,7 @@ EVENT_CONFIG_MAP = {
     "acl_change": "notify_on_acl_change",
     "rule_change": "notify_on_rule_change",
     "security_alert": "notify_on_security_alert",
+    "node_down": "notify_on_node_down",
 }
 
 

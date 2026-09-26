@@ -16,6 +16,7 @@ interface NotifConfig {
   notify_on_acl_change: boolean
   notify_on_rule_change: boolean
   notify_on_security_alert: boolean
+  notify_on_node_down: boolean
 }
 
 export default function Notifications() {
@@ -52,6 +53,7 @@ export default function Notifications() {
         notify_on_acl_change: config.notify_on_acl_change,
         notify_on_rule_change: config.notify_on_rule_change,
         notify_on_security_alert: config.notify_on_security_alert,
+        notify_on_node_down: config.notify_on_node_down,
       }
       await api.updateNotificationConfig(payload)
       showToast(traducir("Configuración guardada correctamente"), 'success')
@@ -192,6 +194,7 @@ export default function Notifications() {
             { key: 'notify_on_acl_change', label: traducir("Cambios en ACLs"), desc: 'Crear, editar o eliminar ACLs' },
             { key: 'notify_on_rule_change', label: traducir("Cambios en reglas de acceso"), desc: 'Crear, editar, reordenar o eliminar reglas' },
             { key: 'notify_on_security_alert', label: traducir("Alertas de seguridad"), desc: traducir("Fuerza bruta, bloqueos en racha o picos de tráfico detectados automáticamente") },
+            { key: 'notify_on_node_down', label: traducir("Estado de nodos (Monitoreo Centralizado)"), desc: traducir("Un nodo configurado deja de responder, o su Squid deja de responder aunque el panel siga arriba -y cuando vuelve a estar en línea") },
           ].map(item => (
             <label key={item.key} className="flex items-start gap-3 cursor-pointer">
               <input type="checkbox"
