@@ -1,8 +1,11 @@
 """Tests de CentralMonitorConfig y el gate _requerir_habilitado() de
-app/routes/central.py: la sección entera (nodos, dashboard, sync) se niega
-mientras el interruptor esté apagado -apagado por defecto, mismo criterio
-que LDAP/Kerberos/Syslog/IA.
-"""
+app/routes/central.py: el lado SALIENTE (listar/crear/editar/borrar nodos
+propios, probarlos, sincronizarlos) se niega mientras el interruptor esté
+apagado -apagado por defecto, mismo criterio que LDAP/Kerberos/Syslog/IA.
+
+A propósito, _requerir_habilitado() NO se llama desde central_dashboard():
+el lado ENTRANTE (que otro SquidManager consulte a este como nodo) nunca
+depende de este interruptor, ver test_central_routes_validacion.py."""
 
 import uuid
 

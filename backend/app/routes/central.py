@@ -50,12 +50,24 @@ def _obtener_o_crear_config(db: Session) -> CentralMonitorConfig:
 
 
 def _requerir_habilitado(db: Session) -> None:
-    """La sección entera -listar/crear/editar/borrar nodos, pedir el
-    dashboard, sincronizar- se niega mientras el interruptor esté apagado,
-    no solo se oculta en el frontend: apagado por defecto significa que la
-    función ni siquiera está disponible, incluida la respuesta a otro
-    SquidManager que tenga a ESTE servidor configurado como nodo -apagarlo
-    acá también significa "no dejarse monitorear"."""
+    """Gatea el lado SALIENTE del feature -listar/crear/editar/borrar los
+    nodos propios, probarlos, sincronizarles la config, reenviar una ruta
+    de detalle hacia ellos-: todo lo que significa "estoy usando esto para
+    monitorear a otros". Apagado por defecto significa que esas acciones ni
+    siquiera están disponibles, no solo que se ocultan en el frontend.
+
+    A propósito NO gatea el lado ENTRANTE (que otro SquidManager me
+    consulte a MÍ como nodo, GET /dashboard): ese nunca necesitó este
+    interruptor -alcanza con que quien pregunta tenga una cuenta válida acá,
+    ni más ni menos que lo que ya hace falta para cualquier otro endpoint
+    de métricas de este proyecto (get_dashboard vía /api/metrics/dashboard
+    tampoco pide esto). Antes si lo gateaba, y quien apagaba este
+    interruptor pensando "quiero dejar de monitorear a mis nodos" de paso
+    dejaba de responderle a SU PROPIO padre -confusión real, reportada en
+    vivo 2026-09-26: "se supone que no se necesita habilitar esa función en
+    los nodos hijos para poder monitorearlo". Ver
+    CentralMonitorConfig.monitorizar_hijos para el interruptor que sí
+    corresponde acá (si expongo o no mis propios nodos al respondar)."""
     config = db.query(CentralMonitorConfig).first()
     if not config or not config.enabled:
         raise HTTPException(403, detail="El monitoreo centralizado está deshabilitado en este servidor.")
@@ -279,9 +291,10 @@ def central_dashboard(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """El dashboard de este servidor (`self`) y, si `profundidad` > 0 Y
-    `monitorizar_hijos` está prendido, el árbol de sus propios nodos
-    remotos habilitados (`children`).
+    """El dashboard de este servidor (`self`) y, si `profundidad` > 0 Y este
+    servidor tiene el monitoreo habilitado (`enabled`) Y `monitorizar_hijos`
+    prendido, el árbol de sus propios nodos remotos habilitados
+    (`children`).
 
     Mismo endpoint para dos llamadores distintos: el panel de este servidor
     (llamada normal, con su propio token) y cualquier OTRO SquidManager que
@@ -290,20 +303,26 @@ def central_dashboard(
     nivel por nivel, sin que un servidor necesite conocer ni tener
     credenciales de nada más allá de sus propios nodos directos.
 
-    `monitorizar_hijos` en falso deja `children` siempre vacío, para
-    cualquiera de los dos llamadores por igual -no hay forma de distinguir
-    "mi propio panel" de "un padre" en la petición en sí (los dos
-    autentican igual), así que la única forma limpia de que este servidor
-    siga siendo visible para un padre sin monitorizar a los suyos es que
-    directamente deje de recorrerlos, sea quien sea el que pregunta. Ver el
-    docstring de CentralMonitorConfig -encontrado en vivo, 2026-09-26: un
-    único interruptor todo-o-nada obligaba a elegir entre "no me dejo
-    monitorear" y "sigo monitoreando a mis nodos"."""
-    _requerir_habilitado(db)
+    A propósito SIN _requerir_habilitado(): a diferencia del resto de esta
+    sección, esto responde siempre que quien pregunte tenga una cuenta
+    válida acá, esté o no prendido el interruptor local -"dejarse
+    monitorear" nunca debería depender de un interruptor propio, alcanza
+    con las credenciales que el padre ya tiene guardadas (ver el docstring
+    de _requerir_habilitado). Confusión real, reportada en vivo
+    2026-09-26: un admin apagaba el interruptor pensando "dejo de
+    monitorear a mis nodos" y de paso su propio padre empezaba a verlo
+    "Sin conexión" (403), sin haber tocado nada del lado del padre.
+
+    `children` sale vacío si falta cualquiera de los dos -`enabled` o
+    `monitorizar_hijos`-, para cualquiera de los dos llamadores por igual:
+    no hay forma de distinguir "mi propio panel" de "un padre" en la
+    petición en sí (los dos autentican igual), así que la única forma
+    limpia de no exponer los nodos propios es no recorrerlos en absoluto,
+    sea quien sea el que pregunta."""
     config = _obtener_o_crear_config(db)
     idioma = idioma_de_cabecera(request.headers.get("accept-language"))
 
-    nodes = db.query(MonitoredNode).order_by(MonitoredNode.name).all() if config.monitorizar_hijos else []
+    nodes = db.query(MonitoredNode).order_by(MonitoredNode.name).all() if (config.enabled and config.monitorizar_hijos) else []
     children = consultar_arbol_de_todos(nodes, profundidad_restante=profundidad - 1) if profundidad > 0 else []
 
     return {

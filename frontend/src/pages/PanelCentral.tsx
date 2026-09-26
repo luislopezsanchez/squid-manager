@@ -495,19 +495,17 @@ export default function PanelCentral() {
           <h1 className="page-title">{traducir("Monitoreo centralizado")}</h1>
           <p className="page-sub">{traducir("Métricas de este servidor y de otras instancias de SquidManager, en una sola vista")}</p>
         </div>
-        {config?.enabled && (
-          <button onClick={loadEstado} className="btn btn-outline flex items-center gap-2">
-            <IconRefresh className="w-4 h-4" />
-            {traducir("Actualizar")}
-          </button>
-        )}
       </div>
 
       {/* Apagado por defecto, mismo patrón que LDAP: un banner con el
           interruptor arriba de todo, y el resto de la página (nodos,
           dashboard) recién aparece una vez habilitado -no es solo estético,
-          el backend también rechaza esas rutas con 403 mientras esté
-          apagado (ver _requerir_habilitado en routes/central.py). */}
+          el backend también rechaza esas rutas (listar/crear/editar/borrar
+          nodos propios, probarlos, sincronizarlos) con 403 mientras esté
+          apagado (ver _requerir_habilitado en routes/central.py). Esto es
+          solo el lado SALIENTE -que otro SquidManager consulte a ESTE
+          servidor como nodo nunca depende de este interruptor, ver el
+          docstring de _requerir_habilitado. */}
       <div className={`rounded-xl p-4 mb-6 border ${config?.enabled ? 'bg-green-50 border-green-200' : 'bg-brand-50 border-line'}`}>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -527,7 +525,7 @@ export default function PanelCentral() {
           </label>
         </div>
         <p className="text-xs text-ink-3 mt-2">
-          {traducir("Cada nodo se consulta con una cuenta propia del panel remoto (recomendado: un usuario con rol \"solo lectura\" dedicado a esto). No requiere ningún cambio en Squid ni que los nodos se conozcan entre sí. Mientras esté desactivado, este servidor tampoco responde si otro SquidManager lo agrega a él como nodo.")}
+          {traducir("Cada nodo se consulta con una cuenta propia del panel remoto (recomendado: un usuario con rol \"solo lectura\" dedicado a esto). No requiere ningún cambio en Squid ni que los nodos se conozcan entre sí. Mientras esté desactivado, no podés configurar ni consultar nodos propios desde acá -pero si OTRO SquidManager ya te tiene agregado como nodo a vos, te sigue viendo igual: dejarse monitorear nunca depende de este interruptor, solo de que esa cuenta sea válida.")}
         </p>
 
         {config?.enabled && (
@@ -542,7 +540,7 @@ export default function PanelCentral() {
               <span className="text-sm text-ink-2">{traducir("Monitorizar mis propios nodos")}</span>
             </label>
             <p className="text-xs text-ink-3 mt-1.5">
-              {traducir("Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo. Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.")}
+              {traducir("Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo, esté prendido o apagado \"Habilitar\". Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.")}
             </p>
           </div>
         )}
@@ -550,23 +548,31 @@ export default function PanelCentral() {
 
       {config?.enabled && (
       <>
-      {ultimaActualizacion && (
-        <p className="text-xs text-ink-3 mb-3">
-          {traducir("Última actualización")}: {ultimaActualizacion.toLocaleTimeString()}
-        </p>
-      )}
-
       {loadingEstado ? (
         <LoadingState />
       ) : estadoError && !raiz ? (
         <ErrorState onRetry={loadEstado} />
       ) : raiz ? (
         <div className="card p-5 mb-8">
-          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
-            <h2 className="text-sm font-bold text-ink">{traducir("Árbol de nodos")}</h2>
-            <span className="text-xs text-ink-3">
-              {traducir("El nivel se calcula según qué panel estés mirando -nadie lo asigna a mano")}
-            </span>
+          <div className="flex items-start justify-between flex-wrap gap-2 mb-4">
+            <div>
+              <h2 className="text-sm font-bold text-ink">{traducir("Árbol de nodos")}</h2>
+              <p className="text-xs text-ink-3 mt-0.5">
+                {traducir("El nivel se calcula según qué panel estés mirando -nadie lo asigna a mano")}
+              </p>
+              {ultimaActualizacion && (
+                <p className="text-xs text-ink-3 mt-0.5">
+                  {traducir("Última actualización")}: {ultimaActualizacion.toLocaleTimeString()}
+                </p>
+              )}
+            </div>
+            {/* Adentro de la propia tarjeta del árbol, no en el encabezado de
+                la página: antes había que scrollear hasta arriba de todo
+                para refrescar -pedido en vivo, 2026-09-26. */}
+            <button onClick={loadEstado} className="btn btn-outline flex items-center gap-2 flex-none">
+              <IconRefresh className="w-4 h-4" />
+              {traducir("Actualizar")}
+            </button>
           </div>
           {/* pt-3: overflow-x-auto sin overflow-y explícito hace que el
               navegador igual recorte el eje Y (no puede quedar "visible" si

@@ -319,3 +319,47 @@ def test_dashboard_con_monitorizar_hijos_prendido_si_recorre_nodos(monkeypatch):
         db=_FakeDBDashboard(config, [nodo]), _=None,
     )
     assert capturado["nodes"] == [nodo]
+
+
+def test_dashboard_responde_aunque_enabled_este_apagado(monkeypatch):
+    """"Dejarse monitorear" (que otro SquidManager consulte a este como
+    nodo) nunca depende de `enabled` -antes central_dashboard() llamaba a
+    _requerir_habilitado() y devolvía 403 acá, y un admin que apagaba el
+    interruptor pensando "dejo de monitorear a mis nodos" de paso dejaba de
+    responderle a SU PROPIO padre, sin haber tocado nada del lado del
+    padre -confusión real, reportada en vivo 2026-09-26."""
+    config = CentralMonitorConfig(
+        id=1, enabled=False, monitorizar_hijos=True, instance_id="00000000-0000-0000-0000-000000000005",
+    )
+    monkeypatch.setattr(central, "get_dashboard", lambda db=None: {})
+
+    resultado = central.central_dashboard(
+        request=_FakeRequestSinHeaders(), profundidad=3,
+        db=_FakeDBDashboard(config, []), _=None,
+    )
+    assert resultado["self"]["status"] == "ok"
+
+
+def test_dashboard_con_enabled_apagado_no_recorre_nodos_propios(monkeypatch):
+    """`children` sale vacío con `enabled` apagado, aunque `monitorizar_hijos`
+    esté prendido -"dejarse monitorear" no implica exponer los nodos
+    propios: son dos preguntas distintas (ver docstring de
+    CentralMonitorConfig)."""
+    config = CentralMonitorConfig(
+        id=1, enabled=False, monitorizar_hijos=True, instance_id="00000000-0000-0000-0000-000000000006",
+    )
+    nodo = MonitoredNode(id=1, name="Norte", url="http://10.0.0.5:8000",
+                          username="viewer", password="secreta", enabled=True)
+    capturado = {}
+
+    def _consultar_arbol_falso(nodes, profundidad_restante):
+        capturado["nodes"] = nodes
+        return []
+
+    monkeypatch.setattr(central, "consultar_arbol_de_todos", _consultar_arbol_falso)
+    monkeypatch.setattr(central, "get_dashboard", lambda db=None: {})
+    central.central_dashboard(
+        request=_FakeRequestSinHeaders(), profundidad=3,
+        db=_FakeDBDashboard(config, [nodo]), _=None,
+    )
+    assert capturado["nodes"] == []
