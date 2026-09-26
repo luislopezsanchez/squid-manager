@@ -20,7 +20,7 @@ from app.models.squid_settings import SquidSetting
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.central_monitor_service import (
     consultar_nodo, sincronizar_configuracion,
-    consultar_arbol_de_todos, consultar_detalle_nodo,
+    consultar_arbol_de_todos, consultar_detalle_nodo, consultar_detalle_relay,
     PROFUNDIDAD_DEFECTO, PROFUNDIDAD_MAXIMA,
 )
 from app.services.metrics_service import get_dashboard
@@ -320,19 +320,42 @@ def sync_node(
     return resultado
 
 
-@router.get("/nodes/{node_id}/detalle")
-def node_detalle(
-    node_id: int,
+@router.get("/nodes/detalle-por-ruta")
+def node_detalle_por_ruta(
+    ruta: str = Query(..., description="ids separados por coma: del hijo directo de quien pregunta hacia el nieto/bisnieto pedido"),
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """Top usuarios, top dominios y últimas conexiones de un nodo remoto
-    -datos adicionales para el modal "Ver más" del árbol. Mismo mecanismo
-    que el dashboard agregado: la cuenta guardada para ese nodo la usa este
-    backend, nunca el navegador -no es una superficie de riesgo nueva,
-    solo pide más endpoints con el mismo login de siempre."""
+    """Top usuarios, top dominios y últimas conexiones de CUALQUIER nodo del
+    árbol, no solo un hijo directo -datos adicionales para el modal "Ver
+    más". Un hijo directo es una ruta de un solo id (ej. «7»); un nieto o
+    bisnieto es una ruta más larga (ej. «7,1,1»: mi nodo 7, después su nodo
+    1, después el nodo 1 de ese).
+
+    Cada salto resuelve el PRIMER id de la ruta con sus propias
+    credenciales; si queda más ruta, se la reenvía tal cual a ESE nodo, que
+    hace lo mismo con la suya (ver consultar_detalle_relay) -mismo
+    principio que ya usa el árbol de dashboards (self+children) para la
+    jerarquía multi-nivel: este servidor nunca necesita las credenciales de
+    nada más allá de sus propios nodos directos. Reemplaza a la vieja
+    GET /nodes/{id}/detalle (un id suelto, sin nunca poder alcanzar más
+    allá de un hijo directo -bug real, visto en pruebas en vivo con una
+    jerarquía de 4 niveles, 2026-09-26)."""
     _requerir_habilitado(db)
-    node = db.query(MonitoredNode).filter(MonitoredNode.id == node_id).first()
+    try:
+        ids = [int(x) for x in ruta.split(",") if x.strip() != ""]
+    except ValueError:
+        raise HTTPException(400, detail="La ruta debe ser una lista de ids separados por coma")
+    if not ids:
+        raise HTTPException(400, detail="La ruta no puede estar vacía")
+    if len(ids) > PROFUNDIDAD_MAXIMA:
+        raise HTTPException(400, detail=f"La ruta no puede tener más de {PROFUNDIDAD_MAXIMA} saltos")
+
+    primero, resto = ids[0], ids[1:]
+    node = db.query(MonitoredNode).filter(MonitoredNode.id == primero).first()
     if not node:
         raise HTTPException(404, detail="Nodo no encontrado")
-    return consultar_detalle_nodo(node)
+
+    if not resto:
+        return consultar_detalle_nodo(node)
+    return consultar_detalle_relay(node, resto)

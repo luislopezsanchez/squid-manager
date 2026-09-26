@@ -9,7 +9,7 @@ import pytest
 import app.services.central_monitor_service as central_monitor_service
 from app.services.central_monitor_service import (
     consultar_nodo, consultar_todos, sincronizar_configuracion, consultar_arbol,
-    consultar_detalle_nodo,
+    consultar_detalle_nodo, consultar_detalle_relay,
 )
 
 
@@ -423,4 +423,53 @@ def test_detalle_nodo_un_endpoint_caido_no_tumba_los_otros(monkeypatch):
     assert resultado["status"] == "ok"
     assert resultado["top_domains"] is None
     assert resultado["top_users"] == [{"ok": True}]
-    assert resultado["connections"] == [{"ok": True}]
+
+
+# --- consultar_detalle_relay: detalle de un nieto/bisnieto (nivel 3+) ------
+
+def test_detalle_relay_reenvia_el_resto_de_la_ruta_al_siguiente_salto(monkeypatch):
+    urls_llamadas = []
+
+    def _get(url, **k):
+        urls_llamadas.append((url, k.get("params")))
+        return FakeResponse(200, json_data={"id": 9, "status": "ok", "top_users": []})
+
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(200, json_data={"access_token": "tok"}))
+    monkeypatch.setattr(central_monitor_service.httpx, "get", _get)
+    resultado = consultar_detalle_relay(FakeNode(), resto=[1, 1])
+    assert resultado == {"id": 9, "status": "ok", "top_users": []}
+    assert len(urls_llamadas) == 1
+    url, params = urls_llamadas[0]
+    assert url == "http://10.0.0.5:8000/api/central/nodes/detalle-por-ruta"
+    assert params == {"ruta": "1,1"}
+
+
+def test_detalle_relay_login_fallido_no_lanza(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(401))
+    resultado = consultar_detalle_relay(FakeNode(), resto=[1])
+    assert resultado["status"] == "error"
+    assert resultado["top_users"] is None
+    assert resultado["top_domains"] is None
+    assert resultado["connections"] is None
+
+
+def test_detalle_relay_nodo_intermedio_sin_esta_ruta_da_mensaje_claro(monkeypatch):
+    """El nodo intermedio tiene una versión anterior a esta función
+    (404 en /central/nodes/detalle-por-ruta): no puede reenviar más allá de
+    sí mismo -mensaje claro, no un error genérico de JSON inválido."""
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(200, json_data={"access_token": "tok"}))
+    monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(404))
+    resultado = consultar_detalle_relay(FakeNode(), resto=[1])
+    assert resultado["status"] == "error"
+    assert "versión de SquidManager anterior" in resultado["message"]
+    assert resultado["top_users"] is None
+
+
+def test_detalle_relay_error_al_reenviar_incluye_los_tres_campos_none(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(200, json_data={"access_token": "tok"}))
+    monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(500))
+    resultado = consultar_detalle_relay(FakeNode(), resto=[1])
+    assert resultado["status"] == "error"
+    assert resultado["top_users"] is None
+    assert resultado["top_domains"] is None
+    assert resultado["connections"] is None

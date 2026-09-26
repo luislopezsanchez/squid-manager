@@ -292,3 +292,63 @@ def consultar_detalle_nodo(node) -> dict:
         "top_domains": _pedir("/api/metrics/top-domains?limit=10&ventana=24h&sort_by=requests"),
         "connections": _pedir("/api/metrics/connections?limit=15"),
     }
+
+
+def _detalle_error(node, mensaje: str) -> dict:
+    error = _error(node, mensaje)
+    error["top_users"] = None
+    error["top_domains"] = None
+    error["connections"] = None
+    return error
+
+
+def consultar_detalle_relay(node, resto: list[int]) -> dict:
+    """Detalle de un nieto o bisnieto (nivel 3+ del árbol): loguea en `node`
+    -el siguiente salto de la ruta- y le pide a SU MISMO endpoint
+    /central/nodes/detalle-por-ruta que resuelva el resto, con el resto de
+    la ruta (sin el id que este salto ya consumió).
+
+    Mismo principio que consultar_arbol() ya usa para el árbol de
+    dashboards: cada servidor resuelve el PRIMER id con sus propias
+    credenciales y, si queda más ruta, se la reenvía tal cual a ESE nodo
+    -así el detalle de un nodo profundo se arma sin que este servidor
+    necesite jamás las credenciales de nada más allá de sus propios nodos
+    directos. `resto` nunca llega vacío acá: ese caso (último salto) lo
+    resuelve la ruta directamente con consultar_detalle_nodo(), ver
+    routes/central.py."""
+    base = _base(node.url)
+    token, error = _login(node, base)
+    if error:
+        error["top_users"] = None
+        error["top_domains"] = None
+        error["connections"] = None
+        return error
+
+    ruta_restante = ",".join(str(i) for i in resto)
+    try:
+        resp = httpx.get(
+            f"{base}/api/central/nodes/detalle-por-ruta",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"ruta": ruta_restante},
+            timeout=_TIMEOUT,
+        )
+    except httpx.HTTPError as e:
+        return _detalle_error(node, f"No se pudo reenviar el pedido de detalle: {e}")
+
+    if resp.status_code == 404:
+        # Nodo intermedio con una versión anterior a esta ruta -no puede
+        # reenviar más allá de sí mismo. Mismo criterio que el resto del
+        # proyecto ante una versión vieja: un mensaje claro, no un error
+        # generico de "JSON inválido".
+        return _detalle_error(
+            node,
+            f"«{node.name}» tiene una versión de SquidManager anterior a esta función: "
+            "no puede reenviar el pedido de detalle a sus propios nodos.",
+        )
+    if resp.status_code != 200:
+        return _detalle_error(node, f"El nodo respondió {resp.status_code} al reenviar el pedido de detalle")
+
+    try:
+        return resp.json()
+    except ValueError:
+        return _detalle_error(node, "La respuesta reenviada del detalle no es JSON válido")

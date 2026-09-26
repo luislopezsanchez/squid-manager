@@ -4,7 +4,10 @@ import pytest
 from fastapi import HTTPException
 
 import app.routes.central as central
-from app.routes.central import _validar_url, _to_response, test_node as _ruta_test_node, NodeTest
+from app.routes.central import (
+    _validar_url, _to_response, test_node as _ruta_test_node, NodeTest,
+    node_detalle_por_ruta as _ruta_detalle_por_ruta,
+)
 from app.models.monitored_node import MonitoredNode
 from app.models.central_config import CentralMonitorConfig
 
@@ -120,3 +123,74 @@ def test_probar_con_contrasena_nueva_no_toca_la_guardada(monkeypatch):
     data = NodeTest(url="http://10.0.0.5:8000", username="viewer", password="una_nueva", id=7)
     _ruta_test_node(data=data, db=FakeDBConNodo(nodo), _=None)
     assert capturado["password"] == "una_nueva"
+
+
+# --- GET /central/nodes/detalle-por-ruta: detalle a cualquier nivel --------
+#
+# Reemplaza a la vieja GET /nodes/{id}/detalle (un id suelto, que solo podía
+# alcanzar un hijo DIRECTO): un nieto o bisnieto llega con un id que
+# pertenece a la tabla de OTRO servidor, y pedirle el detalle a este backend
+# con ese id daba 404 -bug real, visto en pruebas en vivo con una jerarquía
+# de 4 niveles, 2026-09-26.
+
+def test_ruta_vacia_rechazada():
+    with pytest.raises(HTTPException) as exc:
+        _ruta_detalle_por_ruta(ruta="", db=FakeDBConNodo(None), _=None)
+    assert exc.value.status_code == 400
+
+
+def test_ruta_no_numerica_rechazada():
+    with pytest.raises(HTTPException) as exc:
+        _ruta_detalle_por_ruta(ruta="7,abc", db=FakeDBConNodo(None), _=None)
+    assert exc.value.status_code == 400
+
+
+def test_ruta_con_demasiados_saltos_rechazada():
+    ruta = ",".join(str(i) for i in range(central.PROFUNDIDAD_MAXIMA + 1))
+    with pytest.raises(HTTPException) as exc:
+        _ruta_detalle_por_ruta(ruta=ruta, db=FakeDBConNodo(None), _=None)
+    assert exc.value.status_code == 400
+
+
+def test_ruta_primer_id_no_encontrado_da_404():
+    with pytest.raises(HTTPException) as exc:
+        _ruta_detalle_por_ruta(ruta="7,1", db=FakeDBConNodo(None), _=None)
+    assert exc.value.status_code == 404
+
+
+def test_ruta_de_un_solo_id_resuelve_directo(monkeypatch):
+    """Un hijo directo (ruta de un solo id) se resuelve con
+    consultar_detalle_nodo, sin reenviar nada -mismo comportamiento que
+    tenía la vieja ruta de un solo salto."""
+    nodo = MonitoredNode(id=7, name="Norte", url="http://10.0.0.5:8000",
+                          username="viewer", password="secreta", enabled=True)
+    capturado = {}
+
+    def _detalle_falso(n):
+        capturado["node"] = n
+        return {"status": "ok"}
+
+    monkeypatch.setattr(central, "consultar_detalle_nodo", _detalle_falso)
+    resultado = _ruta_detalle_por_ruta(ruta="7", db=FakeDBConNodo(nodo), _=None)
+    assert resultado == {"status": "ok"}
+    assert capturado["node"] is nodo
+
+
+def test_ruta_de_varios_ids_reenvia_el_resto(monkeypatch):
+    """Un nieto/bisnieto (ruta de más de un id) se resuelve con
+    consultar_detalle_relay, pasándole el resto de la ruta sin el primer
+    id (que este salto ya consumió)."""
+    nodo = MonitoredNode(id=7, name="Norte", url="http://10.0.0.5:8000",
+                          username="viewer", password="secreta", enabled=True)
+    capturado = {}
+
+    def _relay_falso(n, resto):
+        capturado["node"] = n
+        capturado["resto"] = resto
+        return {"status": "ok"}
+
+    monkeypatch.setattr(central, "consultar_detalle_relay", _relay_falso)
+    resultado = _ruta_detalle_por_ruta(ruta="7,1,2", db=FakeDBConNodo(nodo), _=None)
+    assert resultado == {"status": "ok"}
+    assert capturado["node"] is nodo
+    assert capturado["resto"] == [1, 2]

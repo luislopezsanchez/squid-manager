@@ -304,9 +304,14 @@ export const api = {
   getCentralDashboard: (profundidad?: number) =>
     request<{ self: any; children: any[] }>(`/central/dashboard${profundidad != null ? `?profundidad=${profundidad}` : ''}`),
   syncCentralNode: (id: number) => request<any>(`/central/nodes/${id}/sync`, { method: 'POST' }),
-  // Top usuarios/dominios y últimas conexiones de un nodo remoto, para el
-  // modal "Ver más" del árbol -bajo demanda, no en cada refresco del árbol.
-  getCentralNodeDetalle: (id: number) => request<any>(`/central/nodes/${id}/detalle`),
+  // Top usuarios/dominios y últimas conexiones de CUALQUIER nodo del árbol
+  // (no solo un hijo directo), pedidos bajo demanda para el modal "Ver más"
+  // -no en cada refresco del árbol. `ruta` es la lista de ids desde el hijo
+  // DIRECTO de este servidor hacia el nodo pedido (un hijo directo es una
+  // ruta de un solo elemento); cada salto la resuelve un id a la vez con
+  // sus propias credenciales. Ver GET /central/nodes/detalle-por-ruta.
+  getCentralNodeDetallePorRuta: (ruta: number[]) =>
+    request<any>(`/central/nodes/detalle-por-ruta?ruta=${ruta.join(',')}`),
 
   // Audit
   listAudit: (limit = 100, offset = 0) => request<any>(`/audit/?limit=${limit}&offset=${offset}`),

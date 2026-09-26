@@ -64,14 +64,20 @@ function hostPuertoDe(nodo: NodeStatus): string | null {
   }
 }
 
-function TarjetaNodo({ nodo, esRaiz, nivel, onVerMas }: {
+function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
   nodo: NodeStatus; esRaiz: boolean
   // Nivel calculado en el momento, según la profundidad de ESTE recorrido
   // -nunca guardado en ningún lado, ver docs/project-log.md: el mismo nodo
   // puede ser "nivel 1" visto desde su propio panel y "nivel 2" visto desde
   // el de su padre, no hay un número fijo que asignarle de antemano.
   nivel: number
-  onVerMas: (n: NodeStatus) => void
+  // Ids desde el hijo DIRECTO de este servidor hasta este nodo (un hijo
+  // directo es una ruta de un solo elemento) -lo que necesita el backend
+  // para pedir el detalle de un nieto/bisnieto sin tener sus credenciales:
+  // cada salto resuelve un id con las suyas y reenvía el resto. Ver
+  // GET /central/nodes/detalle-por-ruta.
+  ruta: number[]
+  onVerMas: (n: NodeStatus, ruta: number[]) => void
 }) {
   const enLinea = nodo.status === 'ok'
   const hostPuerto = hostPuertoDe(nodo)
@@ -111,21 +117,9 @@ function TarjetaNodo({ nodo, esRaiz, nivel, onVerMas }: {
       ) : (
         <p className="text-xs text-rose-700 mb-1">{nodo.message}</p>
       )}
-      {/* Solo nivel 2 (hijo DIRECTO de este servidor, configurado acá con
-          sus propias credenciales) puede pedir su detalle -un nieto o
-          bisnieto (nivel 3+) llega por recursión, con un `id` que es el
-          de la tabla de OTRO servidor: pedirle el detalle a ESTE backend
-          con ese id, o no encuentra nada (404), o -peor, si algún día
-          coincide con el id de un nodo propio distinto- muestra el
-          detalle equivocado sin ningún aviso. Nada de eso es un caso real
-          de "sin datos": es un botón que no puede funcionar para ese nodo
-          desde este panel, así que no se ofrece -mismo criterio que
-          ocultar "Personalizado..." donde no está cableado. Bug real,
-          visto en pruebas en vivo con una jerarquía de 4 niveles,
-          2026-09-26. */}
-      {nivel === 2 && (
+      {!esRaiz && (
         <div className="mt-2 pt-2 border-t border-line-soft text-right">
-          <button onClick={() => onVerMas(nodo)} className="text-xs font-medium text-brand-700 hover:underline">
+          <button onClick={() => onVerMas(nodo, ruta)} className="text-xs font-medium text-brand-700 hover:underline">
             {traducir("Ver más")} →
           </button>
         </div>
@@ -134,14 +128,22 @@ function TarjetaNodo({ nodo, esRaiz, nivel, onVerMas }: {
   )
 }
 
-function ArbolNodo({ nodo, esRaiz, nivel, onVerMas }: { nodo: NodeStatus; esRaiz: boolean; nivel: number; onVerMas: (n: NodeStatus) => void }) {
+function ArbolNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
+  nodo: NodeStatus; esRaiz: boolean; nivel: number; ruta: number[]
+  onVerMas: (n: NodeStatus, ruta: number[]) => void
+}) {
   return (
     <li>
-      <TarjetaNodo nodo={nodo} esRaiz={esRaiz} nivel={nivel} onVerMas={onVerMas} />
+      <TarjetaNodo nodo={nodo} esRaiz={esRaiz} nivel={nivel} ruta={ruta} onVerMas={onVerMas} />
       {nodo.children.length > 0 && (
         <ul>
           {nodo.children.map((hijo, i) => (
-            <ArbolNodo key={hijo.id ?? `${hijo.name}-${i}`} nodo={hijo} esRaiz={false} nivel={nivel + 1} onVerMas={onVerMas} />
+            <ArbolNodo
+              key={hijo.id ?? `${hijo.name}-${i}`}
+              nodo={hijo} esRaiz={false} nivel={nivel + 1}
+              ruta={hijo.id !== null ? [...ruta, hijo.id] : ruta}
+              onVerMas={onVerMas}
+            />
           ))}
         </ul>
       )}
@@ -163,23 +165,23 @@ function BarraProporcion({ etiqueta, valor, maximo, color }: { etiqueta: string;
   )
 }
 
-function ModalDetalleNodo({ nodo, onClose }: { nodo: NodeStatus; onClose: () => void }) {
+function ModalDetalleNodo({ nodo, ruta, onClose }: { nodo: NodeStatus; ruta: number[]; onClose: () => void }) {
   const [detalle, setDetalle] = useState<NodoDetalle | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    if (nodo.id === null) return
+    if (ruta.length === 0) return
     setCargando(true)
     setError(false)
-    api.getCentralNodeDetalle(nodo.id)
+    api.getCentralNodeDetallePorRuta(ruta)
       .then(r => {
         if (r.status !== 'ok') setError(true)
         setDetalle(r)
       })
       .catch(() => setError(true))
       .finally(() => setCargando(false))
-  }, [nodo.id])
+  }, [ruta.join(',')])
 
   const maxBytesUsuarios = detalle?.top_users?.length ? Math.max(...detalle.top_users.map(u => u.bytes), 1) : 1
   const maxReqDominios = detalle?.top_domains?.length ? Math.max(...detalle.top_domains.map(d => d.requests), 1) : 1
@@ -287,7 +289,7 @@ export default function PanelCentral() {
   const [loadingEstado, setLoadingEstado] = useState(true)
   const [estadoError, setEstadoError] = useState(false)
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(null)
-  const [nodoDetalle, setNodoDetalle] = useState<NodeStatus | null>(null)
+  const [nodoDetalle, setNodoDetalle] = useState<{ nodo: NodeStatus; ruta: number[] } | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState(FORM_VACIO)
@@ -519,14 +521,17 @@ export default function PanelCentral() {
           <div className="overflow-x-auto pb-2 pt-3">
             <div className="flex justify-center min-w-max px-4">
               <ul className="tree">
-                <ArbolNodo nodo={raiz} esRaiz nivel={1} onVerMas={setNodoDetalle} />
+                <ArbolNodo nodo={raiz} esRaiz nivel={1} ruta={[]}
+                  onVerMas={(nodo, ruta) => setNodoDetalle({ nodo, ruta })} />
               </ul>
             </div>
           </div>
         </div>
       ) : null}
 
-      {nodoDetalle && <ModalDetalleNodo nodo={nodoDetalle} onClose={() => setNodoDetalle(null)} />}
+      {nodoDetalle && (
+        <ModalDetalleNodo nodo={nodoDetalle.nodo} ruta={nodoDetalle.ruta} onClose={() => setNodoDetalle(null)} />
+      )}
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-medium text-ink">{traducir("Nodos configurados")}</h2>
