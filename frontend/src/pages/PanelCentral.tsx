@@ -833,17 +833,47 @@ export default function PanelCentral() {
     loadConfig()
   }, [])
 
+  const loadAlertas = () => {
+    api.getCentralAlertasRecientes(24, 5).then(setAlertas).catch(() => {})
+  }
+
   useEffect(() => {
     if (!config?.enabled) return
     loadNodes()
     loadEstado()
-    api.getCentralAlertasRecientes(24, 5).then(setAlertas).catch(() => {})
+    loadAlertas()
     // Cada nodo implica un login + un dashboard completo contra otra
     // instancia -no tiene sentido repetirlo cada pocos segundos como el
     // dashboard local, que solo lee de su propio proceso.
-    intervalRef.current = setInterval(loadEstado, 30000)
+    intervalRef.current = setInterval(() => { loadEstado(); loadAlertas() }, 30000)
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [config?.enabled])
+
+  // "Cerrar" el aviso de alertas de nodos no debería esconderlo para
+  // siempre -solo hasta la más nueva que ya viste. Guardado en
+  // localStorage (por navegador, no por servidor -ver la guía de
+  // artifact-capabilities sobre no usarlo para nada que necesite
+  // compartirse o sobrevivir de forma confiable, que acá no aplica: es
+  // pura conveniencia de "ya lo vi"), comparado contra el timestamp de la
+  // alerta más nueva: si aparece una transición nueva después de cerrarlo,
+  // vuelve a mostrarse solo. Pedido en vivo, 2026-09-27.
+  const CLAVE_ALERTAS_VISTAS = 'panelCentral.alertasVistasHasta'
+  const [alertaCerrada, setAlertaCerrada] = useState(false)
+
+  useEffect(() => {
+    if (alertas.length === 0) return
+    try {
+      const vistoHasta = Number(localStorage.getItem(CLAVE_ALERTAS_VISTAS) || 0)
+      setAlertaCerrada(alertas[0].ts <= vistoHasta)
+    } catch {
+      setAlertaCerrada(false)
+    }
+  }, [alertas])
+
+  const cerrarAlertaNodos = () => {
+    setAlertaCerrada(true)
+    try { localStorage.setItem(CLAVE_ALERTAS_VISTAS, String(alertas[0]?.ts ?? Date.now() / 1000)) } catch { /* per-viewer only, sin problema si falla */ }
+  }
 
   const resetForm = () => {
     setForm(FORM_VACIO)
@@ -1038,9 +1068,15 @@ export default function PanelCentral() {
           depender de revisar el correo -ni de tener esta pestaña abierta
           en el momento en que pasó, a diferencia del estado en vivo del
           árbol de abajo. Pedido en vivo, 2026-09-27. */}
-      {alertas.length > 0 && (
-        <div className="card p-4 mb-4 flex items-center gap-3 border"
+      {alertas.length > 0 && !alertaCerrada && (
+        <div className="relative card p-4 mb-4 flex items-center gap-3 border"
              style={{ borderColor: 'var(--warn)', background: 'var(--warn-soft)' }}>
+          <span
+            className="absolute -top-2 left-3 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wide text-white whitespace-nowrap z-10"
+            style={{ background: 'var(--warn)', boxShadow: '0 2px 6px -2px rgba(224,160,54,.6)' }}
+          >
+            {traducir("Alertas de nodos")}
+          </span>
           <span className="flex-none" style={{ color: 'var(--warn)' }}>
             <IconAlert className="w-5 h-5" />
           </span>
@@ -1055,6 +1091,10 @@ export default function PanelCentral() {
               {alertas.length > 1 && ` ${traducir("+ {n} más", { n: alertas.length - 1 })}`}
             </p>
           </div>
+          <button onClick={cerrarAlertaNodos} aria-label={traducir("Cerrar")}
+            className="w-7 h-7 flex-none flex items-center justify-center rounded-lg text-ink-3 hover:bg-black/5 transition">
+            <IconClose className="w-4 h-4" />
+          </button>
         </div>
       )}
       {loadingEstado ? (

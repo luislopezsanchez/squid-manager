@@ -1189,6 +1189,7 @@
   "Clientes": "Clients",
   "No se pudo dibujar el árbol -probablemente un nodo remoto devolvió datos con un formato inesperado. El resto de la página (nodos configurados, configuración) sigue funcionando normalmente.": "The tree couldn't be drawn -a remote node probably returned data in an unexpected shape. The rest of the page (configured nodes, settings) keeps working normally.",
   "Estado de nodos (Monitoreo Centralizado)": "Node status (Centralized Monitoring)",
+  "Alertas de nodos": "Node alerts",
   "Un nodo configurado deja de responder, o su Squid deja de responder aunque el panel siga arriba -y cuando vuelve a estar en línea": "A configured node stops responding, or its Squid stops responding even though the panel is still up -and when it comes back online",
   "1 cambio de estado detectado recientemente": "1 status change detected recently",
   "{n} cambios de estado detectados recientemente": "{n} status changes detected recently",
