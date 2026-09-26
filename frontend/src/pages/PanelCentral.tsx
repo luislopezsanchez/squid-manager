@@ -220,54 +220,84 @@ function ArbolConZoom({ children, dependenciaAjuste }: { children: React.ReactNo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dependenciaAjuste])
 
+  // Se mantiene siempre al día con el zoom actual, sin depender del cierre
+  // (closure) de una función vieja -hace falta porque el listener de la
+  // rueda se engancha UNA sola vez (ver más abajo) y necesita leer el
+  // último valor real en cada evento, no el que existía cuando se creó.
+  const zoomRef = useRef(zoom)
+  useEffect(() => { zoomRef.current = zoom }, [zoom])
+
   const zoomHacia = (nuevoZoomSinTope: number, puntoX: number, puntoY: number) => {
+    const zoomActual = zoomRef.current
     const nuevoZoom = Math.min(ZOOM_MAXIMO, Math.max(ZOOM_MINIMO, nuevoZoomSinTope))
-    setZoom(z => {
-      const razon = nuevoZoom / z
-      setPan(p => ({ x: puntoX - (puntoX - p.x) * razon, y: puntoY - (puntoY - p.y) * razon }))
-      return nuevoZoom
-    })
+    const razon = nuevoZoom / zoomActual
+    setPan(p => ({ x: puntoX - (puntoX - p.x) * razon, y: puntoY - (puntoY - p.y) * razon }))
+    setZoom(nuevoZoom)
+    zoomRef.current = nuevoZoom
   }
 
-  const handleWheel = (e: React.WheelEvent) => {
-    // Solo con Ctrl/Cmd apretado: sin esto, cualquiera que solo quisiera
-    // bajar la página con la rueda -sin querer acercar nada- quedaba
-    // atrapado apenas el cursor pasaba sobre el árbol. Mismo criterio que
-    // Google Maps/Figma: la rueda sola sigue siendo scroll normal de la
-    // página, Ctrl+rueda es lo que acerca. Reportado en vivo, 2026-09-26.
-    if (!e.ctrlKey && !e.metaKey) return
-    e.preventDefault()
-    const rect = viewportRef.current?.getBoundingClientRect()
-    if (!rect) return
-    zoomHacia(zoom * (1 - e.deltaY * PASO_ZOOM_RUEDA), e.clientX - rect.left, e.clientY - rect.top)
-  }
+  // Enganchado a mano con addEventListener (no con la prop onWheel de
+  // React): React adjunta wheel como passive por defecto, así que
+  // e.preventDefault() ahí NO hace nada de verdad -el navegador igual
+  // aplica su propio zoom de página con Ctrl+rueda, aunque el handler de
+  // React se ejecute. Bug real, reportado en vivo 2026-09-26: acercaba el
+  // navegador entero en vez de solo el lienzo (en la emulación de
+  // dispositivo móvil de las herramientas de desarrollo no se nota, porque
+  // ese camino de evento es distinto). Con { passive: false } acá si se
+  // puede frenar el zoom nativo de verdad.
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    const onWheelNativo = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const rect = viewport.getBoundingClientRect()
+      zoomHacia(zoomRef.current * (1 - e.deltaY * PASO_ZOOM_RUEDA), e.clientX - rect.left, e.clientY - rect.top)
+    }
+    viewport.addEventListener('wheel', onWheelNativo, { passive: false })
+    return () => viewport.removeEventListener('wheel', onWheelNativo)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const zoomBoton = (delta: number) => {
     const viewport = viewportRef.current
     if (!viewport) return
-    zoomHacia(zoom + delta, viewport.clientWidth / 2, viewport.clientHeight / 2)
+    zoomHacia(zoomRef.current + delta, viewport.clientWidth / 2, viewport.clientHeight / 2)
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
     arrastreRef.current = { activo: true, x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
   }
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!arrastreRef.current.activo) return
-    const a = arrastreRef.current
-    setPan({ x: a.panX + (e.clientX - a.x), y: a.panY + (e.clientY - a.y) })
-  }
-  const detenerArrastre = () => { arrastreRef.current.activo = false }
+
+  // A nivel window, no del viewport: arrastrar y sacar el cursor un
+  // momento del lienzo (fácil, el viewport mide apenas 440px de alto) no
+  // debe cortar el movimiento -mismo criterio que Google Maps, donde
+  // arrastrar sigue funcionando aunque el cursor se salga del mapa
+  // mientras el botón sigue apretado. Antes se escuchaba mousemove/mouseup
+  // solo sobre el viewport (con onMouseLeave cortando el arrastre apenas
+  // el cursor salía), y el arrastre se sentía roto -bug real, reportado en
+  // vivo 2026-09-26.
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!arrastreRef.current.activo) return
+      const a = arrastreRef.current
+      setPan({ x: a.panX + (e.clientX - a.x), y: a.panY + (e.clientY - a.y) })
+    }
+    const onUp = () => { arrastreRef.current.activo = false }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
 
   return (
     <div className="relative">
       <div
         ref={viewportRef}
         className="relative h-[440px] overflow-hidden rounded-lg bg-ground/60 cursor-grab active:cursor-grabbing select-none"
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={detenerArrastre}
-        onMouseLeave={detenerArrastre}
       >
         <div
           ref={contenidoRef}
