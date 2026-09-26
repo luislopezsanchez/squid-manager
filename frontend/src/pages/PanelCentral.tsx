@@ -111,7 +111,19 @@ function TarjetaNodo({ nodo, esRaiz, nivel, onVerMas }: {
       ) : (
         <p className="text-xs text-rose-700 mb-1">{nodo.message}</p>
       )}
-      {!esRaiz && (
+      {/* Solo nivel 2 (hijo DIRECTO de este servidor, configurado acá con
+          sus propias credenciales) puede pedir su detalle -un nieto o
+          bisnieto (nivel 3+) llega por recursión, con un `id` que es el
+          de la tabla de OTRO servidor: pedirle el detalle a ESTE backend
+          con ese id, o no encuentra nada (404), o -peor, si algún día
+          coincide con el id de un nodo propio distinto- muestra el
+          detalle equivocado sin ningún aviso. Nada de eso es un caso real
+          de "sin datos": es un botón que no puede funcionar para ese nodo
+          desde este panel, así que no se ofrece -mismo criterio que
+          ocultar "Personalizado..." donde no está cableado. Bug real,
+          visto en pruebas en vivo con una jerarquía de 4 niveles,
+          2026-09-26. */}
+      {nivel === 2 && (
         <div className="mt-2 pt-2 border-t border-line-soft text-right">
           <button onClick={() => onVerMas(nodo)} className="text-xs font-medium text-brand-700 hover:underline">
             {traducir("Ver más")} →
