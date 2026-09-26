@@ -383,6 +383,7 @@
   "Mensaje enviado. Gracias por tu reporte.": "Message sent. Thanks for the report.",
   "Mensaje guardado. No se pudo enviar por correo (revisa el SMTP en Notificaciones), pero quedó registrado.": "Message saved. It could not be emailed (check SMTP in Notifications), but it was recorded.",
   "Mostrando": "Showing",
+  "Página {n} de {m}": "Page {n} of {m}",
   "Mediana (p50)": "Median (p50)",
   "Martes": "Tuesday",
   "Miércoles": "Wednesday",

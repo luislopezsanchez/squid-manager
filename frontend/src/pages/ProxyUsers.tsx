@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
-import { IconClose } from '../components/Icons'
+import { IconClose, IconChevronLeft, IconChevronRight } from '../components/Icons'
 import { formatBytes } from '../utils/format'
 import { normalizarUsername } from '../utils/usernames'
 
@@ -553,6 +553,23 @@ export default function ProxyUsers() {
     })
   }, [allUsers, search, sourceFilter, statusFilter])
 
+  // Paginado en el cliente, no en el servidor: la lista ya se trae entera
+  // (local + LDAP combinados, ver loadUsers) porque la búsqueda y los
+  // filtros de arriba necesitan verla completa para funcionar -paginar en
+  // el servidor hubiera significado perder la búsqueda entre páginas, o
+  // rehacer toda esa lógica del lado del backend. Acá solo se corta cuántas
+  // filas se DIBUJAN a la vez -con cientos de usuarios (LDAP importa
+  // fácil esa cantidad) renderizar la tabla entera de golpe era lento y
+  // poco práctico para navegar. Pedido en vivo, 2026-09-27.
+  const USUARIOS_POR_PAGINA = 50
+  const [pagina, setPagina] = useState(0)
+  useEffect(() => { setPagina(0) }, [search, sourceFilter, statusFilter])
+  const totalPaginas = Math.max(1, Math.ceil(filteredUsers.length / USUARIOS_POR_PAGINA))
+  const paginaSegura = Math.min(pagina, totalPaginas - 1)
+  const usuariosPagina = filteredUsers.slice(
+    paginaSegura * USUARIOS_POR_PAGINA, (paginaSegura + 1) * USUARIOS_POR_PAGINA,
+  )
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -761,7 +778,7 @@ export default function ProxyUsers() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line-soft">
-              {filteredUsers.map(u => (
+              {usuariosPagina.map(u => (
                 <tr key={`${u.source}-${u.id}`} className="hover:bg-brand-50">
                   <td className="px-2 py-4">
                     <input type="checkbox" checked={selected.has(u.username)} onChange={() => toggleSelected(u.username)} />
@@ -861,6 +878,29 @@ export default function ProxyUsers() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {filteredUsers.length > 0 && (
+        <div className="flex items-center justify-between mt-4 text-sm">
+          <span className="text-ink-3">
+            {traducir("Mostrando")} {paginaSegura * USUARIOS_POR_PAGINA + 1}–{Math.min((paginaSegura + 1) * USUARIOS_POR_PAGINA, filteredUsers.length)} {traducir("de")} {filteredUsers.length}
+          </span>
+          {totalPaginas > 1 && (
+            <div className="flex gap-2">
+              <button onClick={() => setPagina(p => Math.max(0, p - 1))} disabled={paginaSegura === 0}
+                className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5">
+                <IconChevronLeft className="w-3.5 h-3.5" />{traducir("Anterior")}
+              </button>
+              <span className="text-ink-3 self-center">
+                {traducir("Página {n} de {m}", { n: String(paginaSegura + 1), m: String(totalPaginas) })}
+              </span>
+              <button onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))} disabled={paginaSegura >= totalPaginas - 1}
+                className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5">
+                {traducir("Siguiente")}<IconChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
