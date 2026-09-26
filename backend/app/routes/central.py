@@ -19,7 +19,7 @@ from app.models.central_config import CentralMonitorConfig
 from app.models.squid_settings import SquidSetting
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.central_monitor_service import (
-    consultar_nodo, sincronizar_configuracion,
+    probar_nodo, sincronizar_configuracion,
     consultar_arbol_de_todos, consultar_detalle_nodo, consultar_detalle_relay,
     PROFUNDIDAD_DEFECTO, PROFUNDIDAD_MAXIMA,
 )
@@ -250,7 +250,10 @@ def test_node(
     _: Admin = Depends(require_writer),
 ):
     """Prueba login + dashboard contra un nodo sin necesidad de guardarlo
-    antes -mismo patrón que POST /api/ldap/test."""
+    antes -mismo patrón que POST /api/ldap/test. También chequea si ese
+    nodo tiene el monitoreo centralizado habilitado (ver probar_nodo): sin
+    esto, la prueba decía "conexión exitosa" aunque el remoto fuera a
+    rechazar después la consulta real del árbol."""
     _requerir_habilitado(db)
     password_a_usar = data.password
     if password_a_usar == _MASCARA and data.id is not None:
@@ -265,7 +268,7 @@ def test_node(
         username = data.username
         password = password_a_usar
 
-    resultado = consultar_nodo(_NodoTemporal())
+    resultado = probar_nodo(_NodoTemporal())
     return resultado
 
 

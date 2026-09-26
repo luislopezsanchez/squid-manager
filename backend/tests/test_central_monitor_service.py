@@ -9,7 +9,7 @@ import pytest
 import app.services.central_monitor_service as central_monitor_service
 from app.services.central_monitor_service import (
     consultar_nodo, consultar_todos, sincronizar_configuracion, consultar_arbol,
-    consultar_detalle_nodo, consultar_detalle_relay,
+    consultar_detalle_nodo, consultar_detalle_relay, probar_nodo,
 )
 
 
@@ -473,3 +473,77 @@ def test_detalle_relay_error_al_reenviar_incluye_los_tres_campos_none(monkeypatc
     assert resultado["top_users"] is None
     assert resultado["top_domains"] is None
     assert resultado["connections"] is None
+
+
+# --- probar_nodo: "Probar conexión" también detecta el módulo apagado -----
+#
+# Antes "Probar conexión" solo llamaba a /api/metrics/dashboard, que no
+# depende del interruptor de monitoreo centralizado del remoto: la prueba
+# decía "conexión exitosa" aunque ESE módulo estuviera apagado del otro
+# lado, y la tarjeta del árbol terminaba en "Sin conexión" sin que nada lo
+# hubiera avisado antes -bug real, reportado en vivo 2026-09-26.
+
+def test_probar_nodo_exito_con_monitoreo_habilitado_remoto(monkeypatch):
+    def _get(url, **k):
+        if "central/dashboard" in url:
+            assert k["params"] == {"profundidad": 0}
+            return FakeResponse(200, json_data={"self": {}, "children": []})
+        return FakeResponse(200, json_data={"traffic": {}})
+
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(200, json_data={"access_token": "tok"}))
+    monkeypatch.setattr(central_monitor_service.httpx, "get", _get)
+    resultado = probar_nodo(FakeNode())
+    assert resultado["status"] == "ok"
+    assert resultado["monitoreo_centralizado_remoto"] is True
+
+
+def test_probar_nodo_detecta_monitoreo_deshabilitado_remoto(monkeypatch):
+    def _get(url, **k):
+        if "central/dashboard" in url:
+            return FakeResponse(403)
+        return FakeResponse(200, json_data={"traffic": {}})
+
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(200, json_data={"access_token": "tok"}))
+    monkeypatch.setattr(central_monitor_service.httpx, "get", _get)
+    resultado = probar_nodo(FakeNode())
+    assert resultado["status"] == "ok"
+    assert resultado["monitoreo_centralizado_remoto"] is False
+
+
+def test_probar_nodo_version_vieja_sin_ese_endpoint_no_marca_nada(monkeypatch):
+    """Un SquidManager anterior a /api/central/dashboard (404, no 403) no
+    tiene nada que advertir acá -ese caso ya lo cubre el fallback plano de
+    consultar_arbol, sin jerarquía propia pero sin error."""
+    def _get(url, **k):
+        if "central/dashboard" in url:
+            return FakeResponse(404)
+        return FakeResponse(200, json_data={"traffic": {}})
+
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(200, json_data={"access_token": "tok"}))
+    monkeypatch.setattr(central_monitor_service.httpx, "get", _get)
+    resultado = probar_nodo(FakeNode())
+    assert resultado["status"] == "ok"
+    assert resultado["monitoreo_centralizado_remoto"] is None
+
+
+def test_probar_nodo_login_fallido_no_llega_a_chequear_nada(monkeypatch):
+    monkeypatch.setattr(central_monitor_service.httpx, "post", lambda *a, **k: FakeResponse(401))
+    resultado = probar_nodo(FakeNode())
+    assert resultado["status"] == "error"
+    assert "monitoreo_centralizado_remoto" not in resultado
+
+
+def test_probar_nodo_un_solo_login_para_los_dos_pedidos(monkeypatch):
+    logins = {"n": 0}
+
+    def _post(url, **k):
+        logins["n"] += 1
+        return FakeResponse(200, json_data={"access_token": "tok"})
+
+    monkeypatch.setattr(central_monitor_service.httpx, "post", _post)
+    monkeypatch.setattr(
+        central_monitor_service.httpx, "get",
+        lambda url, **k: FakeResponse(200, json_data={"self": {}, "children": []}) if "central/dashboard" in url else FakeResponse(200, json_data={"traffic": {}}),
+    )
+    probar_nodo(FakeNode())
+    assert logins["n"] == 1

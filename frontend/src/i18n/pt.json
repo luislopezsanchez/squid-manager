@@ -1172,5 +1172,6 @@
   "Nivel {n}": "Nível {n}",
   "este panel": "este painel",
   "Monitorizar mis propios nodos": "Monitorar meus próprios nós",
-  "Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo. Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.": "Independente do item acima: este servidor sempre pode continuar sendo visto por outro SquidManager que o tenha como nó. Desative isso apenas se quiser que seja um nó sem filhos próprios, sem perder os nós que já tenha configurados mais abaixo."
+  "Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo. Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.": "Independente do item acima: este servidor sempre pode continuar sendo visto por outro SquidManager que o tenha como nó. Desative isso apenas se quiser que seja um nó sem filhos próprios, sem perder os nós que já tenha configurados mais abaixo.",
+  "Conexión exitosa, pero el monitoreo centralizado está deshabilitado en ese nodo: va a aparecer «Sin conexión» en el árbol hasta que lo actives allá (Monitoreo centralizado → Habilitar).": "Conexão bem-sucedida, mas o monitoramento centralizado está desativado nesse nó: vai aparecer como \"Sem conexão\" na árvore até você ativá-lo lá (Monitoramento centralizado → Habilitar)."
 }

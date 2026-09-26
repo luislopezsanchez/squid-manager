@@ -90,7 +90,7 @@ def test_probar_con_mascara_y_id_usa_la_contrasena_guardada(monkeypatch):
         capturado["password"] = nodo_temporal.password
         return {"status": "ok"}
 
-    monkeypatch.setattr(central, "consultar_nodo", _consultar_falso)
+    monkeypatch.setattr(central, "probar_nodo", _consultar_falso)
     data = NodeTest(url="http://10.0.0.5:8000", username="viewer", password="***", id=7)
     _ruta_test_node(data=data, db=FakeDBConNodo(nodo), _=None)
     assert capturado["password"] == "la_de_verdad"
@@ -106,7 +106,7 @@ def test_probar_con_mascara_sin_id_no_revienta(monkeypatch):
         capturado["password"] = nodo_temporal.password
         return {"status": "error"}
 
-    monkeypatch.setattr(central, "consultar_nodo", _consultar_falso)
+    monkeypatch.setattr(central, "probar_nodo", _consultar_falso)
     data = NodeTest(url="http://10.0.0.5:8000", username="viewer", password="***", id=None)
     _ruta_test_node(data=data, db=FakeDBConNodo(None), _=None)
     assert capturado["password"] == "***"
@@ -121,7 +121,7 @@ def test_probar_con_contrasena_nueva_no_toca_la_guardada(monkeypatch):
         capturado["password"] = nodo_temporal.password
         return {"status": "ok"}
 
-    monkeypatch.setattr(central, "consultar_nodo", _consultar_falso)
+    monkeypatch.setattr(central, "probar_nodo", _consultar_falso)
     data = NodeTest(url="http://10.0.0.5:8000", username="viewer", password="una_nueva", id=7)
     _ruta_test_node(data=data, db=FakeDBConNodo(nodo), _=None)
     assert capturado["password"] == "una_nueva"

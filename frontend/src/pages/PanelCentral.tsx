@@ -295,7 +295,7 @@ export default function PanelCentral() {
   const [form, setForm] = useState(FORM_VACIO)
   const [testing, setTesting] = useState(false)
   const [syncingId, setSyncingId] = useState<number | null>(null)
-  const [testResult, setTestResult] = useState<{ status: string; message?: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ status: string; message?: string; monitoreo_centralizado_remoto?: boolean | null } | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const { showToast, ToastContainer } = useToast()
 
@@ -620,11 +620,17 @@ export default function PanelCentral() {
           </div>
 
           {testResult && (
-            <div className={`mt-4 note ${testResult.status === 'ok' ? 'note-ok' : 'note-danger'}`}>
+            <div className={`mt-4 note ${
+              testResult.status !== 'ok' ? 'note-danger'
+                : testResult.monitoreo_centralizado_remoto === false ? 'note-warn'
+                  : 'note-ok'
+            }`}>
               <p className="note-text">
-                {testResult.status === 'ok'
-                  ? traducir("Conexión exitosa: el nodo respondió correctamente.")
-                  : testResult.message}
+                {testResult.status !== 'ok'
+                  ? testResult.message
+                  : testResult.monitoreo_centralizado_remoto === false
+                    ? traducir("Conexión exitosa, pero el monitoreo centralizado está deshabilitado en ese nodo: va a aparecer «Sin conexión» en el árbol hasta que lo actives allá (Monitoreo centralizado → Habilitar).")
+                    : traducir("Conexión exitosa: el nodo respondió correctamente.")}
               </p>
             </div>
           )}

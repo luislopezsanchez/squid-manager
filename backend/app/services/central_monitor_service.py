@@ -101,6 +101,58 @@ def consultar_todos(nodes: list) -> list[dict]:
     return [consultar_nodo(n) for n in nodes if n.enabled]
 
 
+def _chequear_monitoreo_habilitado(base: str, token: str) -> bool | None:
+    """True/False si se pudo determinar si el REMOTO tiene el módulo de
+    monitoreo centralizado habilitado; None si no se pudo determinar (una
+    versión anterior a este endpoint, por ejemplo) -en ese caso no hay nada
+    que advertir: el fallback plano de consultar_arbol ya cubre ese caso
+    sin que haga falta un aviso aparte acá.
+
+    profundidad=0 a propósito: alcanza con la respuesta (200 o 403), no
+    hace falta que el remoto recorra sus propios nodos para este chequeo."""
+    try:
+        resp = httpx.get(
+            f"{base}/api/central/dashboard",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"profundidad": 0},
+            timeout=_TIMEOUT,
+        )
+    except httpx.HTTPError:
+        return None
+    if resp.status_code == 403:
+        return False
+    if resp.status_code == 200:
+        return True
+    return None
+
+
+def probar_nodo(node) -> dict:
+    """Login + dashboard plano de un nodo, más un chequeo de si el módulo
+    de monitoreo centralizado está habilitado en ese remoto -para "Probar
+    conexión" al agregar o editar un nodo.
+
+    Antes esto llamaba directo a consultar_nodo() (login + solo
+    /api/metrics/dashboard), que no depende para nada del interruptor de
+    monitoreo centralizado del remoto: la prueba daba "conexión exitosa"
+    aunque el remoto tuviera ese módulo apagado, y la tarjeta del árbol
+    terminaba en "Sin conexión" sin que nada lo hubiera avisado antes -bug
+    real, reportado en vivo 2026-09-26 (se repitió al querer volver a
+    agregar un nodo que antes andaba bien). Un solo login, reusado para
+    los dos pedidos -mismo criterio que ya usa consultar_arbol() con su
+    fallback plano."""
+    base = _base(node.url)
+    token, error = _login(node, base)
+    if error:
+        return error
+
+    resultado = _pedir_dashboard_plano(node, base, token)
+    if resultado["status"] != "ok":
+        return resultado
+
+    resultado["monitoreo_centralizado_remoto"] = _chequear_monitoreo_habilitado(base, token)
+    return resultado
+
+
 # --- Árbol de monitoreo (jerarquía multi-nivel) -----------------------------
 #
 # consultar_nodo() de arriba pide /api/metrics/dashboard: un solo nivel,
