@@ -7,12 +7,16 @@ from pydantic import BaseModel, Field
 class ProxyUserCreate(BaseModel):
     username: str = Field(..., min_length=1, max_length=64)
     password: str = Field(..., min_length=8, max_length=100)
+    # Mismo campo que LdapUser.display_name -acá opcional y a mano, en vez
+    # de sincronizado desde un directorio.
+    display_name: str | None = Field(None, max_length=255)
     enabled: bool = True
     expires_at: datetime | None = None
 
 
 class ProxyUserUpdate(BaseModel):
     password: str | None = Field(None, min_length=8, max_length=100)
+    display_name: str | None = Field(None, max_length=255)
     enabled: bool | None = None
     expires_at: datetime | None = None
 
@@ -20,6 +24,7 @@ class ProxyUserUpdate(BaseModel):
 class ProxyUserResponse(BaseModel):
     id: int
     username: str
+    display_name: str | None = None
     enabled: bool
     expires_at: datetime | None = None
     # True si el usuario puede navegar ahora mismo: habilitado y sin caducar.

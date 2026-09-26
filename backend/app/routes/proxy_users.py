@@ -172,6 +172,7 @@ def create_proxy_user(
 
     user = ProxyUser(
         username=username,
+        display_name=(data.display_name or "").strip() or None,
         password_hash=get_password_hash(data.password),
         htpasswd_hash=htpasswd_line,
         digest_ha1=_generate_digest_ha1(username, data.password, realm),
@@ -216,6 +217,8 @@ def update_proxy_user(
         raise HTTPException(404, detail="Usuario no encontrado")
 
     revoke = False
+    if data.display_name is not None:
+        user.display_name = data.display_name.strip() or None
     if data.password is not None:
         realm = realm_actual(db)
         user.password_hash = get_password_hash(data.password)

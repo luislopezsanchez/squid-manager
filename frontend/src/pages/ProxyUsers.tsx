@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
+import { IconClose } from '../components/Icons'
 import { formatBytes } from '../utils/format'
 import { normalizarUsername } from '../utils/usernames'
 
@@ -10,6 +11,10 @@ interface LocalUser {
   source: 'local'
   id: number
   username: string
+  // Mismo campo que LdapUserRow.display_name -acá lo escribe el admin a
+  // mano al crear el usuario, en vez de venir sincronizado de un
+  // directorio.
+  display_name: string | null
   enabled: boolean
   expires_at: string | null
   created_at: string
@@ -374,13 +379,80 @@ function QuotaModal({ usernames, existing, onClose, onSave, onRemove }: {
   )
 }
 
+// Antes era un <form> siempre incrustado en la página, que aparecía como
+// una tabla más entre el aviso y el listado -mismo cambio de criterio que
+// ya se hizo con "Agregar nodo" en Panel Central: un modal separa
+// claramente la acción de "estoy creando algo nuevo" de la lista de abajo.
+// Pedido en vivo, 2026-09-27.
+function ModalCrearUsuario({ newUser, setNewUser, error, onSave, onClose }: {
+  newUser: { username: string; display_name: string; password: string }
+  setNewUser: (v: { username: string; display_name: string; password: string }) => void
+  error: string
+  onSave: (e: React.FormEvent) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-lg shadow-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line-soft">
+          <h2 className="text-lg font-bold text-ink">{traducir("Nuevo usuario local")}</h2>
+          <button onClick={onClose} aria-label={traducir("Cerrar")}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-ink-3 hover:bg-line-soft hover:text-ink transition flex-none">
+            <IconClose className="w-4 h-4" />
+          </button>
+        </div>
+        <form onSubmit={onSave} className="px-6 py-4">
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="proxyuser-username" className="field-label block mb-1.5">{traducir("Usuario")}</label>
+              <input
+                id="proxyuser-username"
+                type="text" value={newUser.username}
+                onChange={e => setNewUser({ ...newUser, username: normalizarUsername(e.target.value) })}
+                className="input font-mono text-sm"
+                required autoFocus
+              />
+              <p className="field-help mt-1">{traducir("Solo letras, números, punto, guion y guion bajo, sin espacios ni acentos.")}</p>
+            </div>
+            <div>
+              <label htmlFor="proxyuser-display-name" className="field-label block mb-1.5">{traducir("Nombre para mostrar")}</label>
+              <input
+                id="proxyuser-display-name"
+                type="text" value={newUser.display_name}
+                onChange={e => setNewUser({ ...newUser, display_name: e.target.value })}
+                className="input" placeholder={traducir("ej: Juan Pérez")}
+              />
+              <p className="field-help mt-1">{traducir("Opcional -mismo campo que ya usan los usuarios LDAP, para identificar a la persona además del usuario.")}</p>
+            </div>
+            <div>
+              <label htmlFor="proxyuser-password" className="field-label block mb-1.5">{traducir("Contraseña")}</label>
+              <input
+                id="proxyuser-password"
+                type="password" value={newUser.password}
+                onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+                className="input"
+                required
+              />
+            </div>
+          </div>
+          {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
+          <div className="mt-5 flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="btn btn-outline">{traducir("Cancelar")}</button>
+            <button type="submit" className="btn btn-primary">{traducir("Crear Usuario")}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function ProxyUsers() {
   const [localUsers, setLocalUsers] = useState<LocalUser[]>([])
   const [ldapUsers, setLdapUsers] = useState<LdapUserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
-  const [newUser, setNewUser] = useState({ username: '', password: '' })
+  const [newUser, setNewUser] = useState({ username: '', display_name: '', password: '' })
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'ldap'>('all')
@@ -476,7 +548,7 @@ export default function ProxyUsers() {
       if (!q) return true
       const haystack = u.source === 'ldap'
         ? `${u.username} ${u.display_name ?? ''} ${u.email ?? ''}`
-        : u.username
+        : `${u.username} ${u.display_name ?? ''}`
       return haystack.toLowerCase().includes(q)
     })
   }, [allUsers, search, sourceFilter, statusFilter])
@@ -485,8 +557,13 @@ export default function ProxyUsers() {
     e.preventDefault()
     setError('')
     try {
-      await api.createUser({ username: newUser.username, password: newUser.password, enabled: true })
-      setNewUser({ username: '', password: '' })
+      await api.createUser({
+        username: newUser.username,
+        display_name: newUser.display_name.trim() || undefined,
+        password: newUser.password,
+        enabled: true,
+      })
+      setNewUser({ username: '', display_name: '', password: '' })
       setShowForm(false)
       loadUsers()
       showToast(`Usuario "${newUser.username}" creado correctamente`)
@@ -598,10 +675,10 @@ export default function ProxyUsers() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => { setNewUser({ username: '', display_name: '', password: '' }); setError(''); setShowForm(true) }}
             className="btn btn-primary"
           >
-            {showForm ? traducir('Cancelar') : traducir('+ Nuevo Usuario Local')}
+            {traducir('+ Nuevo Usuario Local')}
           </button>
         </div>
       </div>
@@ -614,33 +691,10 @@ export default function ProxyUsers() {
         Los usuarios <strong>LDAP</strong> se sincronizan desde <em>{traducir("LDAP / Active Directory")}</em>{traducir(", pero se habilitan y deshabilitan desde aquí.")}</div>
 
       {showForm && (
-        <form onSubmit={handleCreate} className="card p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="proxyuser-username" className="field-label block mb-1.5">{traducir("Usuario")}</label>
-              <input
-                id="proxyuser-username"
-                type="text" value={newUser.username}
-                onChange={e => setNewUser({ ...newUser, username: normalizarUsername(e.target.value) })}
-                className="input font-mono text-sm"
-                required
-              />
-              <p className="field-help mt-1">{traducir("Solo letras, números, punto, guion y guion bajo, sin espacios ni acentos.")}</p>
-            </div>
-            <div>
-              <label htmlFor="proxyuser-password" className="field-label block mb-1.5">{traducir("Contraseña")}</label>
-              <input
-                id="proxyuser-password"
-                type="password" value={newUser.password}
-                onChange={e => setNewUser({ ...newUser, password: e.target.value })}
-                className="input"
-                required
-              />
-            </div>
-          </div>
-          {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
-          <button type="submit" className="mt-4 btn btn-primary">{traducir("Crear Usuario")}</button>
-        </form>
+        <ModalCrearUsuario
+          newUser={newUser} setNewUser={setNewUser} error={error}
+          onSave={handleCreate} onClose={() => setShowForm(false)}
+        />
       )}
 
       {/* Búsqueda y filtros: antes había que abrir dos páginas distintas
@@ -714,7 +768,7 @@ export default function ProxyUsers() {
                   </td>
                   <td className="px-6 py-4 font-medium text-ink">
                     {u.username}
-                    {u.source === 'ldap' && u.display_name && (
+                    {u.display_name && (
                       <span className="block text-xs font-normal text-ink-3">{u.display_name}</span>
                     )}
                   </td>
