@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import { formatRate, formatNumber, formatBytes } from '../utils/format'
-import { IconRefresh, IconEdit, IconTrash, IconGlobe, IconUpload, IconClose } from '../components/Icons'
+import { IconRefresh, IconEdit, IconTrash, IconGlobe, IconUpload, IconClose, IconBan, IconLink } from '../components/Icons'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 
 interface Node {
@@ -443,6 +443,30 @@ export default function PanelCentral() {
     }
   }
 
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+
+  const handleToggleNodeEnabled = async (node: Node) => {
+    // Pausar el monitoreo de un nodo puntual sin borrarlo -antes la única
+    // forma de hacerlo era abrir "Editar" y destildar "Habilitado" ahí, sin
+    // ninguna acción rápida en la fila misma. El campo `enabled` ya existía
+    // y el árbol ya lo respeta (consultar_arbol_de_todos filtra por él);
+    // solo faltaba esta acción en la UI -encontrado en vivo, 2026-09-26.
+    setTogglingId(node.id)
+    try {
+      const nuevoEstado = !node.enabled
+      await api.updateCentralNode(node.id, { enabled: nuevoEstado })
+      showToast(nuevoEstado
+        ? traducir('Nodo "{n}" reconectado', { n: node.name })
+        : traducir('Nodo "{n}" desconectado', { n: node.name }))
+      loadNodes()
+      loadEstado()
+    } catch (e: any) {
+      showToast(`${traducir("Error")}: ${e.message}`, 'error')
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
   const handleSync = async (node: Node) => {
     if (!confirm(traducir(
       'Esto SOBRESCRIBE la configuración de "{n}" con la de este servidor (ACLs, reglas, usuarios, grupos, cuotas...). ¿Continuar?',
@@ -653,6 +677,11 @@ export default function PanelCentral() {
                 <p className="text-xs text-ink-3 font-mono">{node.url} · {node.username}</p>
               </div>
               <div className="flex gap-2">
+                <button onClick={() => handleToggleNodeEnabled(node)} disabled={togglingId === node.id}
+                  className={`btn-icon ${node.enabled ? 'text-rose-600' : 'text-ok'}`}
+                  title={node.enabled ? traducir("Desconectar (dejar de monitorear sin borrarlo)") : traducir("Reconectar")}>
+                  {node.enabled ? <IconBan className="w-4 h-4" /> : <IconLink className="w-4 h-4" />}
+                </button>
                 <button onClick={() => handleSync(node)} disabled={syncingId === node.id}
                   className="btn-icon" title={traducir("Sincronizar configuración a este nodo")}>
                   <IconUpload className="w-4 h-4" />
