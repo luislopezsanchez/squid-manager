@@ -1187,6 +1187,7 @@
   "Ajustar": "Fit",
   "Squid básico": "Basic Squid",
   "Clientes": "Clients",
+  "No se pudo dibujar el árbol -probablemente un nodo remoto devolvió datos con un formato inesperado. El resto de la página (nodos configurados, configuración) sigue funcionando normalmente.": "The tree couldn't be drawn -a remote node probably returned data in an unexpected shape. The rest of the page (configured nodes, settings) keeps working normally.",
   "Clientes conectados": "Connected clients",
   "Tipo de nodo": "Node type",
   "Otra instancia de este panel, con usuario y contraseña propios.": "Another instance of this panel, with its own username and password.",

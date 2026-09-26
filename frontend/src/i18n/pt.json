@@ -1187,6 +1187,7 @@
   "Ajustar": "Ajustar",
   "Squid básico": "Squid básico",
   "Clientes": "Clientes",
+  "No se pudo dibujar el árbol -probablemente un nodo remoto devolvió datos con un formato inesperado. El resto de la página (nodos configurados, configuración) sigue funcionando normalmente.": "Não foi possível desenhar a árvore -provavelmente um nó remoto retornou dados em um formato inesperado. O resto da página (nós configurados, configuração) continua funcionando normalmente.",
   "Clientes conectados": "Clientes conectados",
   "Tipo de nodo": "Tipo de nó",
   "Otra instancia de este panel, con usuario y contraseña propios.": "Outra instância deste painel, com usuário e senha próprios.",

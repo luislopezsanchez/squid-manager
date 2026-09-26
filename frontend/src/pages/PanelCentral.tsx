@@ -1,5 +1,6 @@
 import { traducir } from '../i18n'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Component } from 'react'
+import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import { formatRate, formatNumber, formatBytes } from '../utils/format'
@@ -232,14 +233,26 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
             </div>
           </div>
         ) : (
+          // OJO: nada de "!" (non-null assertion) acá -eso solo calla a
+          // TypeScript, no protege en tiempo de ejecución. `data.traffic`
+          // puede faltar en un nodo etiquetado "squidmanager" si ESE nodo
+          // remoto corre una versión vieja/incompatible que devuelve otra
+          // forma de dashboard -exactamente lo que pasó en vivo,
+          // 2026-09-27, al monitorear en espejo dos SquidManager entre sí
+          // (cada uno viendo al otro como nodo): uno de los dos corría un
+          // build tan viejo que ni siquiera tenía Monitoreo Centralizado,
+          // y el "traffic" que faltaba tumbaba TODA la página con una
+          // excepción sin capturar. Un problema de UN nodo nunca debería
+          // poder tumbar la vista de todos los demás -por eso ?? en vez de
+          // asumir que siempre está.
           <div className="grid grid-cols-2 gap-2 text-sm mb-1">
             <div className="min-w-0">
               <p className="text-ink-3 text-xs truncate">{traducir("Tráfico actual")}</p>
-              <p className="font-medium truncate">{formatRate(nodo.data.traffic!.total_bytes_per_second)}</p>
+              <p className="font-medium truncate">{nodo.data.traffic ? formatRate(nodo.data.traffic.total_bytes_per_second) : '—'}</p>
             </div>
             <div className="min-w-0">
               <p className="text-ink-3 text-xs truncate">{traducir("Usuarios activos")}</p>
-              <p className="font-medium truncate">{formatNumber(nodo.data.traffic!.active_users.length)}</p>
+              <p className="font-medium truncate">{nodo.data.traffic ? formatNumber(nodo.data.traffic.active_users.length) : '—'}</p>
             </div>
           </div>
         )
@@ -299,6 +312,47 @@ const PASO_ZOOM_BOTON = 0.15
 // rueda del mouse -centrado en el cursor, como Figma/Google Maps, no en el
 // centro de la pantalla- y arrastrar para moverse mientras está acercado.
 // Pedido en vivo, 2026-09-26.
+/** Red de seguridad para el árbol: si CUALQUIER nodo del árbol -el propio
+ *  o un remoto anidado varios niveles adentro- trae datos con una forma
+ *  inesperada y algo revienta al dibujarlo, esto lo atrapa ahí mismo en
+ *  vez de dejar que la excepción suba y tumbe la página ENTERA en blanco
+ *  -que es justo lo que le pasó a un nodo remoto viejo/incompatible
+ *  (visto en vivo, 2026-09-27, monitoreando dos SquidManager entre sí:
+ *  uno de los dos corría una versión sin Monitoreo Centralizado, y su
+ *  "dashboard" le faltaba un campo que el otro daba por garantizado).
+ *  Un componente de clase porque los error boundaries de React todavía
+ *  no tienen equivalente en hooks. */
+class ArbolErrorBoundary extends Component<{ children: ReactNode; onReintentar: () => void }, { rompio: boolean }> {
+  state = { rompio: false }
+
+  static getDerivedStateFromError() {
+    return { rompio: true }
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error('Monitoreo Centralizado: error al dibujar el árbol', error)
+  }
+
+  render() {
+    if (this.state.rompio) {
+      return (
+        <div className="p-8 text-center">
+          <p className="text-sm text-ink-3 mb-3">
+            {traducir("No se pudo dibujar el árbol -probablemente un nodo remoto devolvió datos con un formato inesperado. El resto de la página (nodos configurados, configuración) sigue funcionando normalmente.")}
+          </p>
+          <button
+            onClick={() => { this.setState({ rompio: false }); this.props.onReintentar() }}
+            className="btn btn-outline"
+          >
+            {traducir("Reintentar")}
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 function ArbolConZoom({ children, dependenciaAjuste }: { children: React.ReactNode; dependenciaAjuste: unknown }) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const contenidoRef = useRef<HTMLDivElement>(null)
@@ -1005,19 +1059,21 @@ export default function PanelCentral() {
               </button>
             </div>
           </div>
-          <ArbolConZoom dependenciaAjuste={raiz}>
-            {/* pt-3: le da a la insignia "Este servidor" (que sobresale del
-                borde de su tarjeta con -top-2.5) un margen real, contado
-                adentro de lo que ArbolConZoom mide para encuadrar el árbol
-                -sin esto, la insignia queda justo en el borde superior y el
-                viewport (overflow: hidden) se la recorta. */}
-            <div className="flex justify-center px-4 pt-3">
-              <ul className="tree">
-                <ArbolNodo nodo={raiz} esRaiz nivel={1} ruta={[]}
-                  onVerMas={(nodo, ruta) => setNodoDetalle({ nodo, ruta })} />
-              </ul>
-            </div>
-          </ArbolConZoom>
+          <ArbolErrorBoundary onReintentar={loadEstado}>
+            <ArbolConZoom dependenciaAjuste={raiz}>
+              {/* pt-3: le da a la insignia "Este servidor" (que sobresale del
+                  borde de su tarjeta con -top-2.5) un margen real, contado
+                  adentro de lo que ArbolConZoom mide para encuadrar el árbol
+                  -sin esto, la insignia queda justo en el borde superior y el
+                  viewport (overflow: hidden) se la recorta. */}
+              <div className="flex justify-center px-4 pt-3">
+                <ul className="tree">
+                  <ArbolNodo nodo={raiz} esRaiz nivel={1} ruta={[]}
+                    onVerMas={(nodo, ruta) => setNodoDetalle({ nodo, ruta })} />
+                </ul>
+              </div>
+            </ArbolConZoom>
+          </ArbolErrorBoundary>
         </div>
       ) : null}
 
