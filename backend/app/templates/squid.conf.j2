@@ -267,6 +267,13 @@ http_access deny all
 #
 # El 0 es el puerto ICP, que no se usa: `no-query` desactiva ese sondeo, y
 # `default` marca a este peer como la salida a usar cuando no hay otra regla.
+# `no-digest` desactiva el pedido periódico del "cache digest" del padre
+# -una optimización interna de Squid, sin usuario ni credenciales propias,
+# que un padre que exige autenticación para todo (el caso normal: OTRO
+# SquidManager, con su propio proxy_auth) rechaza con 407 una y otra vez.
+# Sin esto, cada ciclo de refresco del digest deja un 407 de ruido en los
+# logs de padre e hijo que no es tráfico real de ningún usuario -bug real,
+# visto en pruebas en vivo encadenando tres SquidManager, 2026-09-25.
 {% if parent_proxy.auth_method == 'passthru' %}
 {# PASSTHRU reenvia tal cual las credenciales que ya trae el cliente: la unica
    forma de llegar a un padre que exige Digest/NTLM/Negotiate, porque
@@ -275,9 +282,9 @@ http_access deny all
    es obligatorio para que PASSTHRU funcione con algo que no sea Basic. La
    compatibilidad con la auth local de este Squid ya se valido antes de
    llegar aqui (ver parent_proxy_service.validar_auth_method_compatible). #}
-cache_peer {{ parent_proxy.host }} parent {{ parent_proxy.port }} 0 no-query default login=PASSTHRU connection-auth=on
+cache_peer {{ parent_proxy.host }} parent {{ parent_proxy.port }} 0 no-query no-digest default login=PASSTHRU connection-auth=on
 {% else %}
-cache_peer {{ parent_proxy.host }} parent {{ parent_proxy.port }} 0 no-query default{% if parent_proxy.username %} login={{ parent_proxy.username }}:{{ parent_proxy.password or '' }}{% endif %}
+cache_peer {{ parent_proxy.host }} parent {{ parent_proxy.port }} 0 no-query no-digest default{% if parent_proxy.username %} login={{ parent_proxy.username }}:{{ parent_proxy.password or '' }}{% endif %}
 {% endif %}
 
 {% if parent_ca %}

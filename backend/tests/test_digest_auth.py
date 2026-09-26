@@ -108,6 +108,22 @@ def test_padre_passthru_no_lleva_credenciales_fijas():
     assert "login=ana:secreta" not in config
 
 
+def test_cache_peer_lleva_no_digest_fixed_y_passthru():
+    """Sin no-digest, el pedido periódico del cache digest del padre -una
+    optimización interna de Squid, sin credenciales de usuario- se rechaza
+    con 407 contra un padre que exige autenticación para todo (el caso
+    normal: otro SquidManager). Deja ruido de "bloqueos" que no son tráfico
+    real -bug real, visto en pruebas en vivo encadenando tres SquidManager,
+    2026-09-25. Se prueba en los dos métodos, no solo 'fixed'."""
+    from app.services.config_generator import generate_squid_config
+
+    for metodo in ("fixed", "passthru"):
+        padre = FakeParentProxy(auth_method=metodo, username="ana", password="secreta")
+        config = generate_squid_config(_fake_db_con_padre(padre))
+        linea_cache_peer = next(l for l in config.splitlines() if l.startswith("cache_peer "))
+        assert "no-digest" in linea_cache_peer
+
+
 # --- Compatibilidad passthru vs auth local -------------------------------
 
 class _FakeQueryVacia:
