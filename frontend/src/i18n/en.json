@@ -1170,5 +1170,7 @@
   "Este servidor": "This server",
   "El nivel se calcula según qué panel estés mirando -nadie lo asigna a mano": "The level is computed based on which panel you're looking at -nobody assigns it by hand",
   "Nivel {n}": "Level {n}",
-  "este panel": "this panel"
+  "este panel": "this panel",
+  "Monitorizar mis propios nodos": "Monitor my own nodes",
+  "Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo. Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.": "Independent from above: this server can always keep being seen by another SquidManager that has it as a node. Turn this off only if you want it to be a node with no children of its own, without losing the nodes you already have configured below."
 }

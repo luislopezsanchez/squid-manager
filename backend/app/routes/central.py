@@ -34,6 +34,9 @@ _MASCARA = "***"
 
 class CentralConfigIn(BaseModel):
     enabled: bool
+    # Independiente de `enabled`: ver el docstring del modelo
+    # (CentralMonitorConfig) para el porqué de los dos interruptores.
+    monitorizar_hijos: bool = True
 
 
 def _obtener_o_crear_config(db: Session) -> CentralMonitorConfig:
@@ -123,7 +126,11 @@ def get_config(
     apagado -si esto también se negara con `_requerir_habilitado`, nadie
     podría encenderlo nunca desde el panel."""
     config = _obtener_o_crear_config(db)
-    return {"enabled": config.enabled, "instance_id": config.instance_id}
+    return {
+        "enabled": config.enabled,
+        "monitorizar_hijos": config.monitorizar_hijos,
+        "instance_id": config.instance_id,
+    }
 
 
 @router.put("/config")
@@ -134,13 +141,21 @@ def update_config(
 ):
     config = _obtener_o_crear_config(db)
     config.enabled = data.enabled
+    config.monitorizar_hijos = data.monitorizar_hijos
     db.add(AuditLog(
         admin_id=current_admin.id, admin_username=current_admin.username,
         action="update", entity="central_monitor_config",
-        new_value="habilitado" if data.enabled else "deshabilitado",
+        new_value=(
+            f"{'habilitado' if data.enabled else 'deshabilitado'}, "
+            f"monitorizar_hijos={'sí' if data.monitorizar_hijos else 'no'}"
+        ),
     ))
     db.commit()
-    return {"enabled": config.enabled, "instance_id": config.instance_id}
+    return {
+        "enabled": config.enabled,
+        "monitorizar_hijos": config.monitorizar_hijos,
+        "instance_id": config.instance_id,
+    }
 
 
 @router.get("/nodes")
@@ -261,20 +276,31 @@ def central_dashboard(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """El dashboard de este servidor (`self`) y, si `profundidad` > 0, el
-    árbol de sus propios nodos remotos habilitados (`children`).
+    """El dashboard de este servidor (`self`) y, si `profundidad` > 0 Y
+    `monitorizar_hijos` está prendido, el árbol de sus propios nodos
+    remotos habilitados (`children`).
 
     Mismo endpoint para dos llamadores distintos: el panel de este servidor
     (llamada normal, con su propio token) y cualquier OTRO SquidManager que
     tenga a este como nodo (login + token de una cuenta de acá, ver
     central_monitor_service.consultar_arbol) -así la jerarquía se arma sola,
     nivel por nivel, sin que un servidor necesite conocer ni tener
-    credenciales de nada más allá de sus propios nodos directos."""
+    credenciales de nada más allá de sus propios nodos directos.
+
+    `monitorizar_hijos` en falso deja `children` siempre vacío, para
+    cualquiera de los dos llamadores por igual -no hay forma de distinguir
+    "mi propio panel" de "un padre" en la petición en sí (los dos
+    autentican igual), así que la única forma limpia de que este servidor
+    siga siendo visible para un padre sin monitorizar a los suyos es que
+    directamente deje de recorrerlos, sea quien sea el que pregunta. Ver el
+    docstring de CentralMonitorConfig -encontrado en vivo, 2026-09-26: un
+    único interruptor todo-o-nada obligaba a elegir entre "no me dejo
+    monitorear" y "sigo monitoreando a mis nodos"."""
     _requerir_habilitado(db)
     config = _obtener_o_crear_config(db)
     idioma = idioma_de_cabecera(request.headers.get("accept-language"))
 
-    nodes = db.query(MonitoredNode).order_by(MonitoredNode.name).all()
+    nodes = db.query(MonitoredNode).order_by(MonitoredNode.name).all() if config.monitorizar_hijos else []
     children = consultar_arbol_de_todos(nodes, profundidad_restante=profundidad - 1) if profundidad > 0 else []
 
     return {
@@ -352,6 +378,19 @@ def node_detalle_por_ruta(
         raise HTTPException(400, detail=f"La ruta no puede tener más de {PROFUNDIDAD_MAXIMA} saltos")
 
     primero, resto = ids[0], ids[1:]
+
+    if resto:
+        # Reenviar el resto de la ruta es "prestar" uno de mis propios
+        # nodos para que alguien vea a través de mí -si decidí no
+        # monitorizarlos, tampoco presto el acceso a ellos, aunque el nodo
+        # en sí siga configurado acá.
+        config = _obtener_o_crear_config(db)
+        if not config.monitorizar_hijos:
+            raise HTTPException(
+                403,
+                detail="Este servidor tiene desactivado \"Monitorizar mis nodos\": no reenvía pedidos hacia sus propios nodos configurados.",
+            )
+
     node = db.query(MonitoredNode).filter(MonitoredNode.id == primero).first()
     if not node:
         raise HTTPException(404, detail="Nodo no encontrado")

@@ -66,7 +66,9 @@ class _FakeQueryUnNodo:
 # fallarían con un 403 antes de llegar a lo que en realidad quieren probar
 # (la resolución de la contraseña enmascarada). Habilitado a propósito, para
 # que esa parte no interfiera con lo que cada test realmente verifica.
-_CONFIG_HABILITADA = CentralMonitorConfig(id=1, enabled=True, instance_id="00000000-0000-0000-0000-000000000000")
+_CONFIG_HABILITADA = CentralMonitorConfig(
+    id=1, enabled=True, monitorizar_hijos=True, instance_id="00000000-0000-0000-0000-000000000000",
+)
 
 
 class FakeDBConNodo:
@@ -176,6 +178,44 @@ def test_ruta_de_un_solo_id_resuelve_directo(monkeypatch):
     assert capturado["node"] is nodo
 
 
+def test_ruta_reenvio_rechazado_si_monitorizar_hijos_apagado():
+    """Reenviar el resto de la ruta es "prestar" uno de mis propios nodos
+    para que alguien vea a través de mí -si decidí no monitorizarlos,
+    tampoco presto el acceso, aunque el nodo en sí siga configurado acá."""
+    config = CentralMonitorConfig(
+        id=1, enabled=True, monitorizar_hijos=False, instance_id="00000000-0000-0000-0000-000000000001",
+    )
+
+    class _FakeDBSoloConfig:
+        def query(self, model):
+            return _FakeQueryUnNodo(config)
+
+    with pytest.raises(HTTPException) as exc:
+        _ruta_detalle_por_ruta(ruta="7,1", db=_FakeDBSoloConfig(), _=None)
+    assert exc.value.status_code == 403
+
+
+def test_ruta_de_un_solo_id_no_depende_de_monitorizar_hijos(monkeypatch):
+    """El caso base (mi propio hijo directo, sin reenviar nada) sigue
+    andando aunque "monitorizar_hijos" esté apagado -ese interruptor solo
+    afecta al REENVÍO hacia adentro, no a responder por mí mismo."""
+    nodo = MonitoredNode(id=7, name="Norte", url="http://10.0.0.5:8000",
+                          username="viewer", password="secreta", enabled=True)
+
+    class _FakeDBConNodoYConfigApagada:
+        def query(self, model):
+            if model is CentralMonitorConfig:
+                return _FakeQueryUnNodo(CentralMonitorConfig(
+                    id=1, enabled=True, monitorizar_hijos=False,
+                    instance_id="00000000-0000-0000-0000-000000000002",
+                ))
+            return _FakeQueryUnNodo(nodo)
+
+    monkeypatch.setattr(central, "consultar_detalle_nodo", lambda n: {"status": "ok"})
+    resultado = _ruta_detalle_por_ruta(ruta="7", db=_FakeDBConNodoYConfigApagada(), _=None)
+    assert resultado == {"status": "ok"}
+
+
 def test_ruta_de_varios_ids_reenvia_el_resto(monkeypatch):
     """Un nieto/bisnieto (ruta de más de un id) se resuelve con
     consultar_detalle_relay, pasándole el resto de la ruta sin el primer
@@ -194,3 +234,88 @@ def test_ruta_de_varios_ids_reenvia_el_resto(monkeypatch):
     assert resultado == {"status": "ok"}
     assert capturado["node"] is nodo
     assert capturado["resto"] == [1, 2]
+
+
+# --- GET /central/dashboard: monitorizar_hijos independiente de enabled ---
+#
+# Antes un único interruptor todo-o-nada obligaba a elegir entre "no me
+# dejo monitorear" y "sigo monitoreando a mis nodos" -encontrado en vivo,
+# 2026-09-26, al querer que un servidor siga siendo hijo de otro sin tener
+# hijos propios. Con monitorizar_hijos apagado, `children` sale vacío para
+# CUALQUIERA que pregunte (el propio panel o un padre): no hay forma de
+# distinguirlos en la petición en sí, así que la única forma limpia de
+# lograrlo es no recorrer los nodos en absoluto.
+
+class _FakeQueryNodos:
+    def __init__(self, nodos):
+        self._nodos = nodos
+
+    def order_by(self, *a, **k):
+        return self
+
+    def all(self):
+        return self._nodos
+
+
+class _FakeDBDashboard:
+    def __init__(self, config, nodos):
+        self._config = config
+        self._nodos = nodos
+
+    def query(self, model):
+        if model is CentralMonitorConfig:
+            return _FakeQueryUnNodo(self._config)
+        if model is MonitoredNode:
+            return _FakeQueryNodos(self._nodos)
+        return _FakeQueryUnNodo(None)  # SquidSetting (_squid_port): sin puerto configurado
+
+
+class _FakeRequestSinHeaders:
+    class _Headers:
+        def get(self, *a, **k):
+            return None
+
+    headers = _Headers()
+
+
+def test_dashboard_con_monitorizar_hijos_apagado_no_recorre_nodos(monkeypatch):
+    config = CentralMonitorConfig(
+        id=1, enabled=True, monitorizar_hijos=False, instance_id="00000000-0000-0000-0000-000000000003",
+    )
+    nodo = MonitoredNode(id=1, name="Norte", url="http://10.0.0.5:8000",
+                          username="viewer", password="secreta", enabled=True)
+    capturado = {}
+
+    def _consultar_arbol_falso(nodes, profundidad_restante):
+        capturado["nodes"] = nodes
+        return []
+
+    monkeypatch.setattr(central, "consultar_arbol_de_todos", _consultar_arbol_falso)
+    monkeypatch.setattr(central, "get_dashboard", lambda db=None: {})
+    resultado = central.central_dashboard(
+        request=_FakeRequestSinHeaders(), profundidad=3,
+        db=_FakeDBDashboard(config, [nodo]), _=None,
+    )
+    assert capturado["nodes"] == []
+    assert resultado["children"] == []
+
+
+def test_dashboard_con_monitorizar_hijos_prendido_si_recorre_nodos(monkeypatch):
+    config = CentralMonitorConfig(
+        id=1, enabled=True, monitorizar_hijos=True, instance_id="00000000-0000-0000-0000-000000000004",
+    )
+    nodo = MonitoredNode(id=1, name="Norte", url="http://10.0.0.5:8000",
+                          username="viewer", password="secreta", enabled=True)
+    capturado = {}
+
+    def _consultar_arbol_falso(nodes, profundidad_restante):
+        capturado["nodes"] = nodes
+        return []
+
+    monkeypatch.setattr(central, "consultar_arbol_de_todos", _consultar_arbol_falso)
+    monkeypatch.setattr(central, "get_dashboard", lambda db=None: {})
+    central.central_dashboard(
+        request=_FakeRequestSinHeaders(), profundidad=3,
+        db=_FakeDBDashboard(config, [nodo]), _=None,
+    )
+    assert capturado["nodes"] == [nodo]

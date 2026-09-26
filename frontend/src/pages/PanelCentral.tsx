@@ -282,7 +282,7 @@ function ModalDetalleNodo({ nodo, ruta, onClose }: { nodo: NodeStatus; ruta: num
 const FORM_VACIO = { name: '', url: '', username: '', password: '', enabled: true }
 
 export default function PanelCentral() {
-  const [config, setConfig] = useState<{ enabled: boolean; instance_id: string } | null>(null)
+  const [config, setConfig] = useState<{ enabled: boolean; monitorizar_hijos: boolean; instance_id: string } | null>(null)
   const [savingConfig, setSavingConfig] = useState(false)
   const [nodes, setNodes] = useState<Node[]>([])
   const [raiz, setRaiz] = useState<NodeStatus | null>(null)
@@ -306,9 +306,23 @@ export default function PanelCentral() {
   const handleToggleEnabled = async (checked: boolean) => {
     setSavingConfig(true)
     try {
-      const nuevo = await api.updateCentralConfig(checked)
+      const nuevo = await api.updateCentralConfig(checked, config?.monitorizar_hijos ?? true)
       setConfig(nuevo)
       if (checked) { loadNodes(); loadEstado() }
+    } catch (e: any) {
+      showToast(`${traducir("Error")}: ${e.message}`, 'error')
+    } finally {
+      setSavingConfig(false)
+    }
+  }
+
+  const handleToggleMonitorizarHijos = async (checked: boolean) => {
+    if (!config) return
+    setSavingConfig(true)
+    try {
+      const nuevo = await api.updateCentralConfig(config.enabled, checked)
+      setConfig(nuevo)
+      loadEstado()
     } catch (e: any) {
       showToast(`${traducir("Error")}: ${e.message}`, 'error')
     } finally {
@@ -491,6 +505,23 @@ export default function PanelCentral() {
         <p className="text-xs text-ink-3 mt-2">
           {traducir("Cada nodo se consulta con una cuenta propia del panel remoto (recomendado: un usuario con rol \"solo lectura\" dedicado a esto). No requiere ningún cambio en Squid ni que los nodos se conozcan entre sí. Mientras esté desactivado, este servidor tampoco responde si otro SquidManager lo agrega a él como nodo.")}
         </p>
+
+        {config?.enabled && (
+          <div className="mt-3 pt-3 border-t border-line-soft/70">
+            <label className="flex items-center gap-2 cursor-pointer w-fit">
+              <input
+                type="checkbox"
+                checked={config?.monitorizar_hijos ?? true}
+                disabled={savingConfig}
+                onChange={e => handleToggleMonitorizarHijos(e.target.checked)}
+              />
+              <span className="text-sm text-ink-2">{traducir("Monitorizar mis propios nodos")}</span>
+            </label>
+            <p className="text-xs text-ink-3 mt-1.5">
+              {traducir("Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo. Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.")}
+            </p>
+          </div>
+        )}
       </div>
 
       {config?.enabled && (

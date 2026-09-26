@@ -1170,5 +1170,7 @@
   "Este servidor": "Este servidor",
   "El nivel se calcula según qué panel estés mirando -nadie lo asigna a mano": "O nível é calculado de acordo com o painel que você está vendo -ninguém o atribui manualmente",
   "Nivel {n}": "Nível {n}",
-  "este panel": "este painel"
+  "este panel": "este painel",
+  "Monitorizar mis propios nodos": "Monitorar meus próprios nós",
+  "Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo. Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.": "Independente do item acima: este servidor sempre pode continuar sendo visto por outro SquidManager que o tenha como nó. Desative isso apenas se quiser que seja um nó sem filhos próprios, sem perder os nós que já tenha configurados mais abaixo."
 }

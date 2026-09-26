@@ -291,9 +291,15 @@ export const api = {
   // consulta para ver sus métricas junto a las propias. Apagado por
   // defecto (getCentralConfig/updateCentralConfig): con enabled=false el
   // resto de estas rutas devuelve 403, no solo se ocultan en el frontend.
-  getCentralConfig: () => request<{ enabled: boolean; instance_id: string }>('/central/config'),
-  updateCentralConfig: (enabled: boolean) =>
-    request<{ enabled: boolean; instance_id: string }>('/central/config', { method: 'PUT', body: JSON.stringify({ enabled }) }),
+  // monitorizar_hijos es independiente: con enabled=true pero esto en
+  // false, este servidor sigue respondiendo si otro lo tiene como nodo,
+  // pero deja de recorrer sus propios nodos configurados (útil para ser
+  // hijo de otro sin tener hijos propios, sin perder esa configuración).
+  getCentralConfig: () => request<{ enabled: boolean; monitorizar_hijos: boolean; instance_id: string }>('/central/config'),
+  updateCentralConfig: (enabled: boolean, monitorizar_hijos: boolean) =>
+    request<{ enabled: boolean; monitorizar_hijos: boolean; instance_id: string }>(
+      '/central/config', { method: 'PUT', body: JSON.stringify({ enabled, monitorizar_hijos }) },
+    ),
   listCentralNodes: () => request<any[]>('/central/nodes'),
   createCentralNode: (data: any) => request<any>('/central/nodes', { method: 'POST', body: JSON.stringify(data) }),
   updateCentralNode: (id: number, data: any) => request<any>(`/central/nodes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
