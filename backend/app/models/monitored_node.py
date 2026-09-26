@@ -10,15 +10,17 @@ Dos tipos posibles (`tipo`):
   su API (dashboard, árbol de sus propios nodos, etc). username/password
   obligatorios.
 - "squid_basico": un Squid sin SquidManager encima, agregado a mano. No
-  hay cuenta que validar ni API que consultar: se lee directo el Cache
+  hay cuenta que validar ni API que consultar: se intenta leer el Cache
   Manager de Squid (mgr:info) en HTTP plano contra `url` (que acá es
   host:puerto DEL PROPIO SQUID, no de un panel) -ver
   central_monitor_service.consultar_nodo_basico. username/password
-  quedan en None; el árbol solo puede mostrar estado y uptime, nunca
-  tráfico ni usuarios activos (eso sale de la base de datos de
-  SquidManager, que un Squid puro no tiene). Requiere que el squid.conf
-  remoto tenga una ACL que permita esta consulta desde este servidor
-  -por defecto Squid solo la permite desde localhost.
+  quedan en None; el árbol nunca muestra tráfico ni usuarios activos (eso
+  sale de la base de datos de SquidManager, que un Squid puro no tiene).
+  NO requiere ningún cambio en el squid.conf remoto para el caso básico
+  ("¿está arriba?"): CUALQUIER respuesta HTTP de Squid -incluido un 403,
+  que es lo que da por defecto ahí- ya prueba que está vivo. Una ACL ahí
+  (que permita esta consulta desde este servidor) es puramente opcional,
+  y solo agrega datos extra (versión, tiempo activo, clientes conectados).
 """
 
 from app.utils import utcnow

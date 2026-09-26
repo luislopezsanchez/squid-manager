@@ -10,6 +10,15 @@ import { LoadingState, ErrorState } from '../components/AsyncState'
 // sin panel -se lee su Cache Manager directo). Ver MonitoredNode.tipo.
 type TipoNodo = 'squidmanager' | 'squid_basico'
 
+interface FormNodo {
+  name: string
+  tipo: TipoNodo
+  url: string
+  username: string
+  password: string
+  enabled: boolean
+}
+
 interface Node {
   id: number
   name: string
@@ -80,10 +89,15 @@ interface NodoDetalle {
 function InfoTipCentral({ children }: { children: React.ReactNode }) {
   const [abierto, setAbierto] = useState(false)
   return (
-    <span className="relative inline-flex items-center group ml-auto">
+    <span className="relative inline-flex items-center group">
       <button
         type="button"
-        onClick={() => setAbierto(a => !a)}
+        // stopPropagation: este ícono ahora vive DENTRO de un <label> que
+        // envuelve un checkbox (uno por interruptor, en el banner de
+        // Monitoreo Centralizado) -sin esto, el clic para abrir el
+        // tooltip también le llegaría al <label> y tildaría/destildaría
+        // el checkbox sin querer.
+        onClick={e => { e.stopPropagation(); setAbierto(a => !a) }}
         onBlur={() => setAbierto(false)}
         title={traducir("Más información")}
         className="flex items-center justify-center text-ink-3 opacity-60 hover:opacity-100 cursor-help"
@@ -187,7 +201,7 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
             </div>
             <div>
               <p className="text-ink-3 text-xs">{traducir("Clientes conectados")}</p>
-              <p className="font-medium">{formatNumber(nodo.data.clientes_conectados ?? 0)}</p>
+              <p className="font-medium">{nodo.data.clientes_conectados != null ? formatNumber(nodo.data.clientes_conectados) : '—'}</p>
             </div>
           </div>
         ) : (
@@ -209,6 +223,9 @@ function TarjetaNodo({ nodo, esRaiz, nivel, ruta, onVerMas }: {
         <p className="text-xs text-amber-800 mb-1">
           {traducir("El panel de SquidManager responde, pero Squid (el proxy) no -su Cache Manager no contestó.")}
         </p>
+      )}
+      {esBasico && enLinea && nodo.message && (
+        <p className="text-xs text-ink-3 mb-1">{nodo.message}</p>
       )}
       {!esRaiz && (
         <div className="mt-2 pt-2 border-t border-line-soft text-right">
@@ -368,7 +385,7 @@ function ArbolConZoom({ children, dependenciaAjuste }: { children: React.ReactNo
     <div className="relative">
       <div
         ref={viewportRef}
-        className="relative h-[440px] overflow-hidden rounded-lg bg-ground/60 cursor-grab active:cursor-grabbing select-none"
+        className="relative h-[620px] overflow-hidden rounded-lg bg-ground/60 cursor-grab active:cursor-grabbing select-none"
         onMouseDown={handleMouseDown}
       >
         <div
@@ -525,7 +542,146 @@ function ModalDetalleNodo({ nodo, ruta, onClose }: { nodo: NodeStatus; ruta: num
   )
 }
 
-const FORM_VACIO = { name: '', tipo: 'squidmanager' as TipoNodo, url: '', username: '', password: '', enabled: true }
+// Modal para agregar/editar un nodo -antes era un <form> siempre visible
+// dentro de "Nodos configurados", que le robaba espacio a la página incluso
+// cerrado (el botón "Cancelar"/"+ Agregar nodo" quedaba lejos del lienzo del
+// árbol). Ahora vive en un modal, disparado desde un botón al lado de
+// "Actualizar" -mismo lugar donde ya se refresca el árbol- y "Nodos
+// configurados" queda solo como la lista. Pedido en vivo, 2026-09-26.
+function ModalFormNodo({ form, setForm, editingId, testing, testResult, onTest, onSave, onClose }: {
+  form: FormNodo
+  setForm: (f: FormNodo) => void
+  editingId: number | null
+  testing: boolean
+  testResult: { status: string; message?: string; monitoreo_centralizado_remoto?: boolean | null } | null
+  onTest: () => void
+  onSave: (e: React.FormEvent) => void
+  onClose: () => void
+}) {
+  const esBasicoForm = form.tipo === 'squid_basico'
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line-soft flex-none">
+          <h2 className="text-lg font-bold text-ink">
+            {editingId !== null ? traducir("Editar nodo") : traducir("Agregar nodo")}
+          </h2>
+          <button onClick={onClose} aria-label={traducir("Cerrar")}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-ink-3 hover:bg-line-soft hover:text-ink transition flex-none">
+            <IconClose className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={onSave} className="px-6 py-4 overflow-y-auto">
+          <div className="mb-4">
+            <label className="field-label block mb-1.5">{traducir("Tipo de nodo")}</label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <label className={`flex-1 flex items-start gap-2 border rounded-lg px-3 py-2 cursor-pointer ${!esBasicoForm ? 'border-brand-500 bg-brand-50' : 'border-line-soft'}`}>
+                <input type="radio" name="node-tipo" className="mt-1" checked={!esBasicoForm}
+                  onChange={() => setForm({ ...form, tipo: 'squidmanager' })} />
+                <span>
+                  <span className="block text-sm font-medium text-ink">{traducir("SquidManager")}</span>
+                  <span className="block text-xs text-ink-3">{traducir("Otra instancia de este panel, con usuario y contraseña propios.")}</span>
+                </span>
+              </label>
+              <label className={`flex-1 flex items-start gap-2 border rounded-lg px-3 py-2 cursor-pointer ${esBasicoForm ? 'border-brand-500 bg-brand-50' : 'border-line-soft'}`}>
+                <input type="radio" name="node-tipo" className="mt-1" checked={esBasicoForm}
+                  onChange={() => setForm({ ...form, tipo: 'squid_basico' })} />
+                <span>
+                  <span className="block text-sm font-medium text-ink">{traducir("Squid básico")}</span>
+                  <span className="block text-xs text-ink-3">{traducir("Un Squid sin SquidManager, sin cuenta -se lee su Cache Manager directo.")}</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="node-name" className="field-label block mb-1.5">{traducir("Nombre")}</label>
+              <input id="node-name" type="text" value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                className="input" placeholder={traducir("ej: Sucursal Norte")} required />
+            </div>
+            <div>
+              <label htmlFor="node-url" className="field-label block mb-1.5">
+                {esBasicoForm ? traducir("Dirección de Squid") : traducir("URL del panel remoto")}
+              </label>
+              <input id="node-url" type="text" value={form.url}
+                onChange={e => setForm({ ...form, url: e.target.value })}
+                className="input font-mono text-sm" placeholder={esBasicoForm ? "http://10.0.0.9:3128" : "https://10.0.0.5:8443"} required />
+              {esBasicoForm && <p className="field-help mt-1">{traducir("Host y puerto donde escucha Squid -no un panel.")}</p>}
+            </div>
+            {!esBasicoForm && (
+              <>
+                <div>
+                  <label htmlFor="node-username" className="field-label block mb-1.5">{traducir("Usuario")}</label>
+                  <input id="node-username" type="text" value={form.username}
+                    onChange={e => setForm({ ...form, username: e.target.value })}
+                    className="input" required={!esBasicoForm} />
+                  <p className="field-help mt-1">{traducir("Recomendado: una cuenta con rol \"Solo lectura\" dedicada a esto en el nodo remoto.")}</p>
+                </div>
+                <div>
+                  <label htmlFor="node-password" className="field-label block mb-1.5">{traducir("Contraseña")}</label>
+                  <input id="node-password" type="password" value={form.password}
+                    onChange={e => setForm({ ...form, password: e.target.value })}
+                    className="input" placeholder={editingId !== null ? traducir("Dejar en blanco para no cambiarla") : ''}
+                    required={editingId === null} />
+                </div>
+              </>
+            )}
+          </div>
+
+          {esBasicoForm && (
+            <div className="note note-ok mt-4">
+              <p className="note-text">
+                {traducir("No hace falta tocar el squid.conf remoto para agregarlo: alcanza con que Squid esté escuchando. Si además querés ver su versión, tiempo activo y clientes conectados, agregá esto en su squid.conf (y recargá Squid) -es opcional:")}
+              </p>
+              <pre className="mt-2 text-xs bg-black/5 rounded p-2 overflow-x-auto whitespace-pre">
+{`acl monitoreo_central src <IP de este servidor>
+http_access allow manager monitoreo_central`}
+              </pre>
+              <p className="note-text mt-2">
+                {traducir("Esas dos líneas van ANTES del \"http_access deny manager\" ya existente en el squid.conf.")}
+              </p>
+            </div>
+          )}
+
+          <label className="flex items-center gap-2 mt-4 cursor-pointer">
+            <input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} />
+            {traducir("Habilitado")}
+          </label>
+
+          <div className="flex items-center gap-3 mt-4">
+            <button type="button" onClick={onTest} disabled={testing} className="btn btn-outline">
+              {testing ? traducir("Probando...") : traducir("Probar conexión")}
+            </button>
+            <button type="submit" className="btn btn-primary">
+              {editingId !== null ? traducir("Guardar cambios") : traducir("Agregar nodo")}
+            </button>
+          </div>
+
+          {testResult && (
+            <div className={`mt-4 note ${
+              testResult.status !== 'ok' ? 'note-danger'
+                : testResult.monitoreo_centralizado_remoto === false ? 'note-warn'
+                  : 'note-ok'
+            }`}>
+              <p className="note-text">
+                {testResult.status !== 'ok'
+                  ? testResult.message
+                  : testResult.monitoreo_centralizado_remoto === false
+                    ? traducir("Conexión exitosa, pero el monitoreo centralizado está deshabilitado en ese nodo: va a aparecer «Sin conexión» en el árbol hasta que lo actives allá (Monitoreo centralizado → Habilitar).")
+                    : traducir("Conexión exitosa: el nodo respondió correctamente.")}
+              </p>
+            </div>
+          )}
+        </form>
+      </div>
+    </div>
+  )
+}
+
+const FORM_VACIO: FormNodo = { name: '', tipo: 'squidmanager', url: '', username: '', password: '', enabled: true }
 
 export default function PanelCentral() {
   const [config, setConfig] = useState<{ enabled: boolean; monitorizar_hijos: boolean; instance_id: string } | null>(null)
@@ -780,6 +936,11 @@ export default function PanelCentral() {
             onChange={e => handleToggleEnabled(e.target.checked)}
           />
           <span className="text-ink-2 whitespace-nowrap">{traducir("Habilitar")}</span>
+          <InfoTipCentral>
+            <p>
+              {traducir("Cada nodo se consulta con una cuenta propia del panel remoto (recomendado: un usuario con rol \"solo lectura\" dedicado a esto). No requiere ningún cambio en Squid ni que los nodos se conozcan entre sí. Mientras esté desactivado, no podés configurar ni consultar nodos propios desde acá -pero si OTRO SquidManager ya te tiene agregado como nodo a vos, te sigue viendo igual: dejarse monitorear nunca depende de este interruptor, solo de que esa cuenta sea válida.")}
+            </p>
+          </InfoTipCentral>
         </label>
         {config?.enabled && (
           <label className="flex items-center gap-1.5 cursor-pointer">
@@ -790,16 +951,13 @@ export default function PanelCentral() {
               onChange={e => handleToggleMonitorizarHijos(e.target.checked)}
             />
             <span className="text-ink-2 whitespace-nowrap">{traducir("Monitorizar mis propios nodos")}</span>
+            <InfoTipCentral>
+              <p>
+                {traducir("Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo, esté prendido o apagado \"Habilitar\". Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.")}
+              </p>
+            </InfoTipCentral>
           </label>
         )}
-        <InfoTipCentral>
-          <p>
-            {traducir("Cada nodo se consulta con una cuenta propia del panel remoto (recomendado: un usuario con rol \"solo lectura\" dedicado a esto). No requiere ningún cambio en Squid ni que los nodos se conozcan entre sí. Mientras esté desactivado, no podés configurar ni consultar nodos propios desde acá -pero si OTRO SquidManager ya te tiene agregado como nodo a vos, te sigue viendo igual: dejarse monitorear nunca depende de este interruptor, solo de que esa cuenta sea válida.")}
-          </p>
-          <p className="mt-2 pt-2 border-t border-white/20">
-            {traducir("Independiente de arriba: este servidor siempre puede seguir siendo visto por otro SquidManager que lo tenga como nodo, esté prendido o apagado \"Habilitar\". Desactivá esto solo si querés que sea un nodo sin hijos propios, sin perder los nodos que ya tengas configurados más abajo.")}
-          </p>
-        </InfoTipCentral>
       </div>
 
       {config?.enabled && (
@@ -824,11 +982,19 @@ export default function PanelCentral() {
             </div>
             {/* Adentro de la propia tarjeta del árbol, no en el encabezado de
                 la página: antes había que scrollear hasta arriba de todo
-                para refrescar -pedido en vivo, 2026-09-26. */}
-            <button onClick={loadEstado} className="btn btn-outline flex items-center gap-2 flex-none">
-              <IconRefresh className="w-4 h-4" />
-              {traducir("Actualizar")}
-            </button>
+                para refrescar -pedido en vivo, 2026-09-26. "+ Agregar nodo"
+                se suma acá mismo por el mismo motivo (antes estaba junto a
+                "Nodos configurados", lejos del lienzo) -pedido en vivo,
+                2026-09-26. */}
+            <div className="flex items-center gap-2 flex-none">
+              <button onClick={() => { resetForm(); setShowForm(true) }} className="btn btn-primary flex items-center gap-2">
+                {traducir('+ Agregar nodo')}
+              </button>
+              <button onClick={loadEstado} className="btn btn-outline flex items-center gap-2">
+                <IconRefresh className="w-4 h-4" />
+                {traducir("Actualizar")}
+              </button>
+            </div>
           </div>
           <ArbolConZoom dependenciaAjuste={raiz}>
             {/* pt-3: le da a la insignia "Este servidor" (que sobresale del
@@ -850,122 +1016,16 @@ export default function PanelCentral() {
         <ModalDetalleNodo nodo={nodoDetalle.nodo} ruta={nodoDetalle.ruta} onClose={() => setNodoDetalle(null)} />
       )}
 
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-medium text-ink">{traducir("Nodos configurados")}</h2>
-        <button
-          onClick={() => { if (!showForm) resetForm(); setShowForm(!showForm) }}
-          className="btn btn-primary"
-        >
-          {showForm ? traducir('Cancelar') : traducir('+ Agregar nodo')}
-        </button>
-      </div>
-
       {showForm && (
-        <form onSubmit={handleSave} className="card p-6 mb-6">
-          <div className="mb-4">
-            <label className="field-label block mb-1.5">{traducir("Tipo de nodo")}</label>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <label className={`flex-1 flex items-start gap-2 border rounded-lg px-3 py-2 cursor-pointer ${!esBasicoForm ? 'border-brand-500 bg-brand-50' : 'border-line-soft'}`}>
-                <input type="radio" name="node-tipo" className="mt-1" checked={!esBasicoForm}
-                  onChange={() => setForm({ ...form, tipo: 'squidmanager' })} />
-                <span>
-                  <span className="block text-sm font-medium text-ink">{traducir("SquidManager")}</span>
-                  <span className="block text-xs text-ink-3">{traducir("Otra instancia de este panel, con usuario y contraseña propios.")}</span>
-                </span>
-              </label>
-              <label className={`flex-1 flex items-start gap-2 border rounded-lg px-3 py-2 cursor-pointer ${esBasicoForm ? 'border-brand-500 bg-brand-50' : 'border-line-soft'}`}>
-                <input type="radio" name="node-tipo" className="mt-1" checked={esBasicoForm}
-                  onChange={() => setForm({ ...form, tipo: 'squid_basico' })} />
-                <span>
-                  <span className="block text-sm font-medium text-ink">{traducir("Squid básico")}</span>
-                  <span className="block text-xs text-ink-3">{traducir("Un Squid sin SquidManager, sin cuenta -se lee su Cache Manager directo.")}</span>
-                </span>
-              </label>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="node-name" className="field-label block mb-1.5">{traducir("Nombre")}</label>
-              <input id="node-name" type="text" value={form.name}
-                onChange={e => setForm({ ...form, name: e.target.value })}
-                className="input" placeholder={traducir("ej: Sucursal Norte")} required />
-            </div>
-            <div>
-              <label htmlFor="node-url" className="field-label block mb-1.5">
-                {esBasicoForm ? traducir("Dirección de Squid") : traducir("URL del panel remoto")}
-              </label>
-              <input id="node-url" type="text" value={form.url}
-                onChange={e => setForm({ ...form, url: e.target.value })}
-                className="input font-mono text-sm" placeholder={esBasicoForm ? "http://10.0.0.9:3128" : "https://10.0.0.5:8443"} required />
-              {esBasicoForm && <p className="field-help mt-1">{traducir("Host y puerto donde escucha Squid -no un panel.")}</p>}
-            </div>
-            {!esBasicoForm && (
-              <>
-                <div>
-                  <label htmlFor="node-username" className="field-label block mb-1.5">{traducir("Usuario")}</label>
-                  <input id="node-username" type="text" value={form.username}
-                    onChange={e => setForm({ ...form, username: e.target.value })}
-                    className="input" required={!esBasicoForm} />
-                  <p className="field-help mt-1">{traducir("Recomendado: una cuenta con rol \"Solo lectura\" dedicada a esto en el nodo remoto.")}</p>
-                </div>
-                <div>
-                  <label htmlFor="node-password" className="field-label block mb-1.5">{traducir("Contraseña")}</label>
-                  <input id="node-password" type="password" value={form.password}
-                    onChange={e => setForm({ ...form, password: e.target.value })}
-                    className="input" placeholder={editingId !== null ? traducir("Dejar en blanco para no cambiarla") : ''}
-                    required={editingId === null} />
-                </div>
-              </>
-            )}
-          </div>
-
-          {esBasicoForm && (
-            <div className="note note-warn mt-4">
-              <p className="note-text">
-                {traducir("Squid, por defecto, solo deja consultar su Cache Manager desde localhost. Para que este servidor pueda monitorearlo, agregá en su squid.conf (y recargá Squid):")}
-              </p>
-              <pre className="mt-2 text-xs bg-black/5 rounded p-2 overflow-x-auto whitespace-pre">
-{`acl monitoreo_central src <IP de este servidor>
-http_access allow manager monitoreo_central`}
-              </pre>
-              <p className="note-text mt-2">
-                {traducir("Esas dos líneas van ANTES del \"http_access deny manager\" ya existente en el squid.conf.")}
-              </p>
-            </div>
-          )}
-
-          <label className="flex items-center gap-2 mt-4 cursor-pointer">
-            <input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} />
-            {traducir("Habilitado")}
-          </label>
-
-          <div className="flex items-center gap-3 mt-4">
-            <button type="button" onClick={handleTest} disabled={testing} className="btn btn-outline">
-              {testing ? traducir("Probando...") : traducir("Probar conexión")}
-            </button>
-            <button type="submit" className="btn btn-primary">
-              {editingId !== null ? traducir("Guardar cambios") : traducir("Agregar nodo")}
-            </button>
-          </div>
-
-          {testResult && (
-            <div className={`mt-4 note ${
-              testResult.status !== 'ok' ? 'note-danger'
-                : testResult.monitoreo_centralizado_remoto === false ? 'note-warn'
-                  : 'note-ok'
-            }`}>
-              <p className="note-text">
-                {testResult.status !== 'ok'
-                  ? testResult.message
-                  : testResult.monitoreo_centralizado_remoto === false
-                    ? traducir("Conexión exitosa, pero el monitoreo centralizado está deshabilitado en ese nodo: va a aparecer «Sin conexión» en el árbol hasta que lo actives allá (Monitoreo centralizado → Habilitar).")
-                    : traducir("Conexión exitosa: el nodo respondió correctamente.")}
-              </p>
-            </div>
-          )}
-        </form>
+        <ModalFormNodo
+          form={form} setForm={setForm} editingId={editingId}
+          testing={testing} testResult={testResult}
+          onTest={handleTest} onSave={handleSave}
+          onClose={() => setShowForm(false)}
+        />
       )}
+
+      <h2 className="text-lg font-medium text-ink mb-4">{traducir("Nodos configurados")}</h2>
 
       {nodes.length === 0 ? (
         <p className="text-ink-3 text-sm">{traducir("No hay nodos remotos configurados todavía.")}</p>

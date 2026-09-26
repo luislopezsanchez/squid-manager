@@ -136,23 +136,38 @@ def consultar_nodo(node) -> dict:
     return _pedir_dashboard_plano(node, base, token)
 
 
+_NOTA_ACL_OPCIONAL = (
+    "Squid está en línea y respondiendo, pero no deja consultar su Cache Manager desde este "
+    "servidor -por eso no hay más datos que el estado. Esto es opcional: para ver también su "
+    "versión, tiempo activo y clientes conectados, agregá en su squid.conf (y recargá Squid): "
+    "\"acl monitoreo_central src <IP de este servidor>\" y \"http_access allow manager "
+    "monitoreo_central\" ANTES del \"http_access deny manager\" ya existente."
+)
+
+
 def consultar_nodo_basico(node) -> dict:
     """Nodo "Squid básico" (sin SquidManager encima): sin login -no hay
-    cuenta que validar-, se lee directo el Cache Manager de Squid
-    (mgr:info) contra `node.url`, que acá es el host:puerto DEL PROPIO
-    SQUID, no de un panel. Mismo mecanismo que cada SquidManager usa
-    contra SU PROPIO Squid en 127.0.0.1 (ver runtime/native_runtime.py,
-    cache_manager_report), apuntando ahora a otra IP -por eso requiere que
-    el squid.conf remoto tenga una ACL que permita esta consulta desde
-    este servidor: Squid por defecto solo la permite desde localhost.
+    cuenta que validar-, se consulta directo contra `node.url`, que acá es
+    el host:puerto DEL PROPIO SQUID, no de un panel.
 
-    `data` trae mucho menos que un nodo SquidManager -ni tráfico en
-    tiempo real ni usuarios activos: eso sale de la base de datos y los
-    logs de SquidManager, que un Squid puro no tiene- pero sí lo esencial
-    para saber si está arriba: si responde, hace cuánto tiempo, su
-    versión, y cuántos clientes tiene conectados en este momento (dato
-    real del propio Squid, no inventado). Pedido en vivo, 2026-09-26:
-    "no siempre el squid a monitorear será un squidmanager"."""
+    Sin exigir ningún cambio de configuración en el Squid remoto: alcanza
+    con que la conexión HTTP se complete y Squid conteste ALGO -sea lo que
+    sea- para probar que está arriba y escuchando. Se pide de paso su
+    Cache Manager (mgr:info, mismo mecanismo que cada SquidManager usa
+    contra SU PROPIO Squid en 127.0.0.1, ver runtime/native_runtime.py)
+    porque si el squid.conf remoto ya lo permite (o si el admin agrega la
+    ACL más adelante) esa MISMA consulta trae de regalo versión, tiempo
+    activo y clientes conectados -pero un 403 ahí (Squid por defecto solo
+    deja esa consulta desde localhost) NO es un fallo de conexión: Squid
+    respondió, está vivo, solo negó ESA página puntual. Antes esto se
+    trataba como "Sin conexión", obligando a tocar el squid.conf remoto
+    solo para poder agregar el nodo -innecesario para el caso básico de
+    "¿está arriba?". Pedido en vivo, 2026-09-26: "necesito que investigues
+    si hay alguna forma más simple [...] sin implicar cambios en la
+    configuración".
+
+    Solo una falla de conexión de verdad (rechazada, timeout, sin ruta)
+    cuenta como "Sin conexión" acá."""
     base = _base(node.url)
     try:
         resp = httpx.get(
@@ -163,18 +178,17 @@ def consultar_nodo_basico(node) -> dict:
     except httpx.HTTPError as e:
         return _error(node, f"No se pudo conectar: {e}")
 
-    if resp.status_code == 403:
-        return _error(
-            node,
-            "Squid rechazó la consulta al Cache Manager. Para monitorear un Squid básico, su "
-            "squid.conf necesita una ACL que permita esta consulta desde este servidor -por "
-            "defecto Squid solo la permite desde localhost. Por ejemplo: agregar "
-            "\"acl monitoreo_central src <IP de este servidor>\" y \"http_access allow manager "
-            "monitoreo_central\" ANTES del \"http_access deny manager\" ya existente, y recargar "
-            "Squid (squid -k reconfigure).",
-        )
     if resp.status_code != 200:
-        return _error(node, f"Squid respondió {resp.status_code} al pedir el Cache Manager")
+        # Cualquier respuesta HTTP -403 el caso típico- ya prueba que
+        # Squid está arriba: no se necesitó ninguna ACL para llegar hasta
+        # acá. Sin `squid_uptime` en `data` a propósito (no ausente-y-null,
+        # directamente ausente): el frontend ya sabe distinguir "no tengo
+        # este dato" de "lo tengo y vino apagado" -ver TarjetaNodo.
+        return {
+            "id": node.id, "name": node.name, "tipo": "squid_basico", "url": node.url, "status": "ok",
+            "data": {},
+            "message": _NOTA_ACL_OPCIONAL,
+        }
 
     from app.services.cache_manager_service import _parsear_info
     info = _parsear_info(resp.text)

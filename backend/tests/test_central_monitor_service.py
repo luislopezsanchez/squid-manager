@@ -680,23 +680,28 @@ def test_consultar_nodo_basico_exito_parsea_uptime_version_y_clientes(monkeypatc
     assert llamadas[0][1]["headers"]["Host"] == "localhost"
 
 
-def test_consultar_nodo_basico_403_sugiere_la_acl_que_falta(monkeypatch):
+def test_consultar_nodo_basico_403_no_es_error_squid_esta_vivo(monkeypatch):
+    """Un 403 al pedir el Cache Manager significa "Squid está arriba, pero
+    no me deja ver esto" -no "Squid no responde". Squid por defecto solo
+    permite esa consulta desde localhost, y no debería hacer falta tocar
+    su squid.conf solo para poder agregarlo como nodo. Pedido en vivo,
+    2026-09-26."""
     monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(403))
 
     resultado = consultar_nodo_basico(FakeNodeBasico())
 
-    assert resultado["status"] == "error"
-    assert "ACL" in resultado["message"]
-    assert "http_access allow manager" in resultado["message"]
+    assert resultado["status"] == "ok"
+    assert "squid_uptime" not in resultado["data"]
+    assert "ACL" in resultado["message"] or "opcional" in resultado["message"].lower()
 
 
-def test_consultar_nodo_basico_otro_status_da_mensaje_claro(monkeypatch):
+def test_consultar_nodo_basico_cualquier_respuesta_http_prueba_que_esta_vivo(monkeypatch):
     monkeypatch.setattr(central_monitor_service.httpx, "get", lambda *a, **k: FakeResponse(500))
 
     resultado = consultar_nodo_basico(FakeNodeBasico())
 
-    assert resultado["status"] == "error"
-    assert "500" in resultado["message"]
+    assert resultado["status"] == "ok"
+    assert resultado["data"] == {}
 
 
 def test_consultar_nodo_basico_sin_conexion(monkeypatch):
