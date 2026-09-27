@@ -1,10 +1,11 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
-import { IconChevronDown, IconChevronUp, IconUsers } from '../components/Icons'
+import { IconUsers, IconGripVertical, IconChevronUp, IconChevronDown } from '../components/Icons'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
+import Modal from '../components/Modal'
 
 interface AccessRule {
   id: number
@@ -23,6 +24,98 @@ interface Acl {
   type: string
 }
 
+type FormRule = { action: string; acl_names: string; order: number; description: string; enabled: boolean }
+
+function RuleFormModal({ form, setForm, editingId, allAclNames, groupNames, onClose, onSubmit, error }: {
+  form: FormRule
+  setForm: (f: FormRule) => void
+  editingId: number | null
+  allAclNames: string[]
+  groupNames: string[]
+  onClose: () => void
+  onSubmit: (e: React.FormEvent) => void
+  error: string
+}) {
+  const [aclSearch, setAclSearch] = useState('')
+  const term = aclSearch.trim().toLowerCase()
+  const aclNamesFiltradas = term ? allAclNames.filter(n => n.toLowerCase().includes(term)) : allAclNames
+  const groupNamesFiltrados = term ? groupNames.filter(n => n.toLowerCase().includes(term)) : groupNames
+
+  const agregarNombre = (name: string) => {
+    const current = form.acl_names.trim()
+    setForm({ ...form, acl_names: current ? `${current} ${name}` : name })
+  }
+
+  return (
+    <Modal title={editingId ? traducir('Editar Regla') : traducir('Nueva Regla de Acceso')} onClose={onClose} maxWidth="max-w-2xl">
+      <form onSubmit={onSubmit}>
+        <div className="flex items-end gap-4">
+          <div className="flex-1">
+            <label htmlFor="rule-action" className="field-label block mb-1.5">{traducir("Acción")}</label>
+            <select id="rule-action" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}
+              className="input">
+              <option value="allow">{traducir("allow (Permitir)")}</option>
+              <option value="deny">{traducir("deny (Denegar)")}</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="rule-order" className="field-label block mb-1.5" title={traducir("Posición en la que se evalúa: la que ya esté ahí (y las siguientes) se corren un lugar. Después de creada, se reordena arrastrando la tarjeta.")}>
+              {traducir("Posición")}
+            </label>
+            <input id="rule-order" type="number" min={0} value={form.order}
+              onChange={e => setForm({ ...form, order: Math.max(0, parseInt(e.target.value) || 0) })}
+              className="input w-20 text-center" />
+          </div>
+        </div>
+        <div className="mt-4">
+          <label htmlFor="rule-acl-names" className="field-label block mb-1.5">{traducir("ACLs (separadas por espacio)")}</label>
+          <input id="rule-acl-names" type="text" value={form.acl_names} onChange={e => setForm({ ...form, acl_names: e.target.value })}
+            placeholder={traducir("ej: localnet authenticated")} className="input font-mono text-sm" required />
+
+          <input
+            type="text"
+            value={aclSearch}
+            onChange={e => setAclSearch(e.target.value)}
+            placeholder={traducir("Buscar ACL o grupo para añadir…")}
+            className="input mt-2 text-sm"
+          />
+          <div className="mt-2 max-h-40 overflow-y-auto flex flex-wrap gap-2 content-start border border-line-soft rounded-lg p-2">
+            {aclNamesFiltradas.map(name => (
+              <button key={name} type="button" onClick={() => agregarNombre(name)}
+                className="px-2 py-1 bg-brand-50 text-brand-700 text-xs font-mono rounded hover:bg-blue-100">
+                {name}
+              </button>
+            ))}
+            {groupNamesFiltrados.length > 0 && <span className="w-full text-xs text-ink-3 mt-1">{traducir("Grupos de usuarios:")}</span>}
+            {groupNamesFiltrados.map(name => (
+              <button key={`g-${name}`} type="button" onClick={() => agregarNombre(name)}
+                className="px-2 py-1 bg-emerald-50 text-emerald-700 text-xs font-mono rounded hover:bg-emerald-100 border border-emerald-200">
+                <IconUsers className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5" />{name}
+              </button>
+            ))}
+            {aclNamesFiltradas.length === 0 && groupNamesFiltrados.length === 0 && (
+              <span className="text-xs text-ink-3 p-1">{traducir("Ninguna ACL ni grupo coincide con la búsqueda.")}</span>
+            )}
+          </div>
+        </div>
+        <div className="mt-4">
+          <label htmlFor="rule-description" className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
+          <input id="rule-description" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+            placeholder={traducir("ej: Permitir acceso a red local autenticada")} className="input" />
+        </div>
+        {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
+        <div className="mt-5 flex items-center gap-3">
+          <button type="submit" className="btn btn-primary">
+            {editingId ? traducir('Guardar Cambios') : traducir('Crear Regla')}
+          </button>
+          <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink-2">{traducir("Cancelar")}</button>
+          <RequiereAplicar />
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 export default function AccessRules() {
   const [rules, setRules] = useState<AccessRule[]>([])
   const [acls, setAcls] = useState<Acl[]>([])
@@ -31,8 +124,10 @@ export default function AccessRules() {
   const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [form, setForm] = useState({ action: 'allow', acl_names: '', order: 0, description: '', enabled: true })
+  const [form, setForm] = useState<FormRule>({ action: 'allow', acl_names: '', order: 0, description: '', enabled: true })
   const [error, setError] = useState('')
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
   const { showToast, ToastContainer } = useToast()
 
   const loadRules = () => {
@@ -59,7 +154,6 @@ export default function AccessRules() {
         showToast(`Regla "${form.action} ${form.acl_names}" creada correctamente`)
       }
       notificarCambioPendiente()
-      setForm({ action: 'allow', acl_names: '', order: rules.length, description: '', enabled: true })
       setEditingId(null)
       setShowForm(false)
       loadRules()
@@ -85,21 +179,39 @@ export default function AccessRules() {
     } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
   }
 
-  const moveRule = async (index: number, direction: 'up' | 'down') => {
-    const newRules = [...rules]
-    const targetIndex = direction === 'up' ? index - 1 : index + 1
-    if (targetIndex < 0 || targetIndex >= newRules.length) return
-    ;[newRules[index], newRules[targetIndex]] = [newRules[targetIndex], newRules[index]]
+  const aplicarNuevoOrden = async (newRules: AccessRule[]) => {
     setRules(newRules)
-    const ruleIds = newRules.map(r => r.id)
     try {
-      await api.reorderRules(ruleIds)
+      await api.reorderRules(newRules.map(r => r.id))
       notificarCambioPendiente()
       showToast(traducir("Orden de reglas actualizado"))
     } catch (e: any) {
       showToast(`Error al reordenar: ${e.message}`, 'error')
       loadRules()
     }
+  }
+
+  const moveRule = (index: number, direction: 'up' | 'down') => {
+    const newRules = [...rules]
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= newRules.length) return
+    ;[newRules[index], newRules[targetIndex]] = [newRules[targetIndex], newRules[index]]
+    aplicarNuevoOrden(newRules)
+  }
+
+  // Arrastrar y soltar: alternativa a los botones subir/bajar, más rápida
+  // cuando hay que mover una regla varios lugares de una vez. Drag & drop
+  // nativo de HTML5 (sin librería): onDragStart guarda qué fila se está
+  // moviendo, onDrop la reinserta donde se soltó y manda el mismo
+  // PUT /reorder que ya usaban las flechas.
+  const handleDrop = (index: number) => {
+    if (dragIndex === null || dragIndex === index) { setDragIndex(null); setOverIndex(null); return }
+    const newRules = [...rules]
+    const [movida] = newRules.splice(dragIndex, 1)
+    newRules.splice(index, 0, movida)
+    setDragIndex(null)
+    setOverIndex(null)
+    aplicarNuevoOrden(newRules)
   }
 
   const predefinedAcls = ['localnet', 'localhost', 'SSL_ports', 'Safe_ports', 'CONNECT', 'authenticated', 'all']
@@ -115,70 +227,21 @@ export default function AccessRules() {
           <p className="page-sub">{traducir("El orden importa: la primera regla que coincide determina el acceso")}</p>
         </div>
         <button
-          onClick={() => { setShowForm(!showForm); setEditingId(null); setForm({ action: 'allow', acl_names: '', order: rules.length, description: '', enabled: true }) }}
+          onClick={() => { setEditingId(null); setForm({ action: 'allow', acl_names: '', order: rules.length, description: '', enabled: true }); setShowForm(true) }}
           className="btn btn-primary"
         >
-          {showForm ? traducir('Cancelar') : traducir('+ Nueva Regla')}
+          {traducir('+ Nueva Regla')}
         </button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleSave} className="card p-6 mb-6">
-          <h3 className="font-medium text-ink mb-4">{editingId ? traducir('Editar Regla') : traducir('Nueva Regla de Acceso')}</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="rule-action" className="field-label block mb-1.5">{traducir("Acción")}</label>
-              <select id="rule-action" value={form.action} onChange={e => setForm({ ...form, action: e.target.value })}
-                className="input">
-                <option value="allow">{traducir("allow (Permitir)")}</option>
-                <option value="deny">{traducir("deny (Denegar)")}</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="rule-order" className="field-label block mb-1.5">{traducir("Orden")}</label>
-              <input id="rule-order" type="number" value={form.order} onChange={e => setForm({ ...form, order: parseInt(e.target.value) })}
-                className="input" />
-            </div>
-          </div>
-          <div className="mt-4">
-            <label htmlFor="rule-acl-names" className="field-label block mb-1.5">{traducir("ACLs (separadas por espacio)")}</label>
-            <input id="rule-acl-names" type="text" value={form.acl_names} onChange={e => setForm({ ...form, acl_names: e.target.value })}
-              placeholder={traducir("ej: localnet authenticated")} className="input font-mono text-sm" required />
-            <div className="mt-2 flex flex-wrap gap-2">
-              {allAclNames.map(name => (
-                <button key={name} type="button" onClick={() => {
-                  const current = form.acl_names.trim()
-                  setForm({ ...form, acl_names: current ? `${current} ${name}` : name })
-                }}
-                  className="px-2 py-1 bg-brand-50 text-brand-700 text-xs font-mono rounded hover:bg-blue-100">
-                  {name}
-                </button>
-              ))}
-              {groupNames.length > 0 && <span className="w-full text-xs text-ink-3 mt-1">{traducir("Grupos de usuarios:")}</span>}
-              {groupNames.map(name => (
-                <button key={`g-${name}`} type="button" onClick={() => {
-                  const current = form.acl_names.trim()
-                  setForm({ ...form, acl_names: current ? `${current} ${name}` : name })
-                }}
-                  className="px-2 py-1 bg-emerald-50 text-emerald-700 text-xs font-mono rounded hover:bg-emerald-100 border border-emerald-200">
-                  <IconUsers className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5" />{name}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mt-4">
-            <label htmlFor="rule-description" className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
-            <input id="rule-description" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-              placeholder={traducir("ej: Permitir acceso a red local autenticada")} className="input" />
-          </div>
-          {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
-          <div className="mt-4 flex items-center gap-3">
-            <button type="submit" className="btn btn-primary">
-              {editingId ? traducir('Guardar Cambios') : traducir('Crear Regla')}
-            </button>
-            <RequiereAplicar />
-          </div>
-        </form>
+        <RuleFormModal
+          form={form} setForm={setForm} editingId={editingId}
+          allAclNames={allAclNames} groupNames={groupNames}
+          onClose={() => setShowForm(false)}
+          onSubmit={handleSave}
+          error={error}
+        />
       )}
 
       {loading ? (
@@ -197,8 +260,28 @@ export default function AccessRules() {
             </div>
           </div>
 
+          {rules.length > 1 && (
+            <p className="text-xs text-ink-3 flex items-center gap-1.5">
+              <IconGripVertical className="w-3.5 h-3.5" />
+              {traducir("Arrastrá una regla desde el ícono de la izquierda para reordenarla, o usá las flechas.")}
+            </p>
+          )}
+
           {rules.map((rule, index) => (
-            <div key={rule.id} className={`card p-4 flex items-center gap-4 ${!rule.enabled ? 'opacity-50' : ''}`}>
+            <div
+              key={rule.id}
+              draggable
+              onDragStart={() => setDragIndex(index)}
+              onDragOver={e => { e.preventDefault(); if (overIndex !== index) setOverIndex(index) }}
+              onDragEnd={() => { setDragIndex(null); setOverIndex(null) }}
+              onDrop={() => handleDrop(index)}
+              className={`card p-4 flex items-center gap-4 transition ${!rule.enabled ? 'opacity-50' : ''} ${
+                dragIndex === index ? 'opacity-40' : ''
+              } ${overIndex === index && dragIndex !== null && dragIndex !== index ? 'ring-2 ring-brand-400' : ''}`}
+            >
+              <span className="text-ink-3 cursor-grab active:cursor-grabbing" aria-hidden="true">
+                <IconGripVertical className="w-4 h-4" />
+              </span>
               <div className="flex flex-col gap-1">
                 <button onClick={() => moveRule(index, 'up')} disabled={index === 0}
                   className="text-ink-3 hover:text-ink-2 disabled:opacity-20 p-1" aria-label={traducir("Subir")}><IconChevronUp className="w-4 h-4" /></button>

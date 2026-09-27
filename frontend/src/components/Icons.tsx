@@ -276,6 +276,13 @@ export const IconChevronDown = ({ className }: Props) => (
   <svg {...base} className={className} strokeWidth={2.5}><path d="m6 9 6 6 6-6" /></svg>
 )
 
+export const IconGripVertical = ({ className }: Props) => (
+  <svg {...base} className={className} fill="currentColor" strokeWidth={0}>
+    <circle cx="9" cy="5" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="9" cy="19" r="1.4" />
+    <circle cx="15" cy="5" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="15" cy="19" r="1.4" />
+  </svg>
+)
+
 export const IconChevronLeft = ({ className }: Props) => (
   <svg {...base} className={className} strokeWidth={2.5}><path d="m15 18-6-6 6-6" /></svg>
 )
