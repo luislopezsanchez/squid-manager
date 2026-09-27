@@ -256,9 +256,18 @@ def delete_acl(
         action="delete", entity="acl", entity_id=acl.id, old_value=acl.name,
     ))
     name = acl.name
+    era_dominio_indexado = acl.source == "file" and acl.type == "dstdomain"
     db.delete(acl)
     db.commit()
     mark_dirty()
+
+    if era_dominio_indexado:
+        # El helper externo consulta por nombre de categoría: sin esto,
+        # borrar la ACL y crear otra distinta con el mismo nombre heredaría
+        # las filas viejas del índice hasta el próximo apply.
+        from app.services import domain_index_service
+
+        domain_index_service.remove_category(name)
 
     if background_tasks:
         queue_notification(background_tasks, db, "acl_change",

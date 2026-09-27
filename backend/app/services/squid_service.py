@@ -293,10 +293,26 @@ def aplicar_lista_dominios(
             content_hash, line_count = write_acl_list_file(name, combinados)
             nuevo_value = None
             sin_cambios = False
+            if acl_type == "dstdomain":
+                # Se indexa ya mismo (no se espera al próximo apply): así
+                # una regla que enganche esta ACL enseguida después de
+                # cargarla encuentra el helper externo ya al día, en vez de
+                # depender de que build_acl_list_files() lo note más tarde.
+                from app.services import domain_index_service
+
+                domain_index_service.index_category(name, combinados, content_hash)
     else:
         nuevo_value = validate_value(" ".join(combinados)) if combinados else ""
         content_hash, line_count = None, None
         sin_cambios = bool(acl and acl.source == "inline" and acl.value == nuevo_value)
+        if acl and acl.source == "file" and acl.type == "dstdomain":
+            # La lista bajó del umbral y vuelve a 'inline': ya no hace falta
+            # el helper externo para esta categoría. Filas huérfanas en el
+            # índice no rompen nada (el helper solo contesta si alguna ACL
+            # 'file' referencia ese nombre), pero no tiene sentido dejarlas.
+            from app.services import domain_index_service
+
+            domain_index_service.remove_category(name)
 
     accion = "update" if acl else "create"
     if acl:
@@ -352,14 +368,26 @@ def build_acl_list_files(db) -> int:
     - Todo lo demás (el caso normal, apply tras apply, sin cambios en la
       lista) no toca el disco para nada: ni lee ni escribe el archivo, solo
       compara metadatos ya en memoria.
+
+    Además (desde el helper externo de dominios, ver domain_index_service.py):
+    para cada ACL 'file' de tipo dstdomain, si el índice SQLite todavía no
+    refleja su content_hash actual -la primera vez que esta versión corre
+    sobre una instalación existente, o tras una restauración- se reconstruye
+    a partir del .txt ya en disco. Es la migración de la ACL nativa vieja
+    (`acl nombre dstdomain "archivo"`, que Squid cargaba entera en cada
+    parseo) al helper (que no le cuesta nada a Squid reconfigurar). Como
+    `categoria_indexada_al_dia` compara hashes ya guardados, en el caso
+    normal (apply tras apply, sin cambios) esto tampoco toca el índice.
     """
     from app.models.acl import Acl
+    from app.services import domain_index_service
 
     ACL_LISTS_DIR.mkdir(parents=True, exist_ok=True)
     acls_de_archivo = db.query(Acl).filter(Acl.source == "file").all()
 
     esperados = set()
     migradas = 0
+    reindexadas = 0
     for acl in acls_de_archivo:
         nombre_archivo = f"{acl.name}.txt"
         esperados.add(nombre_archivo)
@@ -385,13 +413,25 @@ def build_acl_list_files(db) -> int:
                 f"el archivo {ruta} existe: quedará sin dominios hasta que se "
                 "vuelva a cargar desde 'Cargar dominios'."
             )
+            continue
         # Si el archivo existe y `value` ya es NULL: nada que hacer, es el
         # caso normal -el archivo ya es correcto, escrito directamente por
         # bulk_domains() o por una migración anterior de este mismo bucle.
 
+        if acl.type == "dstdomain" and acl.content_hash:
+            if not domain_index_service.categoria_indexada_al_dia(acl.name, acl.content_hash):
+                dominios = [
+                    d.strip() for d in ruta.read_text(encoding="utf-8", errors="replace").splitlines()
+                    if d.strip()
+                ]
+                domain_index_service.index_category(acl.name, dominios, acl.content_hash)
+                reindexadas += 1
+
     if migradas:
         db.commit()
         logger.info(f"{migradas} ACL(s) de archivo migrada(s) al nuevo esquema (value -> archivo)")
+    if reindexadas:
+        logger.info(f"{reindexadas} ACL(s) de dominio reindexada(s) para el helper externo")
 
     borrados = 0
     for existente in ACL_LISTS_DIR.glob("*.txt"):

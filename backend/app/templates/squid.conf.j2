@@ -79,6 +79,21 @@ acl step1 at_step SslBump1
 acl step2 at_step SslBump2
 acl step3 at_step SslBump3
 
+{% if hay_acls_dominio_indexadas %}
+# Helper de ACL externa para listas de bloqueo de dominios grandes (HaGeZi,
+# una blocklist subida a mano): un único pool de helpers, compartido por
+# todas las que existan, consulta un índice SQLite por request en vez de
+# que Squid cargue la lista entera en memoria en cada parseo -ver
+# domain_index_service.py y squid/domain_block_helper.py-. Dos
+# declaraciones porque cada una alimenta al helper con un dato distinto:
+# %>rd (dominio de la petición) para HTTP/CONNECT normal, %ssl::>sni (SNI
+# del cliente) para el bloqueo pre-descifrado de HTTPS más abajo. El
+# nombre de categoría que recibe el helper es el propio nombre de la ACL,
+# pasado como argumento fijo en cada `acl ... external ...` de más abajo.
+external_acl_type squidmanager_domain_helper children-max=10 children-startup=2 ttl=300 %>rd /usr/lib/squid/squidmanager_domain_helper
+external_acl_type squidmanager_domain_helper_sni children-max=6 children-startup=1 ttl=300 %ssl::>sni /usr/lib/squid/squidmanager_domain_helper
+{% endif %}
+
 # ACLs de SNI para aplicar las políticas de dominio también a HTTPS. Solo se
 # declara para una ACL que de verdad aparece en alguna regla http_access
 # (domain_acls_used, ver config_generator.py): una ACL de dominio que existe
@@ -88,7 +103,9 @@ acl step3 at_step SslBump3
 {% for acl in acls %}
 {% if acl.name in domain_acls_used %}
 {% if acl.type == 'dstdomain' %}
-{% if acl.source == 'file' %}
+{% if acl.name in acls_dominio_indexadas %}
+acl sni_{{ acl.name }} external squidmanager_domain_helper_sni {{ acl.name }}
+{% elif acl.source == 'file' %}
 acl sni_{{ acl.name }} ssl::server_name "/etc/squid/acl_lists/{{ acl.name }}.txt"
 {% else %}
 acl sni_{{ acl.name }} ssl::server_name {{ acl.value }}
@@ -178,7 +195,12 @@ acl authenticated proxy_auth REQUIRED
 
 # --- ACLs personalizadas (desde BD) ---
 {% for acl in acls %}
-{% if acl.source == 'file' %}
+{% if acl.name in acls_dominio_indexadas %}
+# '{{ acl.name }}': lista de dominios de {{ acl.line_count or '?' }} entradas
+# (archivo en /etc/squid/acl_lists/{{ acl.name }}.txt). Resuelta por el
+# helper externo, no cargada en memoria por Squid -ver arriba-.
+acl {{ acl.name }} external squidmanager_domain_helper {{ acl.name }}
+{% elif acl.source == 'file' %}
 acl {{ acl.name }} {{ acl.type }} "/etc/squid/acl_lists/{{ acl.name }}.txt"
 {% else %}
 acl {{ acl.name }} {{ acl.type }} {{ acl.value }}

@@ -109,6 +109,15 @@ RUN chmod +x /usr/lib/squid/squidmanager_digest_helper
 COPY ldap_group_helper.py /usr/lib/squid/squidmanager_ldap_group_helper
 RUN chmod +x /usr/lib/squid/squidmanager_ldap_group_helper
 
+# Helper de ACL externa: listas de bloqueo de dominios grandes (HaGeZi, una
+# blocklist subida a mano). Reemplaza la ACL nativa `dstdomain "archivo"`
+# -que obliga a Squid a cargar la lista entera en memoria en cada parseo,
+# la use o no una regla- por una consulta a un indice SQLite por request
+# (ver domain_index_service.py en el backend y este mismo script). Solo usa
+# la libreria estandar (sqlite3), no necesita ninguna dependencia nueva.
+COPY domain_block_helper.py /usr/lib/squid/squidmanager_domain_helper
+RUN chmod +x /usr/lib/squid/squidmanager_domain_helper
+
 # Guardar copia de archivos de config en /opt/squid-defaults/ (el volumen /etc/squid los ocultara)
 RUN mkdir -p /opt/squid-defaults && cp /etc/squid/mime.conf /opt/squid-defaults/ 2>/dev/null || true \
     && cp /etc/squid/mime.conf.default /opt/squid-defaults/ 2>/dev/null || true \

@@ -177,6 +177,22 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
     # cuesta nada a Squid hasta que se use de verdad.
     acls_declaradas = [a for a in acls if a.name in referenced_acl_names]
 
+    # De las ACLs en uso, las que son una lista de dominios respaldada por
+    # archivo (fuente típica: HaGeZi, una blocklist subida a mano) no se
+    # declaran con la ACL nativa `dstdomain "archivo"` -que obliga a Squid a
+    # cargar la lista entera en memoria en cada parseo, la use o no una
+    # regla, y sea del tamaño que sea-, sino contra el helper externo
+    # (external_acl_type, ver domain_index_service.py y
+    # squid/domain_block_helper.py): Squid solo declara el nombre del
+    # helper una vez, y este consulta un índice SQLite por request. Mismo
+    # patrón que ya usa hay_grupos_ldap/ldap_group_helper para grupos de AD.
+    # dstdom_regex se deja fuera a propósito: un patrón regex no encaja en
+    # el índice de sufijos por dominio (ver domain_index_service.matches).
+    acls_dominio_indexadas = {
+        a.name for a in acls_declaradas if a.source == "file" and a.type == "dstdomain"
+    }
+    hay_acls_dominio_indexadas = bool(acls_dominio_indexadas)
+
     # Dominios excluidos del descifrado (banca, sanidad, apps con pinning).
     ssl_exclude = [
         d.strip()
@@ -253,6 +269,8 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
         terminate_acls=terminate_acls,
         domain_acls_used=domain_acls_used,
         domain_acl_types=DOMAIN_ACL_TYPES,
+        acls_dominio_indexadas=acls_dominio_indexadas,
+        hay_acls_dominio_indexadas=hay_acls_dominio_indexadas,
         settings=settings,
         delay_pools=delay_pools,
         ldap=ldap,

@@ -479,6 +479,34 @@ install -o root -g root -m 755 "$INSTALL_DIR/squid/ldap_group_helper.py" \
     /usr/lib/squid/squidmanager_ldap_group_helper
 ok "Helper de grupos LDAP instalado"
 
+# Helper de ACL externa: listas de bloqueo de dominios grandes (HaGeZi, una
+# blocklist subida a mano). Reemplaza la ACL nativa `dstdomain "archivo"`
+# -que obliga a Squid a cargar la lista entera en memoria en cada parseo,
+# la use o no una regla- por una consulta a un índice SQLite por request.
+# Verificado en vivo, 2026-09-27: con una lista de ~5.9M dominios en uso
+# real, `squid -k parse` tardaba mas de un minuto solo por esa carga; con
+# el helper, no depende del tamaño de la lista. Ver domain_index_service.py
+# y squid/domain_block_helper.py.
+install -o root -g root -m 755 "$INSTALL_DIR/squid/domain_block_helper.py" \
+    /usr/lib/squid/squidmanager_domain_helper
+ok "Helper de listas de bloqueo de dominios instalado"
+
+# Timeout de arranque mas generoso: con listas de dominio grandes
+# habilitadas (las use o no una regla todavia, y sobre todo antes de que el
+# helper de arriba pueda migrarlas -ver domain_index_service.py-, o para
+# una instalacion que decida no usarlo), Squid puede tardar en el propio
+# ExecStartPre (`squid -z`) y en el arranque real mas de lo que systemd
+# espera por defecto (90s). Sin este margen, systemd mata el proceso a
+# mitad de un parseo legitimo y Squid queda en 'failed' sin poder
+# recuperarse solo -reproducido en vivo, 2026-09-27, con una ACL de ~5.9M
+# dominios: el propio `squid -k parse` tardo 67s el solo-.
+mkdir -p /etc/systemd/system/squid.service.d
+cat > /etc/systemd/system/squid.service.d/squidmanager-timeout.conf <<'EOF'
+[Service]
+TimeoutStartSec=600
+EOF
+ok "Timeout de arranque de Squid ampliado (600s)"
+
 # Kerberos/Negotiate: el helper negotiate_kerberos_auth usa libkrb5, que sin
 # un /etc/krb5.conf usa valores por defecto que en Ubuntu 24.04 (MIT Kerberos
 # 1.20) rechazan RC4-HMAC -el tipo de cifrado mas comun en un AD real- con

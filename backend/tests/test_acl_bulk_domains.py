@@ -61,7 +61,14 @@ def test_conserva_el_orden_de_aparicion():
 
 # --- Generación de squid.conf: ACL 'file' vs 'inline' -----------------------
 
-def test_acl_file_referencia_el_archivo_no_el_valor_inline():
+def test_acl_dstdomain_file_usa_el_helper_externo_no_la_acl_nativa():
+    """Desde el fix de rendimiento del helper externo (ver
+    domain_index_service.py): una ACL 'file' de tipo dstdomain ya NO se
+    declara como `acl nombre dstdomain "archivo"` -eso obligaba a Squid a
+    cargar la lista entera en memoria en cada parseo, la usara o no una
+    regla-, sino contra squidmanager_domain_helper. dstdom_regex (que no
+    encaja en el índice de sufijos por dominio) sigue el camino viejo -ver
+    test_acl_dstdom_regex_file_sigue_usando_la_acl_nativa más abajo."""
     from test_config_generator import FakeDB, FakeSetting, FakeRule
     from app.services.config_generator import generate_squid_config
 
@@ -76,8 +83,27 @@ def test_acl_file_referencia_el_archivo_no_el_valor_inline():
         # cuando SÍ está en uso, no si aparece o no.
         rules=[FakeRule("deny", "blocklist", 0)],
     ))
-    assert 'acl blocklist dstdomain "/etc/squid/acl_lists/blocklist.txt"' in config
+    assert "external_acl_type squidmanager_domain_helper " in config
+    assert "acl blocklist external squidmanager_domain_helper blocklist" in config
+    assert 'acl blocklist dstdomain "/etc/squid/acl_lists/blocklist.txt"' not in config
     assert "ads1.com" not in config  # el valor no va inline
+
+
+def test_acl_dstdom_regex_file_sigue_usando_la_acl_nativa():
+    """dstdom_regex no encaja en el índice de sufijos por dominio (un
+    patrón regex no es "un dominio con o sin punto inicial"): tiene que
+    seguir declarándose con la ACL nativa de archivo, sin pasar por el
+    helper externo."""
+    from test_config_generator import FakeDB, FakeSetting, FakeRule, FakeAcl
+    from app.services.config_generator import generate_squid_config
+
+    config = generate_squid_config(FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("patrones", "dstdom_regex", ".*ads.*\n.*track.*", source="file")],
+        rules=[FakeRule("deny", "patrones", 0)],
+    ))
+    assert 'acl patrones dstdom_regex "/etc/squid/acl_lists/patrones.txt"' in config
+    assert "external_acl_type squidmanager_domain_helper" not in config
 
 
 def test_acl_sni_file_tampoco_emite_el_valor_inline():
@@ -92,7 +118,9 @@ def test_acl_sni_file_tampoco_emite_el_valor_inline():
     alguna regla usa de verdad (ver domain_acls_used, evita que Squid
     parsee dos veces una lista de archivo sin uso), una ACL suelta sin
     regla ya no emite ningún bloque SNI -ver test_acl_sin_regla_no_emite_sni
-    más abajo, que cubre justo ese otro caso."""
+    más abajo, que cubre justo ese otro caso. Desde el helper externo, la
+    variante SNI de una ACL 'file' dstdomain tampoco carga nada en memoria:
+    usa squidmanager_domain_helper_sni, no ssl::server_name "archivo"."""
     from test_config_generator import FakeDB, FakeSetting, FakeAcl, FakeRule
     from app.services.config_generator import generate_squid_config
 
@@ -101,7 +129,8 @@ def test_acl_sni_file_tampoco_emite_el_valor_inline():
         acls=[FakeAcl("blocklist", "dstdomain", "ads1.com\nads2.com", source="file")],
         rules=[FakeRule("deny", "blocklist", 0)],
     ))
-    assert 'acl sni_blocklist ssl::server_name "/etc/squid/acl_lists/blocklist.txt"' in config
+    assert "acl sni_blocklist external squidmanager_domain_helper_sni blocklist" in config
+    assert 'ssl::server_name "/etc/squid/acl_lists/blocklist.txt"' not in config
     assert "ads1.com" not in config
     assert "ads2.com" not in config
 
@@ -138,10 +167,16 @@ def test_acl_inline_sigue_igual_que_siempre():
 # --- build_acl_list_files: escritura y limpieza -----------------------------
 
 class _FakeAclRow:
-    def __init__(self, name, value, source="file"):
+    def __init__(self, name, value, source="file", type_="dstdom_regex", content_hash=None):
+        # type_ default 'dstdom_regex' a propósito: no encaja en el índice de
+        # dominios (ver acls_dominio_indexadas en config_generator.py), así
+        # que estos tests -sobre la escritura/limpieza del .txt, no sobre el
+        # índice- no disparan ninguna escritura a domain_index_service.
         self.name = name
         self.value = value
         self.source = source
+        self.type = type_
+        self.content_hash = content_hash
 
 
 class _FakeQuery:
@@ -205,6 +240,54 @@ def test_build_acl_list_files_no_toca_lo_que_sigue_vigente(tmp_path, monkeypatch
     squid_service.build_acl_list_files(db)  # segunda pasada, mismo resultado
 
     assert (tmp_path / "blocklist.txt").read_text() == "a.com\n"
+
+
+def test_build_acl_list_files_indexa_dstdomain_para_el_helper_externo(tmp_path, monkeypatch):
+    """El caso que motivó todo esto: una ACL 'file' de tipo dstdomain (no
+    dstdom_regex) tiene que quedar disponible para squidmanager_domain_helper,
+    no solo escrita en su .txt -ver domain_index_service.py-."""
+    from app.services import domain_index_service
+
+    monkeypatch.setattr(squid_service, "ACL_LISTS_DIR", tmp_path)
+    monkeypatch.setattr(domain_index_service, "DB_PATH", tmp_path / "domain_index.db")
+
+    db = _FakeDBAcls([_FakeAclRow("blocklist", "ads1.com\n.tracker.example\n", type_="dstdomain")])
+    squid_service.build_acl_list_files(db)
+
+    assert domain_index_service.categoria_indexada_al_dia("blocklist", db._acls[0].content_hash)
+
+
+def test_build_acl_list_files_no_reindexar_si_el_hash_no_cambio(tmp_path, monkeypatch):
+    """Segunda pasada sin cambios: no debería reescribir el índice -mismo
+    espíritu que test_build_acl_list_files_no_toca_lo_que_sigue_vigente,
+    pero sobre domain_index_service en vez del .txt."""
+    from app.services import domain_index_service
+
+    monkeypatch.setattr(squid_service, "ACL_LISTS_DIR", tmp_path)
+    monkeypatch.setattr(domain_index_service, "DB_PATH", tmp_path / "domain_index.db")
+
+    fila = _FakeAclRow("blocklist", "ads1.com\n", type_="dstdomain")
+    db = _FakeDBAcls([fila])
+    squid_service.build_acl_list_files(db)
+    hash_tras_primera = fila.content_hash
+
+    llamadas = {"n": 0}
+    index_original = domain_index_service.index_category
+
+    def index_contado(*a, **k):
+        llamadas["n"] += 1
+        return index_original(*a, **k)
+
+    monkeypatch.setattr(domain_index_service, "index_category", index_contado)
+
+    # Segunda pasada: value ya es None (migrado), así que ni siquiera vuelve
+    # a pasar por la rama de migración -es exactamente el "apply tras apply"
+    # de siempre-, y el índice sigue reflejando el mismo hash.
+    fila.value = None
+    squid_service.build_acl_list_files(db)
+
+    assert llamadas["n"] == 0
+    assert domain_index_service.categoria_indexada_al_dia("blocklist", hash_tras_primera)
 
 
 def test_apply_escribe_los_archivos_de_acl_antes_de_validar():

@@ -274,3 +274,51 @@ def test_aplicar_importa_proxy_padre_desactivado():
     assert creado.enabled is False
     assert creado.host == "padre.com"
     assert any("DESACTIVADO" in a for a in detalle["avisos"])
+
+
+# --- Reimportar un squid.conf exportado por este mismo panel -----------------
+# (nuevo desde el helper externo de dominios grandes, ver domain_index_service.py)
+
+def _texto_con_helper_de_dominios():
+    return """
+acl step1 at_step SslBump1
+external_acl_type squidmanager_domain_helper children-max=10 children-startup=2 ttl=300 %>rd /usr/lib/squid/squidmanager_domain_helper
+external_acl_type squidmanager_domain_helper_sni children-max=6 children-startup=1 ttl=300 %ssl::>sni /usr/lib/squid/squidmanager_domain_helper
+acl sni_hagezi_gambling external squidmanager_domain_helper_sni hagezi_gambling
+acl hagezi_gambling external squidmanager_domain_helper hagezi_gambling
+http_access deny hagezi_gambling
+"""
+
+
+def test_external_acl_type_propio_no_se_reporta_como_no_soportado():
+    """Las dos declaraciones external_acl_type que genera este mismo panel
+    (squidmanager_domain_helper / _sni) no son infraestructura ajena: no
+    deberían aparecer como 'no soportada' al reimportar un squid.conf
+    exportado por acá mismo."""
+    archivos = {"squid.conf": _texto_con_helper_de_dominios()}
+    resultado = svc.analizar(archivos, "squid.conf", set(), {"all", "manager"})
+    directivas = {h.directiva for h in resultado.no_soportadas}
+    assert "external_acl_type" not in directivas
+
+
+def test_acl_de_categoria_propia_da_un_motivo_especifico_no_generico():
+    """La ACL 'hagezi_gambling' (external squidmanager_domain_helper ...) sí
+    tiene que reportarse como no importable -su contenido, potencialmente
+    millones de dominios, no viaja en el squid.conf de texto-, pero con un
+    motivo específico ("es una lista de dominios de SquidManager..."), no
+    el genérico de un helper externo ajeno."""
+    archivos = {"squid.conf": _texto_con_helper_de_dominios()}
+    resultado = svc.analizar(archivos, "squid.conf", set(), {"all", "manager"})
+    item = next(a for a in resultado.acls if a.name == "hagezi_gambling")
+    assert item.estado == "no_soportado"
+    assert "SquidManager" in item.motivo
+    assert "hagezi_gambling" in item.motivo
+    assert "helper externo" not in item.motivo  # no el mensaje genérico
+
+
+def test_sni_de_categoria_propia_sigue_ignorado_como_siempre():
+    """acl sni_* ya se ignoraba (INTERNAL_ACLS/prefijo sni_), sin relación
+    con el helper: confirma que sigue siendo así con el nuevo tipo external."""
+    archivos = {"squid.conf": _texto_con_helper_de_dominios()}
+    resultado = svc.analizar(archivos, "squid.conf", set(), {"all", "manager"})
+    assert not any(a.name == "sni_hagezi_gambling" for a in resultado.acls)

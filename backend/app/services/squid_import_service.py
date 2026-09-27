@@ -70,6 +70,19 @@ ACL_TYPES_NO_IMPORTABLES = {
     "external": "depende de un helper externo (external_acl_type) que el import no reconstruye",
 }
 
+# Nombres de los DOS external_acl_type que declara este mismo panel para
+# listas de dominios grandes (ver config_generator.py y
+# domain_index_service.py): una ACL así ("acl nombre external
+# squidmanager_domain_helper <categoria>") no es un helper externo genérico
+# que el import no pueda entender -es EL PROPIO panel el que la generó-,
+# así que se distingue con un mensaje específico (más abajo, en analizar())
+# en vez del genérico de ACL_TYPES_NO_IMPORTABLES["external"]. Lo que sigue
+# sin poder reconstruirse es el CONTENIDO de la lista (millones de
+# dominios): eso vive en /etc/squid/acl_lists/<categoria>.txt, que este
+# import -pensado para un squid.conf de texto, no para archivos de datos
+# aparte- nunca recibe.
+_HELPERS_PROPIOS_DE_DOMINIO = ("squidmanager_domain_helper", "squidmanager_domain_helper_sni")
+
 # ACLs que ya define la propia plantilla de SquidManager. Importarlas
 # duplicaría (o pisaría) una definición interna.
 INTERNAL_ACLS = {
@@ -356,7 +369,21 @@ def analizar(
                     previa.value = f"{previa.value} {value}".strip()
                 continue
 
-            if acl_type in ACL_TYPES_NO_IMPORTABLES:
+            if acl_type == "external" and value.split(" ", 1)[0] in _HELPERS_PROPIOS_DE_DOMINIO:
+                # Es una lista de dominios del propio panel (ver el comentario
+                # de _HELPERS_PROPIOS_DE_DOMINIO más arriba), no un helper
+                # externo genérico: se sabe exactamente qué es, solo que su
+                # contenido (potencialmente millones de dominios) no viaja
+                # dentro de este squid.conf de texto.
+                categoria = value.split(None, 1)[1] if len(value.split(None, 1)) > 1 else name
+                item = ItemAcl(
+                    name, acl_type, value, "no_soportado",
+                    f"es una lista de dominios de SquidManager (categoría «{categoria}»); "
+                    "su contenido no viaja en este archivo. Volvé a cargarla en «ACLs» > "
+                    "«Cargar dominios» con el nombre "
+                    f"«{name}» para recrearla.",
+                )
+            elif acl_type in ACL_TYPES_NO_IMPORTABLES:
                 item = ItemAcl(name, acl_type, value, "no_soportado", ACL_TYPES_NO_IMPORTABLES[acl_type])
             elif acl_type not in IMPORTABLE_ACL_TYPES:
                 item = ItemAcl(name, acl_type, value, "no_soportado", f"tipo de ACL '{acl_type}' no reconocido")
@@ -440,6 +467,9 @@ def analizar(
         if d.nombre in DIRECTIVA_A_SETTING:
             resultado.settings.append(ItemSetting(DIRECTIVA_A_SETTING[d.nombre], d.resto.strip()))
             continue
+
+        if d.nombre == "external_acl_type" and d.resto.split(" ", 1)[0] in _HELPERS_PROPIOS_DE_DOMINIO:
+            continue  # declaración propia del panel, ver _HELPERS_PROPIOS_DE_DOMINIO
 
         if d.nombre == "auth_param":
             mapeo = _es_directiva_auth_param_basic(d.nombre, d.resto)
