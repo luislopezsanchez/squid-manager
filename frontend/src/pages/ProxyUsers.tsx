@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
-import { IconClose } from '../components/Icons'
+import { IconClose, IconEdit, IconKey, IconTrash, IconBan, IconCheck } from '../components/Icons'
+import Modal from '../components/Modal'
 import { formatBytes } from '../utils/format'
 import { normalizarUsername } from '../utils/usernames'
 import Pagination from '../components/Pagination'
@@ -448,6 +449,53 @@ function ModalCrearUsuario({ newUser, setNewUser, error, onSave, onClose }: {
   )
 }
 
+/** Editar el nombre para mostrar de un usuario local ya creado -antes solo
+ * se podía poner al crearlo, sin forma de corregirlo después. */
+function ModalEditarUsuario({ username, displayName, onClose, onSave }: {
+  username: string
+  displayName: string
+  onClose: () => void
+  onSave: (displayName: string) => Promise<void>
+}) {
+  const [value, setValue] = useState(displayName)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErr('')
+    setBusy(true)
+    try {
+      await onSave(value)
+      onClose()
+    } catch (e: any) {
+      setErr(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title={traducir('Editar usuario "{u}"', { u: username })} onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <label htmlFor="edit-display-name" className="field-label block mb-1.5">{traducir("Nombre para mostrar")}</label>
+        <input
+          id="edit-display-name"
+          type="text" value={value} onChange={e => setValue(e.target.value)}
+          className="input" placeholder={traducir("ej: Juan Pérez")} autoFocus
+        />
+        {err && <div className="mt-3 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{err}</div>}
+        <div className="mt-5 flex items-center gap-3">
+          <button type="submit" disabled={busy} className="btn btn-primary disabled:opacity-50">
+            {busy ? traducir('Guardando…') : traducir('Guardar')}
+          </button>
+          <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink-2">{traducir("Cancelar")}</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 export default function ProxyUsers() {
   const [localUsers, setLocalUsers] = useState<LocalUser[]>([])
   const [ldapUsers, setLdapUsers] = useState<LdapUserRow[]>([])
@@ -460,6 +508,7 @@ export default function ProxyUsers() {
   const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'ldap'>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
   const [passwordModalFor, setPasswordModalFor] = useState<LocalUser | null>(null)
+  const [editModalFor, setEditModalFor] = useState<LocalUser | null>(null)
   // null = cerrado; string[] con 1 elemento = editar la cuota de ese
   // usuario; con más de uno = aplicar la misma cuota en bloque.
   const [quotaModalFor, setQuotaModalFor] = useState<string[] | null>(null)
@@ -496,8 +545,15 @@ export default function ProxyUsers() {
   }
   const { showToast, ToastContainer } = useToast()
 
-  const loadUsers = () => {
-    setLoading(true)
+  const loadUsers = (silent = false) => {
+    // silent=true (sondeo periódico, ver el useEffect de más abajo): no
+    // vuelve a mostrar la pantalla de carga -eso vaciaba la tabla cada
+    // pocos segundos-, solo refresca los datos por detrás. Antes la única
+    // forma de ver el consumo de cuota actualizado era recargar la página
+    // entera a mano, y eso perdía la búsqueda/filtro en curso -eran, en el
+    // fondo, el mismo problema: no había ningún refresco en vivo. Pedido
+    // en vivo, 2026-09-27.
+    if (!silent) setLoading(true)
     // Cada llamada absorbe su propio error (que LDAP falle no debería tapar
     // la lista local, ni al revés) -pero eso significa que un fallo total
     // (los 4 servicios caídos a la vez, ej. bajo el límite de peticiones)
@@ -512,6 +568,11 @@ export default function ProxyUsers() {
       api.listGroups().catch(() => []),
       api.listQuotas().catch(() => []),
     ]).then(([local, ldap, groups, quotas]) => {
+      // Un sondeo silencioso que falla (red caída un instante, token por
+      // vencer) no debe vaciar la tabla que ya se veía bien: se deja todo
+      // como estaba y se reintenta en el próximo ciclo, sin mostrar ni un
+      // error ni una lista vacía de la nada.
+      if (silent && usersFailed) return
       setLocalUsers(local.map((u: any) => ({ ...u, source: 'local' as const })))
       setLdapUsers(ldap.map((u: any) => ({ ...u, source: 'ldap' as const })))
 
@@ -530,7 +591,11 @@ export default function ProxyUsers() {
     }).finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadUsers() }, [])
+  useEffect(() => {
+    loadUsers()
+    const interval = setInterval(() => loadUsers(true), 8000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Tabla unificada: local y LDAP son la misma cosa desde el punto de vista
   // de "quién puede navegar por el proxy", solo cambia de dónde vienen las
@@ -845,26 +910,37 @@ export default function ProxyUsers() {
                   <td className="px-6 py-4 text-sm text-ink-3">
                     {formatFecha(u.created_at)}
                   </td>
-                  <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
-                    <button onClick={() => handleToggle(u)}
-                      disabled={isPending(u)}
-                      className="text-primary-600 hover:text-primary-800 text-sm font-medium disabled:opacity-50 disabled:cursor-wait"
-                      title={u.enabled ? traducir('Bloquea su acceso a internet hasta que lo habilites') : traducir('Permite que navegue a través del proxy')}>
-                      {isPending(u) ? 'Aplicando…' : (u.enabled ? 'Bloquear acceso' : 'Habilitar acceso')}
-                    </button>
-                    {u.source === 'local' && (
-                      <>
-                        <button onClick={() => setPasswordModalFor(u)}
-                          disabled={isPending(u)}
-                          className="text-amber-600 hover:text-amber-800 text-sm font-medium disabled:opacity-50"
-                          title={traducir("Genera una contraseña nueva, o establece una tú mismo")}>{traducir("Contraseña")}</button>
-                        <button onClick={() => handleDelete(u)}
-                          disabled={isPending(u)}
-                          className="text-danger hover:text-danger text-sm font-medium disabled:opacity-50 disabled:cursor-wait">
-                          {isPending(u) ? 'Eliminando…' : 'Eliminar'}
+                  <td className="px-6 py-4 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1">
+                      {u.source === 'local' && (
+                        <button onClick={() => setEditModalFor(u)}
+                          className="btn-icon" title={traducir('Editar')}>
+                          <IconEdit />
                         </button>
-                      </>
-                    )}
+                      )}
+                      <button onClick={() => handleToggle(u)}
+                        disabled={isPending(u)}
+                        className="btn-icon"
+                        title={isPending(u) ? traducir('Aplicando…') : u.enabled ? traducir('Bloquea su acceso a internet hasta que lo habilites') : traducir('Permite que navegue a través del proxy')}>
+                        {u.enabled ? <IconBan /> : <IconCheck />}
+                      </button>
+                      {u.source === 'local' && (
+                        <>
+                          <button onClick={() => setPasswordModalFor(u)}
+                            disabled={isPending(u)}
+                            className="btn-icon"
+                            title={traducir("Genera una contraseña nueva, o establece una tú mismo")}>
+                            <IconKey />
+                          </button>
+                          <button onClick={() => handleDelete(u)}
+                            disabled={isPending(u)}
+                            className="btn-icon btn-icon-danger"
+                            title={isPending(u) ? traducir('Eliminando…') : traducir('Eliminar')}>
+                            <IconTrash />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -898,6 +974,19 @@ export default function ProxyUsers() {
           }}
           onSetPassword={async (password) => {
             await api.updateUser(passwordModalFor.id, { password })
+          }}
+        />
+      )}
+
+      {editModalFor && (
+        <ModalEditarUsuario
+          username={editModalFor.username}
+          displayName={editModalFor.display_name ?? ''}
+          onClose={() => setEditModalFor(null)}
+          onSave={async (displayName) => {
+            await api.updateUser(editModalFor.id, { display_name: displayName || null })
+            showToast(traducir('Usuario actualizado correctamente'))
+            loadUsers()
           }}
         />
       )}
