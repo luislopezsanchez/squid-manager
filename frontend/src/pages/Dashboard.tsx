@@ -538,8 +538,19 @@ export default function Dashboard() {
   // de fila) son aproximados a partir del JSX de abajo; si ese layout
   // cambia, hay que actualizarlos acá también.
   const ALTO_FILA_CONECTADO = 56
+  const ALTO_ENCABEZADO_TABLA = 32
+  const ALTO_EXTRA_FILA_DESTACADA = 14
+  // La fila del usuario con más tiempo conectado se dibuja más alta que las
+  // demás (insignia "Más tiempo conectado" debajo del nombre) -si está
+  // visible hay que descontar ese extra o el cálculo de cuántas filas entran
+  // se pasa y termina recortando una fila real por el overflow-hidden.
+  const hayDestacadaVisible = !filtroConectados
+    && conectadosDetalle.some(d => d.conectado_desde_segundos != null)
   const filasQueEntran = trafficCardHeight
-    ? Math.max(1, Math.floor((trafficCardHeight - 48 - 52 - 48) / ALTO_FILA_CONECTADO))
+    ? Math.max(1, Math.floor(
+        (trafficCardHeight - 48 - 52 - ALTO_ENCABEZADO_TABLA - 48 - (hayDestacadaVisible ? ALTO_EXTRA_FILA_DESTACADA : 0))
+        / ALTO_FILA_CONECTADO
+      ))
     : 6
   const hayMasSinBuscar = !filtroConectados && conectadosDetalle.length > filasQueEntran
   const conectadosAMostrar = filtroConectados
@@ -1173,9 +1184,17 @@ export default function Dashboard() {
               />
             </div>
 
-            <div className="flex flex-col divide-y divide-line-soft mt-2 min-h-0 overflow-hidden">
+            {/* Encabezado de tabla: mismo criterio visual del mockup pedido
+                -ayuda a leer la lista como una tabla real, no como una lista
+                suelta de filas. */}
+            <div className="flex items-center gap-2.5 px-2.5 py-1.5 mt-2 rounded-t-lg bg-bg-2 text-[11px] font-semibold text-ink-3 flex-none">
+              <span className="flex-1">{traducir("Usuario")}</span>
+              <span className="w-16 text-right">{traducir("Tiempo conectado")}</span>
+              <span className="w-7 flex-none" />
+            </div>
+            <div className="flex flex-col divide-y divide-line-soft min-h-0 overflow-hidden rounded-b-lg border border-t-0 border-line-soft">
               {conectadosAMostrar.length === 0 ? (
-                <p className="text-sm text-ink-3 py-2">
+                <p className="text-sm text-ink-3 py-2 px-2.5">
                   {filtroConectados
                     ? traducir("«{q}» no está conectado ahora", { q: buscarConectado })
                     : traducir("Nadie autenticado en este momento")}
@@ -1185,35 +1204,59 @@ export default function Dashboard() {
                 const pct = d.conectado_desde_segundos != null
                   ? Math.max(4, (d.conectado_desde_segundos / maxSegundosConectado) * 100)
                   : 4
+                const tiempo = d.conectado_desde_segundos != null ? formatDesde(d.conectado_desde_segundos) : traducir("Recién")
+                // Enlace directo a la evolución de este usuario en el tiempo
+                // -ya existe la pantalla (Análisis → Tendencias), no hace
+                // falta un menú "..." con acciones inventadas.
+                const enlaceTendencia = (
+                  <Link to={`/tendencias?tipo=user&valor=${encodeURIComponent(d.user)}`}
+                    title={traducir("Ver tendencia de {u}", { u: d.user })}
+                    className="w-7 h-7 rounded-md flex items-center justify-center text-ink-3 hover:bg-brand-50 hover:text-brand-700 transition flex-none">
+                    <IconActivity className="w-4 h-4" />
+                  </Link>
+                )
+                if (esElQueMas) {
+                  // Fila destacada -el usuario con más tiempo conectado se
+                  // resalta con fondo e insignia propia, igual que la fila
+                  // "selected" del mockup.
+                  return (
+                    <div key={d.user} className="flex items-center gap-3 py-2.5 px-2.5 flex-none bg-ok-soft/50">
+                      <span className="w-2 h-2 rounded-full bg-ok flex-none" />
+                      <span className="w-9 h-9 rounded-full bg-ok-soft text-ok flex items-center justify-center flex-none ring-2 ring-ok/25">
+                        <IconUsers className="w-4.5 h-4.5" />
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-sm text-ink truncate">{d.user}</span>
+                          <IconCrown className="w-3.5 h-3.5 text-warn flex-none" />
+                        </div>
+                        <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded-full bg-ok text-white text-[10px] font-bold leading-none">
+                          {traducir("Más tiempo conectado")}
+                        </span>
+                      </div>
+                      <span className="w-16 text-right text-xs font-semibold text-ink flex-none tabular">
+                        {tiempo}
+                      </span>
+                      {enlaceTendencia}
+                    </div>
+                  )
+                }
                 return (
-                  <div key={d.user} className="flex items-center gap-2.5 py-2.5 flex-none">
+                  <div key={d.user} className="flex items-center gap-2.5 py-2.5 px-2.5 flex-none">
+                    <span className="w-1.5 h-1.5 rounded-full bg-ok flex-none" />
                     <span className="w-8 h-8 rounded-full bg-ok-soft text-ok flex items-center justify-center flex-none">
                       <IconUsers className="w-4 h-4" />
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-sm text-ink truncate">{d.user}</span>
-                        {esElQueMas && (
-                          <span title={traducir("Más tiempo conectado")} className="flex-none">
-                            <IconCrown className="w-3.5 h-3.5 text-warn" />
-                          </span>
-                        )}
-                      </div>
+                      <span className="font-medium text-sm text-ink truncate block">{d.user}</span>
                       <div className="w-full h-1 bg-line-soft rounded-full overflow-hidden mt-1">
                         <div className="h-full rounded-full bg-ok" style={{ width: `${pct}%`, transition: 'width .6s ease' }} />
                       </div>
                     </div>
-                    <span className="text-xs text-ink-3 flex-none tabular">
-                      {d.conectado_desde_segundos != null ? formatDesde(d.conectado_desde_segundos) : traducir("Recién")}
+                    <span className="w-16 text-right text-xs text-ink-3 flex-none tabular">
+                      {tiempo}
                     </span>
-                    {/* Enlace directo a la evolución de este usuario en el
-                        tiempo -ya existe la pantalla (Análisis → Tendencias),
-                        no hace falta un menú "..." con acciones inventadas. */}
-                    <Link to={`/tendencias?tipo=user&valor=${encodeURIComponent(d.user)}`}
-                      title={traducir("Ver tendencia de {u}", { u: d.user })}
-                      className="w-7 h-7 rounded-md flex items-center justify-center text-ink-3 hover:bg-brand-50 hover:text-brand-700 transition flex-none">
-                      <IconActivity className="w-4 h-4" />
-                    </Link>
+                    {enlaceTendencia}
                   </div>
                 )
               })}
@@ -1228,11 +1271,14 @@ export default function Dashboard() {
           {/* Columna derecha: Total en línea + Tiempo de conexión */}
           <div className="flex flex-col gap-3 w-[190px] flex-none">
             <div className="rounded-xl border border-line-soft p-3 flex flex-col items-center text-center">
-              <div className="w-16">
+              <div className="flex items-center gap-1.5 self-start mb-2">
+                <IconUsers className="w-4 h-4 text-ok flex-none" />
+                <p className="text-sm font-semibold text-ink">{traducir("Total en línea")}</p>
+              </div>
+              <div className="w-20">
                 <MiniDonut pct={pctConectados} />
               </div>
-              <p className="text-sm font-semibold text-ink mt-1">{traducir("Total en línea")}</p>
-              <p className="text-[11px] text-ink-3">
+              <p className="text-[11px] text-ink-3 mt-1">
                 {traducir("{n} de {total} habilitados", { n: t.active_users.length, total: data.total_proxy_users })}
               </p>
               <Link to="/users" className="mt-1 inline-flex items-center gap-0.5 text-[11px] font-semibold text-ok hover:underline">
