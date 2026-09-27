@@ -231,9 +231,11 @@ def test_kerberos_children_personalizado_sin_startup_ni_idle():
 
     kerberos = FakeKerberos(enabled=True, children=20)
     config = generate_squid_config(_fake_db_con_kerberos(kerberos))
+    # La línea exacta (con salto de línea) ya deja fuera cualquier
+    # startup=/idle= en ESTA línea -no basta con buscarlo en todo el
+    # config, que también declara otras cosas con esas mismas palabras
+    # (ver el helper de motivo de deny_info, children-startup=).
     assert "auth_param negotiate children 20\n" in config
-    assert "startup=" not in config
-    assert "idle=" not in config
 
 
 def test_kerberos_startup_e_idle_se_agregan_cuando_estan_definidos():

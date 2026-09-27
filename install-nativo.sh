@@ -491,6 +491,12 @@ install -o root -g root -m 755 "$INSTALL_DIR/squid/domain_block_helper.py" \
     /usr/lib/squid/squidmanager_domain_helper
 ok "Helper de listas de bloqueo de dominios instalado"
 
+# Helper de ACL externa: mensaje fijo (motivo de deny_info por regla, ver
+# config_generator.py y squid/static_message_helper.py).
+install -o root -g root -m 755 "$INSTALL_DIR/squid/static_message_helper.py" \
+    /usr/lib/squid/squidmanager_static_message_helper
+ok "Helper de motivo de bloqueo instalado"
+
 # Pagina de bloqueo personalizada (deny_info, ver config_generator.py):
 # mismo nombre en cada idioma que ya sirve squid-langpack, para que Squid
 # elija sola cual mostrar -exactamente igual que ya hace con sus propias

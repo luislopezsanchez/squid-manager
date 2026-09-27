@@ -23,18 +23,29 @@ class FakeAcl:
 
 
 class FakeRule:
-    def __init__(self, action, acl_names, order, enabled=True, description=""):
+    def __init__(self, action, acl_names, order, enabled=True, description="", id=None):
         self.action = action
         self.acl_names = acl_names
         self.order = order
         self.enabled = enabled
         self.description = description
+        # motivo_regla_<id> (ver config_generator._motivo_de_regla): el id
+        # solo necesita ser único dentro de una misma llamada, así que
+        # reusar `order` alcanza para las pruebas sin pedir un id aparte
+        # en cada FakeRule(...) existente.
+        self.id = id if id is not None else order
 
 
 class FakeUser:
     def __init__(self, username, enabled=True):
         self.username = username
         self.enabled = enabled
+
+
+class _FakeAdmin:
+    def __init__(self, email):
+        self.username = "admin"
+        self.email = email
 
 
 class FakeDelayPool:
@@ -58,7 +69,7 @@ class FakeDB:
     """Simula una sesión SQLAlchemy con queries básicas."""
 
     def __init__(self, settings=None, acls=None, rules=None, users=None, delay_pools=None, ldap=None,
-                 groups=None, group_members=None):
+                 groups=None, group_members=None, admin_email=None):
         self._settings = settings or []
         self._acls = acls or []
         self._rules = rules or []
@@ -67,6 +78,10 @@ class FakeDB:
         self._ldap = ldap
         self._groups = groups or []
         self._group_members = group_members or []
+        # Solo se usa si algún test pasa admin_email: el filtro por
+        # username="admin" es un no-op en este doble (ver filter() más
+        # abajo), así que basta con un único FakeAdmin.
+        self._admin = _FakeAdmin(admin_email) if admin_email is not None else None
 
     def query(self, model):
         name = model.__name__ if hasattr(model, "__name__") else str(model)
@@ -89,6 +104,8 @@ class FakeDB:
             # (como el resto de filtros de este doble): para un test con más
             # de un grupo, pasar solo los miembros del grupo que interesa.
             return self._FakeQuery(self._group_members)
+        elif name == "Admin":
+            return self._FakeQuery([self._admin] if self._admin else [])
         return self._FakeQuery([])
 
     class _FakeQuery:
@@ -333,7 +350,7 @@ def test_grupo_local_se_traduce_a_proxy_auth():
     )
     config = generate_squid_config(db)
     assert "acl ventas proxy_auth jperez mgomez" in config
-    assert "external_acl_type" not in config
+    assert "external_acl_type ldap_group_helper" not in config
 
 
 def test_grupo_local_vacio_usa_el_placeholder():
@@ -380,7 +397,7 @@ def test_sin_grupos_ldap_no_se_declara_el_helper():
         group_members=[FakeGroupMember(0, "jperez")],
     )
     config = generate_squid_config(db)
-    assert "external_acl_type" not in config
+    assert "external_acl_type ldap_group_helper" not in config
 
 
 def test_grupos_locales_y_ldap_conviven():
@@ -401,24 +418,29 @@ def test_grupos_locales_y_ldap_conviven():
 
 def test_deny_info_se_declara_para_la_ultima_acl_de_una_regla_deny():
     """Squid asocia deny_info con la ÚLTIMA ACL de la línea que denegó, no
-    con la regla como un todo."""
+    con la regla como un todo -acá ninguna de las dos ACLs es una lista de
+    dominios indexada (dinámica de por sí), así que se agrega una ACL
+    sintética de motivo al final (ver static_message_helper.py), sin
+    descripción propia cae al texto genérico armado con las ACLs."""
     db = FakeDB(
         settings=[FakeSetting("http_port", "3128", "network")],
         acls=[FakeAcl("red_local", "src", "192.168.1.0/24"), FakeAcl("bloqueados", "dstdomain", ".ejemplo.com")],
         rules=[FakeRule("deny", "red_local bloqueados", 0)],
     )
     config = generate_squid_config(db)
-    assert "deny_info ERR_SQUIDMANAGER_DENIED bloqueados" in config
-    assert "deny_info ERR_SQUIDMANAGER_DENIED red_local" not in config
+    assert "http_access deny red_local bloqueados motivo_regla_0" in config
+    assert "deny_info ERR_SQUIDMANAGER_DENIED motivo_regla_0" in config
+    assert 'acl motivo_regla_0 external squidmanager_static_message_helper No cumple la regla de acceso: red_local bloqueados' in config
 
 
 def test_deny_info_siempre_incluye_all_como_respaldo():
-    """"all" es de la que depende el "deny all" final -la denegación por
-    descarte, el caso más común- así que siempre se declara, haya o no
-    reglas deny personalizadas."""
+    """"motivo_general" es de la que depende el "deny all" final -la
+    denegación por descarte, el caso más común- así que siempre se
+    declara, haya o no reglas deny personalizadas."""
     db = FakeDB(settings=[FakeSetting("http_port", "3128", "network")])
     config = generate_squid_config(db)
-    assert "deny_info ERR_SQUIDMANAGER_DENIED all" in config
+    assert "http_access deny all motivo_general" in config
+    assert "deny_info ERR_SQUIDMANAGER_DENIED motivo_general" in config
 
 
 def test_deny_info_no_se_declara_para_una_regla_allow():
@@ -431,10 +453,15 @@ def test_deny_info_no_se_declara_para_una_regla_allow():
     assert "deny_info ERR_SQUIDMANAGER_DENIED red_local" not in config
 
 
-def test_deny_info_no_se_repite_para_el_mismo_nombre():
+def test_deny_info_no_se_repite_para_una_acl_de_dominio_indexada():
+    """Una lista de dominios indexada (source='file', ver
+    acls_dominio_indexadas) es dinámica de por sí -%o ya muestra la
+    categoría real, vía domain_block_helper.py-, así que dos reglas que la
+    usan como última ACL comparten la misma línea de deny_info, sin
+    duplicar ni agregarle ninguna ACL sintética."""
     db = FakeDB(
         settings=[FakeSetting("http_port", "3128", "network")],
-        acls=[FakeAcl("bloqueados", "dstdomain", ".ejemplo.com")],
+        acls=[FakeAcl("bloqueados", "dstdomain", None, source="file")],
         rules=[
             FakeRule("deny", "bloqueados", 0),
             FakeRule("deny", "bloqueados", 1, description="otra regla, misma ACL"),
@@ -442,3 +469,65 @@ def test_deny_info_no_se_repite_para_el_mismo_nombre():
     )
     config = generate_squid_config(db)
     assert config.count("deny_info ERR_SQUIDMANAGER_DENIED bloqueados") == 1
+    assert "motivo_regla_0" not in config
+    assert "motivo_regla_1" not in config
+
+
+def test_deny_info_cada_regla_sin_acl_dinamica_tiene_su_propio_motivo():
+    """Sin una ACL dinámica al final, cada regla obtiene su PROPIA ACL
+    sintética de motivo (por rule.id) -aunque dos reglas usen el mismo
+    nombre de ACL, cada una puede tener su propia descripción."""
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("bloqueados", "src", "10.0.0.0/8")],
+        rules=[
+            FakeRule("deny", "bloqueados", 0, description="primera regla"),
+            FakeRule("deny", "bloqueados", 1, description="otra regla, misma ACL"),
+        ],
+    )
+    config = generate_squid_config(db)
+    assert 'acl motivo_regla_0 external squidmanager_static_message_helper primera regla' in config
+    assert 'acl motivo_regla_1 external squidmanager_static_message_helper otra regla, misma ACL' in config
+    assert "deny_info ERR_SQUIDMANAGER_DENIED motivo_regla_0" in config
+    assert "deny_info ERR_SQUIDMANAGER_DENIED motivo_regla_1" in config
+
+
+def test_una_descripcion_con_comillas_dobles_no_rompe_la_linea_de_acl():
+    """Una descripción escrita a mano puede traer comillas dobles -se
+    reemplazan por simples, no se intenta escapar (no está probado que
+    Squid soporte un escape ahí adentro, y total no cambia el sentido)."""
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("bloqueados", "src", "10.0.0.0/8")],
+        rules=[FakeRule("deny", "bloqueados", 0, description='Bloqueado "temporalmente" por soporte')],
+    )
+    config = generate_squid_config(db)
+    assert 'acl motivo_regla_0 external squidmanager_static_message_helper Bloqueado \'temporalmente\' por soporte' in config
+
+
+# --- cache_mgr (correo de contacto de la página de bloqueo) -----------------
+
+def test_cache_mgr_usa_el_correo_de_la_cuenta_admin_por_defecto():
+    db = FakeDB(settings=[FakeSetting("http_port", "3128", "network")], admin_email="soporte@empresa.com")
+    config = generate_squid_config(db)
+    assert "cache_mgr soporte@empresa.com" in config
+
+
+def test_sin_correo_de_admin_no_se_declara_cache_mgr():
+    db = FakeDB(settings=[FakeSetting("http_port", "3128", "network")], admin_email="")
+    config = generate_squid_config(db)
+    assert "cache_mgr" not in config
+
+
+def test_motivo_de_regla_pierde_los_acentos():
+    """Verificado en vivo: un motivo con tildes/eñe llega mojibake a la
+    página de bloqueo (Squid reescapa los bytes UTF-8 del mensaje de un
+    ACL externo como si cada uno fuera un carácter Latin-1 suelto) -la
+    única forma confiable de evitarlo es no mandar bytes no-ASCII."""
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("bloqueados", "src", "10.0.0.0/8")],
+        rules=[FakeRule("deny", "bloqueados", 0, description="Política de horario: mañana no, tarde sí")],
+    )
+    config = generate_squid_config(db)
+    assert "acl motivo_regla_0 external squidmanager_static_message_helper Politica de horario: manana no, tarde si" in config

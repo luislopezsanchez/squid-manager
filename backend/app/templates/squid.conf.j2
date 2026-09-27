@@ -266,6 +266,28 @@ http_access allow exentos_auth_dominio
 http_access deny !authenticated
 {% endif %}
 
+# ACL externa que siempre resuelve OK con un mensaje fijo -no consulta
+# nada de verdad, existe solo para que deny_info (más abajo) pueda mostrar
+# un "Motivo" específico por regla en la página de bloqueo personalizada.
+# Se agrega como una condición MÁS al final de cada línea http_access deny
+# que no termine ya en una ACL dinámica (una lista de dominios indexada,
+# que sí puede devolver la categoría real vía %o): como esta ACL siempre
+# resuelve OK, no cambia si la regla matchea, solo qué ACL recuerda Squid
+# como "la última" para elegir la página de error. Ver
+# squid/static_message_helper.py y config_generator._motivo_de_regla.
+external_acl_type squidmanager_static_message_helper children-max=5 children-startup=1 ttl=300 %DATA /usr/lib/squid/squidmanager_static_message_helper
+# Sin comillas a propósito: en una línea `acl`, un argumento entre comillas
+# significa "leer esto como archivo" -para CUALQUIER tipo de ACL, no solo
+# dstdomain/dstdom_regex- así que un motivo con espacios envuelto en
+# comillas rompe con "Can not open file ... for reading" (confirmado en
+# vivo, 2026-09-27). Varias palabras sueltas, en cambio, llegan bien: cada
+# una es un argumento de %DATA distinto, que el helper vuelve a unir (ver
+# static_message_helper.py).
+acl motivo_general external squidmanager_static_message_helper No cumple con la politica de navegacion de tu red.
+{% for nombre, motivo in motivos_reglas.items() %}
+acl {{ nombre }} external squidmanager_static_message_helper {{ motivo }}
+{% endfor %}
+
 {% for rule in rules %}
 http_access {{ rule.action }} {{ rule.acl_names }}
 {% endfor %}
@@ -280,12 +302,12 @@ http_access allow authenticated
 # cual, sin pedir usuario.
 http_access allow all
 {% endif %}
-http_access deny all
+http_access deny all motivo_general
 
 # --- Página de bloqueo personalizada ---
 # Squid asocia deny_info con la ÚLTIMA ACL de la línea http_access que
 # denegó (no con la regla como un todo), así que hace falta una línea por
-# cada nombre distinto que aparece al final de una regla deny -"all"
+# cada nombre distinto que aparece al final de una regla deny -"motivo_general"
 # siempre incluida, es de la que depende el "deny all" final de arriba
 # (una denegación por descarte, el caso más común). ERR_SQUIDMANAGER_DENIED
 # vive en el mismo directorio que las plantillas de error de Squid (ver
@@ -407,3 +429,10 @@ visible_hostname {{ settings.get('visible_hostname', 'squidmanager') }}
 # Idioma de las páginas de error. Squid no hace fallback de es-ES a es, así que
 # se fija explícitamente en lugar de negociarlo con el navegador.
 error_default_language {{ settings.get('error_language', 'es') }}
+{% if cache_mgr_email %}
+# Correo que Squid ofrece en %w en sus páginas de error -acá, el link
+# "Contactá a tu administrador" de la página de bloqueo personalizada
+# (ver ERR_SQUIDMANAGER_DENIED). Siempre el de la cuenta "admin" del
+# panel, ver config_generator.py.
+cache_mgr {{ cache_mgr_email }}
+{% endif %}

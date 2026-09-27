@@ -126,6 +126,11 @@ RUN chmod +x /usr/lib/squid/squidmanager_ldap_group_helper
 COPY domain_block_helper.py /usr/lib/squid/squidmanager_domain_helper
 RUN chmod +x /usr/lib/squid/squidmanager_domain_helper
 
+# Helper de ACL externa: mensaje fijo (motivo de deny_info por regla, ver
+# config_generator.py y este mismo script).
+COPY static_message_helper.py /usr/lib/squid/squidmanager_static_message_helper
+RUN chmod +x /usr/lib/squid/squidmanager_static_message_helper
+
 # Guardar copia de archivos de config en /opt/squid-defaults/ (el volumen /etc/squid los ocultara)
 RUN mkdir -p /opt/squid-defaults && cp /etc/squid/mime.conf /opt/squid-defaults/ 2>/dev/null || true \
     && cp /etc/squid/mime.conf.default /opt/squid-defaults/ 2>/dev/null || true \
