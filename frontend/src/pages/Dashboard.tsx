@@ -1,7 +1,7 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo, IconRefresh, IconShield, IconSearch } from '../components/Icons'
+import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconClose, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo, IconRefresh, IconShield, IconSearch } from '../components/Icons'
 import { api, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
@@ -297,11 +297,10 @@ export default function Dashboard() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [userSort, setUserSort] = useState<'bytes' | 'requests'>('bytes')
   const [domainSort, setDomainSort] = useState<'bytes' | 'requests'>('requests')
-  const [dirty, setDirty] = useState(false)
-  const [applying, setApplying] = useState(false)
   const [squidStatus, setSquidStatus] = useState<{ running: boolean } | null>(null)
   const [startingSquid, setStartingSquid] = useState(false)
   const [anomalias, setAnomalias] = useState<{ ts: number; asunto: string; mensaje: string }[]>([])
+  const [anomaliaCerrada, setAnomaliaCerrada] = useState(false)
   const [buscarConectado, setBuscarConectado] = useState('')
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // "Usuarios conectados ahora" toma este alto por JS, no por flexbox: con
@@ -344,10 +343,6 @@ export default function Dashboard() {
       console.error(e)
       setLoadError(true)
     }).finally(() => setLoading(false))
-    // Se consulta aparte de /dashboard: es un dato de configuración, no de
-    // tráfico, y conviene poder refrescarlo también justo después de aplicar
-    // sin esperar al siguiente ciclo de las métricas.
-    api.getPending().then(r => setDirty(r.dirty)).catch(() => {})
     // Estado real del servicio (systemctl/contenedor), no algo que se pueda
     // inferir de las métricas: el access.log puede seguir teniendo tráfico
     // "viejo" un rato después de que Squid se cae, así que solo esto dice de
@@ -357,6 +352,27 @@ export default function Dashboard() {
     // esto es para que se vean también acá, para quien no tiene esos canales
     // configurados o no los revisa.
     api.getAnomaliasRecientes(24, 5).then(setAnomalias).catch(() => {})
+  }
+
+  // "Ya la vi": mismo patrón que las alertas de nodos de Panel Central -se
+  // guarda el timestamp de la anomalía más nueva vista, por localStorage
+  // (por-navegador, sin problema si falla); si aparece una anomalía más
+  // nueva después de cerrarlo, vuelve a mostrarse sola.
+  const CLAVE_ANOMALIAS_VISTAS = 'dashboard.anomaliasVistasHasta'
+
+  useEffect(() => {
+    if (anomalias.length === 0) return
+    try {
+      const vistoHasta = Number(localStorage.getItem(CLAVE_ANOMALIAS_VISTAS) || 0)
+      setAnomaliaCerrada(anomalias[0].ts <= vistoHasta)
+    } catch {
+      setAnomaliaCerrada(false)
+    }
+  }, [anomalias])
+
+  const cerrarAlertaAnomalias = () => {
+    setAnomaliaCerrada(true)
+    try { localStorage.setItem(CLAVE_ANOMALIAS_VISTAS, String(anomalias[0]?.ts ?? Date.now() / 1000)) } catch { /* per-viewer only */ }
   }
 
   const handleStartSquid = async () => {
@@ -369,26 +385,6 @@ export default function Dashboard() {
     } finally {
       setStartingSquid(false)
       loadData()
-    }
-  }
-
-  const handleApply = async () => {
-    setApplying(true)
-    try {
-      const result = await api.applyConfig()
-      if (result.status === 'ok') {
-        setDirty(false)
-      } else {
-        // El backend rechazó el cambio (config inválida, DNS que no responde,
-        // etc.) sin aplicar nada: "pending" sigue en true, así que había que
-        // decir por qué en vez de solo volver a mostrar el mismo aviso sin
-        // explicación -era exactamente lo que hacía este botón antes-.
-        showToast(result.message, 'warning')
-      }
-    } catch (e: any) {
-      showToast(e.message, 'error')
-    } finally {
-      setApplying(false)
     }
   }
 
@@ -600,8 +596,12 @@ export default function Dashboard() {
 
       {/* Aviso de anomalías: lo mismo que ya se manda por email/Telegram si
           esos canales están configurados (ver anomaly_service.py), para que
-          también se note acá sin depender de revisar el correo. */}
-      {anomalias.length > 0 && (
+          también se note acá sin depender de revisar el correo.
+          Cerrable: se guarda el timestamp de la más nueva vista en
+          localStorage (por-navegador, no crítico si falla) igual que ya
+          hace Panel Central con sus alertas de nodos -si aparece una
+          anomalía más nueva después de cerrarlo, vuelve a mostrarse sola. */}
+      {anomalias.length > 0 && !anomaliaCerrada && (
         <div className="relative card p-4 mt-2 mb-6 flex items-center gap-3 border"
              style={{ borderColor: 'var(--warn)', background: 'var(--warn-soft)' }}>
           <CardBadge text={traducir('Alerta de seguridad')} tone="warn" />
@@ -619,6 +619,10 @@ export default function Dashboard() {
               {anomalias.length > 1 && ` ${traducir("+ {n} más", { n: anomalias.length - 1 })}`}
             </p>
           </div>
+          <button onClick={cerrarAlertaAnomalias} aria-label={traducir("Cerrar")}
+            className="w-7 h-7 flex-none flex items-center justify-center rounded-lg text-ink-3 hover:bg-black/5 transition">
+            <IconClose className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -632,33 +636,6 @@ export default function Dashboard() {
              style={{ borderColor: 'var(--warn)', background: 'var(--warn-soft)' }}>
           <span className="flex-none" style={{ color: 'var(--warn)' }}><IconAlert className="w-4 h-4" /></span>
           <span style={{ color: 'var(--warn)' }}>{traducir("No se pudo actualizar el panel; mostrando los últimos datos conocidos.")}</span>
-        </div>
-      )}
-
-      {/* Aviso de cambios sin aplicar: la barra lateral ya lo indica en todo
-          momento, pero aquí es donde se nota si algo dejó de reflejarse en
-          el tráfico real — vale la pena repetirlo en el punto donde se mira
-          primero. */}
-      {dirty && (
-        <div className="card p-4 mb-6 flex items-center gap-3 border"
-             style={{ borderColor: 'var(--warn)', background: 'var(--warn-soft)' }}>
-          <span className="stat-icon flex-none" style={{ background: 'transparent', color: 'var(--warn)' }}>
-            <IconAlert />
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold" style={{ color: 'var(--warn)' }}>{traducir("Hay cambios sin aplicar")}</p>
-            <p className="text-xs text-ink-2">{traducir("Algo se modificó (ACLs, reglas, grupos o configuración) y todavía no se aplicó a Squid: lo que ves en este dashboard puede no coincidir con lo que el proxy está usando ahora mismo.")}</p>
-          </div>
-          {canWrite() && (
-            <button
-              onClick={handleApply}
-              disabled={applying}
-              className="flex-none px-4 py-2 rounded-lg text-sm font-bold text-white transition disabled:opacity-60"
-              style={{ background: 'var(--warn)' }}
-            >
-              {applying ? traducir('Aplicando…') : traducir('Aplicar ahora')}
-            </button>
-          )}
         </div>
       )}
 

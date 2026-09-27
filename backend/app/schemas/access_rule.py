@@ -7,7 +7,11 @@ from pydantic import BaseModel, Field
 class AccessRuleCreate(BaseModel):
     action: str = Field(..., pattern="^(allow|deny)$")
     acl_names: str = Field(..., min_length=1)
-    order: int = 0
+    # >= 0: el orden es una posición en una lista, no admite "antes del
+    # principio". Insertar en una posición ya ocupada corre el resto hacia
+    # abajo (ver create_access_rule/update_access_rule en access_rules.py),
+    # así que nunca hace falta un valor negativo para "pasar primero".
+    order: int = Field(0, ge=0)
     description: str | None = None
     enabled: bool = True
 
@@ -15,7 +19,7 @@ class AccessRuleCreate(BaseModel):
 class AccessRuleUpdate(BaseModel):
     action: str | None = Field(None, pattern="^(allow|deny)$")
     acl_names: str | None = None
-    order: int | None = None
+    order: int | None = Field(None, ge=0)
     description: str | None = None
     enabled: bool | None = None
 

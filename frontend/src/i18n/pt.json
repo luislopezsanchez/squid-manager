@@ -59,6 +59,7 @@
   "Aplicando… puede tardar unos segundos (reinicia Squid)": "Aplicando… pode levar alguns segundos (reinicia o Squid)",
   "Aplicar ahora": "Aplicar agora",
   "Aplicar cambios": "Aplicar alterações",
+  "Hay cambios sin aplicar: Squid sigue usando la configuración anterior hasta que pulses «Aplicar cambios».": "Há alterações sem aplicar: o Squid continua usando a configuração anterior até que você clique em «Aplicar alterações».",
   "Escribiendo listas de dominios…": "Gravando listas de domínios…",
   "Validando configuración…": "Validando configuração…",
   "Comprobando servidores DNS…": "Verificando servidores DNS…",

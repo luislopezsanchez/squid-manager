@@ -23,6 +23,41 @@ class ReorderRequest(BaseModel):
     rule_ids: list[int]
 
 
+def _calcular_corrimiento(
+    reglas_existentes: list[tuple[int, int]], nuevo_order: int, excluir_id: int | None = None,
+) -> dict[int, int]:
+    """Lógica pura de 'insertar sin pisar' (sin tocar la BD, para poder
+    testearla sin simular SQLAlchemy): si ya hay una regla con 'nuevo_order'
+    -aparte de la que se está guardando-, la corre a ella y a todas las que
+    le siguen un lugar más abajo. Devuelve {id: order_nuevo} solo para las
+    filas que de verdad cambian; {} si no hacía falta correr nada (el valor
+    pedido caía en un hueco, no sobre una regla existente).
+
+    'Crear con orden 12' cuando ya hay una regla en 12 deja a la nueva en 12
+    y a la vieja en 13 (y la que era 13 pasa a 14, etc.), en vez de dos
+    reglas con el mismo valor -que antes quedaba permitido y solo se
+    desempataba por id, en silencio."""
+    hay_colision = any(
+        o == nuevo_order and rid != excluir_id for rid, o in reglas_existentes
+    )
+    if not hay_colision:
+        return {}
+    return {
+        rid: o + 1
+        for rid, o in reglas_existentes
+        if o >= nuevo_order and rid != excluir_id
+    }
+
+
+def _hacer_lugar(db: Session, order: int, excluir_id: int | None = None) -> None:
+    existentes = [(r.id, r.order) for r in db.query(AccessRule).all()]
+    corrimiento = _calcular_corrimiento(existentes, order, excluir_id)
+    if not corrimiento:
+        return
+    for r in db.query(AccessRule).filter(AccessRule.id.in_(corrimiento.keys())):
+        r.order = corrimiento[r.id]
+
+
 @router.get("/", response_model=list[AccessRuleResponse])
 def list_access_rules(
     db: Session = Depends(get_db),
@@ -43,6 +78,7 @@ def create_access_rule(
     # Se comprueba que todas las ACLs citadas existan: una regla que nombra una
     # ACL inexistente hace que Squid rechace el fichero de configuración entero.
     acl_names = validate_acl_names(data.acl_names, known_acl_names(db))
+    _hacer_lugar(db, data.order)
 
     rule = AccessRule(
         action=data.action, acl_names=acl_names,
@@ -138,6 +174,8 @@ def update_access_rule(
     changes = data.model_dump(exclude_unset=True)
     if changes.get("acl_names"):
         changes["acl_names"] = validate_acl_names(changes["acl_names"], known_acl_names(db))
+    if "order" in changes and changes["order"] != rule.order:
+        _hacer_lugar(db, changes["order"], excluir_id=rule.id)
 
     for field, value in changes.items():
         setattr(rule, field, value)

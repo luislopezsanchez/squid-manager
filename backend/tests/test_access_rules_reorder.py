@@ -85,3 +85,39 @@ def test_reorden_valido_se_aplica():
     resultado = _reordenar([2, 1], [r1, r2])
     assert r2.order == 0
     assert r1.order == 1
+
+
+# --- Insertar sin pisar (evita órdenes duplicados/negativos) ----------------
+
+from app.routes.access_rules import _calcular_corrimiento
+
+
+def test_sin_colision_no_corre_nada():
+    """El valor pedido cae en un hueco (no hay ninguna regla en ese order
+    exacto): no hace falta correr nada."""
+    existentes = [(1, 0), (2, 5), (3, 10)]
+    assert _calcular_corrimiento(existentes, 7) == {}
+
+
+def test_colision_corre_la_que_estaba_y_las_siguientes():
+    """Insertar en 12 corre TODO lo que ya estaba en 12 o después -12, 13 y
+    20 pasan a 13, 14 y 21-, igual que insertar en cualquier lista: no solo
+    la que colisiona literal, también las que venían después de ella."""
+    existentes = [(1, 0), (2, 12), (3, 13), (4, 20)]
+    corrimiento = _calcular_corrimiento(existentes, 12)
+    assert corrimiento == {2: 13, 3: 14, 4: 21}
+    assert 1 not in corrimiento  # order=0, antes del punto de inserción
+
+
+def test_actualizar_una_regla_no_se_corre_a_si_misma():
+    """Al editar la regla #2 y dejarla en el mismo order que ya tenía la
+    #2... no debería considerarse colisión consigo misma."""
+    existentes = [(1, 0), (2, 5)]
+    assert _calcular_corrimiento(existentes, 5, excluir_id=2) == {}
+
+
+def test_actualizar_a_un_order_ocupado_por_otra_corre_al_resto():
+    existentes = [(1, 0), (2, 5), (3, 6)]
+    corrimiento = _calcular_corrimiento(existentes, 5, excluir_id=1)
+    assert corrimiento == {2: 6, 3: 7}
+    assert 1 not in corrimiento

@@ -521,6 +521,29 @@ export default function Layout() {
 
       {/* ---------- Contenido ---------- */}
       <main className="flex-1 ml-[248px] min-w-0">
+        {/* Aviso global de cambios sin aplicar: antes solo se veía en el
+            Dashboard (o entrecerrando los ojos al botón de la barra
+            lateral, que solo cambia de color) -en cualquier otra pantalla,
+            guardar un cambio no dejaba ninguna señal visible de que hacía
+            falta un paso más. Vive acá, en Layout, para que aparezca en
+            TODA página sin que cada una tenga que implementarlo por su
+            cuenta. */}
+        {pending && !readOnly && !applying && (
+          <div className="flex items-center gap-3 px-6 py-2 text-[13px] font-medium border-b"
+               style={{ background: 'var(--warn-soft)', color: 'var(--warn)', borderColor: 'var(--warn)' }}>
+            <IconBolt className="w-4 h-4 flex-none" />
+            <span className="flex-1">
+              {traducir("Hay cambios sin aplicar: Squid sigue usando la configuración anterior hasta que pulses «Aplicar cambios».")}
+            </span>
+            <button
+              onClick={handleApply}
+              className="flex-none px-3 py-1 rounded-md text-xs font-bold text-white transition"
+              style={{ background: 'var(--warn)' }}
+            >
+              {traducir("Aplicar ahora")}
+            </button>
+          </div>
+        )}
         {actualizado && (
           <div className="flex items-center gap-3 px-6 py-2 text-[13px] font-medium border-b"
                style={{ background: 'var(--ok-soft)', color: 'var(--ok)', borderColor: 'var(--ok)' }}>
