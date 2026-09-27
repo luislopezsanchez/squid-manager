@@ -29,8 +29,10 @@ from pathlib import Path
 
 from app.database import SessionLocal
 from app.models.navigation_quota import NavigationQuota
+from app.models.group_quota import GroupQuota
 from app.models.proxy_user import ProxyUser
 from app.models.ldap_user import LdapUser
+from app.models.user_group import UserGroup, UserGroupMember
 from app.models.acl import Acl
 from app.models.delay_pool import DelayPool
 from app.models.audit_log import AuditLog
@@ -66,12 +68,18 @@ UMBRAL_RIESGO = 0.8
 
 
 def contar_cuotas_en_riesgo(db) -> int:
-    """Cuantos usuarios con cuota activa ya consumieron 80% o mas de su
-    limite, sin que la accion se haya aplicado todavia -para el dashboard."""
+    """Cuantos usuarios o grupos con cuota activa ya consumieron 80% o mas
+    de su limite, sin que la accion se haya aplicado todavia -para el
+    dashboard."""
     if db is None:
         return 0
     en_riesgo = 0
     for q in db.query(NavigationQuota).all():
+        if q.quota_action_applied or not q.quota_bytes:
+            continue
+        if (q.quota_bytes_used or 0) / q.quota_bytes >= UMBRAL_RIESGO:
+            en_riesgo += 1
+    for q in db.query(GroupQuota).all():
         if q.quota_action_applied or not q.quota_bytes:
             continue
         if (q.quota_bytes_used or 0) / q.quota_bytes >= UMBRAL_RIESGO:
@@ -298,6 +306,140 @@ def _procesar_cuota(db, quota: NavigationQuota, ahora: datetime) -> None:
         db.commit()
 
 
+def _miembros_actuales(db, group_name: str) -> list[str]:
+    return [
+        m.username for m in db.query(UserGroupMember)
+        .join(UserGroup, UserGroup.id == UserGroupMember.group_id)
+        .filter(UserGroup.name == group_name).all()
+    ]
+
+
+def _cortar_grupo(db, quota: GroupQuota) -> None:
+    """Deshabilita a TODOS los miembros actuales del grupo -una sola
+    consulta (no una por usuario) y una sola reescritura de
+    squid_passwd/purga de credenciales al final: son solo cuentas locales
+    (ver el docstring de GroupQuota sobre por qué), así que no hace falta
+    la resolución local/LDAP que sí necesita _cortar()."""
+    from app.services.squid_service import write_passwd_file, write_digest_file, realm_actual, purge_credentials
+
+    miembros = _miembros_actuales(db, quota.group_name)
+    cuentas = db.query(ProxyUser).filter(ProxyUser.username.in_(miembros)).all() if miembros else []
+    afectados = 0
+    for cuenta in cuentas:
+        if cuenta.enabled:
+            cuenta.enabled = False
+            db.add(AuditLog(
+                admin_id=None, admin_username=_SISTEMA,
+                action="toggle", entity="proxy_user", entity_id=cuenta.id,
+                old_value=f"Cuota de grupo '{quota.group_name}' agotada (periodo {quota.quota_period})",
+                new_value="False",
+            ))
+            afectados += 1
+    if afectados:
+        db.flush()
+        write_passwd_file(db)
+        write_digest_file(db, realm_actual(db))
+    db.commit()
+    if afectados:
+        purge_credentials()
+    logger.info(f"Cuota de grupo agotada: '{quota.group_name}' -{afectados} usuario(s) deshabilitado(s)")
+
+
+def _limitar_grupo(db, quota: GroupQuota) -> None:
+    """A diferencia de _limitar() (cuota individual, que necesita una ACL
+    propia por cuota), un grupo local ya tiene su propia ACL proxy_auth
+    declarada siempre en squid.conf (ver el bucle de grupos en
+    config_generator.py) -el pool apunta directo a esa, sin crear ninguna
+    ACL nueva."""
+    from app.services.squid_service import apply_squid_config
+
+    velocidad = quota.quota_throttle_bytes_per_sec or 51200
+    pool = db.query(DelayPool).filter(DelayPool.group_quota_id == quota.id).first()
+    es_nuevo = pool is None
+    if es_nuevo:
+        pool = DelayPool(group_quota_id=quota.id, pool_class=1)
+        db.add(pool)
+    pool.acl_name = quota.group_name
+    pool.pool_class = 1
+    pool.parameters = f"{velocidad}/{velocidad}"
+    pool.description = f"Cuota de grupo agotada: {quota.group_name}"
+    pool.enabled = True
+    db.flush()
+    db.add(AuditLog(
+        admin_id=None, admin_username=_SISTEMA,
+        action="create" if es_nuevo else "update", entity="delay_pool", entity_id=pool.id,
+        new_value=f"Grupo '{quota.group_name}' limitado a {velocidad} B/s por cuota agotada",
+    ))
+    db.commit()
+    mark_dirty()
+    resultado = apply_squid_config(db)
+    if resultado["status"] != "ok":
+        logger.error(
+            f"No se pudo aplicar el límite de cuota para el grupo '{quota.group_name}': {resultado.get('message')}"
+        )
+    else:
+        logger.info(f"Cuota de grupo agotada: '{quota.group_name}' limitado a {velocidad} B/s")
+
+
+def revertir_accion_grupo(db, quota: GroupQuota) -> None:
+    """Deshace lo que haya aplicado la cuota de grupo -mismo criterio que
+    revertir_accion(), para el caso de un pool compartido."""
+    if quota.quota_action == "cut":
+        from app.services.squid_service import write_passwd_file, write_digest_file, realm_actual
+
+        miembros = _miembros_actuales(db, quota.group_name)
+        cuentas = db.query(ProxyUser).filter(ProxyUser.username.in_(miembros)).all() if miembros else []
+        reactivados = 0
+        for cuenta in cuentas:
+            if not cuenta.enabled:
+                cuenta.enabled = True
+                db.add(AuditLog(
+                    admin_id=None, admin_username=_SISTEMA,
+                    action="toggle", entity="proxy_user", entity_id=cuenta.id,
+                    old_value="Nuevo periodo de cuota de grupo", new_value="True",
+                ))
+                reactivados += 1
+        if reactivados:
+            db.flush()
+            write_passwd_file(db)
+            write_digest_file(db, realm_actual(db))
+        db.commit()
+
+    pool = db.query(DelayPool).filter(DelayPool.group_quota_id == quota.id).first()
+    if pool:
+        from app.services.squid_service import apply_squid_config
+        db.delete(pool)
+        db.commit()
+        mark_dirty()
+        apply_squid_config(db)
+
+
+def _procesar_cuota_grupo(db, quota: GroupQuota, ahora: datetime) -> None:
+    """Mismo ciclo que _procesar_cuota(), para un GroupQuota."""
+    if not quota.quota_period_started_at:
+        quota.quota_period_started_at = ahora
+        db.commit()
+        return
+
+    siguiente = siguiente_inicio_periodo(quota.quota_period_started_at, quota.quota_period)
+    if ahora >= siguiente:
+        if quota.quota_action_applied:
+            revertir_accion_grupo(db, quota)
+        quota.quota_bytes_used = 0
+        quota.quota_period_started_at = ahora
+        quota.quota_action_applied = False
+        db.commit()
+        return
+
+    if not quota.quota_action_applied and quota.quota_bytes_used >= quota.quota_bytes:
+        if quota.quota_action == "throttle":
+            _limitar_grupo(db, quota)
+        else:
+            _cortar_grupo(db, quota)
+        quota.quota_action_applied = True
+        db.commit()
+
+
 def _acumular_consumo(db, lines: list[str]) -> None:
     if not lines:
         return
@@ -316,7 +458,30 @@ def _acumular_consumo(db, lines: list[str]) -> None:
     )
     for quota in cuotas:
         quota.quota_bytes_used = (quota.quota_bytes_used or 0) + consumo[quota.username]
+
+    # Cuotas de grupo (pool compartido): solo grupos LOCALES con una cuota
+    # configurada -para cada miembro con tráfico nuevo, a qué grupo(s) con
+    # cuota pertenece, y sumarlo al pool que comparte con el resto.
+    cuotas_por_grupo = {gq.group_name: gq for gq in db.query(GroupQuota).all()}
+    if cuotas_por_grupo:
+        for username, group_name in _grupos_con_cuota_de(db, list(cuotas_por_grupo.keys()), list(consumo.keys())):
+            gq = cuotas_por_grupo[group_name]
+            gq.quota_bytes_used = (gq.quota_bytes_used or 0) + consumo[username]
+
     db.commit()
+
+
+def _grupos_con_cuota_de(db, grupos_con_cuota: list[str], usernames: list[str]) -> list[tuple[str, str]]:
+    """(username, nombre_de_grupo) para cada miembro de `usernames` que
+    pertenece a alguno de `grupos_con_cuota`. Separada de
+    _acumular_consumo() para poder testear la suma de consumo por grupo
+    sin tener que simular el JOIN de SQLAlchemy."""
+    return (
+        db.query(UserGroupMember.username, UserGroup.name)
+        .join(UserGroup, UserGroup.id == UserGroupMember.group_id)
+        .filter(UserGroup.name.in_(grupos_con_cuota), UserGroupMember.username.in_(usernames))
+        .all()
+    )
 
 
 def _tick() -> None:
@@ -334,6 +499,12 @@ def _tick() -> None:
             except Exception as e:
                 db.rollback()
                 logger.error(f"Error procesando la cuota de '{quota.username}': {e}")
+        for quota in db.query(GroupQuota).all():
+            try:
+                _procesar_cuota_grupo(db, quota, ahora)
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error procesando la cuota del grupo '{quota.group_name}': {e}")
     finally:
         db.close()
 

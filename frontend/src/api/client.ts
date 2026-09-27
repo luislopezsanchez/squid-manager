@@ -259,6 +259,14 @@ export const api = {
   removeQuota: (username: string) =>
     request<void>(`/quotas/${encodeURIComponent(username)}`, { method: 'DELETE' }),
 
+  // Cuotas de navegacion "pool compartido": mismo concepto pero por
+  // nombre de GRUPO local en vez de por usuario -ver GroupQuota.
+  listGroupQuotas: () => request<any[]>('/group-quotas/'),
+  setGroupQuota: (groupName: string, data: any) =>
+    request<any>(`/group-quotas/${encodeURIComponent(groupName)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  removeGroupQuota: (groupName: string) =>
+    request<void>(`/group-quotas/${encodeURIComponent(groupName)}`, { method: 'DELETE' }),
+
   // Contacto (Ayuda > Contacto): reporta un error o sugerencia sobre
   // SquidManager mismo al soporte del producto.
   sendContact: (data: { categoria: string; mensaje: string; email_respuesta?: string }) =>

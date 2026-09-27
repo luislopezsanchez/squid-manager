@@ -26,6 +26,7 @@ const Settings = lazy(() => import('./pages/Settings'))
 const LdapConfig = lazy(() => import('./pages/LdapConfig'))
 const Kerberos = lazy(() => import('./pages/Kerberos'))
 const DelayPools = lazy(() => import('./pages/DelayPools'))
+const Cuotas = lazy(() => import('./pages/Cuotas'))
 const AuditLog = lazy(() => import('./pages/AuditLog'))
 const CertificadoCA = lazy(() => import('./pages/CertificadoCA'))
 const BackupRestore = lazy(() => import('./pages/BackupRestore'))
@@ -81,6 +82,7 @@ function App() {
             <Route path="categorias" element={<Categorias />} />
             <Route path="rules" element={<AccessRules />} />
             <Route path="delay-pools" element={<DelayPools />} />
+            <Route path="cuotas" element={<Cuotas />} />
             <Route path="ldap" element={<LdapConfig />} />
             <Route path="kerberos" element={<Kerberos />} />
             <Route path="asistente" element={<Asistente />} />

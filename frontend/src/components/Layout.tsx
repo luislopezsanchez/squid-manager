@@ -243,6 +243,7 @@ export default function Layout() {
         { to: '/categorias', label: traducir("Categorías de dominios"), Icon: IconArchive },
         { to: '/rules', label: traducir("Reglas de acceso"), Icon: IconRules },
         { to: '/delay-pools', label: traducir("Ancho de banda"), Icon: IconGauge },
+        { to: '/cuotas', label: traducir("Cuotas"), Icon: IconGauge },
         { to: '/buscar', label: traducir("Buscar referencias"), Icon: IconSearch },
       ],
     },

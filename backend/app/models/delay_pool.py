@@ -24,5 +24,10 @@ class DelayPool(Base):
     # (no a ProxyUser: una cuota puede ser de un usuario LDAP, que no tiene
     # fila en proxy_users). Ver migración 0030.
     quota_id = Column(Integer, ForeignKey("navigation_quotas.id", ondelete="CASCADE"), nullable=True, unique=True)
+    # Mismo criterio que quota_id, para el "pool compartido" de un grupo
+    # entero (ver GroupQuota): identifica el pool que gestiona
+    # quota_service.py para ESE grupo, para poder borrarlo/reusarlo sin
+    # arriesgarse a tocar un pool creado a mano.
+    group_quota_id = Column(Integer, ForeignKey("group_quotas.id", ondelete="CASCADE"), nullable=True, unique=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

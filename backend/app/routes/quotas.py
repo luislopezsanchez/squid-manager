@@ -44,6 +44,7 @@ class QuotaResponse(BaseModel):
     quota_throttle_bytes_per_sec: int | None
     quota_bytes_used: int
     quota_period_started_at: datetime | None
+    quota_action_applied: bool
 
     class Config:
         from_attributes = True
