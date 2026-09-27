@@ -231,7 +231,21 @@ class NativeRuntime(ProxyRuntime):
         if not self.systemctl:
             return False, "No se encontro systemctl: no se puede reiniciar Squid"
         try:
-            result = self._run(self._systemctl_cmd("restart", self.service), timeout=120)
+            # Mismo margen que reconfigure()/parse_config(): con listas de
+            # bloqueo de dominios grandes habilitadas (aunque ninguna regla
+            # las use todavia, ver generate_squid_config), el propio Squid
+            # tarda mucho mas que los 120s de antes en volver a levantar -no
+            # es este backend el lento, es su ExecStartPre (`squid -z`) y el
+            # arranque real, que reparsean squid.conf entero cada uno. Con el
+            # timeout corto, este subprocess se rendia (TimeoutExpired) ANTES
+            # de que systemd terminara, aunque el reinicio fuera a salir bien
+            # -visto en vivo 2026-09-27 con una ACL de ~5.9M dominios: el
+            # propio `squid -k parse` tardo 67s el solo-. El unit de systemd
+            # necesita el mismo margen (ver TimeoutStartSec en el drop-in
+            # squidmanager-timeout.conf que instala el instalador), sin el
+            # cual systemd mata el proceso a mitad de un parseo legitimo y
+            # Squid queda en 'failed' sin poder recuperarse solo.
+            result = self._run(self._systemctl_cmd("restart", self.service), timeout=600)
         except Exception as e:
             logger.error(f"Error reiniciando Squid: {e}")
             return False, f"Error: {e}"
@@ -240,7 +254,7 @@ class NativeRuntime(ProxyRuntime):
             detalle = ((result.stderr or "") + (result.stdout or "")).strip()
             return False, f"systemctl restart {self.service} fallo: {detalle[-500:]}"
 
-        if not self._wait_until_active():
+        if not self._wait_until_active(timeout=600):
             return False, f"{self.service} no llego a quedar activo tras el reinicio"
         return True, "Squid reiniciado"
 

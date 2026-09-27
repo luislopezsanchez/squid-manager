@@ -130,6 +130,18 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
     # sobrante bajó el tiempo de `squid -k parse` a menos de la mitad con
     # una ACL de ~5.9M dominios sin usar en ninguna regla.
     domain_acls_used: set[str] = set()
+    # Nombres de ACL (de cualquier tipo) que de verdad referencia alguna regla
+    # o un delay pool -no solo las de dominio-, para no declarar en absoluto
+    # (ni siquiera su línea básica `acl nombre tipo ...`) una ACL 'file' que
+    # nadie usa todavía: Squid la carga igual con solo declararla, ANTES de
+    # que ninguna regla la mencione. Confirmado en vivo, 2026-09-27: con 9
+    # categorías HaGeZi + una lista de ~5.9M dominios habilitadas pero sin
+    # ninguna regla que las usara, `squid -k parse` tardaba 67s solo por
+    # cargarlas -tiempo que no compraba ningún filtrado real, porque no
+    # afectaban a ninguna decisión de tráfico. Es la misma idea que ya
+    # aplicaba domain_acls_used más abajo para la variante SNI, extendida a
+    # la declaración base.
+    referenced_acl_names: set[str] = {p.acl_name.strip() for p in delay_pools if p.acl_name}
 
     for rule in rules:
         names = rule.acl_names.split() if rule.acl_names else []
@@ -137,6 +149,7 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
             continue
 
         rendered_rules.append({"action": rule.action, "acl_names": " ".join(names)})
+        referenced_acl_names.update(n.lstrip("!") for n in names)
 
         mentioned_domains = [n for n in names if n.lstrip("!") in domain_acls]
         if not mentioned_domains:
@@ -156,6 +169,13 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
                 bare = n.lstrip("!")
                 if not n.startswith("!") and bare not in terminate_acls:
                     terminate_acls.append(bare)
+
+    # Solo se declaran en squid.conf las ACLs que de verdad usa algo -ver el
+    # comentario de referenced_acl_names más arriba-. Una ACL creada pero
+    # todavía no enganchada a ninguna regla/delay pool (categorías HaGeZi
+    # recién sincronizadas, una lista subida "para más adelante") no le
+    # cuesta nada a Squid hasta que se use de verdad.
+    acls_declaradas = [a for a in acls if a.name in referenced_acl_names]
 
     # Dominios excluidos del descifrado (banca, sanidad, apps con pinning).
     ssl_exclude = [
@@ -228,7 +248,7 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
     puerto_escucha = runtime.listen_port(puerto_deseado)
 
     config = template.render(
-        acls=acls,
+        acls=acls_declaradas,
         rules=rendered_rules,
         terminate_acls=terminate_acls,
         domain_acls_used=domain_acls_used,

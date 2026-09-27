@@ -157,6 +157,44 @@ def test_generate_empty_config():
     assert "http_port" in config  # al menos el puerto por defecto
 
 
+def test_acl_no_referenciada_por_ninguna_regla_no_se_declara():
+    """Una ACL creada pero que ninguna regla ni delay pool usa todavía no le
+    cuesta nada a Squid: no se declara en absoluto (ni su línea básica), a
+    diferencia de la SNI -que ya se omitía solo para ACLs de dominio-."""
+    db = FakeDB(
+        acls=[
+            FakeAcl("usada", "dstdomain", ".ejemplo.com"),
+            FakeAcl("sin_usar", "dstdomain", ".otro-ejemplo.com"),
+        ],
+        rules=[FakeRule("deny", "usada", 0)],
+    )
+    config = generate_squid_config(db)
+    assert "acl usada dstdomain .ejemplo.com" in config
+    assert "sin_usar" not in config
+
+
+def test_acl_referenciada_solo_por_un_delay_pool_si_se_declara():
+    db = FakeDB(
+        acls=[FakeAcl("streaming", "dstdomain", ".youtube.com")],
+        delay_pools=[FakeDelayPool(2, "64000/64000 64000/32000", acl_name="streaming")],
+    )
+    config = generate_squid_config(db)
+    assert "acl streaming dstdomain .youtube.com" in config
+
+
+def test_acl_referenciada_con_negacion_si_se_declara():
+    db = FakeDB(
+        acls=[
+            FakeAcl("bloqueados", "dstdomain", ".bloqueado.com"),
+            FakeAcl("excepcion", "src", "10.0.0.5/32"),
+        ],
+        rules=[FakeRule("allow", "excepcion !bloqueados", 0)],
+    )
+    config = generate_squid_config(db)
+    assert "acl bloqueados dstdomain .bloqueado.com" in config
+    assert "acl excepcion src 10.0.0.5/32" in config
+
+
 class FakeGroup:
     def __init__(self, name, description="", no_bump=False, source="local",
                  ldap_group_name=None, ldap_group_nested=False):

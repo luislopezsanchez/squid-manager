@@ -62,7 +62,7 @@ def test_conserva_el_orden_de_aparicion():
 # --- Generación de squid.conf: ACL 'file' vs 'inline' -----------------------
 
 def test_acl_file_referencia_el_archivo_no_el_valor_inline():
-    from test_config_generator import FakeDB, FakeSetting
+    from test_config_generator import FakeDB, FakeSetting, FakeRule
     from app.services.config_generator import generate_squid_config
 
     config = generate_squid_config(FakeDB(
@@ -70,6 +70,11 @@ def test_acl_file_referencia_el_archivo_no_el_valor_inline():
         acls=[__import__("test_config_generator").FakeAcl(
             "blocklist", "dstdomain", "ads1.com\nads2.com", source="file",
         )],
+        # Sin una regla que la use, config_generator ya no la declara en
+        # absoluto (ver test_acl_no_referenciada_por_ninguna_regla_no_se_declara
+        # en test_config_generator.py); acá interesa el formato de la línea
+        # cuando SÍ está en uso, no si aparece o no.
+        rules=[FakeRule("deny", "blocklist", 0)],
     ))
     assert 'acl blocklist dstdomain "/etc/squid/acl_lists/blocklist.txt"' in config
     assert "ads1.com" not in config  # el valor no va inline
@@ -119,12 +124,13 @@ def test_acl_sin_regla_no_emite_sni():
 
 
 def test_acl_inline_sigue_igual_que_siempre():
-    from test_config_generator import FakeDB, FakeSetting, FakeAcl
+    from test_config_generator import FakeDB, FakeSetting, FakeAcl, FakeRule
     from app.services.config_generator import generate_squid_config
 
     config = generate_squid_config(FakeDB(
         settings=[FakeSetting("http_port", "3128", "network")],
         acls=[FakeAcl("redes", "dstdomain", ".facebook.com .instagram.com")],
+        rules=[FakeRule("deny", "redes", 0)],
     ))
     assert "acl redes dstdomain .facebook.com .instagram.com" in config
 
