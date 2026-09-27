@@ -2,12 +2,11 @@ import { useEffect, useState } from 'react'
 import { traducir } from '../i18n'
 import { api } from '../api/client'
 import { formatBytes, formatNumber } from '../utils/format'
-import { niceCeilBytes, niceCeil } from '../utils/chart'
+import { niceCeilBytes, niceCeil, formatearEtiquetaGranularidad, formatearFechaCompletaGranularidad, type Granularidad } from '../utils/chart'
 import { SelectorVentana, type Ventana } from '../components/ReportWidgets'
 import { LineAreaChart } from '../components/LineAreaChart'
 import { LoadingState } from '../components/AsyncState'
 
-type Granularidad = 'minuto' | 'hora' | 'dia'
 type Punto = { timestamp: number; bytes: number; requests: number }
 
 /** Toggle Datos/Peticiones. */
@@ -28,25 +27,6 @@ function ToggleMetrica({ porDatos, onChange }: { porDatos: boolean; onChange: (v
       </button>
     </div>
   )
-}
-
-// Formato de etiqueta según la granularidad que eligió el backend -no el
-// frontend: es el backend el que decide si el balde es de 5 min, de una
-// hora o de un día calendario (ver get_volumen_por_periodo), acá solo se
-// traduce ese timestamp a texto legible.
-function formatearEtiqueta(ts: number, granularidad: Granularidad): string {
-  const d = new Date(ts * 1000)
-  if (granularidad === 'dia') {
-    return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function formatearFechaCompleta(ts: number, granularidad: Granularidad): string {
-  const d = new Date(ts * 1000)
-  const fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  if (granularidad === 'dia') return fecha
-  return `${fecha} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function VolumenPorPeriodo() {
@@ -80,7 +60,7 @@ function VolumenPorPeriodo() {
   // las etiquetas se pisa -se muestra una de cada varias, el tooltip por
   // punto sigue teniendo la fecha/hora completa.
   const paso = Math.max(1, Math.ceil(datos.length / 10))
-  const ejeXLabels = datos.map((d, i) => (i % paso === 0 ? formatearEtiqueta(d.timestamp, granularidad) : ''))
+  const ejeXLabels = datos.map((d, i) => (i % paso === 0 ? formatearEtiquetaGranularidad(d.timestamp, granularidad) : ''))
 
   return (
     <div>
@@ -106,7 +86,7 @@ function VolumenPorPeriodo() {
               <p className="text-xs text-ink-3 mb-1">
                 {granularidad === 'dia' ? traducir("Día con más tráfico") : traducir("Momento con más tráfico")}
               </p>
-              <p className="text-2xl font-bold text-ink">{formatearFechaCompleta(pico.timestamp, granularidad)}</p>
+              <p className="text-2xl font-bold text-ink">{formatearFechaCompletaGranularidad(pico.timestamp, granularidad)}</p>
             </div>
           )}
           <div className="card p-6">
@@ -115,7 +95,7 @@ function VolumenPorPeriodo() {
               techo={techo}
               formatearValor={formatearValor}
               ejeXLabels={ejeXLabels}
-              tooltipFor={i => `${formatearFechaCompleta(datos[i].timestamp, granularidad)} — ${
+              tooltipFor={i => `${formatearFechaCompletaGranularidad(datos[i].timestamp, granularidad)} — ${
                 porDatos ? formatBytes(datos[i].bytes) : `${formatNumber(datos[i].requests)} ${traducir("req")}`
               }`}
             />

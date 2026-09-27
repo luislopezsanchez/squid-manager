@@ -1,12 +1,13 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconClose, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo, IconRefresh, IconShield, IconSearch } from '../components/Icons'
+import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconClose, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo, IconRefresh, IconShield, IconSearch, IconCrown, IconClock, IconChevronRight } from '../components/Icons'
 import { api, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import { formatBytes, formatRate, formatNumber } from '../utils/format'
-import { monotonePath, niceCeilBytes } from '../utils/chart'
+import { monotonePath, niceCeilBytes, formatearEtiquetaGranularidad, formatearFechaCompletaGranularidad, type Granularidad } from '../utils/chart'
+import { LineAreaChart } from '../components/LineAreaChart'
 
 interface TimelinePoint {
   time: string
@@ -248,6 +249,17 @@ function formatDesde(segundos: number): string {
   return traducir("Hace {n}h {m}m", { n: h, m: min % 60 })
 }
 
+/** Igual que formatDesde pero sin el prefijo "Hace" -para el resumen de
+ * "Tiempo de conexión", donde el dato va al lado de una etiqueta que ya
+ * dice "Más/Menor tiempo conectado" y repetir "Hace" ahí sobra. */
+function formatDuracion(segundos: number): string {
+  if (segundos < 60) return traducir("{n} s", { n: Math.round(segundos) })
+  const min = Math.round(segundos / 60)
+  if (min < 60) return traducir("{n} min", { n: min })
+  const h = Math.floor(min / 60)
+  return traducir("{n}h {m}m", { n: h, m: min % 60 })
+}
+
 /** Etiqueta flotante sobre el borde superior de un aviso, identificando de
  * qué tipo es la notificación (Squid caído, anomalías) -antes las dos
  * decían "Nuevo" sin distinguir "esto es solo informativo" de "esto es
@@ -333,16 +345,16 @@ export default function Dashboard() {
   const [anomalias, setAnomalias] = useState<{ ts: number; asunto: string; mensaje: string }[]>([])
   const [anomaliaCerrada, setAnomaliaCerrada] = useState(false)
   const [buscarConectado, setBuscarConectado] = useState('')
+  // "Tráfico de red en tiempo real": 'vivo' es el comportamiento de
+  // siempre (bajada/subida separadas, buffer de 5 min en memoria). Para un
+  // rango más largo no hay bajada/subida por separado guardada en ningún
+  // lado -Squid no registra el tamaño de subida en el access.log por
+  // defecto, así que ahí solo se puede mostrar el TOTAL (mismo dato que ya
+  // usa Panorama en "Volumen de tráfico").
+  const [rangoTrafico, setRangoTrafico] = useState<'vivo' | '24h' | '7d' | '30d'>('vivo')
+  const [volumenHistorico, setVolumenHistorico] = useState<{ granularidad: Granularidad; puntos: { timestamp: number; bytes: number; requests: number }[] } | null>(null)
+  const [volumenLoading, setVolumenLoading] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  // "Usuarios conectados ahora" toma este alto por JS, no por flexbox: con
-  // stretch normal, ambas tarjetas dependen una de la otra (Tráfico se
-  // estira para igualar a Usuarios si esta tiene muchos usuarios, aunque su
-  // propio contenido no llene ese alto) -un ida y vuelta que con solo
-  // min-h-0 no se corta del todo. Midiendo el alto real del gráfico y
-  // aplicándoselo directo a la otra tarjeta, manda una sola punta: la lista
-  // de usuarios escrolea adentro de lo que le toca, nunca al revés.
-  const trafficCardRef = useRef<HTMLDivElement>(null)
-  const [trafficCardHeight, setTrafficCardHeight] = useState<number | null>(null)
   const { showToast, ToastContainer } = useToast()
 
   const loadData = () => {
@@ -421,25 +433,6 @@ export default function Dashboard() {
     }
   }
 
-  useEffect(() => {
-    const el = trafficCardRef.current
-    if (!el) return
-    // getBoundingClientRect(), no entries[0].contentRect: contentRect mide
-    // solo el área de contenido, SIN el padding (p-6 = 24px arriba y abajo)
-    // ni el borde -por eso la tarjeta de al lado quedaba ~50px más baja
-    // que "Tráfico" en vez de igualarla: se le estaba pasando la altura de
-    // adentro, no la altura real (de borde a borde) que hay que igualar.
-    const ro = new ResizeObserver(() => {
-      setTrafficCardHeight(el.getBoundingClientRect().height)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-    // !!data (no `data`) a propósito: `data` cambia de referencia en CADA
-    // sondeo de 5s, así que dependiendo de eso este efecto desconectaría y
-    // reconectaría el observer sin necesidad en cada refresco -solo hace
-    // falta re-engancharlo una vez, cuando el ref pasa de null (mientras
-    // carga) a existir de verdad (ya con la tarjeta montada).
-  }, [!!data])
 
   useEffect(() => {
     loadData()
@@ -453,6 +446,26 @@ export default function Dashboard() {
     // pocas peticiones pero muchos bytes (una descarga grande) seguía
     // invisible porque nunca llegó a estar entre los 10 por peticiones.
   }, [autoRefresh, domainSort])
+
+  // Volumen histórico (24h/semana/mes) para "Tráfico de red en tiempo
+  // real": solo se pide cuando el admin elige un rango que no es 'vivo'
+  // -evita una llamada de más en el caso común (dashboard recién abierto,
+  // rango en vivo). 60s de intervalo alcanza: a diferencia del tráfico en
+  // vivo, acá cada balde ya es de minutos/horas/días, no tiene sentido
+  // refrescar cada 5s.
+  useEffect(() => {
+    if (rangoTrafico === 'vivo') { setVolumenHistorico(null); return }
+    let cancelado = false
+    const cargar = () => {
+      setVolumenLoading(true)
+      api.getVolumenPorPeriodo(rangoTrafico).then(r => {
+        if (!cancelado) setVolumenHistorico(r)
+      }).finally(() => { if (!cancelado) setVolumenLoading(false) })
+    }
+    cargar()
+    const interval = setInterval(cargar, 60000)
+    return () => { cancelado = true; clearInterval(interval) }
+  }, [rangoTrafico])
 
   if (loading) return <LoadingState text={traducir("Cargando métricas...")} />
   if (!data) return <ErrorState text={traducir("No se pudieron cargar las métricas del panel. Revisá la conexión o volvé a intentar.")} onRetry={loadData} />
@@ -490,25 +503,34 @@ export default function Dashboard() {
     ? conectadosDetalle.filter(d => d.user.toLowerCase().includes(filtroConectados))
     : conectadosDetalle
 
-  // Cuántas filas entran sin scroll, según el alto real medido de "Tráfico"
-  // (ver ResizeObserver más arriba): la idea es "lo que no entra, con un
-  // aviso de que hay más" en vez de una barra de desplazamiento -que además
-  // acá afeaba la tarjeta más que ayudaba. Los números (header, buscador,
-  // alto de fila) son los mismos que ya define el JSX de abajo; si esos
-  // cambian, hay que actualizarlos acá también.
-  const ALTO_FILA_CONECTADO = 24
-  const filasQueEntran = trafficCardHeight
-    ? Math.max(1, Math.floor((trafficCardHeight - 32 - 28 - 8 - 30 - 8) / ALTO_FILA_CONECTADO))
-    : 6
-  const hayMasSinBuscar = !filtroConectados && conectadosDetalle.length > filasQueEntran
+  // "Lo que no entra, con un aviso de que hay más" en vez de una barra de
+  // desplazamiento -que acá afeaba la tarjeta más que ayudaba. Ya no
+  // depende del alto de ninguna otra tarjeta (ver comentario viejo en el
+  // historial): esta sección tiene su propio ancho completo, así que un
+  // número fijo alcanza.
+  const FILAS_VISIBLES_CONECTADOS = 8
+  const hayMasSinBuscar = !filtroConectados && conectadosDetalle.length > FILAS_VISIBLES_CONECTADOS
   const conectadosAMostrar = filtroConectados
     ? conectadosFiltrados
-    : conectadosDetalle.slice(0, hayMasSinBuscar ? filasQueEntran - 1 : filasQueEntran)
-  const ocultosSinBuscar = hayMasSinBuscar ? conectadosDetalle.length - (filasQueEntran - 1) : 0
+    : conectadosDetalle.slice(0, hayMasSinBuscar ? FILAS_VISIBLES_CONECTADOS - 1 : FILAS_VISIBLES_CONECTADOS)
+  const ocultosSinBuscar = hayMasSinBuscar ? conectadosDetalle.length - (FILAS_VISIBLES_CONECTADOS - 1) : 0
 
   const pctConectados = data.total_proxy_users > 0
     ? (t.active_users.length / data.total_proxy_users) * 100
     : 0
+
+  // "Tiempo de conexión": quién lleva más y menos tiempo conectado de
+  // corrido, de los que ya tienen detalle (los recién conectados, sin
+  // detalle todavía -conectado_desde_segundos null-, quedan afuera de este
+  // resumen: no hay "cuánto lleva" que mostrar de ellos todavía).
+  const conMasSegundosConectado = [...t.active_users_detalle]
+  const masTiempoConectado = conMasSegundosConectado.length > 0
+    ? conMasSegundosConectado.reduce((max, d) => d.conectado_desde_segundos > max.conectado_desde_segundos ? d : max)
+    : null
+  const menosTiempoConectado = conMasSegundosConectado.length > 0
+    ? conMasSegundosConectado.reduce((min, d) => d.conectado_desde_segundos < min.conectado_desde_segundos ? d : min)
+    : null
+  const maxSegundosConectado = masTiempoConectado?.conectado_desde_segundos || 1
   // Los tramos sin peticiones cacheables llegan como null. Dibujarlos como 0
   // se ve como una caída real a "0% de aciertos", cuando en realidad no hubo
   // nada que cachear — así que se arrastra el último valor real conocido en
@@ -898,228 +920,320 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Tráfico de red en tiempo real + columna nueva a la derecha.
-          Antes esta tarjeta ocupaba todo el ancho -compartía la fila con
-          "Sistema" (CPU/RAM/Disco/SWAP), que se sacó de acá y ahora vive de
-          forma permanente en el header (ver más arriba). El espacio que
-          liberó se repartió entre el gráfico (que ya no necesita todo el
-          ancho para leerse bien) y dos tarjetas que antes se pedían y
-          nunca se mostraban en ningún lado: usuarios conectados ahora mismo
-          y latencia/ahorro por caché. */}
-      {/* lg (1024px), no xl (1280px): a xl estas dos tarjetas se apilaban
-          en una laptop de 19" con la ventana no maximizada -bastante
-          común-, cuando de sobra entran una al lado de la otra achicando
-          un poco cada una (el resto de la fila de abajo ya usa este mismo
-          corte para "2 columnas en vez de 1", ver el grid de Top
-          usuarios/sitios más abajo). */}
-      <div className="flex flex-col lg:flex-row gap-4 mb-6">
-      <div ref={trafficCardRef} className="card p-6 flex flex-col lg:flex-[1.6] min-w-0">
-          <div className="flex items-center justify-between mb-4">
+      {/* Tráfico de red en tiempo real: ocupa todo el ancho. Antes
+          compartía la fila con "Usuarios conectados ahora" (que se sacó de
+          acá, ver más abajo, ahora con su propia sección más grande) y con
+          "Sistema" (CPU/RAM/Disco/SWAP, que vive en el header). */}
+      <div className="card p-6 flex flex-col mb-6">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div className="flex items-center gap-1.5">
               <h3 className="font-medium text-ink">{traducir("Tráfico de red en tiempo real")}</h3>
-              <InfoTip text={traducir("Velocidad de datos que pasa por el proxy en los últimos minutos. Bajada = del Internet hacia los clientes. Subida = de los clientes hacia Internet. Cada punto es una muestra tomada cada 5 segundos.")} />
+              <InfoTip text={traducir("Velocidad de datos que pasa por el proxy. Bajada = del Internet hacia los clientes. Subida = de los clientes hacia Internet. \"En vivo\" muestra los últimos minutos, muestreados cada 5 segundos; un rango más largo muestra el total transferido (Squid no registra bajada y subida por separado para ventanas largas).")} />
             </div>
-            <span className="text-xs text-ink-3 tabular">
-              {traducir("Promedio: bajada {bajada} · subida {subida}", {
-                bajada: formatRate(t.rx_avg_60s),
-                subida: formatRate(t.tx_avg_60s),
-              })}
-            </span>
-          </div>
-
-          <div className="flex gap-2" style={{ height: '220px' }}>
-            {/* Eje Y */}
-            <div className="flex flex-col justify-between text-[10px] text-ink-3 font-mono text-right pr-1" style={{ width: '64px' }}>
-              <span>{formatRate(maxBytes)}</span>
-              <span>{formatRate(maxBytes * 0.75)}</span>
-              <span>{formatRate(maxBytes * 0.5)}</span>
-              <span>{formatRate(maxBytes * 0.25)}</span>
-              <span>0</span>
-            </div>
-
-            {/* Área del gráfico */}
-            <div className="relative flex-1 overflow-hidden">
-              {/* Rejilla */}
-              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-                {[0, 1, 2, 3, 4].map(i => (
-                  <div key={i} className="border-t border-line-soft w-full" style={{ height: '0' }} />
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex text-xs rounded-md overflow-hidden border border-line">
+                {([
+                  ['vivo', traducir('En vivo')],
+                  ['24h', traducir('Últimas 24 h')],
+                  ['7d', traducir('Última semana')],
+                  ['30d', traducir('El mes')],
+                ] as const).map(([id, label]) => (
+                  <button key={id} onClick={() => setRangoTrafico(id)}
+                    className={`px-2 py-1 transition ${rangoTrafico === id ? 'bg-brand-700 text-white' : 'text-ink-3 hover:bg-brand-50'}`}
+                  >{label}</button>
                 ))}
               </div>
-
-              {timeline.length < 2 ? (
-                <div className="absolute inset-0 grid place-items-center text-sm text-ink-3">{traducir("Recogiendo datos…")}</div>
-              ) : (
-                <>
-                  <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100"
-                       preserveAspectRatio="none" aria-hidden="true">
-                    <defs>
-                      <linearGradient id="rxGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#0B497C" stopOpacity="0.30" />
-                        <stop offset="100%" stopColor="#0B497C" stopOpacity="0.03" />
-                      </linearGradient>
-                      <linearGradient id="txGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#48B3D0" stopOpacity="0.30" />
-                        <stop offset="100%" stopColor="#48B3D0" stopOpacity="0.03" />
-                      </linearGradient>
-                    </defs>
-                    <path d={rxPath.area} fill="url(#rxGrad)" />
-                    <path d={rxPath.line} fill="none" stroke="#0B497C" strokeWidth="2"
-                          vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-                    <path d={txPath.area} fill="url(#txGrad)" />
-                    <path d={txPath.line} fill="none" stroke="#48B3D0" strokeWidth="2"
-                          vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-                  </svg>
-
-                  {/* Capa invisible para los tooltips: cada zona se coloca sobre
-                      la posición real de su muestra, no repartida por igual. */}
-                  <div className="absolute inset-0">
-                    {timeline.map((point, i) => {
-                      const x = xFor(point, i)
-                      const width = 100 / timeline.length
-                      return (
-                        <div
-                          key={i}
-                          className="absolute top-0 h-full group"
-                          style={{ left: `${Math.max(0, x - width / 2)}%`, width: `${width}%` }}
-                        >
-                          <div className="absolute inset-y-0 left-1/2 w-px bg-brand-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-brand-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-20 pointer-events-none">
-                            {point.time}<br />
-                            Bajada {formatRate(point.rx_bytes)}<br />
-                            Subida {formatRate(point.tx_bytes)}
-                          </div>
-                        </div>
-                      )
+              <span className="text-xs text-ink-3 tabular">
+                {rangoTrafico === 'vivo'
+                  ? traducir("Promedio: bajada {bajada} · subida {subida}", {
+                      bajada: formatRate(t.rx_avg_60s),
+                      subida: formatRate(t.tx_avg_60s),
+                    })
+                  : traducir("Total del periodo: {total}", {
+                      total: formatBytes((volumenHistorico?.puntos ?? []).reduce((acc, p) => acc + p.bytes, 0)),
                     })}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Eje temporal: el rango sale de las marcas reales de las muestras. */}
-          <div className="flex justify-between text-xs text-ink-3 mt-2 pl-[72px]">
-            <span>{span > 90
-              ? traducir("Hace {n} min", { n: Math.round(span / 60) })
-              : traducir("Hace {n} s", { n: Math.round(span) })}</span>
-            <span>{traducir("Ahora")}</span>
-          </div>
-
-          {/* Leyenda */}
-          <div className="flex gap-4 mt-3 text-xs items-center">
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#0B497C' }}></span>{traducir("Bajada")}</span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#48B3D0' }}></span>{traducir("Subida")}</span>
-            <span className="text-ink-3 ml-auto tabular">
-              {traducir("{puntos} puntos · {segundos}s de histórico", {
-                puntos: timeline.length,
-                segundos: Math.round(span),
-              })}
-            </span>
-          </div>
-        </div>
-
-        {/* Usuarios conectados ahora: reusa active_users/active_users_detalle
-            que /panel/dashboard ya traía en cada ciclo de 5s y que hasta
-            ahora se pedían y se descartaban sin mostrarse en ningún lado.
-            La tarjeta "Rendimiento" (latencia/caché) que vivía acá al lado
-            se sacó del dashboard -esos datos ya tienen su propia pantalla
-            en Análisis → Latencia y errores, y esta es la tarjeta
-            importante de verdad en una empresa con muchos usuarios
-            habituales: mejor que se quede con todo el alto disponible. */}
-        <div className="flex flex-col gap-4 lg:flex-1 lg:min-w-[280px] min-h-0">
-          {/* min-h-0 en este contenedor (y en la tarjeta y filas de abajo)
-              es lo que de verdad fija el alto: sin él, un div normal se
-              niega a encogerse por debajo del alto natural de su
-              contenido -acá, la lista de usuarios sin recortar-, y ESE
-              alto inflado es el que la fila de más arriba (align-items:
-              stretch por defecto) le contagiaba de vuelta a "Tráfico de
-              red en tiempo real", agrandándola también aunque su propio
-              contenido no llenara ese espacio. Con la cadena de min-h-0
-              cerrada de punta a punta, quien manda es el contenido de
-              Tráfico (fijo, no depende de cuántos usuarios haya conectados)
-              y esta tarjeta se ajusta a lo que le sobra, con scroll interno
-              en la lista en vez de crecer. */}
-          <div
-            className="card p-4 flex flex-col gap-2 min-h-0 overflow-hidden"
-            style={trafficCardHeight ? { height: trafficCardHeight } : undefined}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="font-medium text-ink text-sm">{traducir("Usuarios conectados ahora")}</h3>
-              <span className="pill-ok px-2 py-0.5 rounded-full text-[10px] font-bold">
-                {traducir("{n} en línea", { n: t.active_users.length })}
               </span>
             </div>
+          </div>
 
+          {rangoTrafico === 'vivo' ? (
+            <>
+              <div className="flex gap-2" style={{ height: '220px' }}>
+                {/* Eje Y */}
+                <div className="flex flex-col justify-between text-[10px] text-ink-3 font-mono text-right pr-1" style={{ width: '64px' }}>
+                  <span>{formatRate(maxBytes)}</span>
+                  <span>{formatRate(maxBytes * 0.75)}</span>
+                  <span>{formatRate(maxBytes * 0.5)}</span>
+                  <span>{formatRate(maxBytes * 0.25)}</span>
+                  <span>0</span>
+                </div>
+
+                {/* Área del gráfico */}
+                <div className="relative flex-1 overflow-hidden">
+                  {/* Rejilla */}
+                  <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                    {[0, 1, 2, 3, 4].map(i => (
+                      <div key={i} className="border-t border-line-soft w-full" style={{ height: '0' }} />
+                    ))}
+                  </div>
+
+                  {timeline.length < 2 ? (
+                    <div className="absolute inset-0 grid place-items-center text-sm text-ink-3">{traducir("Recogiendo datos…")}</div>
+                  ) : (
+                    <>
+                      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100"
+                           preserveAspectRatio="none" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="rxGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#0B497C" stopOpacity="0.30" />
+                            <stop offset="100%" stopColor="#0B497C" stopOpacity="0.03" />
+                          </linearGradient>
+                          <linearGradient id="txGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#48B3D0" stopOpacity="0.30" />
+                            <stop offset="100%" stopColor="#48B3D0" stopOpacity="0.03" />
+                          </linearGradient>
+                        </defs>
+                        <path d={rxPath.area} fill="url(#rxGrad)" />
+                        <path d={rxPath.line} fill="none" stroke="#0B497C" strokeWidth="2"
+                              vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+                        <path d={txPath.area} fill="url(#txGrad)" />
+                        <path d={txPath.line} fill="none" stroke="#48B3D0" strokeWidth="2"
+                              vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+                      </svg>
+
+                      {/* Capa invisible para los tooltips: cada zona se coloca sobre
+                          la posición real de su muestra, no repartida por igual. */}
+                      <div className="absolute inset-0">
+                        {timeline.map((point, i) => {
+                          const x = xFor(point, i)
+                          const width = 100 / timeline.length
+                          return (
+                            <div
+                              key={i}
+                              className="absolute top-0 h-full group"
+                              style={{ left: `${Math.max(0, x - width / 2)}%`, width: `${width}%` }}
+                            >
+                              <div className="absolute inset-y-0 left-1/2 w-px bg-brand-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-brand-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-20 pointer-events-none">
+                                {point.time}<br />
+                                Bajada {formatRate(point.rx_bytes)}<br />
+                                Subida {formatRate(point.tx_bytes)}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Eje temporal: el rango sale de las marcas reales de las muestras. */}
+              <div className="flex justify-between text-xs text-ink-3 mt-2 pl-[72px]">
+                <span>{span > 90
+                  ? traducir("Hace {n} min", { n: Math.round(span / 60) })
+                  : traducir("Hace {n} s", { n: Math.round(span) })}</span>
+                <span>{traducir("Ahora")}</span>
+              </div>
+
+              {/* Leyenda */}
+              <div className="flex gap-4 mt-3 text-xs items-center">
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#0B497C' }}></span>{traducir("Bajada")}</span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#48B3D0' }}></span>{traducir("Subida")}</span>
+                <span className="text-ink-3 ml-auto tabular">
+                  {traducir("{puntos} puntos · {segundos}s de histórico", {
+                    puntos: timeline.length,
+                    segundos: Math.round(span),
+                  })}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              {volumenLoading && !volumenHistorico ? (
+                <div className="grid place-items-center text-sm text-ink-3" style={{ height: '220px' }}>
+                  {traducir("Cargando…")}
+                </div>
+              ) : !volumenHistorico || volumenHistorico.puntos.length === 0 ? (
+                <div className="grid place-items-center text-sm text-ink-3" style={{ height: '220px' }}>
+                  {traducir("Sin datos todavía.")}
+                </div>
+              ) : (() => {
+                const puntos = volumenHistorico.puntos
+                const granularidad = volumenHistorico.granularidad
+                const valores = puntos.map(p => p.bytes)
+                const techo = niceCeilBytes(Math.max(...valores, 1))
+                const paso = Math.max(1, Math.ceil(puntos.length / 10))
+                const ejeXLabels = puntos.map((p, i) => (i % paso === 0 ? formatearEtiquetaGranularidad(p.timestamp, granularidad) : ''))
+                return (
+                  <LineAreaChart
+                    valores={valores}
+                    techo={techo}
+                    formatearValor={formatBytes}
+                    ejeXLabels={ejeXLabels}
+                    tooltipFor={i => `${formatearFechaCompletaGranularidad(puntos[i].timestamp, granularidad)} — ${formatBytes(puntos[i].bytes)}`}
+                  />
+                )
+              })()}
+              <p className="text-[11px] text-ink-3 mt-3">
+                {traducir("Total transferido por franja (no distingue bajada de subida en este rango).")}
+              </p>
+            </>
+          )}
+        </div>
+
+      {/* Usuarios conectados ahora: reusa active_users/active_users_detalle
+          que /panel/dashboard ya traía en cada ciclo de 5s. Sección propia
+          de ancho completo (ya no comparte fila ni alto con "Tráfico"),
+          con una columna de lista+buscador y una columna lateral con el
+          anillo de "Total en línea" y el resumen de "Tiempo de conexión"
+          -mismo diseño pedido en vivo, 2026-09-27. */}
+      <div className="card p-6 mb-6">
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <span className="w-11 h-11 rounded-xl bg-ok-soft text-ok flex items-center justify-center flex-none">
+              <IconUsers className="w-6 h-6" />
+            </span>
+            <div>
+              <h3 className="text-lg font-bold text-ink leading-tight">{traducir("Usuarios conectados ahora")}</h3>
+              <p className="text-xs text-ink-3">{traducir("Lista de usuarios actualmente en línea en el sistema")}</p>
+            </div>
+          </div>
+          <span className="pill-ok px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 flex-none">
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--ok)' }} />
+            {traducir("{n} en línea", { n: t.active_users.length })}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-5">
+          {/* Columna principal: buscador + lista */}
+          <div className="lg:col-span-2 min-w-0">
             {/* Buscador: en una empresa con cientos de usuarios habituales,
                 la lista completa no sirve para responder rápido "¿fulano
                 está conectado ahora?" -este filtro sí. Filtra por coincidencia
                 parcial del nombre, sin distinguir mayúsculas. */}
-            <div className="relative flex-none">
-              <IconSearch className="w-3.5 h-3.5 text-ink-3 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="relative mb-1">
+              <IconSearch className="w-4 h-4 text-ink-3 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={buscarConectado}
                 onChange={e => setBuscarConectado(e.target.value)}
                 placeholder={traducir("Buscar usuario conectado...")}
-                className="input w-full pl-8 pr-2 py-1 text-xs"
+                className="input w-full pl-9"
               />
             </div>
 
-            <div className="flex flex-1 min-h-0 gap-4">
-              {/* Sin scroll a propósito -afeaba más de lo que ayudaba-: se
-                  muestran solo las filas que entran de verdad en el alto
-                  disponible (filasQueEntran, calculado más arriba a partir
-                  del alto real de "Tráfico"), de la conexión más reciente a
-                  la más vieja, con un aviso de cuántas quedan afuera. El
-                  buscador sigue filtrando sobre la lista COMPLETA
-                  (conectadosFiltrados), no solo sobre lo visible -para eso
-                  está, para encontrar a alguien que no entra en el top. */}
-              <div className="flex flex-col gap-2 flex-1 min-w-0 overflow-hidden">
-                {conectadosAMostrar.length === 0 ? (
-                  <p className="text-xs text-ink-3">
-                    {filtroConectados
-                      ? traducir("«{q}» no está conectado ahora", { q: buscarConectado })
-                      : traducir("Nadie autenticado en este momento")}
-                  </p>
-                ) : conectadosAMostrar.map(d => (
-                  <div key={d.user} className="flex items-center gap-2 text-xs text-ink-2 flex-none">
-                    <span className="w-1.5 h-1.5 rounded-full flex-none animate-pulse" style={{ background: 'var(--ok)' }} />
-                    {/* Nombre con flex-1 (no un maxWidth fijo): reparte todo
-                        el ancho de la fila entre el nombre y la hora, que
-                        queda pegada al final -contra el separador del
-                        anillo-, en vez de los dos apretados a la izquierda
-                        dejando un hueco vacío antes del gráfico. */}
-                    <span className="font-medium truncate flex-1 min-w-0">{d.user}</span>
-                    <span className="text-[10.5px] text-ink-3 flex-none tabular">
+            <div className="flex flex-col divide-y divide-line-soft">
+              {conectadosAMostrar.length === 0 ? (
+                <p className="text-sm text-ink-3 py-4">
+                  {filtroConectados
+                    ? traducir("«{q}» no está conectado ahora", { q: buscarConectado })
+                    : traducir("Nadie autenticado en este momento")}
+                </p>
+              ) : conectadosAMostrar.map(d => {
+                const esElQueMas = masTiempoConectado?.user === d.user
+                const pct = d.conectado_desde_segundos != null
+                  ? Math.max(4, (d.conectado_desde_segundos / maxSegundosConectado) * 100)
+                  : 4
+                return (
+                  <div key={d.user} className="flex items-center gap-3 py-2.5">
+                    <span className="w-8 h-8 rounded-full bg-ok-soft text-ok flex items-center justify-center flex-none">
+                      <IconUsers className="w-4 h-4" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-sm text-ink truncate">{d.user}</span>
+                        {esElQueMas && <IconCrown className="w-3.5 h-3.5 text-warn flex-none" />}
+                        {esElQueMas && (
+                          <span className="pill-ok px-1.5 py-0.5 rounded-full text-[10px] font-bold flex-none whitespace-nowrap">
+                            {traducir("Más tiempo conectado")}
+                          </span>
+                        )}
+                      </div>
+                      <div className="w-full h-1.5 bg-line-soft rounded-full overflow-hidden mt-1.5">
+                        <div className="h-full rounded-full bg-ok" style={{ width: `${pct}%`, transition: 'width .6s ease' }} />
+                      </div>
+                    </div>
+                    <span className="text-xs text-ink-3 flex-none tabular w-16 text-right">
                       {d.conectado_desde_segundos != null ? formatDesde(d.conectado_desde_segundos) : traducir("Recién")}
                     </span>
+                    {/* Enlace directo a la evolución de este usuario en el
+                        tiempo -ya existe la pantalla (Análisis → Tendencias),
+                        no hace falta un menú "..." con acciones inventadas. */}
+                    <Link to={`/tendencias?tipo=user&valor=${encodeURIComponent(d.user)}`}
+                      title={traducir("Ver tendencia de {u}", { u: d.user })}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-ink-3 hover:bg-brand-50 hover:text-brand-700 transition flex-none">
+                      <IconActivity className="w-4 h-4" />
+                    </Link>
                   </div>
-                ))}
-                {ocultosSinBuscar > 0 && (
-                  <p className="text-[11px] text-ink-3 flex-none">
-                    {traducir("+ {n} más — buscalos arriba", { n: ocultosSinBuscar })}
-                  </p>
-                )}
-              </div>
-
-              {/* Anillo de % conectados vs. cuentas habilitadas: solo con
-                  ancho de sobra (2xl+, monitor grande) -es el mismo espacio
-                  que antes quedaba vacío a la derecha de cada fila. En
-                  pantallas más chicas se prioriza que la lista y el
-                  buscador tengan todo el ancho para sí. w-[150px] (en vez
-                  del ancho angosto que tenía antes, apenas el del círculo
-                  chico de 60px) es lo que le da a MiniDonut margen real
-                  para crecer -w-full ahí adentro escala con esto, no con
-                  un tamaño fijo en píxeles. */}
-              <div className="hidden 2xl:flex flex-col items-center justify-center flex-none w-[150px] border-l border-line-soft pl-5 gap-2">
-                <MiniDonut pct={pctConectados} />
-                <span className="text-[10.5px] text-ink-3 text-center tabular leading-tight w-full">
-                  {traducir("{n} de {total} habilitados", { n: t.active_users.length, total: data.total_proxy_users })}
-                </span>
-              </div>
+                )
+              })}
             </div>
+            {ocultosSinBuscar > 0 && (
+              <p className="text-xs text-ink-3 mt-2">
+                {traducir("+ {n} más — buscalos arriba", { n: ocultosSinBuscar })}
+              </p>
+            )}
+          </div>
+
+          {/* Columna lateral: Total en línea + Tiempo de conexión */}
+          <div className="flex flex-col gap-4">
+            <div className="rounded-xl border border-line-soft p-4 flex flex-col items-center">
+              <div className="flex items-center gap-2 self-start mb-3">
+                <IconUsers className="w-4 h-4 text-ink-3" />
+                <h4 className="text-sm font-semibold text-ink">{traducir("Total en línea")}</h4>
+              </div>
+              <div className="w-28">
+                <MiniDonut pct={pctConectados} />
+              </div>
+              <p className="text-xs text-ink-3 mt-2 text-center">
+                {traducir("{n} de {total} habilitados", { n: t.active_users.length, total: data.total_proxy_users })}
+              </p>
+              <Link to="/users"
+                className="mt-3 w-full flex items-center justify-between gap-1 text-xs font-semibold text-ok bg-ok-soft rounded-lg px-3 py-2 hover:brightness-95 transition">
+                <span>{traducir("{n} en línea", { n: t.active_users.length })}</span>
+                <span className="flex items-center gap-1 opacity-80">
+                  {traducir("Usuarios conectados actualmente")}
+                  <IconChevronRight className="w-3.5 h-3.5" />
+                </span>
+              </Link>
+            </div>
+
+            {masTiempoConectado && menosTiempoConectado && (
+              <div className="rounded-xl border border-line-soft p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <IconClock className="w-4 h-4 text-ink-3" />
+                  <h4 className="text-sm font-semibold text-ink">{traducir("Tiempo de conexión")}</h4>
+                </div>
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="flex items-center gap-1.5 text-ink-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-ok" />{traducir("Más tiempo conectado")}
+                    </span>
+                    <span className="font-bold text-ink tabular">{formatDuracion(masTiempoConectado.conectado_desde_segundos)}</span>
+                  </div>
+                  <p className="text-xs text-ink-3 mb-1 truncate">{masTiempoConectado.user}</p>
+                  <div className="w-full h-1.5 bg-line-soft rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-ok" style={{ width: '100%' }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="flex items-center gap-1.5 text-ink-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-ink-3" />{traducir("Menor tiempo conectado")}
+                    </span>
+                    <span className="font-bold text-ink tabular">{formatDuracion(menosTiempoConectado.conectado_desde_segundos)}</span>
+                  </div>
+                  <p className="text-xs text-ink-3 mb-1 truncate">{menosTiempoConectado.user}</p>
+                  <div className="w-full h-1.5 bg-line-soft rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-ink-3"
+                      style={{ width: `${Math.max(4, (menosTiempoConectado.conectado_desde_segundos / maxSegundosConectado) * 100)}%` }} />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

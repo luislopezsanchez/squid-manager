@@ -283,6 +283,16 @@ export const IconGripVertical = ({ className }: Props) => (
   </svg>
 )
 
+export const IconCrown = ({ className }: Props) => (
+  <svg {...base} className={className} fill="currentColor" strokeWidth={0}>
+    <path d="m3 8 3.5 3L12 5l5.5 6L21 8l-2 10H5L3 8Z" />
+  </svg>
+)
+
+export const IconClock = ({ className }: Props) => (
+  <svg {...base} className={className}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
+)
+
 export const IconChevronLeft = ({ className }: Props) => (
   <svg {...base} className={className} strokeWidth={2.5}><path d="m15 18-6-6 6-6" /></svg>
 )

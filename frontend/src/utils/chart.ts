@@ -87,3 +87,25 @@ export function niceCeil(value: number): number {
   const paso = normalizado <= 1 ? 1 : normalizado <= 2 ? 2 : normalizado <= 5 ? 5 : 10
   return paso * magnitud
 }
+
+export type Granularidad = 'minuto' | 'hora' | 'dia'
+
+// Formato de etiqueta según la granularidad que eligió el backend -no el
+// frontend: es el backend el que decide si el balde es de 5 min, de una
+// hora o de un día calendario (ver get_volumen_por_periodo). Extraído de
+// Panorama.tsx: Dashboard.tsx necesita exactamente el mismo criterio para
+// su selector de rango (24h/semana/mes).
+export function formatearEtiquetaGranularidad(ts: number, granularidad: Granularidad): string {
+  const d = new Date(ts * 1000)
+  if (granularidad === 'dia') {
+    return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+export function formatearFechaCompletaGranularidad(ts: number, granularidad: Granularidad): string {
+  const d = new Date(ts * 1000)
+  const fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  if (granularidad === 'dia') return fecha
+  return `${fecha} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
