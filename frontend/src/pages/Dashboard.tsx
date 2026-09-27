@@ -290,9 +290,40 @@ function formatUptime(segundos: number | null | undefined): string {
   return `${m}m`
 }
 
+// Caché de "arranque instantáneo": el primer montaje del Dashboard (entrar
+// recién logueado, o recargar la página) esperaba a que resolvieran 5+
+// pedidos en paralelo -tráfico, tops, IPs compartidas...- mostrando una
+// pantalla de carga vacía mientras tanto, aunque un segundo antes ya
+// hubiera estado viendo datos frescos. sessionStorage (por pestaña, se
+// pierde al cerrarla -no localStorage: son métricas de tráfico, no algo
+// que valga la pena conservar días) guarda el último payload completo;
+// se muestra de entrada mientras el pedido real corre atrás, con el mismo
+// aviso de "no se pudo actualizar, mostrando lo último conocido" que ya
+// existía para un refresco fallido -acá cubre además "esto puede tener
+// hasta unos segundos, todavía no llegó la respuesta nueva".
+const CLAVE_CACHE_DASHBOARD = 'dashboard.cache.v1'
+
+function leerCacheDashboard(): DashboardData | null {
+  try {
+    const crudo = sessionStorage.getItem(CLAVE_CACHE_DASHBOARD)
+    return crudo ? (JSON.parse(crudo) as DashboardData) : null
+  } catch {
+    return null
+  }
+}
+
+function guardarCacheDashboard(d: DashboardData) {
+  try {
+    sessionStorage.setItem(CLAVE_CACHE_DASHBOARD, JSON.stringify(d))
+  } catch {
+    // Cuota llena o modo privado: no es crítico, solo se pierde el
+    // arranque instantáneo la próxima vez.
+  }
+}
+
 export default function Dashboard() {
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<DashboardData | null>(() => leerCacheDashboard())
+  const [loading, setLoading] = useState(() => leerCacheDashboard() === null)
   const [loadError, setLoadError] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [userSort, setUserSort] = useState<'bytes' | 'requests'>('bytes')
@@ -328,13 +359,15 @@ export default function Dashboard() {
       api.getTopDomains(10, true, '24h'),
       api.getIpsCompartidas(4, '24h'),
     ]).then(([dash, users, domains, blocked, compartidas]) => {
-      setData({
+      const nuevo = {
         ...dash,
         top_users: users,
         top_domains: domains,
         top_blocked: blocked,
         ips_compartidas: compartidas,
-      })
+      }
+      setData(nuevo)
+      guardarCacheDashboard(nuevo)
       setLoadError(false)
     }).catch(e => {
       // Sin esto, un fallo (sesión vencida, red caída, timeout) dejaba

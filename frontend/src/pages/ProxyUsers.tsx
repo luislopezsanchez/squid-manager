@@ -3,9 +3,11 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
-import { IconClose, IconChevronLeft, IconChevronRight } from '../components/Icons'
+import { IconClose } from '../components/Icons'
 import { formatBytes } from '../utils/format'
 import { normalizarUsername } from '../utils/usernames'
+import Pagination from '../components/Pagination'
+import { usePaginacion } from '../hooks/usePaginacion'
 
 interface LocalUser {
   source: 'local'
@@ -562,19 +564,8 @@ export default function ProxyUsers() {
   // fácil esa cantidad) renderizar la tabla entera de golpe era lento y
   // poco práctico para navegar. Pedido en vivo, 2026-09-27.
   const USUARIOS_POR_PAGINA = 50
-  const [pagina, setPagina] = useState(0)
+  const { pagina, setPagina, totalPaginas } = usePaginacion(filteredUsers.length, USUARIOS_POR_PAGINA)
   useEffect(() => { setPagina(0) }, [search, sourceFilter, statusFilter])
-  const totalPaginas = Math.max(1, Math.ceil(filteredUsers.length / USUARIOS_POR_PAGINA))
-  // Mantiene `pagina` siempre DENTRO de rango -no alcanza con acotarlo solo
-  // al leerlo (como hacía antes con una `paginaSegura` derivada aparte):
-  // crear o borrar usuarios (loadUsers) cambia el tamaño de la lista sin
-  // pasar por el efecto de arriba (que solo escucha búsqueda/filtros), y
-  // los botones "Anterior"/"Siguiente" manipulaban el valor crudo -podían
-  // quedar pisando un número de página que ya no correspondía a lo
-  // mostrado. Bug real, encontrado por /code-review, 2026-09-27.
-  useEffect(() => {
-    setPagina(p => Math.min(p, totalPaginas - 1))
-  }, [totalPaginas])
   const usuariosPagina = filteredUsers.slice(
     pagina * USUARIOS_POR_PAGINA, (pagina + 1) * USUARIOS_POR_PAGINA,
   )
@@ -891,25 +882,9 @@ export default function ProxyUsers() {
       )}
 
       {filteredUsers.length > 0 && (
-        <div className="flex items-center justify-between mt-4 text-sm">
-          <span className="text-ink-3">
-            {traducir("Mostrando")} {pagina * USUARIOS_POR_PAGINA + 1}–{Math.min((pagina + 1) * USUARIOS_POR_PAGINA, filteredUsers.length)} {traducir("de")} {filteredUsers.length}
-          </span>
-          {totalPaginas > 1 && (
-            <div className="flex gap-2">
-              <button onClick={() => setPagina(p => Math.max(0, p - 1))} disabled={pagina === 0}
-                className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5">
-                <IconChevronLeft className="w-3.5 h-3.5" />{traducir("Anterior")}
-              </button>
-              <span className="text-ink-3 self-center">
-                {traducir("Página {n} de {m}", { n: String(pagina + 1), m: String(totalPaginas) })}
-              </span>
-              <button onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))} disabled={pagina >= totalPaginas - 1}
-                className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5">
-                {traducir("Siguiente")}<IconChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+        <div className="mt-4">
+          <Pagination pagina={pagina} totalPaginas={totalPaginas} total={filteredUsers.length}
+            porPagina={USUARIOS_POR_PAGINA} onChange={setPagina} />
         </div>
       )}
 

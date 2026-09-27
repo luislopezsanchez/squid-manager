@@ -3,6 +3,9 @@ import { useState, useEffect, useRef } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import RequiereAplicar from '../components/RequiereAplicar'
+import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
+import { usePaginacion } from '../hooks/usePaginacion'
 import { IconRefresh, IconUpload, IconEdit, IconTrash } from '../components/Icons'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import { normalizarNombreAcl } from '../utils/aclNames'
@@ -22,6 +25,147 @@ interface Categoria {
   last_sync_status: string | null
 }
 
+const CATEGORIAS_POR_PAGINA = 50
+
+type FormCategoria = { name: string; displayName: string; domains: string; description: string; enabled: boolean; desconectarSync: boolean }
+const FORM_VACIO: FormCategoria = { name: '', displayName: '', domains: '', description: '', enabled: true, desconectarSync: false }
+
+function CategoriaFormModal({ form, setForm, editingCat, editandoArchivo, onClose, onSubmit, error }: {
+  form: FormCategoria
+  setForm: (f: FormCategoria) => void
+  editingCat: Categoria | null
+  editandoArchivo: boolean
+  onClose: () => void
+  onSubmit: (e: React.FormEvent) => void
+  error: string
+}) {
+  return (
+    <Modal title={editingCat ? traducir('Editar categoría') : traducir('Nueva categoría')} onClose={onClose} maxWidth="max-w-lg">
+      <form onSubmit={onSubmit}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="cat-name" className="field-label block mb-1.5">{traducir("Nombre")}</label>
+            <input id="cat-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: normalizarNombreAcl(e.target.value) })}
+              placeholder={traducir("ej: redes_sociales")} className="input font-mono text-sm" required disabled={!!editingCat} autoFocus={!editingCat} />
+            <p className="text-xs text-ink-3 mt-1">{traducir("Identificador técnico — se ajusta solo a minúsculas y guiones bajos, sin espacios ni acentos. No se puede cambiar después de creada.")}</p>
+          </div>
+          <div>
+            <label htmlFor="cat-display-name" className="field-label block mb-1.5">{traducir("Nombre para mostrar (opcional)")}</label>
+            <input id="cat-display-name" type="text" value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })}
+              placeholder={traducir("ej: Redes sociales")} className="input" />
+            <p className="text-xs text-ink-3 mt-1">{traducir("Este es el que se ve en la tabla. Vacío = se muestra el nombre técnico.")}</p>
+          </div>
+        </div>
+
+        {editandoArchivo ? (
+          <div className="mt-4 rounded-lg border border-line bg-brand-50 p-4 text-sm text-ink-3">
+            {traducir("Esta categoría tiene muchos dominios guardados en un archivo aparte. Para cambiar la lista, usá el ícono de subir archivo (")}
+            <IconUpload className="inline w-3.5 h-3.5 align-text-bottom mx-0.5" />
+            {traducir(") en la tabla")}
+            {editingCat?.sync_url && traducir(', o "Sincronizar ahora" si es automática')}.
+          </div>
+        ) : (
+          <div className="mt-4">
+            <label htmlFor="cat-domains" className="field-label block mb-1.5">{traducir("Dominios (uno por línea)")}</label>
+            <textarea id="cat-domains" rows={6} value={form.domains} onChange={e => setForm({ ...form, domains: e.target.value })}
+              placeholder={".facebook.com\n.instagram.com\n.tiktok.com"} className="input font-mono text-sm" required />
+          </div>
+        )}
+
+        <div className="mt-4">
+          <label htmlFor="cat-description" className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
+          <input id="cat-description" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+            placeholder={traducir("ej: Redes sociales más usadas")} className="input" />
+        </div>
+
+        <label className="mt-4 flex items-center gap-2 cursor-pointer w-fit">
+          <input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })}
+            className="w-5 h-5 rounded text-primary-600" />
+          <span className="text-sm text-ink-2">{traducir("Activa")}</span>
+        </label>
+
+        {editingCat?.sync_url && (
+          <label className="mt-3 flex items-center gap-2 cursor-pointer w-fit">
+            <input type="checkbox" checked={form.desconectarSync} onChange={e => setForm({ ...form, desconectarSync: e.target.checked })}
+              className="w-5 h-5 rounded text-primary-600" />
+            <span className="text-sm text-ink-2">{traducir("Dejar de sincronizar automáticamente")}</span>
+          </label>
+        )}
+
+        {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
+        <div className="mt-5 flex items-center gap-3">
+          <button type="submit" className="btn btn-primary">
+            {editingCat ? traducir('Guardar Cambios') : traducir('Crear categoría')}
+          </button>
+          <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink-2">{traducir("Cancelar")}</button>
+          <RequiereAplicar />
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function BulkCategoriaModal({ categorias, bulkName, setBulkName, bulkModo, setBulkModo,
+  bulkDescription, setBulkDescription, bulkBusy, bulkFileRef, onClose, onSubmit }: {
+  categorias: Categoria[]
+  bulkName: string
+  setBulkName: (v: string) => void
+  bulkModo: 'reemplazar' | 'agregar'
+  setBulkModo: (v: 'reemplazar' | 'agregar') => void
+  bulkDescription: string
+  setBulkDescription: (v: string) => void
+  bulkBusy: boolean
+  bulkFileRef: React.RefObject<HTMLInputElement>
+  onClose: () => void
+  onSubmit: (e: React.FormEvent) => void
+}) {
+  return (
+    <Modal title={traducir('Cargar categoría desde archivo')} onClose={onClose} maxWidth="max-w-lg">
+      <p className="text-xs text-ink-3 mb-4">
+        {traducir('Un dominio por línea (líneas vacías o que empiezan con # se ignoran). Listas grandes se guardan en un archivo aparte que Squid lee directo.')}
+      </p>
+      <form onSubmit={onSubmit}>
+        <div>
+          <label htmlFor="cat-bulk-name" className="field-label block mb-1.5">{traducir("Nombre de la categoría")}</label>
+          <input id="cat-bulk-name" type="text" value={bulkName} onChange={e => setBulkName(normalizarNombreAcl(e.target.value))}
+            placeholder={traducir("ej: redes_sociales")} className="input font-mono text-sm" required
+            list="cat-bulk-name-existentes" autoComplete="off" autoFocus />
+          <datalist id="cat-bulk-name-existentes">
+            {categorias.map(c => <option key={c.id} value={c.name} />)}
+          </datalist>
+          <p className="text-xs text-ink-3 mt-1">
+            {traducir("Se ajusta solo a minúsculas y guiones bajos mientras escribís, sin espacios ni acentos.")}{' '}
+            {traducir("Elegí una de la lista para sumarle dominios a una categoría existente — escribir un nombre nuevo crea una categoría aparte, aunque se parezca a una que ya tenías.")}
+          </p>
+        </div>
+        <div className="mt-4">
+          <label htmlFor="cat-bulk-modo" className="field-label block mb-1.5">{traducir("Si la categoría ya existe")}</label>
+          <select id="cat-bulk-modo" value={bulkModo} onChange={e => setBulkModo(e.target.value as any)} className="input">
+            <option value="reemplazar">{traducir('Reemplazar toda la lista')}</option>
+            <option value="agregar">{traducir('Agregar a lo que ya había')}</option>
+          </select>
+        </div>
+        <div className="mt-4">
+          <label htmlFor="cat-bulk-description" className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
+          <input id="cat-bulk-description" type="text" value={bulkDescription} onChange={e => setBulkDescription(e.target.value)}
+            placeholder={traducir("ej: Redes sociales más usadas")} className="input" />
+        </div>
+        <div className="mt-4">
+          <label htmlFor="cat-bulk-file" className="field-label block mb-1.5">{traducir("Archivo")}</label>
+          <input id="cat-bulk-file" ref={bulkFileRef} type="file" accept=".txt,.csv,text/plain" className="input" required />
+        </div>
+        <div className="mt-5 flex items-center gap-3">
+          <button type="submit" disabled={bulkBusy} className="btn btn-primary">
+            {bulkBusy ? traducir('Cargando…') : traducir('Cargar')}
+          </button>
+          <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink-2">{traducir("Cancelar")}</button>
+          <RequiereAplicar />
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 export default function Categorias() {
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,8 +173,9 @@ export default function Categorias() {
   const [showForm, setShowForm] = useState(false)
   const [showBulk, setShowBulk] = useState(false)
   const [editingCat, setEditingCat] = useState<Categoria | null>(null)
-  const [form, setForm] = useState({ name: '', displayName: '', domains: '', description: '', enabled: true, desconectarSync: false })
+  const [form, setForm] = useState<FormCategoria>(FORM_VACIO)
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
   const { showToast, ToastContainer } = useToast()
 
   const cargar = () => {
@@ -43,8 +188,6 @@ export default function Categorias() {
 
   const domainsANombres = (texto: string) =>
     texto.split(/[\s,]+/).map(d => d.trim()).filter(Boolean)
-
-  const formVacio = { name: '', displayName: '', domains: '', description: '', enabled: true, desconectarSync: false }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -80,7 +223,7 @@ export default function Categorias() {
         showToast(traducir("Categoría creada correctamente"))
       }
       notificarCambioPendiente()
-      setForm(formVacio)
+      setForm(FORM_VACIO)
       setEditingCat(null)
       setShowForm(false)
       cargar()
@@ -190,6 +333,19 @@ export default function Categorias() {
 
   const editandoArchivo = !!editingCat && editingCat.source === 'file'
 
+  const term = search.trim().toLowerCase()
+  const filteredCategorias = term
+    ? categorias.filter(c =>
+        c.name.toLowerCase().includes(term) ||
+        (c.display_name ?? '').toLowerCase().includes(term) ||
+        (c.description ?? '').toLowerCase().includes(term)
+      )
+    : categorias
+
+  const { pagina, setPagina, totalPaginas } = usePaginacion(filteredCategorias.length, CATEGORIAS_POR_PAGINA)
+  useEffect(() => { setPagina(0) }, [search])
+  const categoriasPagina = filteredCategorias.slice(pagina * CATEGORIAS_POR_PAGINA, (pagina + 1) * CATEGORIAS_POR_PAGINA)
+
   return (
     <div className="p-6 md:p-7">
       <ToastContainer />
@@ -208,17 +364,17 @@ export default function Categorias() {
             {hagenziBusy ? traducir('Cargando…') : traducir('Cargar categorías predefinidas (HaGeZi)')}
           </button>
           <button
-            onClick={() => { setShowBulk(!showBulk); setShowForm(false); if (!showBulk) { setBulkName(''); setBulkModo('reemplazar'); setBulkDescription('') } }}
+            onClick={() => { setBulkName(''); setBulkModo('reemplazar'); setBulkDescription(''); setShowBulk(true) }}
             className="btn btn-outline"
             title={traducir("Para categorías grandes: un dominio por línea")}
           >
-            {showBulk ? traducir('Cancelar') : traducir('Cargar desde archivo')}
+            {traducir('Cargar desde archivo')}
           </button>
           <button
-            onClick={() => { setShowForm(!showForm); setShowBulk(false); setEditingCat(null); setForm(formVacio) }}
+            onClick={() => { setForm(FORM_VACIO); setEditingCat(null); setShowForm(true) }}
             className="btn btn-primary"
           >
-            {showForm ? traducir('Cancelar') : traducir('+ Nueva categoría')}
+            {traducir('+ Nueva categoría')}
           </button>
         </div>
       </div>
@@ -230,113 +386,35 @@ export default function Categorias() {
       </p>
 
       {showBulk && (
-        <form onSubmit={handleBulkUpload} className="card p-6 mb-6">
-          <h3 className="font-medium text-ink mb-1">{traducir('Cargar categoría desde archivo')}</h3>
-          <p className="text-xs text-ink-3 mb-4">
-            {traducir('Un dominio por línea (líneas vacías o que empiezan con # se ignoran). Listas grandes se guardan en un archivo aparte que Squid lee directo.')}
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="cat-bulk-name" className="field-label block mb-1.5">{traducir("Nombre de la categoría")}</label>
-              <input id="cat-bulk-name" type="text" value={bulkName} onChange={e => setBulkName(normalizarNombreAcl(e.target.value))}
-                placeholder={traducir("ej: redes_sociales")} className="input font-mono text-sm" required
-                list="cat-bulk-name-existentes" autoComplete="off" />
-              <datalist id="cat-bulk-name-existentes">
-                {categorias.map(c => <option key={c.id} value={c.name} />)}
-              </datalist>
-              <p className="text-xs text-ink-3 mt-1">
-                {traducir("Se ajusta solo a minúsculas y guiones bajos mientras escribís, sin espacios ni acentos.")}{' '}
-                {traducir("Elegí una de la lista para sumarle dominios a una categoría existente — escribir un nombre nuevo crea una categoría aparte, aunque se parezca a una que ya tenías.")}
-              </p>
-            </div>
-            <div>
-              <label htmlFor="cat-bulk-modo" className="field-label block mb-1.5">{traducir("Si la categoría ya existe")}</label>
-              <select id="cat-bulk-modo" value={bulkModo} onChange={e => setBulkModo(e.target.value as any)} className="input">
-                <option value="reemplazar">{traducir('Reemplazar toda la lista')}</option>
-                <option value="agregar">{traducir('Agregar a lo que ya había')}</option>
-              </select>
-            </div>
-          </div>
-          <div className="mt-4">
-            <label htmlFor="cat-bulk-description" className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
-            <input id="cat-bulk-description" type="text" value={bulkDescription} onChange={e => setBulkDescription(e.target.value)}
-              placeholder={traducir("ej: Redes sociales más usadas")} className="input" />
-          </div>
-          <div className="mt-4">
-            <label htmlFor="cat-bulk-file" className="field-label block mb-1.5">{traducir("Archivo")}</label>
-            <input id="cat-bulk-file" ref={bulkFileRef} type="file" accept=".txt,.csv,text/plain" className="input" required />
-          </div>
-          <div className="mt-4 flex items-center gap-3">
-            <button type="submit" disabled={bulkBusy} className="btn btn-primary">
-              {bulkBusy ? traducir('Cargando…') : traducir('Cargar')}
-            </button>
-            <RequiereAplicar />
-          </div>
-        </form>
+        <BulkCategoriaModal
+          categorias={categorias}
+          bulkName={bulkName} setBulkName={setBulkName}
+          bulkModo={bulkModo} setBulkModo={setBulkModo}
+          bulkDescription={bulkDescription} setBulkDescription={setBulkDescription}
+          bulkBusy={bulkBusy} bulkFileRef={bulkFileRef}
+          onClose={() => setShowBulk(false)}
+          onSubmit={handleBulkUpload}
+        />
       )}
 
       {showForm && (
-        <form onSubmit={handleSave} className="card p-6 mb-6">
-          <h3 className="font-medium text-ink mb-4">{editingCat ? traducir('Editar categoría') : traducir('Nueva categoría')}</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="cat-name" className="field-label block mb-1.5">{traducir("Nombre")}</label>
-              <input id="cat-name" type="text" value={form.name} onChange={e => setForm({ ...form, name: normalizarNombreAcl(e.target.value) })}
-                placeholder={traducir("ej: redes_sociales")} className="input font-mono text-sm" required disabled={!!editingCat} />
-              <p className="text-xs text-ink-3 mt-1">{traducir("Identificador técnico — se ajusta solo a minúsculas y guiones bajos, sin espacios ni acentos. No se puede cambiar después de creada.")}</p>
-            </div>
-            <div>
-              <label htmlFor="cat-display-name" className="field-label block mb-1.5">{traducir("Nombre para mostrar (opcional)")}</label>
-              <input id="cat-display-name" type="text" value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })}
-                placeholder={traducir("ej: Redes sociales")} className="input" />
-              <p className="text-xs text-ink-3 mt-1">{traducir("Este es el que se ve en la tabla. Vacío = se muestra el nombre técnico.")}</p>
-            </div>
-          </div>
-
-          {editandoArchivo ? (
-            <div className="mt-4 rounded-lg border border-line bg-brand-50 p-4 text-sm text-ink-3">
-              {traducir("Esta categoría tiene muchos dominios guardados en un archivo aparte. Para cambiar la lista, usá el ícono de subir archivo (")}
-              <IconUpload className="inline w-3.5 h-3.5 align-text-bottom mx-0.5" />
-              {traducir(") en la tabla")}
-              {editingCat?.sync_url && traducir(', o "Sincronizar ahora" si es automática')}.
-            </div>
-          ) : (
-            <div className="mt-4">
-              <label htmlFor="cat-domains" className="field-label block mb-1.5">{traducir("Dominios (uno por línea)")}</label>
-              <textarea id="cat-domains" rows={6} value={form.domains} onChange={e => setForm({ ...form, domains: e.target.value })}
-                placeholder={".facebook.com\n.instagram.com\n.tiktok.com"} className="input font-mono text-sm" required />
-            </div>
-          )}
-
-          <div className="mt-4">
-            <label htmlFor="cat-description" className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
-            <input id="cat-description" type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-              placeholder={traducir("ej: Redes sociales más usadas")} className="input" />
-          </div>
-
-          <label className="mt-4 flex items-center gap-2 cursor-pointer w-fit">
-            <input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })}
-              className="w-5 h-5 rounded text-primary-600" />
-            <span className="text-sm text-ink-2">{traducir("Activa")}</span>
-          </label>
-
-          {editingCat?.sync_url && (
-            <label className="mt-3 flex items-center gap-2 cursor-pointer w-fit">
-              <input type="checkbox" checked={form.desconectarSync} onChange={e => setForm({ ...form, desconectarSync: e.target.checked })}
-                className="w-5 h-5 rounded text-primary-600" />
-              <span className="text-sm text-ink-2">{traducir("Dejar de sincronizar automáticamente")}</span>
-            </label>
-          )}
-
-          {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
-          <div className="mt-4 flex items-center gap-3">
-            <button type="submit" className="btn btn-primary">
-              {editingCat ? traducir('Guardar Cambios') : traducir('Crear categoría')}
-            </button>
-            <RequiereAplicar />
-          </div>
-        </form>
+        <CategoriaFormModal
+          form={form} setForm={setForm} editingCat={editingCat} editandoArchivo={editandoArchivo}
+          onClose={() => setShowForm(false)}
+          onSubmit={handleSave}
+          error={error}
+        />
       )}
+
+      <div className="mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder={traducir("Buscar por nombre o descripción…")}
+          className="input w-full sm:max-w-sm"
+        />
+      </div>
 
       {loading ? (
         <LoadingState />
@@ -356,7 +434,7 @@ export default function Categorias() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line-soft">
-              {categorias.map(cat => (
+              {categoriasPagina.map(cat => (
                 <tr key={cat.id} className="hover:bg-brand-50">
                   <td className="px-6 py-4">
                     <div className="font-medium text-ink">{cat.display_name || cat.name}</div>
@@ -413,12 +491,21 @@ export default function Categorias() {
                   </td>
                 </tr>
               ))}
-              {categorias.length === 0 && (
-                <tr><td colSpan={6} className="px-6 py-12 text-center text-ink-3">{traducir("Todavía no hay categorías. Creá una para agrupar dominios bajo un nombre reutilizable.")}</td></tr>
+              {categoriasPagina.length === 0 && (
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-ink-3">
+                  {categorias.length === 0
+                    ? traducir("Todavía no hay categorías. Creá una para agrupar dominios bajo un nombre reutilizable.")
+                    : traducir("Ninguna categoría coincide con la búsqueda.")}
+                </td></tr>
               )}
             </tbody>
           </table>
         </div>
+      )}
+
+      {filteredCategorias.length > 0 && (
+        <Pagination pagina={pagina} totalPaginas={totalPaginas} total={filteredCategorias.length}
+          porPagina={CATEGORIAS_POR_PAGINA} onChange={setPagina} />
       )}
     </div>
   )

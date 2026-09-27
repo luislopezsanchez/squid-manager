@@ -172,6 +172,7 @@ export default function DelayPools() {
   const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showRawEditor, setShowRawEditor] = useState(false)
+  const [search, setSearch] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
 
   const [name, setName] = useState('')
@@ -390,6 +391,14 @@ export default function DelayPools() {
   }, {})
   const previewClass = targetKey.startsWith('group:') && groupIndividual ? 2 : 1
 
+  const term = search.trim().toLowerCase()
+  const filteredPools = term
+    ? pools.filter(p =>
+        (p.description ?? '').toLowerCase().includes(term) ||
+        describeTarget(p).toLowerCase().includes(term)
+      )
+    : pools
+
   return (
     <div className="p-6 md:p-7">
       <ToastContainer />
@@ -548,6 +557,16 @@ export default function DelayPools() {
         </form>
       )}
 
+      <div className="mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder={traducir("Buscar por nombre o a quién aplica…")}
+          className="input w-full sm:max-w-sm"
+        />
+      </div>
+
       {loading ? (
         <LoadingState />
       ) : loadError && pools.length === 0 ? (
@@ -565,7 +584,7 @@ export default function DelayPools() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line-soft">
-              {pools.map(pool => (
+              {filteredPools.map(pool => (
                 <tr key={pool.id} className={!pool.enabled ? 'opacity-50' : ''}>
                   <td className="px-5 py-3 font-medium text-ink">{pool.description || traducir("(sin nombre)")}</td>
                   <td className="px-5 py-3">{describeTarget(pool)}</td>
@@ -581,8 +600,12 @@ export default function DelayPools() {
                   </td>
                 </tr>
               ))}
-              {pools.length === 0 && (
-                <tr><td colSpan={5} className="px-5 py-12 text-center text-ink-3">{traducir("No hay reglas de ancho de banda configuradas.")}</td></tr>
+              {filteredPools.length === 0 && (
+                <tr><td colSpan={5} className="px-5 py-12 text-center text-ink-3">
+                  {pools.length === 0
+                    ? traducir("No hay reglas de ancho de banda configuradas.")
+                    : traducir("Ninguna regla coincide con la búsqueda.")}
+                </td></tr>
               )}
             </tbody>
           </table>
