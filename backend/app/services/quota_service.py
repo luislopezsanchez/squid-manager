@@ -523,3 +523,34 @@ def start_quota_tracker() -> None:
     """Arranca el hilo de fondo una sola vez, al iniciar el backend."""
     thread = threading.Thread(target=_loop, name="quota-tracker", daemon=True)
     thread.start()
+
+
+def cuotas_excedidas(db) -> list[dict]:
+    """Cuotas (individuales y de grupo) que ya llegaron o pasaron su
+    límite -para la pestaña "Cuota excedida" de Actividad de red y su
+    reporte en PDF. Reusa el mismo criterio que `_procesar_cuota`/
+    `_procesar_cuota_grupo` para "se agotó" (bytes_used >= bytes), no un
+    umbral aparte -si acá se ve una fila, es porque quota_service ya
+    debería haberle aplicado (o estar por aplicarle) la acción configurada.
+    Ordenadas por consumo real (para poder listar cuotas con distinto
+    límite bajo un mismo criterio de urgencia), no alfabéticamente.
+    """
+    filas: list[dict] = []
+    for q in db.query(NavigationQuota).all():
+        if q.quota_bytes > 0 and q.quota_bytes_used >= q.quota_bytes:
+            filas.append({
+                "tipo": "usuario", "nombre": q.username,
+                "quota_bytes": q.quota_bytes, "quota_bytes_used": q.quota_bytes_used,
+                "quota_period": q.quota_period, "quota_action": q.quota_action,
+                "quota_action_applied": q.quota_action_applied,
+            })
+    for q in db.query(GroupQuota).all():
+        if q.quota_bytes > 0 and q.quota_bytes_used >= q.quota_bytes:
+            filas.append({
+                "tipo": "grupo", "nombre": q.group_name,
+                "quota_bytes": q.quota_bytes, "quota_bytes_used": q.quota_bytes_used,
+                "quota_period": q.quota_period, "quota_action": q.quota_action,
+                "quota_action_applied": q.quota_action_applied,
+            })
+    filas.sort(key=lambda f: f["quota_bytes_used"] / f["quota_bytes"], reverse=True)
+    return filas

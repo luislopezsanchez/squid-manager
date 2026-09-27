@@ -15,6 +15,11 @@ type FilaDominio = { domain: string; requests: number; bytes: number }
 type FilaBloqueado = { user: string; blocked_requests: number; account_status: 'enabled' | 'disabled' | 'unknown' }
 type RespuestaBloqueados = { users: FilaBloqueado[]; anonymous_blocked: number }
 type FilaIpCompartida = { ip: string; usuarios: string[]; requests: number }
+type FilaCuotaExcedida = {
+  tipo: 'usuario' | 'grupo'; nombre: string
+  quota_bytes: number; quota_bytes_used: number
+  quota_period: string; quota_action: 'cut' | 'throttle'; quota_action_applied: boolean
+}
 type Totales = {
   usuarios: { count: number; bytes: number; requests: number }
   dominios: { count: number; requests: number; bytes: number }
@@ -22,7 +27,7 @@ type Totales = {
   usuarios_bloqueados_requests: number
 }
 
-type Pestana = 'usuarios' | 'dominios' | 'bloqueados-dominio' | 'bloqueados-usuario' | 'ips-compartidas'
+type Pestana = 'usuarios' | 'dominios' | 'bloqueados-dominio' | 'bloqueados-usuario' | 'ips-compartidas' | 'cuota-excedida'
 
 const COLORES: Record<Pestana, string> = {
   usuarios: '#0B497C',
@@ -30,6 +35,7 @@ const COLORES: Record<Pestana, string> = {
   'bloqueados-dominio': '#C0392B',
   'bloqueados-usuario': '#C0392B',
   'ips-compartidas': '#E0A036',
+  'cuota-excedida': '#C0392B',
 }
 
 // Por que importa cada vista -no es solo "una tabla mas": cada una responde
@@ -50,6 +56,9 @@ const EXPLICACIONES: Record<Pestana, string> = {
   'ips-compartidas': traducir(
     "Direcciones IP desde las que navegó más de un usuario autenticado distinto. No es un veredicto -puede ser un equipo compartido de verdad (una sala, un kiosco)-, pero es una señal que vale la pena revisar: credenciales que circulan entre personas se ven así."
   ),
+  'cuota-excedida': traducir(
+    "Quién llegó o pasó el límite de su cuota de navegación ahora mismo -por usuario o por grupo. A diferencia del resto de esta página, esto no depende de la ventana de tiempo elegida arriba: es el estado actual, tal como lo gestiona Gestión → Cuotas."
+  ),
 }
 
 export default function ActividadRed() {
@@ -63,6 +72,7 @@ export default function ActividadRed() {
   const [bloqueadosUsuario, setBloqueadosUsuario] = useState<FilaBloqueado[] | null>(null)
   const [anonimosBloqueados, setAnonimosBloqueados] = useState(0)
   const [ipsCompartidas, setIpsCompartidas] = useState<FilaIpCompartida[] | null>(null)
+  const [cuotasExcedidas, setCuotasExcedidas] = useState<FilaCuotaExcedida[] | null>(null)
   const [totales, setTotales] = useState<Totales | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -96,8 +106,11 @@ export default function ActividadRed() {
       api.getTopBlockedUsers(10, v, rango),
       api.getTotalesActividad(v, rango),
       api.getIpsCompartidas(10, v, rango),
+      // Sin filtrar por ventana/rango a propósito: es estado actual, no
+      // histórico (ver la explicación de la pestaña más abajo).
+      api.getCuotasExcedidas(),
     ])
-      .then(([u, d, bd, bu, t, ips]: [FilaUsuario[], FilaDominio[], FilaDominio[], RespuestaBloqueados, Totales, FilaIpCompartida[]]) => {
+      .then(([u, d, bd, bu, t, ips, excedidas]: [FilaUsuario[], FilaDominio[], FilaDominio[], RespuestaBloqueados, Totales, FilaIpCompartida[], FilaCuotaExcedida[]]) => {
         setUsuarios(u)
         setDominios(d)
         setBloqueadosDominio(bd)
@@ -105,6 +118,7 @@ export default function ActividadRed() {
         setAnonimosBloqueados(bu.anonymous_blocked)
         setTotales(t)
         setIpsCompartidas(ips)
+        setCuotasExcedidas(excedidas)
         setError(null)
       })
       .catch((e: any) => setError(e.message))
@@ -169,6 +183,7 @@ export default function ActividadRed() {
     { id: 'bloqueados-dominio', label: traducir("Sitios bloqueados") },
     { id: 'bloqueados-usuario', label: traducir("Usuarios con más bloqueos") },
     { id: 'ips-compartidas', label: traducir("IPs compartidas") },
+    { id: 'cuota-excedida', label: traducir("Cuota excedida") },
   ]
 
   if (loading) return <LoadingState />
@@ -281,7 +296,11 @@ export default function ActividadRed() {
         </div>
 
         <div className="flex items-center gap-3">
-          <SelectorVentana value={ventana} onChange={setVentana} rango={rangoInput} onRangoChange={setRangoInput} />
+          {/* No aplica en "Cuota excedida": esa pestaña es estado actual,
+              no algo que se pueda acotar a una ventana de tiempo. */}
+          {pestana !== 'cuota-excedida' && (
+            <SelectorVentana value={ventana} onChange={setVentana} rango={rangoInput} onRangoChange={setRangoInput} />
+          )}
 
           {(pestana === 'usuarios' || pestana === 'dominios') && (
             <div className="flex gap-1 bg-line-soft p-1 rounded-lg">
@@ -308,7 +327,44 @@ export default function ActividadRed() {
 
       <p className="text-sm text-ink-2 mb-4 max-w-3xl">{EXPLICACIONES[pestana]}</p>
 
-      {pestana === 'ips-compartidas' ? (
+      {pestana === 'cuota-excedida' ? (
+        // Tampoco entra en el modelo de ranking-contra-un-máximo: acá lo
+        // que importa es el estado (cortada/limitada/activa) de cada
+        // cuota, no compararlas entre sí por un valor.
+        <div className="card p-5">
+          {!cuotasExcedidas || cuotasExcedidas.length === 0 ? (
+            <p className="text-sm text-ink-3 text-center py-8">{traducir("Ninguna cuota está excedida en este momento.")}</p>
+          ) : (
+            <div className="divide-y divide-line-soft">
+              {cuotasExcedidas.map((q, i) => {
+                const pct = q.quota_bytes > 0 ? Math.min(999, (q.quota_bytes_used / q.quota_bytes) * 100) : 0
+                const estado = !q.quota_action_applied
+                  ? { texto: traducir('Activa'), clase: 'pill-ok' }
+                  : q.quota_action === 'throttle'
+                  ? { texto: traducir('Limitada'), clase: 'pill-warn' }
+                  : { texto: traducir('Cortada'), clase: 'pill-danger' }
+                return (
+                  <div key={`${q.tipo}-${q.nombre}`} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-6 h-6 rounded-full text-xs flex items-center justify-center text-white flex-none" style={{ backgroundColor: color }}>{i + 1}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm text-ink truncate">
+                          {q.nombre}
+                          <span className="text-ink-3 font-normal"> · {q.tipo === 'grupo' ? traducir('grupo') : traducir('usuario')}</span>
+                        </p>
+                        <p className="text-xs text-ink-3 tabular">
+                          {formatBytes(q.quota_bytes_used)} / {formatBytes(q.quota_bytes)} ({Math.round(pct)}%)
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-bold flex-none ${estado.clase}`}>{estado.texto}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      ) : pestana === 'ips-compartidas' ? (
         // No entra en el modelo de "ranking con un solo número" que usan las
         // demás pestañas (FilaBarra + anillo de concentración): acá cada fila
         // es una IP con VARIOS usuarios, no un valor que se pueda comparar

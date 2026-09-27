@@ -15,6 +15,7 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 from app.services import metrics_service
+from app.services.quota_service import cuotas_excedidas
 from app.utils import utcnow
 
 _ETIQUETA_VENTANA = {
@@ -115,6 +116,31 @@ def generar_pdf_actividad(ventana: str | None, db=None) -> bytes:
         estado = {"disabled": "Deshabilitada", "enabled": "Activa", "unknown": "—"}[u["account_status"]]
         filas.append([str(i), u["user"], str(u["blocked_requests"]), estado])
     elementos.append(Table(filas, colWidths=[1.2 * cm, 6 * cm, 4 * cm, 4 * cm], style=estilo_tabla))
+
+    # --- Cuota excedida ---
+    # Estado ACTUAL (no depende de la ventana elegida arriba, a diferencia
+    # de las secciones anteriores): quién tiene la cuota agotada en este
+    # momento, sea individual o de grupo. Ver quota_service.cuotas_excedidas.
+    excedidas = cuotas_excedidas(db) if db is not None else []
+    elementos.append(Paragraph(
+        f"Cuota excedida ({len(excedidas)} en este momento)",
+        estilo_seccion,
+    ))
+    if excedidas:
+        filas = [["#", "Nombre", "Tipo", "Consumido", "Límite", "Estado"]]
+        for i, q in enumerate(excedidas, 1):
+            tipo = "Grupo" if q["tipo"] == "grupo" else "Usuario"
+            if not q["quota_action_applied"]:
+                estado = "Activa"
+            else:
+                estado = "Limitada" if q["quota_action"] == "throttle" else "Cortada"
+            filas.append([
+                str(i), q["nombre"], tipo,
+                _formatear_bytes(q["quota_bytes_used"]), _formatear_bytes(q["quota_bytes"]), estado,
+            ])
+        elementos.append(Table(filas, colWidths=[1.2 * cm, 4.8 * cm, 2.4 * cm, 3 * cm, 3 * cm, 2.6 * cm], style=estilo_tabla))
+    else:
+        elementos.append(Paragraph("Ninguna cuota está excedida en este momento.", estilos["Normal"]))
 
     doc.build(elementos)
     return buffer.getvalue()

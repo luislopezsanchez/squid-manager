@@ -31,6 +31,7 @@ from app.services.metrics_service import (
 )
 from app.services.pdf_report_service import generar_pdf_actividad
 from app.services.anomaly_service import get_anomalias_recientes
+from app.services.quota_service import cuotas_excedidas
 from app.utils import utcnow
 
 # Traduce la ventana elegida en el filtro global ("1h"/"24h"/"7d") a segundos.
@@ -136,6 +137,16 @@ def actividad_export_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=actividad-red-{stamp}.pdf"},
     )
+
+
+@router.get("/cuotas-excedidas")
+def cuotas_excedidas_route(
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    """Cuotas de navegación (por usuario o por grupo) que ya llegaron o
+    pasaron su límite -pestaña "Cuota excedida" de Actividad de red."""
+    return cuotas_excedidas(db)
 
 
 @router.get("/detalle")

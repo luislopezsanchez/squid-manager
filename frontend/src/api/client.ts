@@ -363,6 +363,10 @@ export const api = {
     request<any>(`/panel/top-blocked-users?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}${_rangoQuery(rango)}`),
   getIpsCompartidas: (limit = 20, ventana?: string, rango?: RangoFechas) =>
     request<any>(`/panel/ips-compartidas?limit=${limit}${ventana ? `&ventana=${ventana}` : ''}${_rangoQuery(rango)}`),
+  // Estado ACTUAL, no depende de ninguna ventana de tiempo -a diferencia
+  // del resto de Actividad de red, esto no viene del access.log sino de
+  // NavigationQuota/GroupQuota (ver quota_service.cuotas_excedidas).
+  getCuotasExcedidas: () => request<any[]>('/panel/cuotas-excedidas'),
   getTotalesActividad: (ventana?: string, rango?: RangoFechas) => {
     const params = [
       ventana ? `ventana=${ventana}` : '',
