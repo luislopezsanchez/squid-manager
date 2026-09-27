@@ -273,6 +273,9 @@ export const api = {
   toggleLdapUser: (id: number) => request<any>(`/ldap/users/${id}/toggle`, { method: 'PATCH' }),
   listLdapGroups: () => request<{ groups: string[] }>('/ldap/groups'),
 
+  // Buscador global de referencias (dónde aparece un usuario, dominio, ACL...)
+  searchReferences: (q: string) => request<any>(`/search/references?q=${encodeURIComponent(q)}`),
+
   // Grupos de usuarios
   listGroups: () => request<any[]>('/groups/'),
   createGroup: (data: any) => request<any>('/groups/', { method: 'POST', body: JSON.stringify(data) }),

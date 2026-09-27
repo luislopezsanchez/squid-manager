@@ -7,7 +7,7 @@ import {
   IconSettings, IconLock, IconAudit, IconBackup, IconLogs, IconBell, IconShield, IconSend,
   IconBolt, IconKey, IconLogout, IconSpinner, IconEye, IconGlobe, IconAssistant, IconArchive,
   IconChevronDown, IconActivity, IconTool, IconInfo, IconFile, IconMail, IconRefresh,
-  IconClose,
+  IconClose, IconSearch,
 } from './Icons'
 
 type Item = { to: string; label: string; Icon: (p: { className?: string }) => JSX.Element }
@@ -243,6 +243,7 @@ export default function Layout() {
         { to: '/categorias', label: traducir("Categorías de dominios"), Icon: IconArchive },
         { to: '/rules', label: traducir("Reglas de acceso"), Icon: IconRules },
         { to: '/delay-pools', label: traducir("Ancho de banda"), Icon: IconGauge },
+        { to: '/buscar', label: traducir("Buscar referencias"), Icon: IconSearch },
       ],
     },
     {

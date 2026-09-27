@@ -37,6 +37,7 @@ const Smtp = lazy(() => import('./pages/Smtp'))
 const SyslogConfig = lazy(() => import('./pages/SyslogConfig'))
 const ParentProxy = lazy(() => import('./pages/ParentProxy'))
 const Groups = lazy(() => import('./pages/Groups'))
+const BuscarReferencias = lazy(() => import('./pages/BuscarReferencias'))
 const Asistente = lazy(() => import('./pages/Asistente'))
 const Documentacion = lazy(() => import('./pages/Documentacion'))
 const Contacto = lazy(() => import('./pages/Contacto'))
@@ -96,6 +97,7 @@ function App() {
             <Route path="syslog" element={<SyslogConfig />} />
             <Route path="parent-proxy" element={<ParentProxy />} />
             <Route path="groups" element={<Groups />} />
+            <Route path="buscar" element={<BuscarReferencias />} />
             <Route path="admins" element={isSuperadmin() ? <Admins /> : <Navigate to="/" />} />
             <Route path="actualizaciones" element={<Actualizaciones />} />
             <Route path="reportes/cache" element={<CacheStats />} />
