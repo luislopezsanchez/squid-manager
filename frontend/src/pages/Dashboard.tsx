@@ -502,17 +502,12 @@ export default function Dashboard() {
     ? conectadosDetalle.filter(d => d.user.toLowerCase().includes(filtroConectados))
     : conectadosDetalle
 
-  // "Lo que no entra, con un aviso de que hay más" en vez de una barra de
-  // desplazamiento -que acá afeaba la tarjeta más que ayudaba. Ya no
-  // depende del alto de ninguna otra tarjeta (ver comentario viejo en el
-  // historial): esta sección tiene su propio ancho completo, así que un
-  // número fijo alcanza.
-  const FILAS_VISIBLES_CONECTADOS = 5
-  const hayMasSinBuscar = !filtroConectados && conectadosDetalle.length > FILAS_VISIBLES_CONECTADOS
-  const conectadosAMostrar = filtroConectados
-    ? conectadosFiltrados
-    : conectadosDetalle.slice(0, hayMasSinBuscar ? FILAS_VISIBLES_CONECTADOS - 1 : FILAS_VISIBLES_CONECTADOS)
-  const ocultosSinBuscar = hayMasSinBuscar ? conectadosDetalle.length - (FILAS_VISIBLES_CONECTADOS - 1) : 0
+  // Todos los que matchean el filtro, en una lista con scroll interno (no
+  // un tope fijo de filas + "hay más"): la tarjeta ahora estira su alto
+  // para igualar al de "Tráfico" (stretch por defecto en la fila, ver más
+  // abajo), así que el espacio real disponible varía -un número fijo de
+  // filas visibles dejaba espacio vacío o cortaba de más según el caso.
+  const conectadosAMostrar = conectadosFiltrados
 
   const pctConectados = data.total_proxy_users > 0
     ? (t.active_users.length / data.total_proxy_users) * 100
@@ -920,13 +915,15 @@ export default function Dashboard() {
       </div>
 
       {/* Tráfico de red en tiempo real + Usuarios conectados ahora, lado a
-          lado (pedido en vivo, 2026-09-27: la versión de ancho completo
-          apilada se veía peor que compartiendo fila, como antes). "Sistema"
-          (CPU/RAM/Disco/SWAP) vive en el header, no acá.
-          items-start (no el stretch por defecto): cada tarjeta tiene su
-          propio contenido, de alto naturalmente distinto -forzarlas a la
-          misma altura exigía medir una desde JS y encajar la otra a la
-          fuerza, más frágil que dejar que cada una respire lo que necesite.
+          lado y del mismo alto -pedido en vivo, 2026-09-27: "Tráfico" se
+          achica (flex-[1.2] en vez de flex-[2]) para dejarle a "Usuarios
+          conectados ahora" el ancho que necesita para verse como la
+          referencia (avatares, tabla completa), y el stretch por defecto
+          de flexbox (sin items-start) iguala el alto de las dos sin medir
+          nada por JS: la lista de conectados absorbe la diferencia con
+          scroll interno (flex-1 min-h-0 más abajo), los paneles de abajo
+          quedan fijos. "Sistema" (CPU/RAM/Disco/SWAP) vive en el header,
+          no acá.
           flex-wrap + min-width en cada tarjeta (no un breakpoint lg:) para
           que "al lado de la otra" no dependa de que el ancho de CONTENIDO
           (ventana menos la barra lateral) cruce justo los 1024px de lg: -en
@@ -934,8 +931,8 @@ export default function Dashboard() {
           puede quedar por debajo de eso aunque la ventana se vea "ancha".
           Con flex-wrap, se apilan solas únicamente si de verdad no entran
           las dos anchos mínimos lado a lado. */}
-      <div className="flex flex-wrap items-start gap-4 mb-6">
-      <div className="card p-6 flex flex-col flex-[2] min-w-[420px]">
+      <div className="flex flex-wrap gap-4 mb-6">
+      <div className="card p-6 flex flex-col flex-[1.2] min-w-[420px]">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div className="flex items-center gap-1.5">
               <h3 className="font-medium text-ink">{traducir("Tráfico de red en tiempo real")}</h3>
@@ -1102,7 +1099,7 @@ export default function Dashboard() {
           esta tarjeta usaba tamaños más chicos (text-xs) para que entrara
           en una columna angosta; con flex-wrap + min-width ya tiene ancho
           de sobra para verse uniforme, pedido en vivo, 2026-09-27. */}
-      <div className="card p-6 flex flex-col gap-4 flex-1 min-w-[360px] max-w-[460px]">
+      <div className="card p-6 flex flex-col gap-4 flex-1 min-w-[420px] min-h-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <span className="w-9 h-9 rounded-lg bg-ok-soft text-ok flex items-center justify-center flex-none">
@@ -1130,7 +1127,7 @@ export default function Dashboard() {
           />
         </div>
 
-        <div className="flex flex-col divide-y divide-line-soft">
+        <div className="flex flex-col divide-y divide-line-soft flex-1 min-h-0 overflow-y-auto">
           {conectadosAMostrar.length === 0 ? (
             <p className="text-sm text-ink-3 py-2">
               {filtroConectados
@@ -1175,11 +1172,6 @@ export default function Dashboard() {
             )
           })}
         </div>
-        {ocultosSinBuscar > 0 && (
-          <p className="text-[11px] text-ink-3 -mt-2">
-            {traducir("+ {n} más — buscalos arriba", { n: ocultosSinBuscar })}
-          </p>
-        )}
 
         {/* Total en línea */}
         <div className="rounded-xl border border-line-soft p-4 flex items-center gap-3">
