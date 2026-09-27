@@ -926,9 +926,16 @@ export default function Dashboard() {
           items-start (no el stretch por defecto): cada tarjeta tiene su
           propio contenido, de alto naturalmente distinto -forzarlas a la
           misma altura exigía medir una desde JS y encajar la otra a la
-          fuerza, más frágil que dejar que cada una respire lo que necesite. */}
-      <div className="flex flex-col lg:flex-row lg:items-start gap-4 mb-6">
-      <div className="card p-6 flex flex-col lg:flex-[1.5] min-w-0">
+          fuerza, más frágil que dejar que cada una respire lo que necesite.
+          flex-wrap + min-width en cada tarjeta (no un breakpoint lg:) para
+          que "al lado de la otra" no dependa de que el ancho de CONTENIDO
+          (ventana menos la barra lateral) cruce justo los 1024px de lg: -en
+          una laptop común, con la barra lateral ya puesta, el contenido
+          puede quedar por debajo de eso aunque la ventana se vea "ancha".
+          Con flex-wrap, se apilan solas únicamente si de verdad no entran
+          las dos anchos mínimos lado a lado. */}
+      <div className="flex flex-wrap items-start gap-4 mb-6">
+      <div className="card p-6 flex flex-col flex-[2] min-w-[420px]">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div className="flex items-center gap-1.5">
               <h3 className="font-medium text-ink">{traducir("Tráfico de red en tiempo real")}</h3>
@@ -1088,23 +1095,22 @@ export default function Dashboard() {
           )}
         </div>
 
-      {/* Usuarios conectados ahora: columna angosta al lado de "Tráfico",
-          todo apilado en vertical (no hay ancho de sobra para una grilla
-          interna acá) -búsqueda + lista con corona/barra de progreso por
-          tiempo conectado, y debajo el anillo de "Total en línea" y el
-          resumen de "Tiempo de conexión". Diseño pedido en vivo con una
-          captura de referencia, 2026-09-27; reajustado el mismo día para
-          volver a compartir fila con Tráfico en vez de ocupar su propia
-          sección de ancho completo. */}
-      <div className="card p-5 flex flex-col gap-4 lg:flex-1 lg:min-w-[300px] lg:max-w-[380px] min-w-0">
+      {/* Usuarios conectados ahora: al lado de "Tráfico", con el mismo
+          criterio tipográfico que el resto de las tarjetas del dashboard
+          (h3 sin tamaño propio, filas en text-sm, leyendas secundarias en
+          text-[11px] -ver "Top usuarios" más abajo, mismo patrón). Antes
+          esta tarjeta usaba tamaños más chicos (text-xs) para que entrara
+          en una columna angosta; con flex-wrap + min-width ya tiene ancho
+          de sobra para verse uniforme, pedido en vivo, 2026-09-27. */}
+      <div className="card p-6 flex flex-col gap-4 flex-1 min-w-[360px] max-w-[460px]">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <span className="w-9 h-9 rounded-lg bg-ok-soft text-ok flex items-center justify-center flex-none">
               <IconUsers className="w-5 h-5" />
             </span>
-            <h3 className="font-medium text-ink text-sm leading-tight">{traducir("Usuarios conectados ahora")}</h3>
+            <h3 className="font-medium text-ink">{traducir("Usuarios conectados ahora")}</h3>
           </div>
-          <span className="pill-ok px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 flex-none whitespace-nowrap">
+          <span className="pill-ok px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 flex-none whitespace-nowrap">
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--ok)' }} />
             {traducir("{n} en línea", { n: t.active_users.length })}
           </span>
@@ -1114,19 +1120,19 @@ export default function Dashboard() {
             lista completa no sirve para responder rápido "¿fulano está
             conectado ahora?" -este filtro sí. */}
         <div className="relative">
-          <IconSearch className="w-3.5 h-3.5 text-ink-3 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <IconSearch className="w-4 h-4 text-ink-3 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={buscarConectado}
             onChange={e => setBuscarConectado(e.target.value)}
             placeholder={traducir("Buscar usuario conectado...")}
-            className="input w-full pl-8 py-1.5 text-xs"
+            className="input w-full pl-9"
           />
         </div>
 
         <div className="flex flex-col divide-y divide-line-soft">
           {conectadosAMostrar.length === 0 ? (
-            <p className="text-xs text-ink-3 py-2">
+            <p className="text-sm text-ink-3 py-2">
               {filtroConectados
                 ? traducir("«{q}» no está conectado ahora", { q: buscarConectado })
                 : traducir("Nadie autenticado en este momento")}
@@ -1137,16 +1143,16 @@ export default function Dashboard() {
               ? Math.max(4, (d.conectado_desde_segundos / maxSegundosConectado) * 100)
               : 4
             return (
-              <div key={d.user} className="flex items-center gap-2 py-2">
-                <span className="w-7 h-7 rounded-full bg-ok-soft text-ok flex items-center justify-center flex-none">
-                  <IconUsers className="w-3.5 h-3.5" />
+              <div key={d.user} className="flex items-center gap-2.5 py-2.5">
+                <span className="w-8 h-8 rounded-full bg-ok-soft text-ok flex items-center justify-center flex-none">
+                  <IconUsers className="w-4 h-4" />
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1">
-                    <span className="font-medium text-xs text-ink truncate">{d.user}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium text-sm text-ink truncate">{d.user}</span>
                     {esElQueMas && (
                       <span title={traducir("Más tiempo conectado")} className="flex-none">
-                        <IconCrown className="w-3 h-3 text-warn" />
+                        <IconCrown className="w-3.5 h-3.5 text-warn" />
                       </span>
                     )}
                   </div>
@@ -1154,7 +1160,7 @@ export default function Dashboard() {
                     <div className="h-full rounded-full bg-ok" style={{ width: `${pct}%`, transition: 'width .6s ease' }} />
                   </div>
                 </div>
-                <span className="text-[10.5px] text-ink-3 flex-none tabular">
+                <span className="text-xs text-ink-3 flex-none tabular">
                   {d.conectado_desde_segundos != null ? formatDesde(d.conectado_desde_segundos) : traducir("Recién")}
                 </span>
                 {/* Enlace directo a la evolución de este usuario en el
@@ -1162,8 +1168,8 @@ export default function Dashboard() {
                     no hace falta un menú "..." con acciones inventadas. */}
                 <Link to={`/tendencias?tipo=user&valor=${encodeURIComponent(d.user)}`}
                   title={traducir("Ver tendencia de {u}", { u: d.user })}
-                  className="w-6 h-6 rounded-md flex items-center justify-center text-ink-3 hover:bg-brand-50 hover:text-brand-700 transition flex-none">
-                  <IconActivity className="w-3.5 h-3.5" />
+                  className="w-7 h-7 rounded-md flex items-center justify-center text-ink-3 hover:bg-brand-50 hover:text-brand-700 transition flex-none">
+                  <IconActivity className="w-4 h-4" />
                 </Link>
               </div>
             )
@@ -1176,12 +1182,12 @@ export default function Dashboard() {
         )}
 
         {/* Total en línea */}
-        <div className="rounded-xl border border-line-soft p-3 flex items-center gap-3">
+        <div className="rounded-xl border border-line-soft p-4 flex items-center gap-3">
           <div className="w-14 flex-none">
             <MiniDonut pct={pctConectados} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-ink">{traducir("Total en línea")}</p>
+            <p className="text-sm font-semibold text-ink">{traducir("Total en línea")}</p>
             <p className="text-[11px] text-ink-3">
               {traducir("{n} de {total} habilitados", { n: t.active_users.length, total: data.total_proxy_users })}
             </p>
@@ -1194,13 +1200,13 @@ export default function Dashboard() {
 
         {/* Tiempo de conexión */}
         {masTiempoConectado && menosTiempoConectado && (
-          <div className="rounded-xl border border-line-soft p-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <IconClock className="w-3.5 h-3.5 text-ink-3" />
-              <h4 className="text-xs font-semibold text-ink">{traducir("Tiempo de conexión")}</h4>
+          <div className="rounded-xl border border-line-soft p-4">
+            <div className="flex items-center gap-1.5 mb-3">
+              <IconClock className="w-4 h-4 text-ink-3" />
+              <h4 className="text-sm font-semibold text-ink">{traducir("Tiempo de conexión")}</h4>
             </div>
-            <div className="mb-2">
-              <div className="flex items-center justify-between text-[11px] mb-1">
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-xs mb-1">
                 <span className="flex items-center gap-1 text-ink-2 truncate">
                   <span className="w-1.5 h-1.5 rounded-full bg-ok flex-none" />
                   <span className="truncate">{traducir("Más: {u}", { u: masTiempoConectado.user })}</span>
@@ -1212,7 +1218,7 @@ export default function Dashboard() {
               </div>
             </div>
             <div>
-              <div className="flex items-center justify-between text-[11px] mb-1">
+              <div className="flex items-center justify-between text-xs mb-1">
                 <span className="flex items-center gap-1 text-ink-2 truncate">
                   <span className="w-1.5 h-1.5 rounded-full bg-ink-3 flex-none" />
                   <span className="truncate">{traducir("Menos: {u}", { u: menosTiempoConectado.user })}</span>
