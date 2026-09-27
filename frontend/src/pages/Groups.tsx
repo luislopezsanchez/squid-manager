@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
 import Modal from '../components/Modal'
+import { IconSpinner } from '../components/Icons'
 import { normalizarNombreAcl } from '../utils/aclNames'
 
 interface Group {
@@ -38,7 +39,7 @@ function GroupFormModal({ newGroup, setNewGroup, ldapEnabled, ldapGroups, ldapNo
   onSubmit: (e: React.FormEvent) => void
 }) {
   return (
-    <Modal title={traducir('Nuevo grupo')} onClose={onClose} maxWidth="max-w-lg">
+    <Modal title={traducir('Nuevo grupo')} onClose={onClose} maxWidth="max-w-2xl">
       <datalist id="ldap-group-options">
         {ldapGroups.map(g => <option key={g} value={g} />)}
       </datalist>
@@ -173,9 +174,12 @@ function GroupFormModal({ newGroup, setNewGroup, ldapEnabled, ldapGroups, ldapNo
           </div>
         </label>
 
-        <div className="mt-5 flex items-center gap-3">
-          <button type="submit" className="btn btn-primary">{traducir("Crear Grupo")}</button>
-          <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink-2">{traducir("Cancelar")}</button>
+        <div className="mt-5 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <button type="submit" className="btn btn-primary">{traducir("Crear Grupo")}</button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">{traducir("Cancelar")}</button>
+          </div>
           <RequiereAplicar />
         </div>
       </form>
@@ -190,6 +194,13 @@ export default function Groups() {
   const [showForm, setShowForm] = useState(false)
   const [newGroup, setNewGroup] = useState<FormGroup>(FORM_VACIO)
   const [newMember, setNewMember] = useState<Record<number, string>>({})
+  // Quitar a alguien de un grupo local dispara purge_credentials() en el
+  // backend (reinicio de Squid para invalidar credenciales ya validadas,
+  // ver user_groups.py) -mucho más lento que agregar, que no lo necesita.
+  // Sin este estado, un click no mostraba ningún cambio durante ese rato y
+  // parecía colgado -invitando a hacer click de nuevo (o a los dos: "quitar"
+  // y "agregar" a la vez) mientras la primera petición seguía en vuelo.
+  const [removingMember, setRemovingMember] = useState<string | null>(null)
   const [allUsers, setAllUsers] = useState<string[]>([])
   const [ldapEnabled, setLdapEnabled] = useState(false)
   const [ldapGroups, setLdapGroups] = useState<string[]>([])
@@ -256,11 +267,18 @@ export default function Groups() {
   }
 
   const handleRemoveMember = async (groupId: number, username: string) => {
+    const clave = `${groupId}:${username}`
+    if (removingMember === clave) return
+    setRemovingMember(clave)
     try {
       await api.removeGroupMember(groupId, username)
       loadGroups()
       showToast(`Usuario "${username}" eliminado del grupo`)
-    } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
+    } catch (e: any) {
+      showToast(`Error: ${e.message}`, 'error')
+    } finally {
+      setRemovingMember(null)
+    }
   }
 
   const term = search.trim().toLowerCase()
@@ -357,12 +375,19 @@ export default function Groups() {
               ) : (
                 <>
                   <div className="flex flex-wrap gap-2 mb-4">
-                    {group.members.map(m => (
-                      <span key={m} className="inline-flex items-center gap-1 bg-primary-50 text-primary-800 px-2 py-1 rounded-full text-xs font-medium">
-                        {m}
-                        <button onClick={() => handleRemoveMember(group.id, m)} className="text-primary-500 hover:text-danger">×</button>
-                      </span>
-                    ))}
+                    {group.members.map(m => {
+                      const quitando = removingMember === `${group.id}:${m}`
+                      return (
+                        <span key={m} className={`inline-flex items-center gap-1 bg-primary-50 text-primary-800 px-2 py-1 rounded-full text-xs font-medium ${quitando ? 'opacity-60' : ''}`}>
+                          {m}
+                          <button onClick={() => handleRemoveMember(group.id, m)} disabled={quitando}
+                            title={quitando ? traducir("Quitando…") : undefined}
+                            className="text-primary-500 hover:text-danger disabled:hover:text-primary-500 disabled:cursor-wait w-3.5 h-3.5 flex items-center justify-center">
+                            {quitando ? <IconSpinner className="w-3 h-3 animate-spin" /> : '×'}
+                          </button>
+                        </span>
+                      )
+                    })}
                     {group.members.length === 0 && (
                       <span className="text-xs text-ink-3">{traducir("Sin miembros")}</span>
                     )}
@@ -374,12 +399,14 @@ export default function Groups() {
                       value={newMember[group.id] || ''}
                       onChange={e => setNewMember(prev => ({ ...prev, [group.id]: e.target.value }))}
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember(group.id) } }}
-                      className="flex-1 px-3 py-1.5 border border-line rounded-lg text-sm"
+                      disabled={removingMember?.startsWith(`${group.id}:`)}
+                      className="flex-1 px-3 py-1.5 border border-line rounded-lg text-sm disabled:opacity-50"
                       placeholder={traducir("nombre de usuario (local o LDAP)")}
                       list="member-options"
                     />
                     <button onClick={() => handleAddMember(group.id)}
-                      className="btn btn-primary btn-sm">{traducir("Añadir")}</button>
+                      disabled={removingMember?.startsWith(`${group.id}:`)}
+                      className="btn btn-primary btn-sm disabled:opacity-50">{traducir("Añadir")}</button>
                   </div>
                 </>
               )}

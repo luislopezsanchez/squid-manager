@@ -47,7 +47,7 @@ function RuleFormModal({ form, setForm, editingId, allAclNames, groupNames, onCl
   }
 
   return (
-    <Modal title={editingId ? traducir('Editar Regla') : traducir('Nueva Regla de Acceso')} onClose={onClose} maxWidth="max-w-2xl">
+    <Modal title={editingId ? traducir('Editar Regla') : traducir('Nueva Regla de Acceso')} onClose={onClose} maxWidth="max-w-3xl">
       <form onSubmit={onSubmit}>
         <div className="flex items-end gap-4">
           <div className="flex-1">
@@ -104,11 +104,14 @@ function RuleFormModal({ form, setForm, editingId, allAclNames, groupNames, onCl
             placeholder={traducir("ej: Permitir acceso a red local autenticada")} className="input" />
         </div>
         {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
-        <div className="mt-5 flex items-center gap-3">
-          <button type="submit" className="btn btn-primary">
-            {editingId ? traducir('Guardar Cambios') : traducir('Crear Regla')}
-          </button>
-          <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink-2">{traducir("Cancelar")}</button>
+        <div className="mt-5 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <button type="submit" className="btn btn-primary">
+              {editingId ? traducir('Guardar Cambios') : traducir('Crear Regla')}
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">{traducir("Cancelar")}</button>
+          </div>
           <RequiereAplicar />
         </div>
       </form>
@@ -128,6 +131,7 @@ export default function AccessRules() {
   const [error, setError] = useState('')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
   const { showToast, ToastContainer } = useToast()
 
   const loadRules = () => {
@@ -218,6 +222,22 @@ export default function AccessRules() {
   const allAclNames = [...predefinedAcls, ...acls.map(a => a.name)]
   const groupNames = groups.map(g => g.name)
 
+  // Filtra por ACL/grupo, descripción, acción u orden -búsqueda a nivel de
+  // página, distinta de la que ya existe DENTRO del modal para elegir
+  // ACLs/grupos al armar una regla. Reordenar (arrastrar o flechas) se
+  // deshabilita mientras hay un término activo: "subir" o "bajar" sobre un
+  // subconjunto filtrado saltearía por encima de reglas ocultas, dando un
+  // resultado distinto al que se ve en pantalla.
+  const term = search.trim().toLowerCase()
+  const filteredRules = term
+    ? rules.filter(r =>
+        r.acl_names.toLowerCase().includes(term) ||
+        (r.description ?? '').toLowerCase().includes(term) ||
+        r.action.toLowerCase().includes(term) ||
+        String(r.order).includes(term)
+      )
+    : rules
+
   return (
     <div className="p-6 md:p-7">
       <ToastContainer />
@@ -260,17 +280,33 @@ export default function AccessRules() {
             </div>
           </div>
 
-          {rules.length > 1 && (
-            <p className="text-xs text-ink-3 flex items-center gap-1.5">
-              <IconGripVertical className="w-3.5 h-3.5" />
-              {traducir("Arrastrá una regla desde el ícono de la izquierda para reordenarla, o usá las flechas.")}
-            </p>
+          {rules.length > 0 && (
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={traducir("Buscar por ACL, grupo, descripción, acción u orden…")}
+              className="input w-full sm:max-w-sm"
+            />
           )}
 
-          {rules.map((rule, index) => (
+          {rules.length > 1 && (
+            term
+              ? <p className="text-xs text-ink-3">{traducir("Reordenar (arrastrar o flechas) se deshabilita mientras hay una búsqueda activa.")}</p>
+              : (
+                <p className="text-xs text-ink-3 flex items-center gap-1.5">
+                  <IconGripVertical className="w-3.5 h-3.5" />
+                  {traducir("Arrastrá una regla desde el ícono de la izquierda para reordenarla, o usá las flechas.")}
+                </p>
+              )
+          )}
+
+          {filteredRules.map(rule => {
+            const index = rules.indexOf(rule)
+            return (
             <div
               key={rule.id}
-              draggable
+              draggable={!term}
               onDragStart={() => setDragIndex(index)}
               onDragOver={e => { e.preventDefault(); if (overIndex !== index) setOverIndex(index) }}
               onDragEnd={() => { setDragIndex(null); setOverIndex(null) }}
@@ -279,15 +315,19 @@ export default function AccessRules() {
                 dragIndex === index ? 'opacity-40' : ''
               } ${overIndex === index && dragIndex !== null && dragIndex !== index ? 'ring-2 ring-brand-400' : ''}`}
             >
-              <span className="text-ink-3 cursor-grab active:cursor-grabbing" aria-hidden="true">
-                <IconGripVertical className="w-4 h-4" />
-              </span>
-              <div className="flex flex-col gap-1">
-                <button onClick={() => moveRule(index, 'up')} disabled={index === 0}
-                  className="text-ink-3 hover:text-ink-2 disabled:opacity-20 p-1" aria-label={traducir("Subir")}><IconChevronUp className="w-4 h-4" /></button>
-                <button onClick={() => moveRule(index, 'down')} disabled={index === rules.length - 1}
-                  className="text-ink-3 hover:text-ink-2 disabled:opacity-20 p-1" aria-label={traducir("Bajar")}><IconChevronDown className="w-4 h-4" /></button>
-              </div>
+              {!term && (
+                <>
+                  <span className="text-ink-3 cursor-grab active:cursor-grabbing" aria-hidden="true">
+                    <IconGripVertical className="w-4 h-4" />
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    <button onClick={() => moveRule(index, 'up')} disabled={index === 0}
+                      className="text-ink-3 hover:text-ink-2 disabled:opacity-20 p-1" aria-label={traducir("Subir")}><IconChevronUp className="w-4 h-4" /></button>
+                    <button onClick={() => moveRule(index, 'down')} disabled={index === rules.length - 1}
+                      className="text-ink-3 hover:text-ink-2 disabled:opacity-20 p-1" aria-label={traducir("Bajar")}><IconChevronDown className="w-4 h-4" /></button>
+                  </div>
+                </>
+              )}
               <div className="flex-1">
                 <div className="flex items-center gap-3">
                   <span className={`px-3 py-1 rounded-full text-sm font-bold ${rule.action === 'allow' ? 'pill-ok' : 'pill-danger'}`}>
@@ -303,9 +343,13 @@ export default function AccessRules() {
                 <button onClick={() => handleDelete(rule.id)} className="text-danger hover:text-danger text-sm font-medium">{traducir("Eliminar")}</button>
               </div>
             </div>
-          ))}
+            )
+          })}
           {rules.length === 0 && (
             <div className="card p-8 text-center text-ink-3">{traducir("No hay reglas personalizadas. Squid usará las reglas por defecto (permitir autenticados, denegar el resto).")}</div>
+          )}
+          {rules.length > 0 && filteredRules.length === 0 && (
+            <div className="card p-8 text-center text-ink-3">{traducir("Ninguna regla coincide con la búsqueda.")}</div>
           )}
         </div>
       )}

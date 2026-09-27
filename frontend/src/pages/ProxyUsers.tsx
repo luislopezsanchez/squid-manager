@@ -1,5 +1,6 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
@@ -480,7 +481,22 @@ export default function ProxyUsers() {
   const [showForm, setShowForm] = useState(false)
   const [newUser, setNewUser] = useState({ username: '', display_name: '', password: '' })
   const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
+  // La búsqueda vive en la URL (?q=...), no solo en useState: así
+  // sobrevive a un F5 -antes se perdía en cada recarga real de la página,
+  // aunque el sondeo silencioso de más abajo ya no la perdiera con cada
+  // refresco de datos. Pedido en vivo, 2026-09-27 (segunda vez que se pide
+  // esto mismo).
+  const [urlParams, setUrlParams] = useSearchParams()
+  const [search, setSearchState] = useState(() => urlParams.get('q') || '')
+  const setSearch = (v: string) => {
+    setSearchState(v)
+    setUrlParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (v) next.set('q', v)
+      else next.delete('q')
+      return next
+    }, { replace: true })
+  }
   const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'ldap'>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
   const [passwordModalFor, setPasswordModalFor] = useState<LocalUser | null>(null)
@@ -532,18 +548,14 @@ export default function ProxyUsers() {
     if (!silent) setLoading(true)
     // Cada llamada absorbe su propio error (que LDAP falle no debería tapar
     // la lista local, ni al revés) -pero eso significa que un fallo total
-    // (los 4 servicios caídos a la vez, ej. bajo el límite de peticiones)
+    // (los 2 servicios caídos a la vez, ej. bajo el límite de peticiones)
     // antes se veía como "no hay usuarios", sin ninguna pista de que en
-    // realidad la carga falló. `usersFailed` distingue ambos casos: solo
-    // importa si las dos listas de usuarios (no grupos/cuotas, que son
-    // metadata secundaria) fallaron de verdad.
+    // realidad la carga falló. `usersFailed` distingue ambos casos.
     let usersFailed = false
     Promise.all([
       api.listUsers().catch(() => { usersFailed = true; return [] }),
       api.listLdapUsers().catch(() => { usersFailed = true; return [] }),
-      api.listGroups().catch(() => []),
-      api.listQuotas().catch(() => []),
-    ]).then(([local, ldap, groups, quotas]) => {
+    ]).then(([local, ldap]) => {
       // Un sondeo silencioso que falla (red caída un instante, token por
       // vencer) no debe vaciar la tabla que ya se veía bien: se deja todo
       // como estaba y se reintenta en el próximo ciclo, sin mostrar ni un
@@ -551,7 +563,20 @@ export default function ProxyUsers() {
       if (silent && usersFailed) return
       setLocalUsers(local.map((u: any) => ({ ...u, source: 'local' as const })))
       setLdapUsers(ldap.map((u: any) => ({ ...u, source: 'ldap' as const })))
+      setLoadError(usersFailed && local.length === 0 && ldap.length === 0)
+    }).finally(() => setLoading(false))
 
+    // Grupos y cuotas son metadata secundaria (solo alimentan el badge de
+    // grupo y la barra de cuota de cada fila) -se piden aparte, en vez de
+    // en el mismo Promise.all de arriba, para que esperarlas no retrase
+    // mostrar la lista de usuarios en sí. Antes las cuatro llamadas se
+    // esperaban todas juntas, así que la más lenta de las cuatro (no
+    // siempre la misma) demoraba la tabla entera aunque los usuarios ya
+    // estuvieran listos.
+    Promise.all([
+      api.listGroups().catch(() => []),
+      api.listQuotas().catch(() => []),
+    ]).then(([groups, quotas]) => {
       const map = new Map<string, string[]>()
       for (const g of groups as { name: string; members: string[] }[]) {
         for (const username of g.members) {
@@ -561,10 +586,8 @@ export default function ProxyUsers() {
         }
       }
       setGroupsByUser(map)
-
       setQuotasByUser(new Map((quotas as Quota[]).map(q => [q.username, q])))
-      setLoadError(usersFailed && local.length === 0 && ldap.length === 0)
-    }).finally(() => setLoading(false))
+    })
   }
 
   useEffect(() => {

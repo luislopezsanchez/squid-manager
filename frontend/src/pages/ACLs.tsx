@@ -60,7 +60,7 @@ function AclFormModal({ form, setForm, editingId, onClose, onSubmit, error }: {
 }) {
   const selectedType = ACL_TYPES.find(t => t.value === form.type)
   return (
-    <Modal title={editingId ? traducir('Editar ACL') : traducir('Nueva ACL')} onClose={onClose} maxWidth="max-w-lg">
+    <Modal title={editingId ? traducir('Editar ACL') : traducir('Nueva ACL')} onClose={onClose} maxWidth="max-w-xl">
       <form onSubmit={onSubmit}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -89,11 +89,14 @@ function AclFormModal({ form, setForm, editingId, onClose, onSubmit, error }: {
             placeholder={traducir("ej: Bloquear acceso a redes sociales")} className="input" />
         </div>
         {error && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
-        <div className="mt-5 flex items-center gap-3">
-          <button type="submit" className="btn btn-primary">
-            {editingId ? traducir('Guardar Cambios') : traducir('Crear ACL')}
-          </button>
-          <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink-2">{traducir("Cancelar")}</button>
+        <div className="mt-5 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <button type="submit" className="btn btn-primary">
+              {editingId ? traducir('Guardar Cambios') : traducir('Crear ACL')}
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">{traducir("Cancelar")}</button>
+          </div>
           <RequiereAplicar />
         </div>
       </form>
@@ -115,7 +118,7 @@ function BulkUploadModal({ bulkAclName, setBulkAclName, bulkType, setBulkType, b
   onSubmit: (e: React.FormEvent) => void
 }) {
   return (
-    <Modal title={traducir('Cargar dominios desde archivo')} onClose={onClose} maxWidth="max-w-lg">
+    <Modal title={traducir('Cargar dominios desde archivo')} onClose={onClose} maxWidth="max-w-xl">
       <p className="text-xs text-ink-3 mb-4">
         {traducir('Un dominio por línea (líneas vacías o que empiezan con # se ignoran). Listas grandes se guardan en un archivo aparte que Squid lee directo, no como una única línea gigante en squid.conf.')}
       </p>
@@ -147,11 +150,14 @@ function BulkUploadModal({ bulkAclName, setBulkAclName, bulkType, setBulkType, b
           <label htmlFor="acl-bulk-file" className="field-label block mb-1.5">{traducir("Archivo")}</label>
           <input id="acl-bulk-file" ref={bulkFileRef} type="file" accept=".txt,.csv,text/plain" className="input" required />
         </div>
-        <div className="mt-5 flex items-center gap-3">
-          <button type="submit" disabled={bulkBusy} className="btn btn-primary">
-            {bulkBusy ? traducir('Cargando…') : traducir('Cargar')}
-          </button>
-          <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink-2">{traducir("Cancelar")}</button>
+        <div className="mt-5 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <button type="submit" disabled={bulkBusy} className="btn btn-primary">
+              {bulkBusy ? traducir('Cargando…') : traducir('Cargar')}
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">{traducir("Cancelar")}</button>
+          </div>
           <RequiereAplicar />
         </div>
         {bulkBusy && (

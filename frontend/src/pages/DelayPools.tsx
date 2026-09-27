@@ -4,6 +4,7 @@ import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
+import Modal from '../components/Modal'
 import { normalizarNombreAcl } from '../utils/aclNames'
 
 interface DelayPool {
@@ -408,10 +409,10 @@ export default function DelayPools() {
           <p className="page-sub">{traducir("Reglas de velocidad máxima por usuario, grupo, dominio o tipo de archivo")}</p>
         </div>
         <button
-          onClick={() => { if (showForm) { resetForm(); setShowForm(false) } else { resetForm(); setShowForm(true) } }}
+          onClick={() => { resetForm(); setShowForm(true) }}
           className="btn btn-primary"
         >
-          {showForm ? traducir('Cancelar') : traducir('+ Nueva regla')}
+          {traducir('+ Nueva regla')}
         </button>
       </div>
 
@@ -422,9 +423,12 @@ export default function DelayPools() {
       </div>
 
       {showForm && (
-        <form onSubmit={handleSave} className="card p-6 mb-6">
-          <h3 className="font-medium text-ink mb-4">{editingId ? traducir('Editar regla') : traducir('Nueva regla')}</h3>
-
+        <Modal
+          title={editingId ? traducir('Editar regla') : traducir('Nueva regla')}
+          onClose={() => { resetForm(); setShowForm(false) }}
+          maxWidth="max-w-2xl"
+        >
+        <form onSubmit={handleSave}>
           {showRawEditor ? (
             <>
               <div className="note note-warn mb-4">
@@ -548,13 +552,18 @@ export default function DelayPools() {
           </label>
 
           {error && <div className="mb-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
-          <div className="flex items-center gap-3">
-            <button type="submit" className="btn btn-primary" disabled={creatingFileAcl}>
-              {creatingFileAcl ? traducir("Creando...") : editingId ? traducir('Guardar Cambios') : traducir('Crear regla')}
-            </button>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <button type="submit" className="btn btn-primary" disabled={creatingFileAcl}>
+                {creatingFileAcl ? traducir("Creando...") : editingId ? traducir('Guardar Cambios') : traducir('Crear regla')}
+              </button>
+              <button type="button" onClick={() => { resetForm(); setShowForm(false) }}
+                className="px-4 py-2 rounded-lg font-medium border border-line hover:bg-brand-50 transition">{traducir("Cancelar")}</button>
+            </div>
             <RequiereAplicar />
           </div>
         </form>
+        </Modal>
       )}
 
       <div className="mb-4">

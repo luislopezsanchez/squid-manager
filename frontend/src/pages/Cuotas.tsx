@@ -157,6 +157,7 @@ function CuotaFormModal({ existente, usuariosDisponibles, gruposLocales, onClose
   return (
     <Modal
       onClose={onClose}
+      maxWidth="max-w-xl"
       title={esEdicion
         ? traducir('Editar cuota de "{n}"', { n: existente!.nombre })
         : traducir('Nueva cuota de navegación')}
@@ -306,7 +307,7 @@ function AplicarPorMiembroModal({ grupo, onClose, onApplied }: {
   }
 
   return (
-    <Modal onClose={onClose} title={traducir('Aplicar cuota individual a cada integrante de "{n}"', { n: grupo.name })}>
+    <Modal onClose={onClose} maxWidth="max-w-xl" title={traducir('Aplicar cuota individual a cada integrante de "{n}"', { n: grupo.name })}>
       <p className="text-sm text-ink-3 mb-4">
         {traducir("A diferencia del pool compartido, acá cada integrante recibe su PROPIA cuota (no comparten un único cupo). Reemplaza la cuota individual que ya tuviera cada uno.")}
       </p>
@@ -396,7 +397,19 @@ export default function Cuotas() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [])
+  // Refresco corto en segundo plano: el consumo de cada cuota cambia con
+  // la navegación de quien la tiene, no con nada que el admin haga en esta
+  // página -sin esto, la barra de cada fila quedaba desactualizada hasta
+  // que se recargaba la página a mano (ver quota_service._tick, corre cada
+  // pocos segundos del lado del backend). `load()` ya es "silencioso" para
+  // llamadas después de la primera: `loading` solo se pone en true en el
+  // useState inicial, nunca de nuevo, así que un refresco de fondo no hace
+  // parpadear la pantalla ni molesta si hay un modal abierto.
+  useEffect(() => {
+    load()
+    const interval = setInterval(load, 8000)
+    return () => clearInterval(interval)
+  }, [])
 
   const filas: Fila[] = useMemo(() => {
     const gruposPorNombre = new Map(groups.map(g => [g.name, g]))
@@ -410,11 +423,19 @@ export default function Cuotas() {
   }, [userQuotas, groupQuotas, groups])
 
   const term = search.trim().toLowerCase()
-  const filasFiltradas = filas.filter(f => {
-    if (filtro !== 'todas' && f.tipo !== filtro) return false
-    if (term && !f.nombre.toLowerCase().includes(term)) return false
-    return true
-  })
+  // Ordenadas por consumo (más cerca del límite primero): en una empresa
+  // con muchas cuotas configuradas, lo urgente de mirar es quién está por
+  // agotarla, no el orden alfabético en que se crearon.
+  const filasFiltradas = filas
+    .filter(f => {
+      if (filtro !== 'todas' && f.tipo !== filtro) return false
+      if (term && !f.nombre.toLowerCase().includes(term)) return false
+      return true
+    })
+    .sort((a, b) => {
+      const ratio = (f: Fila) => f.cuota.quota_bytes > 0 ? f.cuota.quota_bytes_used / f.cuota.quota_bytes : 0
+      return ratio(b) - ratio(a)
+    })
 
   const enRiesgo = filas.filter(f => {
     const c = f.cuota
