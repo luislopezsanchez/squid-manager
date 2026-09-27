@@ -92,7 +92,10 @@ def test_handle_protocolo_linea_completa(tmp_path, monkeypatch):
     _sembrar(db_path, monkeypatch, "hagezi_gambling", ["casino.com"])
     mod = _cargar_modulo(db_path)
 
-    assert mod.handle("casino.com hagezi_gambling") == "OK"
+    # message= queda disponible como %o en la página de error personalizada
+    # (deny_info, ver config_generator.py): el "motivo" que ve el usuario
+    # bloqueado nombra la categoría real, no un texto genérico.
+    assert mod.handle("casino.com hagezi_gambling") == 'OK message="hagezi_gambling"'
     assert mod.handle("otrositio.com hagezi_gambling") == "ERR"
     assert mod.handle("solo-un-campo") == "ERR"
 

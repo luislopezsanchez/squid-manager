@@ -395,3 +395,50 @@ def test_grupos_locales_y_ldap_conviven():
     assert "acl local1 proxy_auth __EMPTY_GROUP__" in config
     assert "acl ad1 external ldap_group_helper Grupo1 direct" in config
     assert config.count("external_acl_type ldap_group_helper") == 1
+
+
+# --- Página de bloqueo personalizada (deny_info) ----------------------------
+
+def test_deny_info_se_declara_para_la_ultima_acl_de_una_regla_deny():
+    """Squid asocia deny_info con la ÚLTIMA ACL de la línea que denegó, no
+    con la regla como un todo."""
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("red_local", "src", "192.168.1.0/24"), FakeAcl("bloqueados", "dstdomain", ".ejemplo.com")],
+        rules=[FakeRule("deny", "red_local bloqueados", 0)],
+    )
+    config = generate_squid_config(db)
+    assert "deny_info ERR_SQUIDMANAGER_DENIED bloqueados" in config
+    assert "deny_info ERR_SQUIDMANAGER_DENIED red_local" not in config
+
+
+def test_deny_info_siempre_incluye_all_como_respaldo():
+    """"all" es de la que depende el "deny all" final -la denegación por
+    descarte, el caso más común- así que siempre se declara, haya o no
+    reglas deny personalizadas."""
+    db = FakeDB(settings=[FakeSetting("http_port", "3128", "network")])
+    config = generate_squid_config(db)
+    assert "deny_info ERR_SQUIDMANAGER_DENIED all" in config
+
+
+def test_deny_info_no_se_declara_para_una_regla_allow():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("red_local", "src", "192.168.1.0/24")],
+        rules=[FakeRule("allow", "red_local", 0)],
+    )
+    config = generate_squid_config(db)
+    assert "deny_info ERR_SQUIDMANAGER_DENIED red_local" not in config
+
+
+def test_deny_info_no_se_repite_para_el_mismo_nombre():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("bloqueados", "dstdomain", ".ejemplo.com")],
+        rules=[
+            FakeRule("deny", "bloqueados", 0),
+            FakeRule("deny", "bloqueados", 1, description="otra regla, misma ACL"),
+        ],
+    )
+    config = generate_squid_config(db)
+    assert config.count("deny_info ERR_SQUIDMANAGER_DENIED bloqueados") == 1

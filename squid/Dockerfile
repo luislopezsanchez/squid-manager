@@ -76,6 +76,14 @@ RUN wget -q "https://www.squid-cache.org/Versions/v6/squid-6.12.tar.gz" -O /tmp/
 # España veían un error genérico en lugar de la página de acceso denegado.
 RUN set -e;     if [ -d /usr/share/squid/errors/es ]; then         for variant in es-es es-ar es-cl es-co es-pe es-uy es-ve es-bo es-py es-ec; do             [ -e "/usr/share/squid/errors/$variant" ] || ln -s es "/usr/share/squid/errors/$variant";         done;     fi
 
+# Pagina de bloqueo personalizada (deny_info, ver config_generator.py):
+# mismo nombre en cada idioma que ya usan las paginas propias de Squid, para
+# que elija sola cual mostrar -igual que ya hace con ERR_ACCESS_DENIED-.
+RUN mkdir -p /usr/share/squid/errors/es /usr/share/squid/errors/en /usr/share/squid/errors/pt
+COPY errors/es/ERR_SQUIDMANAGER_DENIED /usr/share/squid/errors/es/ERR_SQUIDMANAGER_DENIED
+COPY errors/en/ERR_SQUIDMANAGER_DENIED /usr/share/squid/errors/en/ERR_SQUIDMANAGER_DENIED
+COPY errors/pt/ERR_SQUIDMANAGER_DENIED /usr/share/squid/errors/pt/ERR_SQUIDMANAGER_DENIED
+
 # Rotación diaria de los logs de Squid
 COPY squid-logrotate /etc/logrotate.d/squid
 

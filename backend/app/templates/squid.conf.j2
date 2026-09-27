@@ -282,6 +282,19 @@ http_access allow all
 {% endif %}
 http_access deny all
 
+# --- Página de bloqueo personalizada ---
+# Squid asocia deny_info con la ÚLTIMA ACL de la línea http_access que
+# denegó (no con la regla como un todo), así que hace falta una línea por
+# cada nombre distinto que aparece al final de una regla deny -"all"
+# siempre incluida, es de la que depende el "deny all" final de arriba
+# (una denegación por descarte, el caso más común). ERR_SQUIDMANAGER_DENIED
+# vive en el mismo directorio que las plantillas de error de Squid (ver
+# install-nativo.sh/Dockerfile), con una versión por idioma -Squid elige
+# sola cuál mostrar, igual que ya hace con las suyas.
+{% for name in deny_info_acls %}
+deny_info ERR_SQUIDMANAGER_DENIED {{ name }}
+{% endfor %}
+
 {% if parent_proxy and parent_proxy.enabled and parent_proxy.host %}
 # --- Salida a Internet a través de otro proxy ---
 # En redes donde el cortafuegos cierra la salida directa, todo el tráfico tiene

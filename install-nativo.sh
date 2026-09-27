@@ -491,6 +491,19 @@ install -o root -g root -m 755 "$INSTALL_DIR/squid/domain_block_helper.py" \
     /usr/lib/squid/squidmanager_domain_helper
 ok "Helper de listas de bloqueo de dominios instalado"
 
+# Pagina de bloqueo personalizada (deny_info, ver config_generator.py):
+# mismo nombre en cada idioma que ya sirve squid-langpack, para que Squid
+# elija sola cual mostrar -exactamente igual que ya hace con sus propias
+# paginas ERR_ACCESS_DENIED-.
+for _idioma in es en pt; do
+    if [ -d "/usr/share/squid-langpack/$_idioma" ] && [ -f "$INSTALL_DIR/squid/errors/$_idioma/ERR_SQUIDMANAGER_DENIED" ]; then
+        install -o root -g root -m 644 \
+            "$INSTALL_DIR/squid/errors/$_idioma/ERR_SQUIDMANAGER_DENIED" \
+            "/usr/share/squid-langpack/$_idioma/ERR_SQUIDMANAGER_DENIED"
+    fi
+done
+ok "Pagina de bloqueo personalizada instalada"
+
 # Timeout de arranque mas generoso: con listas de dominio grandes
 # habilitadas (las use o no una regla todavia, y sobre todo antes de que el
 # helper de arriba pueda migrarlas -ver domain_index_service.py-, o para

@@ -1,0 +1,43 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html><head>
+<meta type="copyright" content="SquidManagerPro">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Acesso bloqueado</title>
+<style type="text/css"><!--
+ %l
+html body{margin:0 !important;padding:0 !important;background:#f2f7fa !important;color:#10222f !important;font-size:15px !important;font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif !important;
+  display:flex;flex-direction:column;align-items:center;padding:56px 20px 32px !important;}
+.icon{width:76px;height:76px;border-radius:50%;background:#fbeae8;display:flex;align-items:center;justify-content:center;margin-bottom:22px;}
+h1{font-size:1.5rem;font-weight:800;margin:0 0 8px;letter-spacing:-0.01em;text-align:center;}
+.sub{color:#40596b;font-size:.95rem;max-width:44ch;margin:0 0 26px;text-align:center;}
+.card{background:#fff;border:1px solid #dde8ee;border-radius:12px;padding:18px 22px;max-width:520px;width:100%;box-sizing:border-box;box-shadow:0 1px 2px rgba(16,34,47,.04);}
+.row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #ebf2f6;font-size:.85rem;}
+.row:last-child{border-bottom:none;}
+.row .k{color:#7a93a5;font-weight:600;white-space:nowrap;}
+.row .v{color:#10222f;font-family:ui-monospace,"SF Mono",Consolas,monospace;font-size:.8rem;text-align:right;word-break:break-all;}
+.help{margin-top:24px;color:#7a93a5;font-size:.82rem;text-align:center;}
+.help a{color:#1d6a96;font-weight:600;text-decoration:none;}
+.footer{margin-top:34px;padding-top:18px;border-top:1px solid #dde8ee;color:#7a93a5;font-size:.72rem;text-align:center;}
+--></style>
+</head><body id="%c">
+
+<div class="icon">
+<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#c0392f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>
+</div>
+<h1>Acesso bloqueado</h1>
+<p class="sub">A política de navegação da sua rede não permite o acesso a este site.</p>
+
+<div class="card">
+<div class="row"><span class="k">Site solicitado</span><span class="v">%U</span></div>
+<div class="row"><span class="k">Usuário</span><span class="v">%a</span></div>
+<div class="row"><span class="k">Motivo</span><span class="v">%o</span></div>
+<div class="row"><span class="k">Data</span><span class="v">%T</span></div>
+</div>
+
+<p class="help">Acha que isto é um erro? <a href="mailto:%w">Fale com seu administrador</a></p>
+
+<div class="footer">
+Gerado pelo SquidManager &middot; %h (%s)
+<!-- %c -->
+</div>
+</body></html>

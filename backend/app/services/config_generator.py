@@ -143,6 +143,12 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
     # la declaración base.
     referenced_acl_names: set[str] = {p.acl_name.strip() for p in delay_pools if p.acl_name}
 
+    # Nombres de ACL que hace falta declarar en deny_info para que un deny
+    # de esa regla muestre la página de bloqueo personalizada -Squid la
+    # asocia con la ÚLTIMA ACL de la línea http_access que denegó, no con
+    # la regla como un todo (ver deny_info en squid.conf.documented).
+    deny_info_acls: set[str] = set()
+
     for rule in rules:
         names = rule.acl_names.split() if rule.acl_names else []
         if not names:
@@ -150,6 +156,8 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
 
         rendered_rules.append({"action": rule.action, "acl_names": " ".join(names)})
         referenced_acl_names.update(n.lstrip("!") for n in names)
+        if rule.action == "deny":
+            deny_info_acls.add(names[-1].lstrip("!"))
 
         mentioned_domains = [n for n in names if n.lstrip("!") in domain_acls]
         if not mentioned_domains:
@@ -176,6 +184,13 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
     # recién sincronizadas, una lista subida "para más adelante") no le
     # cuesta nada a Squid hasta que se use de verdad.
     acls_declaradas = [a for a in acls if a.name in referenced_acl_names]
+
+    # "all" siempre incluida: es la ACL de la que depende el "deny all" final
+    # de la plantilla (lo que nadie autorizó explícitamente), así que sin
+    # esto una denegación por descarte -la más común- se quedaría con la
+    # página de error genérica de Squid en vez de la personalizada.
+    deny_info_acls.add("all")
+    deny_info_acls_ordenadas = sorted(deny_info_acls)
 
     # De las ACLs en uso, las que son una lista de dominios respaldada por
     # archivo (fuente típica: HaGeZi, una blocklist subida a mano) no se
@@ -271,6 +286,7 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
         domain_acl_types=DOMAIN_ACL_TYPES,
         acls_dominio_indexadas=acls_dominio_indexadas,
         hay_acls_dominio_indexadas=hay_acls_dominio_indexadas,
+        deny_info_acls=deny_info_acls_ordenadas,
         settings=settings,
         delay_pools=delay_pools,
         ldap=ldap,

@@ -118,7 +118,13 @@ def handle(line: str) -> str:
         return "ERR"
     dominio = unquote(parts[0])
     category = unquote(parts[1])
-    return "OK" if domain_blocked(category, dominio) else "ERR"
+    # message= queda disponible como %o en la página de error personalizada
+    # (deny_info, ver config_generator.py) -así el aviso que ve el usuario
+    # puede decir "Motivo: hagezi_gambling" en vez de un texto genérico,
+    # para el caso más común de bloqueo (una lista de dominios).
+    if domain_blocked(category, dominio):
+        return f'OK message="{category}"'
+    return "ERR"
 
 
 def main():
