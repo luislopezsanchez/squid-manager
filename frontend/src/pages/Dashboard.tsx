@@ -1354,14 +1354,17 @@ export default function Dashboard() {
                 </p>
                 {/* Reemplaza al "+N más — ver todos" del encabezado de xl:
                     mismo destino (/users?conectado=1), acá como una tarjeta
-                    clicable en vez de una línea de texto -hay más lugar. */}
+                    clicable en vez de una línea de texto -hay más lugar. El
+                    texto no repite el número de arriba (antes decía "N en
+                    línea" dos veces en la misma columna) -describe la
+                    acción del enlace, no el dato. */}
                 <Link
                   to="/users?conectado=1"
                   className="mt-3 w-full flex items-center gap-2 rounded-lg bg-ok-soft px-2.5 py-2 hover:opacity-90 transition"
                 >
                   <span className="flex-1 min-w-0 text-left">
-                    <span className="block text-sm font-bold text-ok">{traducir("{n} en línea", { n: t.active_users.length })}</span>
-                    <span className="block text-[10px] text-ink-3 truncate">{traducir("Usuarios conectados actualmente")}</span>
+                    <span className="block text-sm font-bold text-ok">{traducir("Ver usuarios en línea")}</span>
+                    <span className="block text-[10px] text-ink-3 truncate">{traducir("Abre la lista completa")}</span>
                   </span>
                   <IconChevronRight className="w-3.5 h-3.5 text-ok flex-none" />
                 </Link>

@@ -871,6 +871,7 @@ export default function ProxyUsers() {
                 <th className="text-left">{traducir("Usuario")}</th>
                 <th className="text-left">{traducir("Origen")}</th>
                 <th className="text-left">{traducir("Estado")}</th>
+                <th className="text-left">{traducir("Conexión")}</th>
                 <th className="text-left">{traducir("Grupos")}</th>
                 <th className="text-left">{traducir("Cuota")}</th>
                 <th className="text-left">{traducir("Creado")}</th>
@@ -909,6 +910,19 @@ export default function ProxyUsers() {
                       u.enabled ? 'pill-ok' : 'pill-danger'
                     }`}>
                       {u.enabled ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    {/* Columna aparte del punto verde de la columna "Usuario"
+                        (ese es para el vistazo rápido al escanear la lista;
+                        acá es un estado explícito, mismo criterio que la
+                        columna "Estado" de al lado) -pedido en vivo,
+                        2026-09-28. */}
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full ${
+                      connectedUsers.has(u.username) ? 'pill-ok' : 'bg-line-soft text-ink-3'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full flex-none ${connectedUsers.has(u.username) ? 'bg-ok' : 'bg-ink-3'}`} />
+                      {connectedUsers.has(u.username) ? traducir('En línea') : traducir('Desconectado')}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -989,7 +1003,7 @@ export default function ProxyUsers() {
               ))}
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-ink-3">
+                  <td colSpan={9} className="px-6 py-12 text-center text-ink-3">
                     {allUsers.length === 0
                       ? traducir('No hay usuarios. Crea el primero o sincroniza LDAP.') : traducir('Ningún usuario coincide con el filtro.')}
                   </td>
