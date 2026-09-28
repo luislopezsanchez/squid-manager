@@ -1,5 +1,5 @@
 import { traducir } from '../i18n'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconClose, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo, IconRefresh, IconShield, IconSearch, IconCrown } from '../components/Icons'
 import { api, canWrite } from '../api/client'
@@ -420,20 +420,29 @@ export default function Dashboard() {
   }, [!!data, rangoTrafico])
 
   // Cuántas filas de "Usuarios conectados ahora" entran sin desbordar: se
-  // mide el alto REAL disponible para la lista (después de encabezado,
-  // barra de ocupación, buscador y encabezado de columnas), en vez de
-  // calcularlo restando constantes aproximadas -eso dejaba espacio en
-  // blanco cada vez que el alto real de esos elementos no coincidía
-  // exactamente con lo estimado (ver reporte del usuario, 2026-09-28).
-  useEffect(() => {
+  // mide el alto REAL disponible para la lista, en vez de calcularlo
+  // restando constantes aproximadas -eso dejaba espacio en blanco cada vez
+  // que el alto real de esos elementos no coincidía con lo estimado (ver
+  // reporte del usuario, 2026-09-28).
+  //
+  // useLayoutEffect (no un ResizeObserver) a propósito: el contenedor de la
+  // lista es un hijo flex-1 dentro de una tarjeta de alto fijo
+  // (trafficCardHeight) -su tamaño real queda determinado por el reparto de
+  // flexbox apenas se aplica ese alto, INDEPENDIENTEMENTE de cuántas filas
+  // haya adentro en ese momento. Medirlo con un ResizeObserver corría el
+  // riesgo de una sola medición temprana (con la tarjeta todavía sin alto
+  // fijo, achicada a su contenido) que después nunca se repetía si el
+  // tamaño del contenedor no volvía a cambiar -dejando trabado un número de
+  // filas mucho menor al real (se vio en vivo: solo 3 de 13 cabían, sobraba
+  // media tarjeta vacía). Midiendo en cambio en un useLayoutEffect atado a
+  // trafficCardHeight, la lectura ocurre siempre DESPUÉS de que React ya
+  // aplicó el alto fijo al DOM y ANTES de pintar, así que ya ve el tamaño
+  // final -sin importar cuántas filas se hayan renderizado hasta ahora.
+  useLayoutEffect(() => {
     const el = listaConectadosRef.current
-    if (!el) return
-    const ro = new ResizeObserver(() => {
-      setListaConectadosHeight(el.getBoundingClientRect().height)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [!!data, trafficCardHeight])
+    if (!el || trafficCardHeight == null) return
+    setListaConectadosHeight(el.getBoundingClientRect().height)
+  }, [trafficCardHeight])
 
   useEffect(() => {
     loadData()
@@ -1131,10 +1140,20 @@ export default function Dashboard() {
               semántico -mismo criterio que "EN VIVO" en el header- que
               amerita ese color; todo lo demás usa la paleta azul del resto
               del dashboard (ver "Top usuarios" y los stat-icon de arriba). */}
-          <span className="pill-ok px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 flex-none whitespace-nowrap">
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--ok)' }} />
-            {traducir("{n} en línea", { n: t.active_users.length })}
-          </span>
+          <div className="flex flex-col items-end gap-1 flex-none">
+            <span className="pill-ok px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 flex-none whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--ok)' }} />
+              {traducir("{n} en línea", { n: t.active_users.length })}
+            </span>
+            {/* Movido acá desde el pie de la lista: dejarlo ahí competía por
+                alto con las filas -el usuario pidió liberar ese espacio para
+                mostrar más usuarios conectados (2026-09-28). */}
+            {ocultosSinBuscar > 0 && (
+              <p className="text-[11px] text-ink-3 whitespace-nowrap">
+                {traducir("+ {n} más — buscalos arriba", { n: ocultosSinBuscar })}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Ocupación de cuentas habilitadas: representación mínima de "hay
@@ -1203,11 +1222,6 @@ export default function Dashboard() {
               )
             })}
           </div>
-          {ocultosSinBuscar > 0 && (
-            <p className="text-[11px] text-ink-3 px-2.5 pt-1 flex-none">
-              {traducir("+ {n} más — buscalos arriba", { n: ocultosSinBuscar })}
-            </p>
-          )}
         </div>
       </div>
       </div>
