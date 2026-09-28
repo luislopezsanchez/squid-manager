@@ -1,7 +1,7 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconClose, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo, IconRefresh, IconShield, IconSearch, IconCrown, IconClock, IconChevronRight } from '../components/Icons'
+import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconClose, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo, IconRefresh, IconShield, IconSearch, IconCrown, IconChevronRight } from '../components/Icons'
 import { api, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
@@ -244,17 +244,6 @@ function formatDesde(segundos: number): string {
   if (min < 60) return traducir("Hace {n} min", { n: min })
   const h = Math.floor(min / 60)
   return traducir("Hace {n}h {m}m", { n: h, m: min % 60 })
-}
-
-/** Igual que formatDesde pero sin el prefijo "Hace" -para el resumen de
- * "Tiempo de conexión", donde el dato va al lado de una etiqueta que ya
- * dice "Más/Menor tiempo conectado" y repetir "Hace" ahí sobra. */
-function formatDuracion(segundos: number): string {
-  if (segundos < 60) return traducir("{n} s", { n: Math.round(segundos) })
-  const min = Math.round(segundos / 60)
-  if (min < 60) return traducir("{n} min", { n: min })
-  const h = Math.floor(min / 60)
-  return traducir("{n}h {m}m", { n: h, m: min % 60 })
 }
 
 /** Etiqueta flotante sobre el borde superior de un aviso, identificando de
@@ -622,17 +611,12 @@ export default function Dashboard() {
     </>
   )
 
-  // Quién lleva más y menos tiempo conectado de corrido -masTiempoConectado
-  // resalta esa fila con corona en todas las resoluciones; menosTiempoConectado
-  // y maxSegundosConectado solo alimentan la caja "Tiempo de conexión" y la
-  // barra de progreso por fila, que en 2xl/"Amplia" volvieron (mockup
-  // acordado 2026-09-28) -se habían sacado al simplificar para xl/"Estándar",
-  // donde no entraban.
+  // Quién lleva más tiempo conectado de corrido -resalta esa fila con
+  // corona en todas las resoluciones; maxSegundosConectado además alimenta
+  // la barra de progreso por fila (solo 2xl/"Amplia", mockup acordado
+  // 2026-09-28).
   const masTiempoConectado = t.active_users_detalle.length > 0
     ? t.active_users_detalle.reduce((max, d) => d.conectado_desde_segundos > max.conectado_desde_segundos ? d : max)
-    : null
-  const menosTiempoConectado = t.active_users_detalle.length > 0
-    ? t.active_users_detalle.reduce((min, d) => d.conectado_desde_segundos < min.conectado_desde_segundos ? d : min)
     : null
   const maxSegundosConectado = masTiempoConectado?.conectado_desde_segundos || 1
   // Los tramos sin peticiones cacheables llegan como null. Dibujarlos como 0
@@ -1415,40 +1399,14 @@ export default function Dashboard() {
                   <IconChevronRight className="w-3.5 h-3.5 text-ok flex-none" />
                 </Link>
               </div>
-
-              {masTiempoConectado && menosTiempoConectado && (
-                <div className="w-full max-w-56 rounded-xl border border-line-soft p-3">
-                  <div className="flex items-center gap-1.5 mb-3">
-                    <IconClock className="w-4 h-4 text-ink-3" />
-                    <h4 className="text-sm font-semibold text-ink">{traducir("Tiempo de conexión")}</h4>
-                  </div>
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="flex items-center gap-1 text-ink-2 truncate">
-                        <span className="w-1.5 h-1.5 rounded-full bg-ok flex-none" />
-                        <span className="truncate">{traducir("Más: {u}", { u: masTiempoConectado.user })}</span>
-                      </span>
-                      <span className="font-bold text-ink tabular flex-none">{formatDuracion(masTiempoConectado.conectado_desde_segundos)}</span>
-                    </div>
-                    <div className="w-full h-1 bg-line-soft rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-ok" style={{ width: '100%' }} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="flex items-center gap-1 text-ink-2 truncate">
-                        <span className="w-1.5 h-1.5 rounded-full bg-ink-3 flex-none" />
-                        <span className="truncate">{traducir("Menos: {u}", { u: menosTiempoConectado.user })}</span>
-                      </span>
-                      <span className="font-bold text-ink tabular flex-none">{formatDuracion(menosTiempoConectado.conectado_desde_segundos)}</span>
-                    </div>
-                    <div className="w-full h-1 bg-line-soft rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-ink-3"
-                        style={{ width: `${Math.max(4, (menosTiempoConectado.conectado_desde_segundos / maxSegundosConectado) * 100)}%` }} />
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* "Tiempo de conexión" (más/menos tiempo conectado) se
+                  probó acá debajo -junto con "Total en línea" no entraban
+                  las dos en el alto disponible: al centrarlas con
+                  justify-center, lo que sobraba de alto se recortaba mitad
+                  arriba (por eso parecía que el buscador "tapaba" la
+                  tarjeta) y mitad abajo (cortando esta caja a la mitad).
+                  Se descarta -pedido en vivo, 2026-09-28- y queda solo
+                  "Total en línea", que sí entra cómodo. */}
             </div>
           </div>
         </div>
