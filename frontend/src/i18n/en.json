@@ -1261,6 +1261,7 @@
   "No se detectaron IPs con más de un usuario en esta ventana.": "No IPs with more than one user were detected in this window.",
   "{n} usuarios": "{n} users",
   "{n} en línea": "{n} online",
+  "usuarios en línea": "users online",
   "{n} cuentas": "{n} accounts",
   "Qué dominios se piden más veces o consumen más datos. Sirve para decidir con datos reales si vale la pena sumar una ACL nueva: si algo no productivo aparece seguido aquí, es candidato a bloquear.": "Which domains are requested most often or use the most data. Useful for deciding with real data whether a new ACL is worth adding: if something unproductive shows up here often, it's a candidate to block.",
   "Por datos transferidos · últimas 24 horas": "By data transferred · last 24 hours",

@@ -204,37 +204,6 @@ function SysMetric({ Icon, pct, label }: {
   )
 }
 
-/** Anillo compacto para "% de usuarios conectados ahora" -mismo criterio
- * visual que MultiGauge (arco redondeado sobre pista gris), pero más chico
- * y de un solo segmento. Solo se usa en 2xl/"Amplia" (ver mockup acordado
- * 2026-09-28): en xl/"Estándar" no entraba con el ancho angosto de esa
- * resolución, por eso se había sacado -Amplia tiene ancho de sobra para
- * la lista y la dona lado a lado. */
-function MiniDonut({ pct }: { pct: number }) {
-  // viewBox 0-100 (no px fijos): el tamaño real lo da el contenedor
-  // (w-full + aspect-square, ver donde se usa) -así aprovecha el alto que
-  // tenga disponible en vez de quedar un círculo chico con espacio en
-  // blanco alrededor, sin importar cuánto mida la columna a cada lado.
-  const radius = 42
-  const circumference = 2 * Math.PI * radius
-  const dash = (Math.min(Math.max(pct, 0), 100) / 100) * circumference
-  return (
-    <div className="relative w-full aspect-square">
-      <svg viewBox="0 0 100 100" className="w-full h-full">
-        <g transform="rotate(-90 50 50)">
-          <circle cx="50" cy="50" r={radius} fill="none" stroke="var(--line-soft)" strokeWidth="9" />
-          <circle cx="50" cy="50" r={radius} fill="none" stroke="var(--ok)" strokeWidth="9"
-                  strokeLinecap="round" strokeDasharray={`${dash} ${circumference - dash}`}
-                  style={{ transition: 'stroke-dasharray .6s ease' }} />
-        </g>
-        <text x="50" y="52" textAnchor="middle" dominantBaseline="middle" fontSize="20" fontWeight="800" fill="var(--ink)" className="tabular">
-          {Math.round(pct)}%
-        </text>
-      </svg>
-    </div>
-  )
-}
-
 /** "Conectado desde hace X" de una fila de Usuarios conectados ahora -mismas
  * claves de traducción que ya usa el eje temporal del gráfico de tráfico,
  * para no duplicar "hace N segundos/minutos" con otra redacción. */
@@ -1294,10 +1263,10 @@ export default function Dashboard() {
           </div>
 
           {/* gap-4 (no gap-0) porque en 2xl/"Amplia" esta fila pasa a tener
-              dos columnas -lista + dona "Total en línea", que en xl no
-              entraba y por eso se había sacado (ver MiniDonut más arriba).
-              En lg/"Compacta" y xl/"Estándar" la dona queda oculta y la
-              lista ocupa todo el ancho como hasta ahora. */}
+              dos columnas -lista + "Total en línea"- que en xl no entraban
+              juntas por el ancho angosto de esa resolución. En
+              lg/"Compacta" y xl/"Estándar" la columna derecha queda oculta
+              y la lista ocupa todo el ancho como hasta ahora. */}
           <div className="flex gap-4 flex-1 min-h-0">
             {/* max-w acá (no solo flex-1): el nombre de cada fila usa
                 flex-1 para separarse del tiempo, así que si esta columna
@@ -1360,28 +1329,26 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Columna derecha: solo en 2xl/"Amplia" (mockup acordado
-                2026-09-28), dos cajas apiladas -"Total en línea" (dona +
-                enlace, reemplaza al pill/aviso que en esta resolución se
-                sacó del encabezado) y "Tiempo de conexión" (más/menos
-                tiempo conectado). Llenan con contenido real el espacio que
-                antes quedaba vacío alrededor de la dona sola.
-                flex-1 (no un ancho fijo) en la columna: con la lista topada
-                en max-w arriba, esta se queda con todo el ancho que sobre
-                -en vez de adivinar un número fijo que en una tarjeta muy
-                ancha se quedaría corto y en una angosta sobraría; max-w-56
-                en cada caja evita que se vean gigantes si sobra mucho.
-                justify-center centra el conjunto de las dos cajas en el
-                alto libre, con el mismo aire arriba y abajo. */}
+            {/* Columna derecha: solo en 2xl/"Amplia". Antes era una dona
+                dentro de una caja con su propio borde -"caja dentro de la
+                tarjeta", pesada visualmente, y una dona no es el mejor
+                lenguaje acá: el denominador (cuentas habilitadas) es
+                grande y lo que importa (conectados ahora) casi siempre va
+                a ser un % chico, así que el círculo se ve "vacío" casi
+                siempre por diseño, no por error. Se reemplaza por el mismo
+                lenguaje que ya usan las tarjetas de estadística de arriba
+                del dashboard (Tráfico actual, Peticiones...): número
+                grande + etiqueta, sin caja propia -el separador vertical
+                (border-l) ya alcanza para distinguirla de la lista, no
+                hace falta una segunda (crítica de diseño pedida en vivo,
+                2026-09-28). */}
             <div className="hidden 2xl:flex flex-col items-center justify-center gap-3 flex-1 min-w-0 border-l border-line-soft pl-4">
-              <div className="w-full max-w-56 rounded-xl border border-line-soft p-3 flex flex-col items-center text-center">
-                <div className="flex items-center gap-1.5 self-start mb-2">
-                  <IconUsers className="w-4 h-4 text-ok flex-none" />
-                  <p className="text-sm font-semibold text-ink">{traducir("Total en línea")}</p>
-                </div>
-                <div className="w-20">
-                  <MiniDonut pct={pctConectados} />
-                </div>
+              <div className="w-full max-w-56 flex flex-col items-center text-center">
+                <span className="stat-icon w-9 h-9 mb-2">
+                  <IconUsers className="w-5 h-5" />
+                </span>
+                <p className="stat-value">{t.active_users.length}</p>
+                <p className="stat-label">{traducir("usuarios en línea")}</p>
                 <p className="text-[11px] text-ink-3 mt-1">
                   {traducir("{n} de {total} habilitados", { n: t.active_users.length, total: data.total_proxy_users })}
                 </p>
@@ -1390,7 +1357,7 @@ export default function Dashboard() {
                     clicable en vez de una línea de texto -hay más lugar. */}
                 <Link
                   to="/users?conectado=1"
-                  className="mt-2 w-full flex items-center gap-2 rounded-lg bg-ok-soft px-2.5 py-2 hover:opacity-90 transition"
+                  className="mt-3 w-full flex items-center gap-2 rounded-lg bg-ok-soft px-2.5 py-2 hover:opacity-90 transition"
                 >
                   <span className="flex-1 min-w-0 text-left">
                     <span className="block text-sm font-bold text-ok">{traducir("{n} en línea", { n: t.active_users.length })}</span>
@@ -1399,14 +1366,6 @@ export default function Dashboard() {
                   <IconChevronRight className="w-3.5 h-3.5 text-ok flex-none" />
                 </Link>
               </div>
-              {/* "Tiempo de conexión" (más/menos tiempo conectado) se
-                  probó acá debajo -junto con "Total en línea" no entraban
-                  las dos en el alto disponible: al centrarlas con
-                  justify-center, lo que sobraba de alto se recortaba mitad
-                  arriba (por eso parecía que el buscador "tapaba" la
-                  tarjeta) y mitad abajo (cortando esta caja a la mitad).
-                  Se descarta -pedido en vivo, 2026-09-28- y queda solo
-                  "Total en línea", que sí entra cómodo. */}
             </div>
           </div>
         </div>
