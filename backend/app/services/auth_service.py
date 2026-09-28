@@ -59,10 +59,22 @@ def create_access_token(data: dict) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-async def get_current_admin(
+def get_current_admin(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> Admin:
+    # def normal (no async): hace una consulta SÍNCRONA a la base
+    # (db.query(...)), y esta dependencia se evalúa en TODA ruta protegida.
+    # Declarada `async def`, esa consulta se ejecutaba directamente sobre el
+    # único hilo del event loop de uvicorn -con el dashboard pidiendo ~15
+    # rutas cada 5s por pestaña abierta, eso bloqueaba el loop lo bastante
+    # seguido como para que otros requests, que ya habían tomado una
+    # conexión del pool en su propio get_db(), quedaran "colgados a mitad de
+    # camino" sosteniendo esa conexión -Postgres los mostraba como "idle in
+    # transaction" sobre un SELECT a admins, hasta agotar el pool entero y
+    # tumbar el panel entero (2026-09-28). `def` a secas hace que FastAPI la
+    # corra en threadpool, igual que ya hacen todas las rutas de metrics.py.
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales",
