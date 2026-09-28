@@ -438,26 +438,20 @@ export default function Dashboard() {
   // trafficCardHeight, la lectura ocurre siempre DESPUÉS de que React ya
   // aplicó el alto fijo al DOM y ANTES de pintar, así que ya ve el tamaño
   // final -sin importar cuántas filas se hayan renderizado hasta ahora.
+  // OJO: a propósito NO hay un ResizeObserver acá además de este
+  // useLayoutEffect -se probó agregar uno "de refuerzo" sobre este mismo
+  // contenedor (listaConectadosRef) y causó un ciclo: medir cambia
+  // filasQueEntran, eso cambia cuántas filas hay adentro, el navegador
+  // vuelve a disparar el resize del contenedor, se mide de nuevo... el
+  // resultado se sintió como la página "mareada"/trabada (reportado en
+  // vivo, 2026-09-28). Este efecto es seguro porque depende de
+  // trafficCardHeight, que Usuarios nunca modifica (la relación es
+  // estrictamente unidireccional) -no hay forma de que se retroalimente.
   useLayoutEffect(() => {
     const el = listaConectadosRef.current
     if (!el || trafficCardHeight == null) return
     setListaConectadosHeight(el.getBoundingClientRect().height)
   }, [trafficCardHeight])
-
-  // Red de seguridad además del useLayoutEffect de arriba: si el ancho de
-  // la ventana cambia (o cualquier otra cosa recalcula el layout) sin que
-  // trafficCardHeight en sí cambie de valor, esto vuelve a medir igual.
-  // Anotar el mismo estado desde dos mecanismos no es un conflicto: los dos
-  // terminan escribiendo el alto real vigente en cada momento.
-  useEffect(() => {
-    const el = listaConectadosRef.current
-    if (!el) return
-    const ro = new ResizeObserver(() => {
-      setListaConectadosHeight(el.getBoundingClientRect().height)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   useEffect(() => {
     loadData()
