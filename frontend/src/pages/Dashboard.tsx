@@ -1247,6 +1247,13 @@ export default function Dashboard() {
             />
           </div>
 
+          {/* DIAGNÓSTICO TEMPORAL -sacar apenas se confirme el número real
+              (pedido explícito del usuario, 2026-09-28, opción A: valores en
+              pantalla en vez de instrumentar a ciegas). */}
+          <p className="text-[10px] font-mono text-danger flex-none">
+            DEBUG trafficCardHeight={trafficCardHeight ?? 'null'} listaConectadosHeight={listaConectadosHeight ?? 'null'} filasQueEntran={filasQueEntran} conectados={conectadosDetalle.length}
+          </p>
+
           <div className="flex flex-col flex-1 min-h-0">
             {/* Encabezado de columnas en una sola línea -"Conectado" en vez de
                 "Tiempo conectado" para que nunca haga wrap a dos líneas. */}

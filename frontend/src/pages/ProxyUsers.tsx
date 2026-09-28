@@ -609,7 +609,12 @@ export default function ProxyUsers() {
       }
       setGroupsByUser(map)
       setQuotasByUser(new Map((quotas as Quota[]).map(q => [q.username, q])))
-      if (dashboard) setConnectedUsers(new Set((dashboard as any).active_users ?? []))
+      // active_users vive adentro de "traffic" en la respuesta de
+      // /api/panel/dashboard (ver Dashboard.tsx: `const t = data.traffic`),
+      // no en la raíz -acá estaba mal la ruta y el filtro nunca encontraba
+      // a nadie conectado, sin importar cuántos hubiera de verdad
+      // (reportado en vivo, 2026-09-28).
+      if (dashboard) setConnectedUsers(new Set((dashboard as any).traffic?.active_users ?? []))
     })
   }
 
