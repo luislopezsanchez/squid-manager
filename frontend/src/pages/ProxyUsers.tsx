@@ -499,6 +499,27 @@ export default function ProxyUsers() {
   }
   const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'ldap'>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
+  // Mismo patrón que `search` (?q=...): vive en la URL para que el enlace
+  // "ver todos" de la tarjeta "Usuarios conectados ahora" del Dashboard
+  // pueda entrar directo con el filtro ya puesto (/users?conectado=1), en
+  // vez de un modal con su propia lista y buscador -pedido en vivo,
+  // 2026-09-28.
+  const [connectedFilter, setConnectedFilterState] = useState<'all' | 'connected'>(
+    () => urlParams.get('conectado') === '1' ? 'connected' : 'all'
+  )
+  const setConnectedFilter = (v: 'all' | 'connected') => {
+    setConnectedFilterState(v)
+    setUrlParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (v === 'connected') next.set('conectado', '1')
+      else next.delete('conectado')
+      return next
+    }, { replace: true })
+  }
+  // Quién está conectado ahora mismo (para el filtro de arriba) -se carga
+  // junto con grupos/cuotas, mismo criterio: metadata secundaria que no
+  // debe retrasar mostrar la lista de usuarios en sí.
+  const [connectedUsers, setConnectedUsers] = useState<Set<string>>(new Set())
   const [passwordModalFor, setPasswordModalFor] = useState<LocalUser | null>(null)
   const [editModalFor, setEditModalFor] = useState<LocalUser | null>(null)
   // null = cerrado; string[] con 1 elemento = editar la cuota de ese
@@ -576,7 +597,8 @@ export default function ProxyUsers() {
     Promise.all([
       api.listGroups().catch(() => []),
       api.listQuotas().catch(() => []),
-    ]).then(([groups, quotas]) => {
+      api.getDashboard().catch(() => null),
+    ]).then(([groups, quotas, dashboard]) => {
       const map = new Map<string, string[]>()
       for (const g of groups as { name: string; members: string[] }[]) {
         for (const username of g.members) {
@@ -587,6 +609,7 @@ export default function ProxyUsers() {
       }
       setGroupsByUser(map)
       setQuotasByUser(new Map((quotas as Quota[]).map(q => [q.username, q])))
+      if (dashboard) setConnectedUsers(new Set((dashboard as any).active_users ?? []))
     })
   }
 
@@ -611,13 +634,14 @@ export default function ProxyUsers() {
       if (sourceFilter !== 'all' && u.source !== sourceFilter) return false
       if (statusFilter === 'enabled' && !u.enabled) return false
       if (statusFilter === 'disabled' && u.enabled) return false
+      if (connectedFilter === 'connected' && !connectedUsers.has(u.username)) return false
       if (!q) return true
       const haystack = u.source === 'ldap'
         ? `${u.username} ${u.display_name ?? ''} ${u.email ?? ''}`
         : `${u.username} ${u.display_name ?? ''}`
       return haystack.toLowerCase().includes(q)
     })
-  }, [allUsers, search, sourceFilter, statusFilter])
+  }, [allUsers, search, sourceFilter, statusFilter, connectedFilter, connectedUsers])
 
   // Paginado en el cliente, no en el servidor: la lista ya se trae entera
   // (local + LDAP combinados, ver loadUsers) porque la búsqueda y los
@@ -798,6 +822,10 @@ export default function ProxyUsers() {
           <option value="enabled">{traducir("Solo habilitados")}</option>
           <option value="disabled">{traducir("Solo deshabilitados")}</option>
         </select>
+        <select value={connectedFilter} onChange={e => setConnectedFilter(e.target.value as any)} className="input sm:w-44">
+          <option value="all">{traducir("Conectados o no")}</option>
+          <option value="connected">{traducir("Solo conectados ahora")}</option>
+        </select>
       </div>
 
       {/* Barra de acción en bloque: solo aparece con algo seleccionado, para
@@ -848,7 +876,15 @@ export default function ProxyUsers() {
                     <input type="checkbox" checked={selected.has(u.username)} onChange={() => toggleSelected(u.username)} />
                   </td>
                   <td className="px-6 py-4 font-medium text-ink">
-                    {u.username}
+                    <span className="inline-flex items-center gap-1.5">
+                      {connectedUsers.has(u.username) && (
+                        <span
+                          className="w-1.5 h-1.5 rounded-full bg-ok flex-none"
+                          title={traducir("Conectado ahora")}
+                        />
+                      )}
+                      {u.username}
+                    </span>
                     {u.display_name && (
                       <span className="block text-xs font-normal text-ink-3">{u.display_name}</span>
                     )}

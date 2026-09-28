@@ -529,7 +529,12 @@ export default function Dashboard() {
   // ocupación o el buscador en cada resolución. "Lo que no entra, con un
   // aviso de que hay más" en vez de una barra de desplazamiento -que acá
   // afeaba la tarjeta más que ayudaba.
-  const ALTO_FILA_CONECTADO = 38
+  // 32 (no 38 como antes): el avatar mide 24px, con eso sobra margen para
+  // centrarlo bien -y una fila más chica deja menos "resto sin usar" cada
+  // vez que listaConectadosHeight no es un múltiplo exacto del alto de
+  // fila (con floor(), lo que sobra es siempre MENOS de un alto de fila:
+  // cuanto más chica la fila, más chico ese resto).
+  const ALTO_FILA_CONECTADO = 32
   const filasQueEntran = listaConectadosHeight
     ? Math.max(1, Math.floor(listaConectadosHeight / ALTO_FILA_CONECTADO))
     : 6
@@ -554,9 +559,9 @@ export default function Dashboard() {
   // repetir el texto/markup dos veces.
   const bloqueOcupacion = (
     <>
-      <div className="flex items-center justify-between text-[11px] text-ink-3">
-        <span>{traducir("Ocupación de cuentas habilitadas")}</span>
-        <span className="font-bold text-ink tabular">
+      <div className="flex items-center justify-between gap-2 text-[11px] text-ink-3">
+        <span className="truncate min-w-0">{traducir("Ocupación de cuentas habilitadas")}</span>
+        <span className="font-bold text-ink tabular flex-none">
           {traducir("{n} de {total}", { n: t.active_users.length, total: data.total_proxy_users })}
         </span>
       </div>
@@ -1142,17 +1147,21 @@ export default function Dashboard() {
           alto: sin él, un div normal se niega a encogerse por debajo del
           alto natural de su contenido, y ESE alto inflado se le contagiaría
           de vuelta a "Tráfico".
-          xl:w-[440px] (ancho fijo, no flexible) -en xl/"Estándar" (ver
+          xl:w-[380px] (ancho fijo, no flexible) -en xl/"Estándar" (ver
           convención de resoluciones acordada, 2026-09-28) el mínimo de esta
           tarjeta (560px) terminaba empatando o superando al de "Tráfico"
           (420px), dejando un hueco enorme entre el nombre y el tiempo en
           cada fila; con ancho fijo más angosto ese sobrante se lo queda
-          "Tráfico" (xl:flex-1 en su propio div). En lg/"Compacta" y por
-          debajo se mantiene el flex-1 original -ahí no se reportó ese
-          problema-, y en 2xl/"Amplia" está pendiente un rediseño propio de
-          esta sección (a definir). */}
+          "Tráfico" (xl:flex-1 en su propio div). 380px (no menos) porque
+          la fila del encabezado en xl combina la barra de ocupación con el
+          pill "N en línea" + el aviso "+N más" en una sola línea (ver
+          bloqueOcupacion más abajo): angostarla más de acá hace que esa
+          combinación no entre. En lg/"Compacta" y por debajo se mantiene
+          el flex-1 original -ahí no se reportó ese problema-, y en
+          2xl/"Amplia" está pendiente un rediseño propio de esta sección (a
+          definir). */}
       <div
-        className="relative flex-1 min-w-[560px] xl:flex-none xl:w-[440px] xl:min-w-0 2xl:flex-1 2xl:w-auto 2xl:min-w-[560px]"
+        className="relative flex-1 min-w-[560px] xl:flex-none xl:w-[380px] xl:min-w-0 2xl:flex-1 2xl:w-auto 2xl:min-w-[560px]"
         style={trafficCardHeight ? { height: trafficCardHeight } : undefined}
       >
         {/* Etiqueta con el nombre de la tarjeta (xl/"Estándar" únicamente)
@@ -1197,11 +1206,22 @@ export default function Dashboard() {
               </span>
               {/* Movido acá desde el pie de la lista: dejarlo ahí competía por
                   alto con las filas -el usuario pidió liberar ese espacio para
-                  mostrar más usuarios conectados (2026-09-28). */}
+                  mostrar más usuarios conectados (2026-09-28). Es un enlace
+                  real (no solo texto) a Usuarios filtrado por "conectado
+                  ahora" -mismo criterio de "cientos o miles de usuarios,
+                  listalos en otro lado con su propio buscador" que ya usan
+                  "Ver todas en Actividad de red" y "Ver tendencia de {u}" en
+                  esta misma pantalla, en vez de un modal con una lista
+                  propia (que en algún momento también necesitaría
+                  paginación aparte). */}
               {ocultosSinBuscar > 0 && (
-                <p className="text-[11px] text-ink-3 whitespace-nowrap">
-                  {traducir("+ {n} más, usa el buscador", { n: ocultosSinBuscar })}
-                </p>
+                <Link
+                  to="/users?conectado=1"
+                  className="text-[11px] font-semibold whitespace-nowrap hover:underline"
+                  style={{ color: 'var(--brand-700)' }}
+                >
+                  {traducir("+ {n} más — ver todos →", { n: ocultosSinBuscar })}
+                </Link>
               )}
             </div>
           </div>
