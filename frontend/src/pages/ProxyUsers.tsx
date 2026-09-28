@@ -597,8 +597,16 @@ export default function ProxyUsers() {
     Promise.all([
       api.listGroups().catch(() => []),
       api.listQuotas().catch(() => []),
-      api.getDashboard().catch(() => null),
-    ]).then(([groups, quotas, dashboard]) => {
+      // Endpoint liviano a propósito (no /panel/dashboard completo, que
+      // calcula de más para lo que hace falta acá): pedir el dashboard
+      // entero cada 8s desde esta pantalla -encima del propio sondeo de
+      // 5s del Dashboard, si estaba abierto a la vez- alcanzaba a saturar
+      // el pool de conexiones bajo carga real. Se vio en vivo, 2026-09-28:
+      // Usuarios tardaba 10+ segundos en cargar y el filtro de conectados
+      // llegaba vacío porque esa llamada pesada directamente fallaba por
+      // lenta. Ver routes/metrics.py::usuarios_conectados_route.
+      api.getUsuariosConectados().catch(() => []),
+    ]).then(([groups, quotas, conectados]) => {
       const map = new Map<string, string[]>()
       for (const g of groups as { name: string; members: string[] }[]) {
         for (const username of g.members) {
@@ -609,12 +617,7 @@ export default function ProxyUsers() {
       }
       setGroupsByUser(map)
       setQuotasByUser(new Map((quotas as Quota[]).map(q => [q.username, q])))
-      // active_users vive adentro de "traffic" en la respuesta de
-      // /api/panel/dashboard (ver Dashboard.tsx: `const t = data.traffic`),
-      // no en la raíz -acá estaba mal la ruta y el filtro nunca encontraba
-      // a nadie conectado, sin importar cuántos hubiera de verdad
-      // (reportado en vivo, 2026-09-28).
-      if (dashboard) setConnectedUsers(new Set((dashboard as any).traffic?.active_users ?? []))
+      setConnectedUsers(new Set(conectados as string[]))
     })
   }
 

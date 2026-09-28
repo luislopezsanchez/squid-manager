@@ -241,6 +241,25 @@ def dashboard_all(db: Session = Depends(get_db), _: Admin = Depends(get_current_
     return get_dashboard(db=db)
 
 
+@router.get("/usuarios-conectados")
+def usuarios_conectados_route(_: Admin = Depends(get_current_admin)):
+    """Solo los nombres de usuario conectados ahora mismo (últimos 60s de
+    access.log).
+
+    A propósito NO reusa /dashboard: ese endpoint además calcula CPU/RAM,
+    el timeline de tráfico, las últimas conexiones y las cuotas en riesgo
+    -trabajo real de sobra para algo que en Usuarios (ProxyUsers.tsx) solo
+    necesita esta lista, para el filtro "Solo conectados ahora". Pedirle
+    el dashboard completo desde ahí duplicaba ese trabajo cada 8s (encima
+    del propio sondeo de 5s del Dashboard si estaba abierto a la vez) y
+    bajo carga real eso alcanzaba a saturar el pool de conexiones -
+    reportado en vivo, 2026-09-28: 10+ segundos para cargar Usuarios y la
+    lista de conectados llegaba vacía porque la llamada al dashboard
+    completo directamente fallaba por lenta.
+    """
+    return get_realtime_traffic()["active_users"]
+
+
 @router.get("/anomalias-recientes")
 def anomalias_recientes(
     horas: float = Query(24, ge=1, le=168),

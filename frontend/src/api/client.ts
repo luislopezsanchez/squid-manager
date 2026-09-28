@@ -349,6 +349,11 @@ export const api = {
   // nada explique por qué. Quien administra un proxy suele llevar bloqueador,
   // así que no era un caso raro.
   getDashboard: () => request<any>('/panel/dashboard'),
+  // Liviano a propósito: /panel/dashboard completo calcula de más (CPU/RAM,
+  // timeline, conexiones recientes, cuotas en riesgo) para lo que hace
+  // falta acá -solo la lista de usuarios conectados ahora. Ver
+  // routes/metrics.py::usuarios_conectados_route.
+  getUsuariosConectados: () => request<string[]>('/panel/usuarios-conectados'),
   getTraffic: (seconds = 60) => request<any>(`/panel/traffic?seconds=${seconds}`),
   getTimeline: (seconds = 60, interval = 5) => request<any>(`/panel/timeline?seconds=${seconds}&interval=${interval}`),
   getConnections: (limit = 20) => request<any>(`/panel/connections?limit=${limit}`),
