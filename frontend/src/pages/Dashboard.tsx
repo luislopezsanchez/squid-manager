@@ -938,7 +938,7 @@ export default function Dashboard() {
           Con flex-wrap, se apilan solas únicamente si de verdad no entran
           las dos anchos mínimos lado a lado. */}
       <div className="flex flex-wrap items-start gap-4 mb-6">
-      <div ref={trafficCardRef} className="card p-6 flex flex-col flex-[1.4] min-w-[420px]">
+      <div ref={trafficCardRef} className="card p-6 flex flex-col flex-[1.4] min-w-[420px] xl:flex-1">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div className="flex items-center gap-1.5">
               <h3 className="font-medium text-ink">{traducir("Tráfico de red en tiempo real")}</h3>
@@ -1099,15 +1099,22 @@ export default function Dashboard() {
         </div>
 
       {/* Usuarios conectados ahora: al lado de "Tráfico", ajustada al alto
-          medido de esa tarjeta (nunca al revés, ver trafficCardHeight). Dos
-          columnas adentro: lista de conectados a la izquierda, resumen
-          (Total en línea + Tiempo de conexión) a la derecha -mismo criterio
-          que el mockup pedido en vivo, 2026-09-27. min-h-0 en cada nivel de
-          este árbol es lo que de verdad fija el alto: sin él, un div normal
-          se niega a encogerse por debajo del alto natural de su contenido,
-          y ESE alto inflado se le contagiaría de vuelta a "Tráfico". */}
+          medido de esa tarjeta (nunca al revés, ver trafficCardHeight).
+          min-h-0 en cada nivel de este árbol es lo que de verdad fija el
+          alto: sin él, un div normal se niega a encogerse por debajo del
+          alto natural de su contenido, y ESE alto inflado se le contagiaría
+          de vuelta a "Tráfico".
+          xl:w-[440px] (ancho fijo, no flexible) -en xl/"Estándar" (ver
+          convención de resoluciones acordada, 2026-09-28) el mínimo de esta
+          tarjeta (560px) terminaba empatando o superando al de "Tráfico"
+          (420px), dejando un hueco enorme entre el nombre y el tiempo en
+          cada fila; con ancho fijo más angosto ese sobrante se lo queda
+          "Tráfico" (xl:flex-1 en su propio div). En lg/"Compacta" y por
+          debajo se mantiene el flex-1 original -ahí no se reportó ese
+          problema-, y en 2xl/"Amplia" está pendiente un rediseño propio de
+          esta sección (a definir). */}
       <div
-        className="card p-6 flex flex-col gap-4 flex-1 min-w-[560px] min-h-0 overflow-hidden"
+        className="card p-6 flex flex-col gap-4 flex-1 min-w-[560px] min-h-0 overflow-hidden xl:flex-none xl:w-[440px] xl:min-w-0"
         style={trafficCardHeight ? { height: trafficCardHeight } : undefined}
       >
         <div className="flex items-center justify-between gap-2 flex-none">
