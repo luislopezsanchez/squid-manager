@@ -320,6 +320,8 @@ export default function Dashboard() {
   // directo a la otra tarjeta, manda una sola punta, siempre la misma.
   const trafficCardRef = useRef<HTMLDivElement>(null)
   const [trafficCardHeight, setTrafficCardHeight] = useState<number | null>(null)
+  const listaConectadosRef = useRef<HTMLDivElement>(null)
+  const [listaConectadosHeight, setListaConectadosHeight] = useState<number | null>(null)
   const { showToast, ToastContainer } = useToast()
 
   const loadData = () => {
@@ -417,6 +419,22 @@ export default function Dashboard() {
     // (leyenda, nota al pie) y por lo tanto el alto real de la tarjeta.
   }, [!!data, rangoTrafico])
 
+  // Cuántas filas de "Usuarios conectados ahora" entran sin desbordar: se
+  // mide el alto REAL disponible para la lista (después de encabezado,
+  // barra de ocupación, buscador y encabezado de columnas), en vez de
+  // calcularlo restando constantes aproximadas -eso dejaba espacio en
+  // blanco cada vez que el alto real de esos elementos no coincidía
+  // exactamente con lo estimado (ver reporte del usuario, 2026-09-28).
+  useEffect(() => {
+    const el = listaConectadosRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      setListaConectadosHeight(el.getBoundingClientRect().height)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [!!data, trafficCardHeight])
+
   useEffect(() => {
     loadData()
     if (autoRefresh) {
@@ -486,23 +504,16 @@ export default function Dashboard() {
     ? conectadosDetalle.filter(d => d.user.toLowerCase().includes(filtroConectados))
     : conectadosDetalle
 
-  // Cuántas filas entran sin desbordar, según el alto real medido de
-  // "Tráfico" (ver ResizeObserver más arriba): "lo que no entra, con un
+  // Cuántas filas entran sin desbordar: se usa el alto REAL medido del
+  // contenedor de la lista (listaConectadosHeight, ver ResizeObserver más
+  // arriba), no una resta de constantes aproximadas -así el resultado es
+  // exacto sin importar cuánto midan en verdad el encabezado, la barra de
+  // ocupación o el buscador en cada resolución. "Lo que no entra, con un
   // aviso de que hay más" en vez de una barra de desplazamiento -que acá
-  // afeaba la tarjeta más que ayudaba. Los números (header, buscador, alto
-  // de fila) son aproximados a partir del JSX de abajo; si ese layout
-  // cambia, hay que actualizarlos acá también.
-  // Rediseño compacto de una sola columna (sin panel lateral de dona +
-  // "Tiempo de conexión": no entraba bien en el ancho real de la tarjeta,
-  // ver mockup acordado 2026-09-28). Todas las filas miden lo mismo -la
-  // destacada ya no lleva insignia propia, solo corona + fondo tenue-, así
-  // que el cálculo de cuántas entran es un solo descuento fijo de "todo lo
-  // que no es la lista" (encabezado, barra de ocupación, buscador,
-  // encabezado de columnas, aviso de "+N más").
+  // afeaba la tarjeta más que ayudaba.
   const ALTO_FILA_CONECTADO = 38
-  const ALTO_RESERVADO_TARJETA = 230
-  const filasQueEntran = trafficCardHeight
-    ? Math.max(1, Math.floor((trafficCardHeight - ALTO_RESERVADO_TARJETA) / ALTO_FILA_CONECTADO))
+  const filasQueEntran = listaConectadosHeight
+    ? Math.max(1, Math.floor(listaConectadosHeight / ALTO_FILA_CONECTADO))
     : 6
   const hayMasSinBuscar = !filtroConectados && conectadosDetalle.length > filasQueEntran
   const conectadosAMostrar = filtroConectados
@@ -1101,7 +1112,7 @@ export default function Dashboard() {
       >
         <div className="flex items-center justify-between gap-2 flex-none">
           <div className="flex items-center gap-2.5">
-            <span className="w-9 h-9 rounded-lg bg-ok-soft text-ok flex items-center justify-center flex-none">
+            <span className="stat-icon w-9 h-9">
               <IconUsers className="w-5 h-5" />
             </span>
             <div>
@@ -1109,6 +1120,10 @@ export default function Dashboard() {
               <p className="text-[11px] text-ink-3">{traducir("Lista de usuarios actualmente en línea en el sistema")}</p>
             </div>
           </div>
+          {/* El único verde de la tarjeta: "en línea" es justo el caso
+              semántico -mismo criterio que "EN VIVO" en el header- que
+              amerita ese color; todo lo demás usa la paleta azul del resto
+              del dashboard (ver "Top usuarios" y los stat-icon de arriba). */}
           <span className="pill-ok px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 flex-none whitespace-nowrap">
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--ok)' }} />
             {traducir("{n} en línea", { n: t.active_users.length })}
@@ -1126,7 +1141,7 @@ export default function Dashboard() {
             </span>
           </div>
           <div className="w-full h-1.5 bg-line-soft rounded-full overflow-hidden">
-            <div className="h-full rounded-full bg-ok" style={{ width: `${pctConectados}%`, transition: 'width .6s ease' }} />
+            <div className="h-full rounded-full" style={{ width: `${pctConectados}%`, backgroundColor: '#48B3D0', transition: 'width .6s ease' }} />
           </div>
         </div>
 
@@ -1151,7 +1166,7 @@ export default function Dashboard() {
             <span>{traducir("Usuario")}</span>
             <span>{traducir("Conectado")}</span>
           </div>
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div ref={listaConectadosRef} className="flex flex-col flex-1 min-h-0 overflow-hidden">
             {conectadosAMostrar.length === 0 ? (
               <p className="text-sm text-ink-3 py-2 px-2.5">
                 {filtroConectados
@@ -1164,18 +1179,17 @@ export default function Dashboard() {
               return (
                 <div
                   key={d.user}
-                  className={`flex items-center gap-2.5 px-2.5 rounded-lg flex-none ${esElQueMas ? 'bg-ok-soft/50' : ''}`}
+                  className={`flex items-center gap-2.5 px-2.5 rounded-lg flex-none ${esElQueMas ? 'bg-brand-50' : ''}`}
                   style={{ height: ALTO_FILA_CONECTADO }}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-ok flex-none" />
-                  <span className="w-6 h-6 rounded-full bg-ok-soft text-ok flex items-center justify-center flex-none">
+                  <span className="w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center flex-none">
                     <IconUsers className="w-3.5 h-3.5" />
                   </span>
                   <span className="flex-1 min-w-0 flex items-center gap-1.5">
                     <span className={`text-sm truncate ${esElQueMas ? 'font-semibold' : 'font-medium'} text-ink`}>{d.user}</span>
                     {esElQueMas && <IconCrown className="w-3.5 h-3.5 text-warn flex-none" />}
                   </span>
-                  <span className={`text-xs flex-none tabular ${esElQueMas ? 'font-bold text-ok' : 'text-ink-3'}`}>
+                  <span className={`text-xs flex-none tabular ${esElQueMas ? 'font-bold text-ink' : 'text-ink-3'}`}>
                     {tiempo}
                   </span>
                 </div>
