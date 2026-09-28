@@ -1,7 +1,7 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconClose, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo, IconRefresh, IconShield, IconSearch, IconCrown } from '../components/Icons'
+import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBolt, IconCheck, IconClose, IconDashboard, IconGauge, IconLink, IconUsers, IconInfo, IconRefresh, IconShield, IconSearch, IconCrown, IconClock, IconChevronRight } from '../components/Icons'
 import { api, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
@@ -244,6 +244,17 @@ function formatDesde(segundos: number): string {
   if (min < 60) return traducir("Hace {n} min", { n: min })
   const h = Math.floor(min / 60)
   return traducir("Hace {n}h {m}m", { n: h, m: min % 60 })
+}
+
+/** Igual que formatDesde pero sin el prefijo "Hace" -para el resumen de
+ * "Tiempo de conexión", donde el dato va al lado de una etiqueta que ya
+ * dice "Más/Menor tiempo conectado" y repetir "Hace" ahí sobra. */
+function formatDuracion(segundos: number): string {
+  if (segundos < 60) return traducir("{n} s", { n: Math.round(segundos) })
+  const min = Math.round(segundos / 60)
+  if (min < 60) return traducir("{n} min", { n: min })
+  const h = Math.floor(min / 60)
+  return traducir("{n}h {m}m", { n: h, m: min % 60 })
 }
 
 /** Etiqueta flotante sobre el borde superior de un aviso, identificando de
@@ -611,11 +622,19 @@ export default function Dashboard() {
     </>
   )
 
-  // Quién lleva más tiempo conectado de corrido -solo para resaltar esa
-  // fila con corona, ya no hay una tarjeta de "Tiempo de conexión" aparte.
+  // Quién lleva más y menos tiempo conectado de corrido -masTiempoConectado
+  // resalta esa fila con corona en todas las resoluciones; menosTiempoConectado
+  // y maxSegundosConectado solo alimentan la caja "Tiempo de conexión" y la
+  // barra de progreso por fila, que en 2xl/"Amplia" volvieron (mockup
+  // acordado 2026-09-28) -se habían sacado al simplificar para xl/"Estándar",
+  // donde no entraban.
   const masTiempoConectado = t.active_users_detalle.length > 0
     ? t.active_users_detalle.reduce((max, d) => d.conectado_desde_segundos > max.conectado_desde_segundos ? d : max)
     : null
+  const menosTiempoConectado = t.active_users_detalle.length > 0
+    ? t.active_users_detalle.reduce((min, d) => d.conectado_desde_segundos < min.conectado_desde_segundos ? d : min)
+    : null
+  const maxSegundosConectado = masTiempoConectado?.conectado_desde_segundos || 1
   // Los tramos sin peticiones cacheables llegan como null. Dibujarlos como 0
   // se ve como una caída real a "0% de aciertos", cuando en realidad no hubo
   // nada que cachear — así que se arrastra el último valor real conocido en
@@ -1216,14 +1235,16 @@ export default function Dashboard() {
         </div>
         <div className="card p-6 flex flex-col gap-4 h-full min-h-0 overflow-hidden">
           {/* En lg/"Compacta" va el encabezado completo de siempre, con la
-              ocupación en su propia fila debajo. En xl/"Estándar" y
-              2xl/"Amplia" el nombre ya está en la etiqueta del borde, así
-              que en su lugar entra la barra de ocupación (mismo bloque, ver
-              bloqueOcupacion) -ahí gana el ancho libre que dejó el
-              ícono+título+subtítulo, y el pill "N en línea" + el aviso de
-              "+N más" quedan apilados a la derecha (pedido del usuario,
-              2026-09-28). */}
-          <div className="flex items-center justify-between gap-3 flex-none">
+              ocupación en su propia fila debajo. En xl/"Estándar" el nombre
+              ya está en la etiqueta del borde, así que en su lugar entra la
+              barra de ocupación (mismo bloque, ver bloqueOcupacion) -ahí
+              gana el ancho libre que dejó el ícono+título+subtítulo, y el
+              pill "N en línea" + el aviso de "+N más" quedan apilados a la
+              derecha. En 2xl/"Amplia" esta fila entera se oculta: "N en
+              línea" y "13 de 173" quedan representados en la columna
+              derecha (caja "Total en línea" + dona), así el buscador y la
+              lista suben y ganan alto -pedido del usuario, 2026-09-28. */}
+          <div className="flex items-center justify-between gap-3 flex-none 2xl:hidden">
             <div className="flex items-center gap-2.5 xl:hidden">
               <span className="stat-icon w-9 h-9">
                 <IconUsers className="w-5 h-5" />
@@ -1319,6 +1340,9 @@ export default function Dashboard() {
                 ) : conectadosAMostrar.map(d => {
                   const esElQueMas = masTiempoConectado?.user === d.user
                   const tiempo = d.conectado_desde_segundos != null ? formatDesde(d.conectado_desde_segundos) : traducir("Recién")
+                  const pct = d.conectado_desde_segundos != null
+                    ? Math.max(4, (d.conectado_desde_segundos / maxSegundosConectado) * 100)
+                    : 4
                   return (
                     <div
                       key={d.user}
@@ -1328,10 +1352,21 @@ export default function Dashboard() {
                       <span className="w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center flex-none">
                         <IconUsers className="w-3.5 h-3.5" />
                       </span>
-                      <span className="flex-1 min-w-0 flex items-center gap-1.5">
+                      {/* flex-1 hasta 2xl (como siempre): el nombre se separa
+                          del tiempo usando el ancho que sobre. En
+                          2xl/"Amplia" pasa a ancho fijo y ESE espacio lo
+                          usa la barrita de al lado (mockup acordado
+                          2026-09-28) -en vez de competir los dos por el
+                          mismo espacio. */}
+                      <span className="flex-1 min-w-0 2xl:flex-none 2xl:w-[104px] flex items-center gap-1.5">
                         <span className={`text-sm truncate ${esElQueMas ? 'font-semibold' : 'font-medium'} text-ink`}>{d.user}</span>
                         {esElQueMas && <IconCrown className="w-3.5 h-3.5 text-warn flex-none" />}
                       </span>
+                      <div className="hidden 2xl:block flex-1 min-w-0">
+                        <div className="w-full h-1.5 bg-line-soft rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-ok" style={{ width: `${pct}%`, transition: 'width .6s ease' }} />
+                        </div>
+                      </div>
                       <span className={`text-xs flex-none tabular ${esElQueMas ? 'font-bold text-ink' : 'text-ink-3'}`}>
                         {tiempo}
                       </span>
@@ -1341,28 +1376,79 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Dona "Total en línea": solo en 2xl/"Amplia" (mockup acordado
-                2026-09-28). Mismo dato que la barra de ocupación de arriba
-                -no hace falta pedir nada nuevo al backend-, solo una
-                representación visual alternativa que en esta resolución
-                sí entra al lado de la lista.
-                flex-1 (no un ancho fijo): con la lista topada en max-w
-                arriba, esta columna se queda con todo lo que sobre -en vez
-                de adivinar un ancho fijo en píxeles que en una tarjeta muy
-                ancha se quedaría corto y en una angosta sobraría.
-                items-center + justify-center en las DOS direcciones centra
-                el grupo dona+texto en el medio de ese espacio libre, con el
-                mismo aire a los costados que arriba y abajo (pedido en
-                vivo, 2026-09-28). El círculo en sí queda en un ancho fijo
-                (w-28): que la columna crezca con el ancho libre de la
-                tarjeta no significa que la dona también deba agrandarse. */}
-            <div className="hidden 2xl:flex flex-col items-center justify-center gap-2 flex-1 min-w-0 border-l border-line-soft pl-4">
-              <div className="w-28">
-                <MiniDonut pct={pctConectados} />
+            {/* Columna derecha: solo en 2xl/"Amplia" (mockup acordado
+                2026-09-28), dos cajas apiladas -"Total en línea" (dona +
+                enlace, reemplaza al pill/aviso que en esta resolución se
+                sacó del encabezado) y "Tiempo de conexión" (más/menos
+                tiempo conectado). Llenan con contenido real el espacio que
+                antes quedaba vacío alrededor de la dona sola.
+                flex-1 (no un ancho fijo) en la columna: con la lista topada
+                en max-w arriba, esta se queda con todo el ancho que sobre
+                -en vez de adivinar un número fijo que en una tarjeta muy
+                ancha se quedaría corto y en una angosta sobraría; max-w-56
+                en cada caja evita que se vean gigantes si sobra mucho.
+                justify-center centra el conjunto de las dos cajas en el
+                alto libre, con el mismo aire arriba y abajo. */}
+            <div className="hidden 2xl:flex flex-col items-center justify-center gap-3 flex-1 min-w-0 border-l border-line-soft pl-4">
+              <div className="w-full max-w-56 rounded-xl border border-line-soft p-3 flex flex-col items-center text-center">
+                <div className="flex items-center gap-1.5 self-start mb-2">
+                  <IconUsers className="w-4 h-4 text-ok flex-none" />
+                  <p className="text-sm font-semibold text-ink">{traducir("Total en línea")}</p>
+                </div>
+                <div className="w-20">
+                  <MiniDonut pct={pctConectados} />
+                </div>
+                <p className="text-[11px] text-ink-3 mt-1">
+                  {traducir("{n} de {total} habilitados", { n: t.active_users.length, total: data.total_proxy_users })}
+                </p>
+                {/* Reemplaza al "+N más — ver todos" del encabezado de xl:
+                    mismo destino (/users?conectado=1), acá como una tarjeta
+                    clicable en vez de una línea de texto -hay más lugar. */}
+                <Link
+                  to="/users?conectado=1"
+                  className="mt-2 w-full flex items-center gap-2 rounded-lg bg-ok-soft px-2.5 py-2 hover:opacity-90 transition"
+                >
+                  <span className="flex-1 min-w-0 text-left">
+                    <span className="block text-sm font-bold text-ok">{traducir("{n} en línea", { n: t.active_users.length })}</span>
+                    <span className="block text-[10px] text-ink-3 truncate">{traducir("Usuarios conectados actualmente")}</span>
+                  </span>
+                  <IconChevronRight className="w-3.5 h-3.5 text-ok flex-none" />
+                </Link>
               </div>
-              <p className="text-[11px] text-ink-3 text-center leading-snug">
-                {traducir("{n} de {total} habilitados", { n: t.active_users.length, total: data.total_proxy_users })}
-              </p>
+
+              {masTiempoConectado && menosTiempoConectado && (
+                <div className="w-full max-w-56 rounded-xl border border-line-soft p-3">
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <IconClock className="w-4 h-4 text-ink-3" />
+                    <h4 className="text-sm font-semibold text-ink">{traducir("Tiempo de conexión")}</h4>
+                  </div>
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="flex items-center gap-1 text-ink-2 truncate">
+                        <span className="w-1.5 h-1.5 rounded-full bg-ok flex-none" />
+                        <span className="truncate">{traducir("Más: {u}", { u: masTiempoConectado.user })}</span>
+                      </span>
+                      <span className="font-bold text-ink tabular flex-none">{formatDuracion(masTiempoConectado.conectado_desde_segundos)}</span>
+                    </div>
+                    <div className="w-full h-1 bg-line-soft rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-ok" style={{ width: '100%' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="flex items-center gap-1 text-ink-2 truncate">
+                        <span className="w-1.5 h-1.5 rounded-full bg-ink-3 flex-none" />
+                        <span className="truncate">{traducir("Menos: {u}", { u: menosTiempoConectado.user })}</span>
+                      </span>
+                      <span className="font-bold text-ink tabular flex-none">{formatDuracion(menosTiempoConectado.conectado_desde_segundos)}</span>
+                    </div>
+                    <div className="w-full h-1 bg-line-soft rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-ink-3"
+                        style={{ width: `${Math.max(4, (menosTiempoConectado.conectado_desde_segundos / maxSegundosConectado) * 100)}%` }} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
