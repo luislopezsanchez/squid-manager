@@ -173,6 +173,48 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
             "The 'sni_' prefix is used by SquidManager for HTTPS rules. Choose another name.",
         "Hay un '!' sin ACL detrás.": "There's a '!' with no ACL after it.",
         "Este servidor": "This server",
+        "El modo agéntico no está disponible con Ollama Cloud todavía. Probá con Gemini, Groq o NVIDIA NIM.":
+            "The agentic mode is not available with Ollama Cloud yet. Try Gemini, Groq or NVIDIA NIM.",
+        "El monitoreo centralizado está deshabilitado en este servidor.":
+            "Centralized monitoring is disabled on this server.",
+        "El origen del grupo debe ser 'local' o 'ldap'.":
+            "The group's origin must be 'local' or 'ldap'.",
+        "El periodo de la cuota debe ser 'daily', 'weekly' o 'monthly'.":
+            "The quota period must be 'daily', 'weekly' or 'monthly'.",
+        "El usuario es obligatorio para un nodo de tipo SquidManager":
+            "The username is required for a SquidManager-type node",
+        "Ese grupo no tiene ningún pool compartido configurado.":
+            "That group doesn't have any shared pool configured.",
+        "Ese usuario no tiene ninguna cuota configurada.":
+            "That user doesn't have any quota configured.",
+        "Esta categoría no tiene una URL de sincronización configurada.":
+            "This category doesn't have a sync URL configured.",
+        "Este grupo consulta la pertenencia en el directorio LDAP: no tiene miembros propios que agregar.":
+            "This group looks up membership in the LDAP directory: it doesn't have its own members to add.",
+        "Falta el nombre del grupo en el directorio LDAP.":
+            "The group name in the LDAP directory is missing.",
+        "Falta la velocidad límite para la acción 'limitar velocidad'.":
+            "The speed limit is missing for the 'throttle' action.",
+        "La URL de sincronización debe empezar con https://.":
+            "The sync URL must start with https://.",
+        "La URL del nodo debe empezar con http:// o https://":
+            "The node URL must start with http:// or https://",
+        "La acción de la cuota debe ser 'cut' o 'throttle'.":
+            "The quota action must be 'cut' or 'throttle'.",
+        "La contraseña es obligatoria para un nodo de tipo SquidManager":
+            "The password is required for a SquidManager-type node",
+        "La excepción de SSL Bump por grupo todavía no está disponible para grupos de LDAP.":
+            "The per-group SSL Bump exception is not yet available for LDAP groups.",
+        "La ruta debe ser una lista de ids separados por coma":
+            "The path must be a list of comma-separated ids",
+        "La ruta no puede estar vacía": "The path cannot be empty",
+        "Nodo no encontrado": "Node not found",
+        "Una categoría solo puede ser de tipo dominio (dstdomain o dstdom_regex).":
+            "A category can only be of the domain type (dstdomain or dstdom_regex).",
+        "Usuario y contraseña son obligatorios para un nodo de tipo SquidManager":
+            "Username and password are required for a SquidManager-type node",
+        "Este servidor tiene desactivado \"Monitorizar mis nodos\": no reenvía pedidos hacia sus propios nodos configurados.":
+            "This server has \"Monitor my nodes\" disabled: it doesn't forward requests to its own configured nodes.",
     },
     "pt": {
         "ACL no encontrada": "ACL não encontrada",
@@ -328,6 +370,48 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
             "O prefixo 'sni_' é usado pelo SquidManager para as regras HTTPS. Escolha outro nome.",
         "Hay un '!' sin ACL detrás.": "Há um '!' sem ACL depois.",
         "Este servidor": "Este servidor",
+        "El modo agéntico no está disponible con Ollama Cloud todavía. Probá con Gemini, Groq o NVIDIA NIM.":
+            "O modo agêntico ainda não está disponível com o Ollama Cloud. Experimente o Gemini, o Groq ou o NVIDIA NIM.",
+        "El monitoreo centralizado está deshabilitado en este servidor.":
+            "O monitoramento centralizado está desabilitado neste servidor.",
+        "El origen del grupo debe ser 'local' o 'ldap'.":
+            "A origem do grupo deve ser 'local' ou 'ldap'.",
+        "El periodo de la cuota debe ser 'daily', 'weekly' o 'monthly'.":
+            "O período da cota deve ser 'daily', 'weekly' ou 'monthly'.",
+        "El usuario es obligatorio para un nodo de tipo SquidManager":
+            "O usuário é obrigatório para um nó do tipo SquidManager",
+        "Ese grupo no tiene ningún pool compartido configurado.":
+            "Esse grupo não tem nenhum pool compartilhado configurado.",
+        "Ese usuario no tiene ninguna cuota configurada.":
+            "Esse usuário não tem nenhuma cota configurada.",
+        "Esta categoría no tiene una URL de sincronización configurada.":
+            "Essa categoria não tem uma URL de sincronização configurada.",
+        "Este grupo consulta la pertenencia en el directorio LDAP: no tiene miembros propios que agregar.":
+            "Esse grupo consulta a associação no diretório LDAP: não tem membros próprios para adicionar.",
+        "Falta el nombre del grupo en el directorio LDAP.":
+            "Falta o nome do grupo no diretório LDAP.",
+        "Falta la velocidad límite para la acción 'limitar velocidad'.":
+            "Falta o limite de velocidade para a ação de limitar a velocidade.",
+        "La URL de sincronización debe empezar con https://.":
+            "A URL de sincronização deve começar com https://.",
+        "La URL del nodo debe empezar con http:// o https://":
+            "A URL do nó deve começar com http:// ou https://",
+        "La acción de la cuota debe ser 'cut' o 'throttle'.":
+            "A ação da cota deve ser 'cut' ou 'throttle'.",
+        "La contraseña es obligatoria para un nodo de tipo SquidManager":
+            "A senha é obrigatória para um nó do tipo SquidManager",
+        "La excepción de SSL Bump por grupo todavía no está disponible para grupos de LDAP.":
+            "A exceção de SSL Bump por grupo ainda não está disponível para grupos de LDAP.",
+        "La ruta debe ser una lista de ids separados por coma":
+            "O caminho deve ser uma lista de ids separados por vírgula",
+        "La ruta no puede estar vacía": "O caminho não pode estar vazio",
+        "Nodo no encontrado": "Nó não encontrado",
+        "Una categoría solo puede ser de tipo dominio (dstdomain o dstdom_regex).":
+            "Uma categoria só pode ser do tipo domínio (dstdomain ou dstdom_regex).",
+        "Usuario y contraseña son obligatorios para un nodo de tipo SquidManager":
+            "Usuário e senha são obrigatórios para um nó do tipo SquidManager",
+        "Este servidor tiene desactivado \"Monitorizar mis nodos\": no reenvía pedidos hacia sus propios nodos configurados.":
+            "Este servidor tem \"Monitorar meus nós\" desativado: não encaminha pedidos para os seus próprios nós configurados.",
     },
 }
 

@@ -46,6 +46,34 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
   actualizarse sola. Afecta a instalaciones entre 0.24.2 y 0.24.7; pasos
   detallados y el comando exacto en
   [docs/actualizacion.md](docs/actualizacion.md#la-actualización-desde-el-panel-falla-con-fatal-home-not-set).
+- **El panel dejaba de cargar para todos los administradores bajo uso
+  concurrente.** `get_current_admin` (`backend/app/services/auth_service.py`)
+  estaba declarada `async def` pero hacía una consulta SQLAlchemy síncrona
+  por dentro; al ejecutarse en el único event loop de uvicorn — en vez de en
+  el threadpool que Starlette reserva para dependencias `def` normales — esa
+  consulta bloqueaba el backend entero para todos los usuarios mientras
+  corría, agotando el pool de conexiones a la base de datos. Ahora es una
+  función `def` normal.
+- **22 mensajes de error del backend no tenían traducción a inglés ni
+  portugués** (`backend/app/i18n.py`) y salían en español sin importar el
+  idioma elegido en el panel. Concentrados en monitoreo centralizado
+  (`routes/central.py`), cuotas por grupo (`routes/group_quotas.py`,
+  `routes/quotas.py`), categorías de bloqueo (`routes/acls.py`) y grupos LDAP
+  (`routes/user_groups.py`). Traducciones agregadas.
+
+### Agregado
+
+- **Columna "Conexión" en la tabla de Usuarios**, con un filtro "Solo
+  conectados ahora", para ver de un vistazo quién está en línea.
+- **Endpoint liviano `GET /api/panel/usuarios-conectados`**
+  (`backend/app/routes/metrics.py`) para no depender del `/dashboard`
+  completo solo para saber quién está conectado — corrige el enlace "ver
+  todos" de la tarjeta "Usuarios conectados ahora", que bajo carga podía
+  tardar más de 10 segundos y devolver una lista vacía.
+- Rediseño de la tarjeta "Usuarios conectados ahora" del Dashboard en las
+  resoluciones Estándar y Amplia: badge de nombre en el borde de la
+  tarjeta, ocupación de cuentas habilitadas, barra de progreso por usuario y
+  panel resumen en la vista Amplia.
 
 ---
 
