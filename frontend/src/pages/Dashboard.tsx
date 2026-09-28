@@ -1294,7 +1294,15 @@ export default function Dashboard() {
               En lg/"Compacta" y xl/"Estándar" la dona queda oculta y la
               lista ocupa todo el ancho como hasta ahora. */}
           <div className="flex gap-4 flex-1 min-h-0">
-            <div className="flex flex-col flex-1 min-h-0 min-w-0">
+            {/* max-w acá (no solo flex-1): el nombre de cada fila usa
+                flex-1 para separarse del tiempo, así que si esta columna
+                puede crecer sin techo, "Conectado" siempre termina pegado
+                al borde derecho de la tarjeta -lejos del nombre- sin
+                importar cuánto ancho real haga falta. Con un tope, la
+                columna deja de estirarse de más y "Conectado" queda cerca
+                de "Usuario"; lo que sobra (en Amplia siempre sobra) se lo
+                queda la dona de al lado (pedido en vivo, 2026-09-28). */}
+            <div className="flex flex-col flex-1 min-h-0 min-w-0 max-w-[340px]">
               {/* Encabezado de columnas en una sola línea -"Conectado" en vez de
                   "Tiempo conectado" para que nunca haga wrap a dos líneas. */}
               <div className="flex items-center justify-between px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wide text-ink-3 flex-none">
@@ -1337,9 +1345,19 @@ export default function Dashboard() {
                 2026-09-28). Mismo dato que la barra de ocupación de arriba
                 -no hace falta pedir nada nuevo al backend-, solo una
                 representación visual alternativa que en esta resolución
-                sí entra al lado de la lista. */}
-            <div className="hidden 2xl:flex flex-col items-center gap-2 flex-none w-36 border-l border-line-soft pl-4">
-              <div className="w-24">
+                sí entra al lado de la lista.
+                flex-1 (no un ancho fijo): con la lista topada en max-w
+                arriba, esta columna se queda con todo lo que sobre -en vez
+                de adivinar un ancho fijo en píxeles que en una tarjeta muy
+                ancha se quedaría corto y en una angosta sobraría.
+                items-center + justify-center en las DOS direcciones centra
+                el grupo dona+texto en el medio de ese espacio libre, con el
+                mismo aire a los costados que arriba y abajo (pedido en
+                vivo, 2026-09-28). El círculo en sí queda en un ancho fijo
+                (w-28): que la columna crezca con el ancho libre de la
+                tarjeta no significa que la dona también deba agrandarse. */}
+            <div className="hidden 2xl:flex flex-col items-center justify-center gap-2 flex-1 min-w-0 border-l border-line-soft pl-4">
+              <div className="w-28">
                 <MiniDonut pct={pctConectados} />
               </div>
               <p className="text-[11px] text-ink-3 text-center leading-snug">
