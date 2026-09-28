@@ -1274,9 +1274,13 @@ export default function Dashboard() {
                 al borde derecho de la tarjeta -lejos del nombre- sin
                 importar cuánto ancho real haga falta. Con un tope, la
                 columna deja de estirarse de más y "Conectado" queda cerca
-                de "Usuario"; lo que sobra (en Amplia siempre sobra) se lo
-                queda la dona de al lado (pedido en vivo, 2026-09-28). */}
-            <div className="flex flex-col flex-1 min-h-0 min-w-0 max-w-[340px]">
+                de "Usuario"; lo que sobra se lo queda "Total en línea" de
+                al lado (pedido en vivo, 2026-09-28). 440px (no 340px): esa
+                columna ya no necesita crecer con el ancho libre -tiene un
+                ancho fijo propio, ver más abajo-, así que ese espacio de
+                sobra pasa para acá, dándole más aire a la barrita de cada
+                fila (pedido en vivo, 2026-09-28, segunda vuelta). */}
+            <div className="flex flex-col flex-1 min-h-0 min-w-0 max-w-[440px]">
               {/* Encabezado de columnas en una sola línea -"Conectado" en vez de
                   "Tiempo conectado" para que nunca haga wrap a dos líneas. */}
               <div className="flex items-center justify-between px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wide text-ink-3 flex-none">
@@ -1341,9 +1345,15 @@ export default function Dashboard() {
                 grande + etiqueta, sin caja propia -el separador vertical
                 (border-l) ya alcanza para distinguirla de la lista, no
                 hace falta una segunda (crítica de diseño pedida en vivo,
-                2026-09-28). */}
-            <div className="hidden 2xl:flex flex-col items-center justify-center gap-3 flex-1 min-w-0 border-l border-line-soft pl-4">
-              <div className="w-full max-w-56 flex flex-col items-center text-center">
+                2026-09-28).
+                flex-none w-52 (no flex-1): el contenido de esta columna
+                -ícono, número, etiquetas y el pill- no necesita más que
+                eso; dejarla crecer con todo el ancho libre de la tarjeta
+                angostaba de más la lista de al lado, justo donde va la
+                barrita de cada fila. Con ancho fijo, lo que sobra pasa a
+                la lista (pedido en vivo, 2026-09-28, segunda vuelta). */}
+            <div className="hidden 2xl:flex flex-col items-center justify-center gap-3 flex-none w-52 border-l border-line-soft pl-4">
+              <div className="w-full flex flex-col items-center text-center">
                 <span className="stat-icon w-9 h-9 mb-2">
                   <IconUsers className="w-5 h-5" />
                 </span>
