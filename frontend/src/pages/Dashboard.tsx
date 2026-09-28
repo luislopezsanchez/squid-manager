@@ -204,6 +204,37 @@ function SysMetric({ Icon, pct, label }: {
   )
 }
 
+/** Anillo compacto para "% de usuarios conectados ahora" -mismo criterio
+ * visual que MultiGauge (arco redondeado sobre pista gris), pero más chico
+ * y de un solo segmento. Solo se usa en 2xl/"Amplia" (ver mockup acordado
+ * 2026-09-28): en xl/"Estándar" no entraba con el ancho angosto de esa
+ * resolución, por eso se había sacado -Amplia tiene ancho de sobra para
+ * la lista y la dona lado a lado. */
+function MiniDonut({ pct }: { pct: number }) {
+  // viewBox 0-100 (no px fijos): el tamaño real lo da el contenedor
+  // (w-full + aspect-square, ver donde se usa) -así aprovecha el alto que
+  // tenga disponible en vez de quedar un círculo chico con espacio en
+  // blanco alrededor, sin importar cuánto mida la columna a cada lado.
+  const radius = 42
+  const circumference = 2 * Math.PI * radius
+  const dash = (Math.min(Math.max(pct, 0), 100) / 100) * circumference
+  return (
+    <div className="relative w-full aspect-square">
+      <svg viewBox="0 0 100 100" className="w-full h-full">
+        <g transform="rotate(-90 50 50)">
+          <circle cx="50" cy="50" r={radius} fill="none" stroke="var(--line-soft)" strokeWidth="9" />
+          <circle cx="50" cy="50" r={radius} fill="none" stroke="var(--ok)" strokeWidth="9"
+                  strokeLinecap="round" strokeDasharray={`${dash} ${circumference - dash}`}
+                  style={{ transition: 'stroke-dasharray .6s ease' }} />
+        </g>
+        <text x="50" y="52" textAnchor="middle" dominantBaseline="middle" fontSize="20" fontWeight="800" fill="var(--ink)" className="tabular">
+          {Math.round(pct)}%
+        </text>
+      </svg>
+    </div>
+  )
+}
+
 /** "Conectado desde hace X" de una fila de Usuarios conectados ahora -mismas
  * claves de traducción que ya usa el eje temporal del gráfico de tráfico,
  * para no duplicar "hace N segundos/minutos" con otra redacción. */
@@ -1173,26 +1204,27 @@ export default function Dashboard() {
         className="relative flex-1 min-w-[560px] xl:flex-none xl:w-[380px] xl:min-w-0 2xl:flex-1 2xl:w-auto 2xl:min-w-[560px]"
         style={trafficCardHeight ? { height: trafficCardHeight } : undefined}
       >
-        {/* Etiqueta con el nombre de la tarjeta (xl/"Estándar" únicamente)
+        {/* Etiqueta con el nombre de la tarjeta (xl/"Estándar" y
+            2xl/"Amplia" -mismo criterio en las dos desde 2026-09-28)
             AFUERA de la tarjeta con overflow-hidden: puesta adentro (como se
             había hecho primero) el propio recorte de la tarjeta le comía la
             mitad de arriba -por eso se veía cortada. Este div externo, sin
             overflow-hidden, es lo que la deja asomar sobre el borde sin que
             nada la tape. */}
-        <div className="hidden xl:block 2xl:hidden">
+        <div className="hidden xl:block">
           <CardBadge text={traducir("Usuarios conectados ahora")} tone="brand" />
         </div>
         <div className="card p-6 flex flex-col gap-4 h-full min-h-0 overflow-hidden">
-          {/* En lg/"Compacta" y 2xl/"Amplia" (pendiente de su propio
-              rediseño) va el encabezado completo de siempre, con la
-              ocupación en su propia fila debajo. En xl/"Estándar" el nombre
-              ya está en la etiqueta del borde, así que en su lugar entra la
-              barra de ocupación (mismo bloque, ver bloqueOcupacion) -ahí
-              gana el ancho libre que dejó el ícono+título+subtítulo, y el
-              pill "N en línea" + el aviso de "+N más" quedan apilados a la
-              derecha (pedido del usuario, 2026-09-28). */}
+          {/* En lg/"Compacta" va el encabezado completo de siempre, con la
+              ocupación en su propia fila debajo. En xl/"Estándar" y
+              2xl/"Amplia" el nombre ya está en la etiqueta del borde, así
+              que en su lugar entra la barra de ocupación (mismo bloque, ver
+              bloqueOcupacion) -ahí gana el ancho libre que dejó el
+              ícono+título+subtítulo, y el pill "N en línea" + el aviso de
+              "+N más" quedan apilados a la derecha (pedido del usuario,
+              2026-09-28). */}
           <div className="flex items-center justify-between gap-3 flex-none">
-            <div className="flex items-center gap-2.5 xl:hidden 2xl:flex">
+            <div className="flex items-center gap-2.5 xl:hidden">
               <span className="stat-icon w-9 h-9">
                 <IconUsers className="w-5 h-5" />
               </span>
@@ -1201,7 +1233,7 @@ export default function Dashboard() {
                 <p className="text-[11px] text-ink-3">{traducir("Lista de usuarios actualmente en línea en el sistema")}</p>
               </div>
             </div>
-            <div className="hidden xl:flex 2xl:hidden flex-1 min-w-0 flex-col gap-1">
+            <div className="hidden xl:flex flex-1 min-w-0 flex-col gap-1">
               {bloqueOcupacion}
             </div>
             {/* El único verde de la tarjeta: "en línea" es justo el caso
@@ -1236,9 +1268,9 @@ export default function Dashboard() {
           </div>
 
           {/* Ocupación de cuentas habilitadas en su propia fila: solo en
-              lg/"Compacta" y 2xl/"Amplia" -en xl ya está arriba, adentro del
+              lg/"Compacta" -en xl y 2xl ya está arriba, adentro del
               encabezado (bloqueOcupacion). */}
-          <div className="flex flex-col gap-1 flex-none xl:hidden 2xl:flex">
+          <div className="flex flex-col gap-1 flex-none xl:hidden">
             {bloqueOcupacion}
           </div>
 
@@ -1256,45 +1288,66 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="flex flex-col flex-1 min-h-0">
-            {/* Encabezado de columnas en una sola línea -"Conectado" en vez de
-                "Tiempo conectado" para que nunca haga wrap a dos líneas. */}
-          <div className="flex items-center justify-between px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wide text-ink-3 flex-none">
-            <span>{traducir("Usuario")}</span>
-            <span>{traducir("Conectado")}</span>
-          </div>
-          <div ref={listaConectadosRef} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-            {conectadosAMostrar.length === 0 ? (
-              <p className="text-sm text-ink-3 py-2 px-2.5">
-                {filtroConectados
-                  ? traducir("«{q}» no está conectado ahora", { q: buscarConectado })
-                  : traducir("Nadie autenticado en este momento")}
+          {/* gap-4 (no gap-0) porque en 2xl/"Amplia" esta fila pasa a tener
+              dos columnas -lista + dona "Total en línea", que en xl no
+              entraba y por eso se había sacado (ver MiniDonut más arriba).
+              En lg/"Compacta" y xl/"Estándar" la dona queda oculta y la
+              lista ocupa todo el ancho como hasta ahora. */}
+          <div className="flex gap-4 flex-1 min-h-0">
+            <div className="flex flex-col flex-1 min-h-0 min-w-0">
+              {/* Encabezado de columnas en una sola línea -"Conectado" en vez de
+                  "Tiempo conectado" para que nunca haga wrap a dos líneas. */}
+              <div className="flex items-center justify-between px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wide text-ink-3 flex-none">
+                <span>{traducir("Usuario")}</span>
+                <span>{traducir("Conectado")}</span>
+              </div>
+              <div ref={listaConectadosRef} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                {conectadosAMostrar.length === 0 ? (
+                  <p className="text-sm text-ink-3 py-2 px-2.5">
+                    {filtroConectados
+                      ? traducir("«{q}» no está conectado ahora", { q: buscarConectado })
+                      : traducir("Nadie autenticado en este momento")}
+                  </p>
+                ) : conectadosAMostrar.map(d => {
+                  const esElQueMas = masTiempoConectado?.user === d.user
+                  const tiempo = d.conectado_desde_segundos != null ? formatDesde(d.conectado_desde_segundos) : traducir("Recién")
+                  return (
+                    <div
+                      key={d.user}
+                      className={`flex items-center gap-2.5 px-2.5 rounded-lg flex-none ${esElQueMas ? 'bg-brand-50' : ''}`}
+                      style={{ height: ALTO_FILA_CONECTADO }}
+                    >
+                      <span className="w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center flex-none">
+                        <IconUsers className="w-3.5 h-3.5" />
+                      </span>
+                      <span className="flex-1 min-w-0 flex items-center gap-1.5">
+                        <span className={`text-sm truncate ${esElQueMas ? 'font-semibold' : 'font-medium'} text-ink`}>{d.user}</span>
+                        {esElQueMas && <IconCrown className="w-3.5 h-3.5 text-warn flex-none" />}
+                      </span>
+                      <span className={`text-xs flex-none tabular ${esElQueMas ? 'font-bold text-ink' : 'text-ink-3'}`}>
+                        {tiempo}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Dona "Total en línea": solo en 2xl/"Amplia" (mockup acordado
+                2026-09-28). Mismo dato que la barra de ocupación de arriba
+                -no hace falta pedir nada nuevo al backend-, solo una
+                representación visual alternativa que en esta resolución
+                sí entra al lado de la lista. */}
+            <div className="hidden 2xl:flex flex-col items-center gap-2 flex-none w-36 border-l border-line-soft pl-4">
+              <div className="w-24">
+                <MiniDonut pct={pctConectados} />
+              </div>
+              <p className="text-[11px] text-ink-3 text-center leading-snug">
+                {traducir("{n} de {total} habilitados", { n: t.active_users.length, total: data.total_proxy_users })}
               </p>
-            ) : conectadosAMostrar.map(d => {
-              const esElQueMas = masTiempoConectado?.user === d.user
-              const tiempo = d.conectado_desde_segundos != null ? formatDesde(d.conectado_desde_segundos) : traducir("Recién")
-              return (
-                <div
-                  key={d.user}
-                  className={`flex items-center gap-2.5 px-2.5 rounded-lg flex-none ${esElQueMas ? 'bg-brand-50' : ''}`}
-                  style={{ height: ALTO_FILA_CONECTADO }}
-                >
-                  <span className="w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center flex-none">
-                    <IconUsers className="w-3.5 h-3.5" />
-                  </span>
-                  <span className="flex-1 min-w-0 flex items-center gap-1.5">
-                    <span className={`text-sm truncate ${esElQueMas ? 'font-semibold' : 'font-medium'} text-ink`}>{d.user}</span>
-                    {esElQueMas && <IconCrown className="w-3.5 h-3.5 text-warn flex-none" />}
-                  </span>
-                  <span className={`text-xs flex-none tabular ${esElQueMas ? 'font-bold text-ink' : 'text-ink-3'}`}>
-                    {tiempo}
-                  </span>
-                </div>
-              )
-            })}
+            </div>
           </div>
         </div>
-      </div>
       </div>
       </div>
 
