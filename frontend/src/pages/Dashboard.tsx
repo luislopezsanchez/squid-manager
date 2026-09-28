@@ -539,10 +539,19 @@ export default function Dashboard() {
     ? Math.max(1, Math.floor(listaConectadosHeight / ALTO_FILA_CONECTADO))
     : 6
   const hayMasSinBuscar = !filtroConectados && conectadosDetalle.length > filasQueEntran
+  // Antes se mostraban filasQueEntran-1 (se reservaba una fila para el
+  // aviso "+N más", que en ese momento vivía DENTRO de la lista, como una
+  // línea más al pie). Ese aviso se mudó al encabezado de la tarjeta (ver
+  // el Link "+N más — ver todos" más abajo, dentro del header) y acá quedó
+  // el -1 sin sacar: reservaba una fila entera de más, vacía, cada vez que
+  // sobraban usuarios -exactamente el espacio en blanco reportado en vivo
+  // varias veces, 2026-09-28 (confirmado con el inspector del navegador:
+  // el contenedor medía 237.5px, entraban 7 filas de 32px, pero solo se
+  // mostraban 6). Ahora se usan las filasQueEntran completas.
   const conectadosAMostrar = filtroConectados
     ? conectadosFiltrados
-    : conectadosDetalle.slice(0, hayMasSinBuscar ? filasQueEntran - 1 : filasQueEntran)
-  const ocultosSinBuscar = hayMasSinBuscar ? conectadosDetalle.length - (filasQueEntran - 1) : 0
+    : conectadosDetalle.slice(0, filasQueEntran)
+  const ocultosSinBuscar = hayMasSinBuscar ? conectadosDetalle.length - filasQueEntran : 0
 
   // Ocupación de cuentas habilitadas: reemplaza a la dona -misma lectura
   // ("cuántos de los habilitados están conectados ahora"), en una sola
