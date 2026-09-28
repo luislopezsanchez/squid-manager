@@ -125,6 +125,8 @@
   "Buscar usuario conectado...": "Buscar usuário conectado...",
   "«{q}» no está conectado ahora": "«{q}» não está conectado agora",
   "{n} de {total} habilitados": "{n} de {total} habilitados",
+  "{n} de {total}": "{n} de {total}",
+  "Ocupación de cuentas habilitadas": "Ocupação de contas habilitadas",
   "Bytes": "Bytes",
   "Caché": "Cache",
   "Cambiar contraseña": "Alterar senha",

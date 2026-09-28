@@ -125,6 +125,8 @@
   "Buscar usuario conectado...": "Search connected user...",
   "«{q}» no está conectado ahora": "«{q}» isn't connected right now",
   "{n} de {total} habilitados": "{n} of {total} enabled",
+  "{n} de {total}": "{n} of {total}",
+  "Ocupación de cuentas habilitadas": "Occupancy of enabled accounts",
   "Bytes": "Bytes",
   "Caché": "Cache",
   "Cambiar contraseña": "Change password",
