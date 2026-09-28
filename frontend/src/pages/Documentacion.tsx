@@ -17,16 +17,22 @@ import { DOC_USUARIOS } from '../content/docsUsuarios'
 import { DOC_GRUPOS } from '../content/docsGrupos'
 import { DOC_REGLAS_ACCESO } from '../content/docsReglasAcceso'
 import { DOC_ANCHO_BANDA } from '../content/docsAnchoBanda'
+import { DOC_CUOTAS } from '../content/docsCuotas'
 import { DOC_LDAP } from '../content/docsLdap'
 import { DOC_KERBEROS } from '../content/docsKerberos'
 import { DOC_SYSLOG } from '../content/docsSyslog'
 import { DOC_PROXY_PADRE } from '../content/docsProxyPadre'
+import { DOC_PANEL_CENTRAL } from '../content/docsPanelCentral'
 import { DOC_NOTIFICACIONES } from '../content/docsNotificaciones'
 import { DOC_CERTIFICADO } from '../content/docsCertificado'
 import { DOC_CONFIGURACION } from '../content/docsConfiguracion'
 import { DOC_BACKUP_MIGRACION } from '../content/docsBackupMigracion'
 import { DOC_ADMINISTRADORES } from '../content/docsAdministradores'
 import { DOC_SMTP } from '../content/docsSmtp'
+import { DOC_CATEGORIAS } from '../content/docsCategorias'
+import { DOC_BUSCAR_REFERENCIAS } from '../content/docsBuscarReferencias'
+import { DOC_ASISTENTE } from '../content/docsAsistente'
+import { DOC_ACTUALIZACIONES } from '../content/docsActualizaciones'
 
 type Articulo = { slug: string; titulo: string; listo: boolean; contenido?: Record<'es' | 'en' | 'pt', string> }
 type Grupo = { id: string; titulo: string; Icon: (p: { className?: string }) => JSX.Element; articulos: Articulo[] }
@@ -62,6 +68,9 @@ const GRUPOS: Grupo[] = [
       { slug: 'acls', titulo: traducir('ACLs'), listo: true, contenido: DOC_ACLS },
       { slug: 'reglas-de-acceso', titulo: traducir('Reglas de acceso'), listo: true, contenido: DOC_REGLAS_ACCESO },
       { slug: 'ancho-de-banda', titulo: traducir('Ancho de banda'), listo: true, contenido: DOC_ANCHO_BANDA },
+      { slug: 'categorias-de-dominios', titulo: traducir('Categorías de dominios'), listo: true, contenido: DOC_CATEGORIAS },
+      { slug: 'buscar-referencias', titulo: traducir('Buscar referencias'), listo: true, contenido: DOC_BUSCAR_REFERENCIAS },
+      { slug: 'cuotas', titulo: traducir('Cuotas'), listo: true, contenido: DOC_CUOTAS },
     ],
   },
   {
@@ -72,6 +81,7 @@ const GRUPOS: Grupo[] = [
       { slug: 'syslog-externo', titulo: traducir('Syslog externo'), listo: true, contenido: DOC_SYSLOG },
       { slug: 'proxy-padre', titulo: traducir('Proxy padre'), listo: true, contenido: DOC_PROXY_PADRE },
       { slug: 'notificaciones', titulo: traducir('Notificaciones'), listo: true, contenido: DOC_NOTIFICACIONES },
+      { slug: 'panel-central', titulo: traducir('Panel central'), listo: true, contenido: DOC_PANEL_CENTRAL },
     ],
   },
   {
@@ -82,6 +92,8 @@ const GRUPOS: Grupo[] = [
       { slug: 'smtp', titulo: traducir('SMTP'), listo: true, contenido: DOC_SMTP },
       { slug: 'backup-y-migracion', titulo: traducir('Backup y migración'), listo: true, contenido: DOC_BACKUP_MIGRACION },
       { slug: 'administradores', titulo: traducir('Administradores'), listo: true, contenido: DOC_ADMINISTRADORES },
+      { slug: 'asistente-ai', titulo: traducir('Asistente AI'), listo: true, contenido: DOC_ASISTENTE },
+      { slug: 'actualizaciones', titulo: traducir('Actualizaciones'), listo: true, contenido: DOC_ACTUALIZACIONES },
     ],
   },
 ]

@@ -1,6 +1,6 @@
 # API Reference — SquidManager
 
-La API tiene 20 routers y 102 endpoints.
+La API tiene 27 routers y 144 endpoints.
 
 ## Idioma de las respuestas
 
@@ -265,6 +265,49 @@ Si estaba aplicada (cortado o limitado), lo revierte en el acto.
 Un hilo de fondo (`quota_service.py`) sigue el `access.log` como `tail -f` para sumar bytes por usuario, revisa cada ~15s si alguna cuota se agotó o si le tocó reiniciar el periodo, y aplica el cambio de inmediato (no espera a "Aplicar cambios" del panel: es cumplimiento automático, no una edición a revisar).
 
 **Nota de rendimiento:** cortar a un usuario reinicia Squid por completo para purgar credenciales (`systemctl restart squid`), no un `-k reconfigure` liviano — medido en vivo, puede tardar **~45 segundos**. Si varias cuotas se agotan en la misma vuelta del hilo, se procesan una por una: con muchos usuarios cortándose a la vez, esa vuelta puede tardar varios minutos antes de que el hilo quede libre para la siguiente. No afecta a Squid mientras tanto (sigue sirviendo tráfico normalmente durante su propio reinicio, salvo el pequeño corte inherente a reiniciar), pero si esto llega a ser un cuello de botella real con muchos usuarios, es candidato a revisar más adelante.
+
+## Cuotas por grupo
+
+Mismo mecanismo que las cuotas de usuario, pero el límite es un **pool compartido** entre todos los integrantes de un grupo (`group_quotas`), en vez de un límite individual. Solo admite grupos **locales**: un grupo LDAP resuelve su membresía en vivo contra el directorio, así que no hay de dónde sumar el consumo de cada integrante.
+
+### Listar todas las cuotas de grupo
+```http
+GET /api/group-quotas/
+Authorization: Bearer <token>
+```
+
+**Respuesta:** mismo formato que `GET /api/quotas/`, con `group_name` en vez de `username`.
+
+### Crear o reemplazar el pool compartido de un grupo
+```http
+PUT /api/group-quotas/{group_name}
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "quota_bytes": 53687091200,
+  "quota_period": "monthly",
+  "quota_action": "cut",
+  "quota_throttle_bytes_per_sec": null
+}
+```
+
+`{group_name}` tiene que ser un grupo local existente — 404 si no existe, 400 si es un grupo LDAP. Igual que con la cuota de usuario, si ya estaba aplicada (cortado o limitado), guardarla de nuevo la revierte primero.
+
+### Quitar el pool compartido de un grupo
+```http
+DELETE /api/group-quotas/{group_name}
+Authorization: Bearer <token>
+```
+
+Si estaba aplicada, revierte a **todos** los integrantes del grupo en el acto.
+
+### Cómo se aplica
+
+- **`quota_action: "cut"`** — al agotarse el pool, deshabilita a **todos** los integrantes actuales del grupo (no solo a quien hizo consumir el último byte).
+- **`quota_action: "throttle"`** — crea un Delay pool con una ACL de tipo `tag` que cubre al grupo entero.
+
+Para dar a cada integrante su **propia** cuota individual en vez de un pool compartido, se usa `POST /api/quotas/bulk` con la lista de miembros del grupo — es lo que hace el botón "Por miembro…" del panel, no un endpoint aparte.
 
 ---
 
@@ -580,6 +623,40 @@ Content-Type: application/json
 DELETE /api/delay-pools/{id}
 Authorization: Bearer <token>
 ```
+
+---
+
+## Búsqueda de referencias
+
+Un único término de búsqueda contra ACLs/categorías, Reglas de acceso, Grupos y Delay Pools a la vez — responde preguntas del tipo "¿por qué está bloqueado facebook.com?" o "¿puedo borrar esta ACL sin romper nada?" sin abrir página por página.
+
+### Buscar
+
+```http
+GET /api/search/references?q=facebook
+Authorization: Bearer <token>
+```
+
+Busca `q` (sin distinguir mayúsculas, mínimo 1 carácter) en nombre/valor/descripción de ACLs, en las ACLs referenciadas y la descripción de cada regla, en nombre/descripción/miembros de grupos, y en descripción/ACL asociada de delay pools. Hasta 50 resultados por categoría.
+
+```json
+{
+  "acls": [
+    {"id": 12, "name": "redes_sociales", "type": "dstdomain", "description": "Redes sociales más usadas", "is_category": true, "source": "inline"}
+  ],
+  "rules": [
+    {"id": 5, "action": "deny", "acl_names": "redes_sociales", "order": 3, "description": null, "enabled": true}
+  ],
+  "groups": [
+    {"id": 2, "name": "invitados", "description": "Red de invitados", "source": "local", "matched_member": null}
+  ],
+  "delay_pools": [
+    {"id": 1, "description": "64KB/s para streaming", "acl_name": "redes_sociales", "pool_class": 2}
+  ]
+}
+```
+
+No busca **dentro** del contenido de una ACL tipo `file` (puede tener millones de líneas): ahí solo compara contra nombre, descripción o metadatos, igual que el resto del panel.
 
 ---
 
@@ -1214,6 +1291,99 @@ GET /api/metrics/connections?limit=20
 Authorization: Bearer <token>
 ```
 
+### Usuarios conectados ahora
+```http
+GET /api/metrics/usuarios-conectados
+Authorization: Bearer <token>
+```
+
+Solo los nombres de usuario conectados ahora mismo (últimos 60 segundos de access.log). A propósito no reutiliza `/dashboard`: ese endpoint además calcula CPU/RAM, el timeline de tráfico, las últimas conexiones y las cuotas en riesgo, trabajo de sobra para algo que la página de Usuarios solo necesita para el filtro "Solo conectados ahora". Devuelve una lista simple:
+
+```json
+["jperez", "mgomez", "acastro"]
+```
+
+### IPs compartidas por varios usuarios
+```http
+GET /api/metrics/ips-compartidas?limit=10&ventana=24h
+Authorization: Bearer <token>
+```
+
+IPs desde las que se autenticaron más de un usuario distinto (desde access.log) — indicio de un equipo compartido o un proxy/NAT intermedio. `ventana` acepta `1h`, `24h` o `7d`; sin ese parámetro usa las últimas 1.000 peticiones del log en vez de una ventana de tiempo. `desde`/`hasta` (timestamps Unix) acotan a un rango puntual en vez de una ventana relativa a ahora.
+
+### Totales reales de Actividad de red
+```http
+GET /api/metrics/totales-actividad?ventana=24h
+Authorization: Bearer <token>
+```
+
+Totales de **todos** los usuarios/dominios (no solo el top N que se muestra en pantalla) — los usa el panel para calcular el % de concentración y la fila "Total" de Actividad de red. Mismos parámetros de ventana/rango que el resto de esta sección.
+
+### Exportar Actividad de red a PDF
+```http
+GET /api/metrics/actividad/export-pdf?ventana=24h
+Authorization: Bearer <token>
+```
+
+Informe ejecutivo en PDF con los mismos datos que ya se ven en el panel (top usuarios/dominios/bloqueados + totales reales) — para adjuntar o imprimir sin depender de una captura de pantalla. Responde con `Content-Type: application/pdf` y `Content-Disposition: attachment`.
+
+### Cuotas excedidas
+```http
+GET /api/metrics/cuotas-excedidas
+Authorization: Bearer <token>
+```
+
+Cuotas de navegación (por usuario o por grupo) que ya llegaron o pasaron su límite — alimenta la pestaña "Cuota excedida" de Actividad de red. Ver también [Cuotas de navegación](#cuotas-de-navegación) y [Cuotas por grupo](#cuotas-por-grupo).
+
+### Detalle de peticiones de un usuario o dominio
+```http
+GET /api/metrics/detalle?user=jperez&ventana=24h&limit=50
+GET /api/metrics/detalle?domain=facebook.com&denied=true
+Authorization: Bearer <token>
+```
+
+Drill-down desde un ranking de Actividad de red: hace falta `user` o `domain` (si no se manda ninguno, responde `[]`). `denied=true` filtra solo peticiones bloqueadas; `errors=true` filtra solo errores HTTP reales (4xx/5xx, sin contar 401/403/407, que son de autenticación del proxy, no errores del sitio).
+
+### Tendencia de tráfico de un usuario o dominio
+```http
+GET /api/metrics/tendencia-trafico?user=jperez&ventana=7d&buckets=20
+Authorization: Bearer <token>
+```
+
+Evolución en el tiempo (bytes/peticiones) de un usuario o dominio puntual, para el gráfico de Tendencias. Igual que `/detalle`, hace falta `user` o `domain`.
+
+### Volumen por período
+```http
+GET /api/metrics/volumen-por-periodo?ventana=7d
+Authorization: Bearer <token>
+```
+
+Volumen de tráfico en baldes que se adaptan a la ventana elegida (minutos, horas o días según corresponda), para el gráfico de Panorama. `ventana` acepta además `30d` (no disponible en el resto de los endpoints de esta sección).
+
+### Latencia
+```http
+GET /api/metrics/latencia?limit=10&ventana=24h
+Authorization: Bearer <token>
+```
+
+Latencia general (media, p50, p95) y los dominios más lentos, desde access.log.
+
+### Errores HTTP
+```http
+GET /api/metrics/errores-http?limit=10&ventana=24h
+Authorization: Bearer <token>
+```
+
+Códigos de error HTTP más frecuentes y qué dominios los generan, desde access.log.
+
+### Anomalías recientes
+```http
+GET /api/metrics/anomalias-recientes?horas=24&limit=10
+Authorization: Bearer <token>
+```
+
+Anomalías detectadas por reglas simples (`anomaly_service.py`) en las últimas `horas` — para el aviso del dashboard, aparte de lo que ya se haya mandado por email/Telegram si esos canales están configurados.
+
 ---
 
 ## Notificaciones
@@ -1557,6 +1727,34 @@ Authorization: Bearer <token>
 
 Solo superadmin. `400` si la actualización ya está en curso (ya no se puede cancelar).
 
+---
+
+## Contacto
+
+Formulario de soporte del panel (Ayuda > Contacto) — reporta errores o sugerencias sobre **SquidManager mismo**, no es un canal de soporte del proxy de la red del admin.
+
+### Enviar un mensaje
+
+```http
+POST /api/contact
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "categoria": "error",
+  "mensaje": "El botón de exportar PDF no responde en Firefox.",
+  "email_respuesta": "admin@empresa.com"
+}
+```
+
+`categoria` es `error`, `sugerencia` u `otro` (cualquier otro valor se guarda como `otro`). `email_respuesta` es opcional. El mensaje siempre se guarda en la base de datos; el envío por email es best-effort, usando el SMTP que ya esté configurado en Notificaciones — si no hay SMTP configurado o falla el envío, el mensaje igual queda guardado.
+
+```json
+{"guardado": true, "enviado_por_email": true, "detalle": "Enviado correctamente"}
+```
+
+---
+
 ## Estadísticas de caché
 
 ### Ver estadísticas
@@ -1749,3 +1947,48 @@ Envía la configuración de **este servidor** al nodo remoto, vía su propio `PO
 ```
 
 Igual que el resto de esta sección, nunca falla con un error HTTP salvo que el nodo no exista (404): el resultado de la sincronización siempre viaja en el cuerpo.
+
+### Configuración del monitoreo centralizado
+
+```http
+GET /api/central/config
+Authorization: Bearer <token>
+```
+
+Sin gate propio (a diferencia del resto de esta sección): hay que poder ver y prender el interruptor aunque el monitoreo esté deshabilitado.
+
+```json
+{"enabled": true, "monitorizar_hijos": true, "instance_id": "..."}
+```
+
+```http
+PUT /api/central/config
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"enabled": true, "monitorizar_hijos": true}
+```
+
+Dos interruptores independientes:
+- `enabled`: gatea el lado **saliente** del feature -poder listar/crear/editar/borrar nodos propios, probarlos y sincronizarles la config. Apagado, esas rutas responden 403.
+- `monitorizar_hijos`: decide si este servidor le presta sus propios nodos configurados a **su padre** (otro SquidManager que lo tenga a él como nodo). Que a este servidor lo monitoreen nunca depende de ninguno de los dos interruptores -alcanza con que la cuenta que guardó el padre siga siendo válida acá.
+
+### Detalle de cualquier nodo del árbol (no solo un hijo directo)
+
+```http
+GET /api/central/nodes/detalle-por-ruta?ruta=7,1,1
+Authorization: Bearer <token>
+```
+
+Top usuarios, top dominios y últimas conexiones de cualquier nodo del árbol, para el modal "Ver más". `ruta` es la lista de ids desde el hijo directo de quien pregunta hasta el nodo pedido: `7` es un hijo directo; `7,1,1` es un bisnieto (mi nodo 7, después su nodo 1, después el nodo 1 de ese).
+
+Cada salto resuelve el primer id de la ruta con sus propias credenciales; si queda más ruta, se la reenvía tal cual a ese nodo, que hace lo mismo con la suya -este servidor nunca necesita las credenciales de nada más allá de sus propios nodos directos. Si `monitorizar_hijos` está apagado y la ruta pide reenviar hacia un nodo propio, responde 403.
+
+### Alertas recientes de nodos
+
+```http
+GET /api/central/alertas-recientes?horas=24&limit=20
+Authorization: Bearer <token>
+```
+
+Transiciones de estado ("nodo caído" / "nodo recuperado") notificadas en las últimas `horas`, para el aviso en Panel Central -aparte de lo que ya se haya mandado por email/Telegram si esos canales están configurados. Sin gate: alcanza con estar logueado para ver el historial.
