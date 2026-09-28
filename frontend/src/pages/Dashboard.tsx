@@ -552,6 +552,26 @@ export default function Dashboard() {
     ? (t.active_users.length / data.total_proxy_users) * 100
     : 0
 
+  // Mismo bloque en dos lugares distintos según la resolución (ver más
+  // abajo, en el JSX): en lg/"Compacta" y 2xl/"Amplia" va en su propia fila
+  // debajo del encabezado; en xl/"Estándar" va DENTRO del encabezado, en el
+  // espacio que deja libre el ícono+título+subtítulo (que ahí se esconde,
+  // reemplazado por la etiqueta del borde). Una sola definición evita
+  // repetir el texto/markup dos veces.
+  const bloqueOcupacion = (
+    <>
+      <div className="flex items-center justify-between text-[11px] text-ink-3">
+        <span>{traducir("Ocupación de cuentas habilitadas")}</span>
+        <span className="font-bold text-ink tabular">
+          {traducir("{n} de {total}", { n: t.active_users.length, total: data.total_proxy_users })}
+        </span>
+      </div>
+      <div className="w-full h-1.5 bg-line-soft rounded-full overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${pctConectados}%`, backgroundColor: '#48B3D0', transition: 'width .6s ease' }} />
+      </div>
+    </>
+  )
+
   // Quién lleva más tiempo conectado de corrido -solo para resaltar esa
   // fila con corona, ya no hay una tarjeta de "Tiempo de conexión" aparte.
   const masTiempoConectado = t.active_users_detalle.length > 0
@@ -1138,81 +1158,84 @@ export default function Dashboard() {
           problema-, y en 2xl/"Amplia" está pendiente un rediseño propio de
           esta sección (a definir). */}
       <div
-        className="relative card p-6 flex flex-col gap-4 flex-1 min-w-[560px] min-h-0 overflow-hidden xl:flex-none xl:w-[440px] xl:min-w-0 2xl:flex-1 2xl:w-auto 2xl:min-w-[560px]"
+        className="relative flex-1 min-w-[560px] xl:flex-none xl:w-[440px] xl:min-w-0 2xl:flex-1 2xl:w-auto 2xl:min-w-[560px]"
         style={trafficCardHeight ? { height: trafficCardHeight } : undefined}
       >
-        {/* En xl/"Estándar" el nombre de la tarjeta se muda a una etiqueta
-            sobre el borde superior (mismo componente que ya usan los avisos
-            de arriba) y el bloque ícono+título+subtítulo se oculta -eso
-            libera el espacio para subir la barra de ocupación, el buscador
-            y la lista (pedido del usuario, 2026-09-28). En lg/"Compacta" y
-            en 2xl/"Amplia" (pendiente de su propio rediseño) se mantiene el
-            encabezado de siempre. */}
+        {/* Etiqueta con el nombre de la tarjeta (xl/"Estándar" únicamente)
+            AFUERA de la tarjeta con overflow-hidden: puesta adentro (como se
+            había hecho primero) el propio recorte de la tarjeta le comía la
+            mitad de arriba -por eso se veía cortada. Este div externo, sin
+            overflow-hidden, es lo que la deja asomar sobre el borde sin que
+            nada la tape. */}
         <div className="hidden xl:block 2xl:hidden">
           <CardBadge text={traducir("Usuarios conectados ahora")} tone="brand" />
         </div>
-        <div className="flex items-center justify-between gap-2 flex-none xl:justify-end 2xl:justify-between">
-          <div className="flex items-center gap-2.5 xl:hidden 2xl:flex">
-            <span className="stat-icon w-9 h-9">
-              <IconUsers className="w-5 h-5" />
-            </span>
-            <div>
-              <h3 className="font-medium text-ink leading-tight">{traducir("Usuarios conectados ahora")}</h3>
-              <p className="text-[11px] text-ink-3">{traducir("Lista de usuarios actualmente en línea en el sistema")}</p>
+        <div className="card p-6 flex flex-col gap-4 h-full min-h-0 overflow-hidden">
+          {/* En lg/"Compacta" y 2xl/"Amplia" (pendiente de su propio
+              rediseño) va el encabezado completo de siempre, con la
+              ocupación en su propia fila debajo. En xl/"Estándar" el nombre
+              ya está en la etiqueta del borde, así que en su lugar entra la
+              barra de ocupación (mismo bloque, ver bloqueOcupacion) -ahí
+              gana el ancho libre que dejó el ícono+título+subtítulo, y el
+              pill "N en línea" + el aviso de "+N más" quedan apilados a la
+              derecha (pedido del usuario, 2026-09-28). */}
+          <div className="flex items-center justify-between gap-3 flex-none">
+            <div className="flex items-center gap-2.5 xl:hidden 2xl:flex">
+              <span className="stat-icon w-9 h-9">
+                <IconUsers className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="font-medium text-ink leading-tight">{traducir("Usuarios conectados ahora")}</h3>
+                <p className="text-[11px] text-ink-3">{traducir("Lista de usuarios actualmente en línea en el sistema")}</p>
+              </div>
+            </div>
+            <div className="hidden xl:flex 2xl:hidden flex-1 min-w-0 flex-col gap-1">
+              {bloqueOcupacion}
+            </div>
+            {/* El único verde de la tarjeta: "en línea" es justo el caso
+                semántico -mismo criterio que "EN VIVO" en el header- que
+                amerita ese color; todo lo demás usa la paleta azul del resto
+                del dashboard (ver "Top usuarios" y los stat-icon de arriba). */}
+            <div className="flex flex-col items-end gap-1 flex-none">
+              <span className="pill-ok px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 flex-none whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--ok)' }} />
+                {traducir("{n} en línea", { n: t.active_users.length })}
+              </span>
+              {/* Movido acá desde el pie de la lista: dejarlo ahí competía por
+                  alto con las filas -el usuario pidió liberar ese espacio para
+                  mostrar más usuarios conectados (2026-09-28). */}
+              {ocultosSinBuscar > 0 && (
+                <p className="text-[11px] text-ink-3 whitespace-nowrap">
+                  {traducir("+ {n} más, usa el buscador", { n: ocultosSinBuscar })}
+                </p>
+              )}
             </div>
           </div>
-          {/* El único verde de la tarjeta: "en línea" es justo el caso
-              semántico -mismo criterio que "EN VIVO" en el header- que
-              amerita ese color; todo lo demás usa la paleta azul del resto
-              del dashboard (ver "Top usuarios" y los stat-icon de arriba). */}
-          <div className="flex flex-col items-end gap-1 flex-none xl:flex-row xl:items-center xl:gap-2 2xl:flex-col 2xl:items-end 2xl:gap-1">
-            <span className="pill-ok px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 flex-none whitespace-nowrap">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--ok)' }} />
-              {traducir("{n} en línea", { n: t.active_users.length })}
-            </span>
-            {/* Movido acá desde el pie de la lista: dejarlo ahí competía por
-                alto con las filas -el usuario pidió liberar ese espacio para
-                mostrar más usuarios conectados (2026-09-28). */}
-            {ocultosSinBuscar > 0 && (
-              <p className="text-[11px] text-ink-3 whitespace-nowrap">
-                {traducir("+ {n} más — buscalos arriba", { n: ocultosSinBuscar })}
-              </p>
-            )}
-          </div>
-        </div>
 
-        {/* Ocupación de cuentas habilitadas: representación mínima de "hay
-            usuarios conectados" sin la dona lateral -una sola línea, no
-            compite por alto con la lista de abajo. */}
-        <div className="flex flex-col gap-1 flex-none">
-          <div className="flex items-center justify-between text-[11px] text-ink-3">
-            <span>{traducir("Ocupación de cuentas habilitadas")}</span>
-            <span className="font-bold text-ink tabular">
-              {traducir("{n} de {total}", { n: t.active_users.length, total: data.total_proxy_users })}
-            </span>
+          {/* Ocupación de cuentas habilitadas en su propia fila: solo en
+              lg/"Compacta" y 2xl/"Amplia" -en xl ya está arriba, adentro del
+              encabezado (bloqueOcupacion). */}
+          <div className="flex flex-col gap-1 flex-none xl:hidden 2xl:flex">
+            {bloqueOcupacion}
           </div>
-          <div className="w-full h-1.5 bg-line-soft rounded-full overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${pctConectados}%`, backgroundColor: '#48B3D0', transition: 'width .6s ease' }} />
+
+          {/* Buscador: en una empresa con cientos de usuarios habituales, la
+              lista completa no sirve para responder rápido "¿fulano está
+              conectado ahora?" -este filtro sí. */}
+          <div className="relative flex-none">
+            <IconSearch className="w-4 h-4 text-ink-3 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={buscarConectado}
+              onChange={e => setBuscarConectado(e.target.value)}
+              placeholder={traducir("Buscar usuario conectado...")}
+              className="input w-full pl-9"
+            />
           </div>
-        </div>
 
-        {/* Buscador: en una empresa con cientos de usuarios habituales, la
-            lista completa no sirve para responder rápido "¿fulano está
-            conectado ahora?" -este filtro sí. */}
-        <div className="relative flex-none">
-          <IconSearch className="w-4 h-4 text-ink-3 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={buscarConectado}
-            onChange={e => setBuscarConectado(e.target.value)}
-            placeholder={traducir("Buscar usuario conectado...")}
-            className="input w-full pl-9"
-          />
-        </div>
-
-        <div className="flex flex-col flex-1 min-h-0">
-          {/* Encabezado de columnas en una sola línea -"Conectado" en vez de
-              "Tiempo conectado" para que nunca haga wrap a dos líneas. */}
+          <div className="flex flex-col flex-1 min-h-0">
+            {/* Encabezado de columnas en una sola línea -"Conectado" en vez de
+                "Tiempo conectado" para que nunca haga wrap a dos líneas. */}
           <div className="flex items-center justify-between px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wide text-ink-3 flex-none">
             <span>{traducir("Usuario")}</span>
             <span>{traducir("Conectado")}</span>
@@ -1248,6 +1271,7 @@ export default function Dashboard() {
             })}
           </div>
         </div>
+      </div>
       </div>
       </div>
 

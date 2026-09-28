@@ -19,6 +19,7 @@
   "+ {n} bloqueos sin usuario identificado (tráfico de fondo del navegador, sin credenciales)": "+ {n} blocks with no identified user (browser background traffic, no credentials)",
   "+ {n} más": "+ {n} more",
   "+ {n} más — buscalos arriba": "+ {n} more — search for them above",
+  "+ {n} más, usa el buscador": "+ {n} more, use the search box",
   ", pero se habilitan y deshabilitan desde aquí.": ", but they are enabled and disabled from here.",
   ". Si el padre es otro SquidManager, descárgalo de su panel en «Certificado CA» y cárgalo aquí con el botón, o pega su contenido.": ". If the parent is another SquidManager, download it from its CA Certificate page and upload it here with the button, or paste its contents.",
   "1 IP · {n} autenticados": "1 IP · {n} authenticated",

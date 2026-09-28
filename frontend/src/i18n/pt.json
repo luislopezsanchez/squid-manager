@@ -19,6 +19,7 @@
   "+ {n} bloqueos sin usuario identificado (tráfico de fondo del navegador, sin credenciales)": "+ {n} bloqueios sem usuário identificado (tráfego de fundo do navegador, sem credenciais)",
   "+ {n} más": "+ {n} mais",
   "+ {n} más — buscalos arriba": "+ {n} mais — busque-os acima",
+  "+ {n} más, usa el buscador": "+ {n} mais, use a busca",
   ", pero se habilitan y deshabilitan desde aquí.": ", mas são habilitados e desabilitados aqui.",
   ". Si el padre es otro SquidManager, descárgalo de su panel en «Certificado CA» y cárgalo aquí con el botón, o pega su contenido.": ". Se o pai for outro SquidManager, baixe-o do painel dele em Certificado CA e envie aqui pelo botão, ou cole o conteúdo.",
   "1 IP · {n} autenticados": "1 IP · {n} autenticados",
