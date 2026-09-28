@@ -444,6 +444,21 @@ export default function Dashboard() {
     setListaConectadosHeight(el.getBoundingClientRect().height)
   }, [trafficCardHeight])
 
+  // Red de seguridad además del useLayoutEffect de arriba: si el ancho de
+  // la ventana cambia (o cualquier otra cosa recalcula el layout) sin que
+  // trafficCardHeight en sí cambie de valor, esto vuelve a medir igual.
+  // Anotar el mismo estado desde dos mecanismos no es un conflicto: los dos
+  // terminan escribiendo el alto real vigente en cada momento.
+  useEffect(() => {
+    const el = listaConectadosRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      setListaConectadosHeight(el.getBoundingClientRect().height)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   useEffect(() => {
     loadData()
     if (autoRefresh) {
@@ -947,7 +962,7 @@ export default function Dashboard() {
           Con flex-wrap, se apilan solas únicamente si de verdad no entran
           las dos anchos mínimos lado a lado. */}
       <div className="flex flex-wrap items-start gap-4 mb-6">
-      <div ref={trafficCardRef} className="card p-6 flex flex-col flex-[1.4] min-w-[420px] xl:flex-1">
+      <div ref={trafficCardRef} className="card p-6 flex flex-col flex-[1.4] min-w-[420px] xl:flex-1 2xl:flex-[1.4]">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div className="flex items-center gap-1.5">
               <h3 className="font-medium text-ink">{traducir("Tráfico de red en tiempo real")}</h3>
@@ -1123,11 +1138,21 @@ export default function Dashboard() {
           problema-, y en 2xl/"Amplia" está pendiente un rediseño propio de
           esta sección (a definir). */}
       <div
-        className="card p-6 flex flex-col gap-4 flex-1 min-w-[560px] min-h-0 overflow-hidden xl:flex-none xl:w-[440px] xl:min-w-0"
+        className="relative card p-6 flex flex-col gap-4 flex-1 min-w-[560px] min-h-0 overflow-hidden xl:flex-none xl:w-[440px] xl:min-w-0 2xl:flex-1 2xl:w-auto 2xl:min-w-[560px]"
         style={trafficCardHeight ? { height: trafficCardHeight } : undefined}
       >
-        <div className="flex items-center justify-between gap-2 flex-none">
-          <div className="flex items-center gap-2.5">
+        {/* En xl/"Estándar" el nombre de la tarjeta se muda a una etiqueta
+            sobre el borde superior (mismo componente que ya usan los avisos
+            de arriba) y el bloque ícono+título+subtítulo se oculta -eso
+            libera el espacio para subir la barra de ocupación, el buscador
+            y la lista (pedido del usuario, 2026-09-28). En lg/"Compacta" y
+            en 2xl/"Amplia" (pendiente de su propio rediseño) se mantiene el
+            encabezado de siempre. */}
+        <div className="hidden xl:block 2xl:hidden">
+          <CardBadge text={traducir("Usuarios conectados ahora")} tone="brand" />
+        </div>
+        <div className="flex items-center justify-between gap-2 flex-none xl:justify-end 2xl:justify-between">
+          <div className="flex items-center gap-2.5 xl:hidden 2xl:flex">
             <span className="stat-icon w-9 h-9">
               <IconUsers className="w-5 h-5" />
             </span>
@@ -1140,7 +1165,7 @@ export default function Dashboard() {
               semántico -mismo criterio que "EN VIVO" en el header- que
               amerita ese color; todo lo demás usa la paleta azul del resto
               del dashboard (ver "Top usuarios" y los stat-icon de arriba). */}
-          <div className="flex flex-col items-end gap-1 flex-none">
+          <div className="flex flex-col items-end gap-1 flex-none xl:flex-row xl:items-center xl:gap-2 2xl:flex-col 2xl:items-end 2xl:gap-1">
             <span className="pill-ok px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 flex-none whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--ok)' }} />
               {traducir("{n} en línea", { n: t.active_users.length })}
