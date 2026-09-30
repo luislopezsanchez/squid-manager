@@ -22,6 +22,27 @@ Cada tipo de evento se activa o desactiva por separado: aplicar cambios, cambios
 
 - **Email**: destinatarios \`red@miempresa.com, seguridad@miempresa.com\` (varios, separados por coma), con "Alertas de seguridad" y "Aplicar cambios" activados.
 - **Telegram**: bot token (se pega una sola vez, no se vuelve a mostrar) y chat ID \`-1001234567890\` (el ID de un grupo/canal, no un usuario individual, para que el aviso lo vea todo el equipo).
+
+## Avisos de cuota y de sitios bloqueados
+
+Además de los cambios y las alertas de seguridad, puedes recibir dos avisos más:
+
+- **Cuota agotada**: cuando un usuario o grupo llega al límite de su cuota (se le corta el acceso o se le baja la velocidad). Ejemplo: «El usuario ana llegó a su cuota diaria: 500 MB de 500 MB. Se ha cortado el acceso».
+- **Intentos de entrar a sitios bloqueados**: cuando un usuario acumula cierto número de peticiones bloqueadas en 10 minutos (por defecto 10; se cambia en la misma pantalla). El aviso dice quién es y a qué sitios intentó entrar. Se manda una sola vez por usuario y por hora.
+
+## Correos con formato
+
+Todos los avisos por correo llegan con diseño: una franja de color según la gravedad, lo ocurrido en una frase, **qué significa**, **qué puedes hacer** y la fecha y hora en la zona horaria de la instalación. El idioma es el del panel cuando guardaste la configuración.
+
+## Reporte diario por correo
+
+Un resumen de las últimas 24 horas que llega a los administradores con correo: usuarios activos, sitios, datos y peticiones, los que más navegaron, los sitios bloqueados más intentados, cuotas agotadas y alertas.
+
+1. Configura el servidor en **Sistema → SMTP**.
+2. Pon un correo en tu cuenta de administrador (**Administradores**).
+3. Activa «Reporte diario», elige la hora (por defecto 23:55) y guarda.
+
+Si falta alguno de los dos requisitos, la casilla queda bloqueada y la pantalla dice cuál. El botón **Enviar el reporte ahora** manda uno de prueba.
 `.trim(),
   en: `
 ## What this is for
@@ -43,6 +64,27 @@ Each event type is turned on or off separately: applying changes, user changes, 
 
 - **Email**: recipients \`network@mycompany.com, security@mycompany.com\` (several, comma-separated), with "Security alerts" and "Apply changes" enabled.
 - **Telegram**: bot token (pasted once, never shown again) and chat ID \`-1001234567890\` (a group/channel ID, not an individual user, so the whole team sees the alert).
+
+## Quota and blocked-site notices
+
+Besides changes and security alerts you can receive two more notices:
+
+- **Quota reached**: when a user or group hits its quota limit (access is cut or speed reduced). Example: "User ana reached her daily quota: 500 MB of 500 MB. Access has been cut".
+- **Attempts to reach blocked sites**: when a user accumulates a number of blocked requests in 10 minutes (10 by default; changed on the same screen). The notice says who and which sites they tried. It is sent once per user per hour.
+
+## Formatted emails
+
+All email notices arrive designed: a colored band by severity, what happened in one sentence, **what it means**, **what you can do** and the date and time in the installation's time zone. The language is the panel's when you saved the settings.
+
+## Daily report by email
+
+A summary of the last 24 hours sent to administrators with an email: active users, sites, data and requests, top browsers, most attempted blocked sites, exhausted quotas and alerts.
+
+1. Configure the server in **System → SMTP**.
+2. Put an email on your administrator account (**Administrators**).
+3. Enable "Daily report", pick the time (23:55 by default) and save.
+
+If either requirement is missing the checkbox is locked and the screen says which one. **Send the report now** sends a test.
 `.trim(),
   pt: `
 ## Para que serve
@@ -64,5 +106,26 @@ Cada tipo de evento é ativado ou desativado separadamente: aplicar alterações
 
 - **E-mail**: destinatários \`rede@minhaempresa.com, seguranca@minhaempresa.com\` (vários, separados por vírgula), com "Alertas de segurança" e "Aplicar alterações" ativados.
 - **Telegram**: token do bot (colado uma única vez, não é mostrado de novo) e chat ID \`-1001234567890\` (o ID de um grupo/canal, não de um usuário individual, para que o aviso seja visto por toda a equipe).
+
+## Avisos de cota e de sites bloqueados
+
+Além das mudanças e dos alertas de segurança, você pode receber mais dois avisos:
+
+- **Cota esgotada**: quando um usuário ou grupo atinge o limite da cota (o acesso é cortado ou a velocidade reduzida). Exemplo: «O usuário ana atingiu sua cota diária: 500 MB de 500 MB. O acesso foi cortado».
+- **Tentativas de acessar sites bloqueados**: quando um usuário acumula certo número de requisições bloqueadas em 10 minutos (10 por padrão; muda na mesma tela). O aviso diz quem é e quais sites tentou acessar. É enviado uma vez por usuário por hora.
+
+## E-mails com formato
+
+Todos os avisos por e-mail chegam com design: uma faixa de cor conforme a gravidade, o ocorrido em uma frase, **o que significa**, **o que você pode fazer** e a data e hora no fuso da instalação. O idioma é o do painel quando você salvou a configuração.
+
+## Relatório diário por e-mail
+
+Um resumo das últimas 24 horas enviado aos administradores com e-mail: usuários ativos, sites, dados e requisições, quem mais navegou, sites bloqueados mais tentados, cotas esgotadas e alertas.
+
+1. Configure o servidor em **Sistema → SMTP**.
+2. Coloque um e-mail na sua conta de administrador (**Administradores**).
+3. Ative «Relatório diário», escolha o horário (23:55 por padrão) e salve.
+
+Se faltar um dos requisitos, a caixa fica bloqueada e a tela diz qual. **Enviar o relatório agora** envia um de teste.
 `.trim(),
 }

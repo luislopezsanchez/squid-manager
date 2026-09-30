@@ -17,6 +17,10 @@ Las demás secciones de Análisis muestran una foto fija del período elegido (e
 ## Acceso directo desde el detalle
 
 En Actividad de red y en Latencia y errores, al hacer clic en un usuario o dominio se abre un detalle con sus peticiones concretas — ahí mismo hay un botón **Ver tendencia** que trae directo a esta página con ese usuario o dominio ya cargado, sin tener que volver a escribirlo.
+
+## «Quién consume más o menos que antes»
+
+Las tarjetas de usuarios y sitios comparan este periodo con el anterior con **barras divergentes**: a la derecha del eje lo que subió (naranja), a la izquierda lo que bajó (azul), y en verde lo que es nuevo. Cada fila dice el «antes → ahora» y la diferencia. Ejemplo: \`usuario1  274 MB → 2,4 GB · +2,1 GB\` es alguien que multiplicó su consumo.
 `.trim(),
   en: `
 ## What this is for
@@ -33,6 +37,10 @@ The other Analytics sections show a fixed snapshot of the chosen period (the tot
 ## Direct access from the detail view
 
 In Network activity and Latency and errors, clicking a user or domain opens a detail view with its actual requests — right there is a **View trend** button that takes you straight to this page with that user or domain already loaded, no need to type it again.
+
+## "Who uses more or less than before"
+
+The user and site cards compare this period with the previous one using **diverging bars**: to the right of the axis what went up (orange), to the left what went down (blue), and in green what is new. Each row shows "before → now" and the difference. Example: \`user1  274 MB → 2.4 GB · +2.1 GB\` is someone who multiplied their usage.
 `.trim(),
   pt: `
 ## Para que serve
@@ -49,5 +57,9 @@ As outras seções de Análise mostram uma foto fixa do período escolhido (o to
 ## Acesso direto a partir do detalhe
 
 Em Atividade de rede e em Latência e erros, ao clicar em um usuário ou domínio abre um detalhe com suas requisições concretas — ali mesmo há um botão **Ver tendência** que leva direto a esta página com aquele usuário ou domínio já carregado, sem precisar digitar de novo.
+
+## «Quem consome mais ou menos que antes»
+
+Os cartões de usuários e sites comparam este período com o anterior com **barras divergentes**: à direita do eixo o que subiu (laranja), à esquerda o que desceu (azul) e em verde o que é novo. Cada linha mostra o «antes → agora» e a diferença. Exemplo: \`usuario1  274 MB → 2,4 GB · +2,1 GB\` é alguém que multiplicou o consumo.
 `.trim(),
 }

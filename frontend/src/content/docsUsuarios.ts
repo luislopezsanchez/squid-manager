@@ -29,6 +29,10 @@ Un usuario local puede tener fecha de vencimiento: pasada esa fecha, deja de pod
 ## Ejemplo
 
 Crear el usuario \`contratista_web\`, generar una contraseña automática, y ponerle vencimiento a 30 días -pasado ese plazo, deja de poder navegar sin que nadie tenga que acordarse de desactivarlo.
+
+## Buscar usuarios
+
+El buscador encuentra por **nombre de usuario, nombre visible o correo**, tanto en usuarios locales como en los de LDAP.
 `.trim(),
   en: `
 ## What this is for
@@ -57,6 +61,10 @@ A local user can have an expiration date: past that date, they stop being able t
 ## Example
 
 Create the user \`web_contractor\`, generate an automatic password, and set it to expire in 30 days -past that date, they stop being able to browse without anyone having to remember to disable them.
+
+## Searching users
+
+The search box matches **username, display name or email**, for both local and LDAP users.
 `.trim(),
   pt: `
 ## Para que serve
@@ -85,5 +93,9 @@ Um usuário local pode ter data de vencimento: passada essa data, ele deixa de c
 ## Exemplo
 
 Criar o usuário \`prestador_web\`, gerar uma senha automática, e definir vencimento em 30 dias -passado esse prazo, ele deixa de conseguir navegar sem que ninguém precise lembrar de desativá-lo.
+
+## Buscar usuários
+
+A busca encontra por **nome de usuário, nome de exibição ou e-mail**, tanto em usuários locais quanto LDAP.
 `.trim(),
 }

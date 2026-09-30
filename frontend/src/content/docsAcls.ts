@@ -37,6 +37,10 @@ El modo **"Agregar a lo que ya había"** suma los dominios nuevos a los que ya t
 - **Cargar el archivo** es rápido (segundos, incluso con varios millones de líneas): se valida cada línea y se escribe una sola vez.
 - **Volver a subir el mismo archivo sin cambios** no reescribe nada -se detecta que es idéntico.
 - **"Aplicar cambios"**, en cambio, va a tardar -a veces varios minutos- mientras esa ACL exista y esté en uso en alguna regla, sin importar lo simple que sea el resto del cambio (una IP de DNS, un horario). Esto no es una demora de SquidManager: es Squid mismo releyendo esa lista completa en su propia memoria cada vez que recarga su configuración, algo que ningún proxy evita del todo. La barra de progreso bajo "Aplicar cambios" muestra en qué paso va mientras se espera.
+
+## Columna «Uso»
+
+La tabla indica qué ACLs están **en uso** (las referencia alguna regla de acceso o de ancho de banda) y cuáles **sin uso**. Al pasar el ratón sobre «En uso · N» ves dónde se usa. Sirve para saber de un vistazo cuáles puedes borrar: una ACL en uso no se puede eliminar hasta quitar esas referencias; una sin uso no tiene ningún efecto sobre el tráfico.
 `.trim(),
   en: `
 ## What this is for
@@ -73,6 +77,10 @@ An ACL (Access Control List) is a named condition -an IP range, a list of domain
 - **Uploading the file** is fast (seconds, even with several million lines): each line is validated and it's written once.
 - **Re-uploading the exact same file** doesn't rewrite anything -it's detected as identical.
 - **"Apply changes"**, however, will take a while -sometimes several minutes- for as long as that ACL exists and is used in some rule, no matter how simple the rest of the change is (a DNS IP, a schedule). This isn't a SquidManager delay: it's Squid itself reloading that entire list into its own memory every time it reloads its configuration, something no proxy fully avoids. The progress bar under "Apply changes" shows which step it's on while you wait.
+
+## "Usage" column
+
+The table shows which ACLs are **in use** (referenced by an access or bandwidth rule) and which are **unused**. Hover "In use · N" to see where. It tells you at a glance which ones you can delete: an ACL in use cannot be deleted until those references are removed; an unused one has no effect on traffic.
 `.trim(),
   pt: `
 ## Para que serve
@@ -109,5 +117,9 @@ O modo **"Adicionar ao que já havia"** soma os domínios novos aos que a ACL j�
 - **Carregar o arquivo** é rápido (segundos, mesmo com vários milhões de linhas): cada linha é validada e ele é gravado uma única vez.
 - **Reenviar o mesmo arquivo sem mudanças** não reescreve nada -é detectado como idêntico.
 - **"Aplicar alterações"**, porém, vai demorar -às vezes vários minutos- enquanto essa ACL existir e estiver em uso em alguma regra, não importa quão simples seja o resto da mudança (um IP de DNS, um horário). Isso não é uma demora do SquidManager: é o próprio Squid recarregando essa lista inteira na sua própria memória toda vez que recarrega sua configuração, algo que nenhum proxy evita totalmente. A barra de progresso abaixo de "Aplicar alterações" mostra em qual etapa está enquanto você espera.
+
+## Coluna «Uso»
+
+A tabela indica quais ACLs estão **em uso** (referenciadas por alguma regra de acesso ou de largura de banda) e quais **sem uso**. Passando o mouse em «Em uso · N» você vê onde é usada. Serve para saber de relance quais pode apagar: uma ACL em uso não pode ser excluída até remover essas referências; uma sem uso não tem efeito sobre o tráfego.
 `.trim(),
 }

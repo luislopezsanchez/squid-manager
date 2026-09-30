@@ -34,6 +34,19 @@ Arriba a la derecha se elige la ventana: **Recientes** (últimas 1.000 peticione
 ## Qué se exporta a PDF
 
 El botón **Exportar PDF** genera un informe con las cuatro tablas (top 10 de cada una) más los totales reales de toda la ventana seleccionada — pensado para adjuntar o imprimir sin depender de una captura de pantalla.
+
+## Cuándo ocurrió cada cosa
+
+- **IPs compartidas**: cada fila muestra desde cuándo hasta cuándo se vio esa IP con más de una cuenta (con precisión de hora). Sale de la lista cuando pasa la ventana elegida sin que se repita.
+- **Cuota excedida**: cada fila indica cuándo se agotó la cuota y **cuándo se restablece**; ahí desaparece de la lista (o antes, si subes o quitas el límite).
+
+## Una gráfica propia por pestaña
+
+La tarjeta de evolución cambia con la pestaña: datos o peticiones (Usuarios), sitios distintos (Sitios visitados), peticiones bloqueadas, usuarios con bloqueos e IPs compartidas por periodo. Con la ventana de 1 h las que no son de tráfico piden 24 h o más.
+
+## Informe en PDF
+
+**Exportar PDF** genera un informe con el resumen, «lo más destacado», y por cada pestaña una explicación, su tabla y su gráfica. Respeta la ventana o el rango de fechas elegido, la zona horaria y el idioma del panel.
 `.trim(),
   en: `
 ## What this is for
@@ -65,6 +78,19 @@ Top right, pick the window: **Recent** (last 1,000 requests logged, regardless o
 ## What the PDF export includes
 
 The **Export PDF** button generates a report with all four tables (top 10 of each) plus the real totals for the whole selected window — meant to attach or print without relying on a screenshot.
+
+## When each thing happened
+
+- **Shared IPs**: each row shows since when until when that IP was seen with more than one account (hour precision). It leaves the list when the chosen window passes without it repeating.
+- **Quota exceeded**: each row says when the quota was exhausted and **when it resets**; it disappears from the list then (or earlier if you raise or remove the limit).
+
+## A chart of its own per tab
+
+The evolution card changes with the tab: data or requests (Users), distinct sites (Sites visited), blocked requests, users with blocks and shared IPs per period. With the 1 h window the non-traffic ones ask for 24 h or more.
+
+## PDF report
+
+**Export PDF** produces a report with the summary, highlights, and for each tab an explanation, its table and its chart. It follows the chosen window or date range, the time zone and the panel language.
 `.trim(),
   pt: `
 ## Para que serve
@@ -96,5 +122,18 @@ No canto superior direito, escolha a janela: **Recentes** (últimas 1.000 requis
 ## O que é exportado em PDF
 
 O botão **Exportar PDF** gera um relatório com as quatro tabelas (top 10 de cada uma) mais os totais reais de toda a janela selecionada — pensado para anexar ou imprimir sem depender de uma captura de tela.
+
+## Quando aconteceu cada coisa
+
+- **IPs compartilhados**: cada linha mostra desde quando até quando esse IP foi visto com mais de uma conta (precisão de hora). Sai da lista quando a janela escolhida passa sem se repetir.
+- **Cota excedida**: cada linha indica quando a cota se esgotou e **quando é reiniciada**; nesse momento sai da lista (ou antes, se você aumentar ou remover o limite).
+
+## Um gráfico próprio por aba
+
+O cartão de evolução muda com a aba: dados ou requisições (Usuários), sites distintos (Sites visitados), requisições bloqueadas, usuários com bloqueios e IPs compartilhados por período. Com a janela de 1 h as que não são de tráfego pedem 24 h ou mais.
+
+## Relatório em PDF
+
+**Exportar PDF** gera um relatório com o resumo, os destaques e, por aba, uma explicação, sua tabela e seu gráfico. Respeita a janela ou o intervalo de datas escolhido, o fuso horário e o idioma do painel.
 `.trim(),
 }

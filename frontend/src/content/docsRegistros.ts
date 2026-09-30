@@ -24,6 +24,10 @@ La exportación respeta los filtros activos -si filtraste por un usuario, el arc
 ## Qué NO es
 
 Esto es \`access.log\` en vivo, con una ventana de retención limitada (Squid lo rota). Para consultar tráfico de meses anteriores, esa es la sección **Histórico** -un sistema completamente aparte, con sus propios archivos mensuales.
+
+## Terminar conexión
+
+El botón **Terminar conexión** solo aparece en las filas de clientes que tienen conexiones abiertas ahora mismo. En las demás dice «Sin conexión activa»: no hay nada que cortar. Cortar no bloquea la navegación futura.
 `.trim(),
   en: `
 ## What this is for
@@ -47,6 +51,10 @@ The export respects the active filters -if you filtered by a user, the exported 
 ## What this is NOT
 
 This is the live \`access.log\`, with a limited retention window (Squid rotates it). To look at traffic from previous months, that's the **Historical** section -a completely separate system, with its own monthly files.
+
+## Terminate connection
+
+The **Terminate connection** button only appears on rows of clients that have open connections right now. On the others it says "No active connection": there is nothing to cut. Cutting does not block future browsing.
 `.trim(),
   pt: `
 ## Para que serve
@@ -70,5 +78,9 @@ A exportação respeita os filtros ativos -se você filtrou por um usuário, o a
 ## O que isso NÃO é
 
 Isso é o \`access.log\` ao vivo, com uma janela de retenção limitada (o Squid o rotaciona). Para consultar tráfego de meses anteriores, essa é a seção **Histórico** -um sistema completamente separado, com seus próprios arquivos mensais.
+
+## Terminar conexão
+
+O botão **Terminar conexão** só aparece nas linhas de clientes que têm conexões abertas agora. Nas demais diz «Sem conexão ativa»: não há nada para cortar. Cortar não bloqueia a navegação futura.
 `.trim(),
 }

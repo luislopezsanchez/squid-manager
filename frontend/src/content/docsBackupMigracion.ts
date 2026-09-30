@@ -25,6 +25,14 @@ Qué se importa y qué no:
 - ACLs, reglas de acceso, delay pools con formato estándar, y un proxy padre simple -este último se importa **desactivado**, para probarlo antes de activarlo.
 - Los usuarios (htpasswd) **no** se importan -hay que crearlos a mano después.
 - NTLM/AD, grupos externos, squidGuard y otras directivas sin equivalente en el panel se listan en el informe como no soportadas, nunca se importan en silencio.
+
+## Formatos aceptados al migrar
+
+Al importar desde otro Squid puedes subir la carpeta de configuración comprimida en **.zip, .tar.gz, .rar o .7z** (sin contraseña) o sus archivos sueltos. Para \`.rar\` y \`.7z\` el servidor necesita el paquete \`libarchive-tools\`, que el instalador ya incluye.
+
+## DNS del Squid de origen
+
+Si el Squid de origen usaba servidores DNS que **no responden desde este servidor** (típico al cambiar de red), el informe lo avisa antes de importar y, por defecto, **no los importa**: con un DNS inalcanzable, Squid no podría resolver nombres y «Aplicar cambios» se negaría a propósito. Puedes marcar la casilla si aun así quieres importarlos.
 `.trim(),
   en: `
 ## What this is for
@@ -49,6 +57,14 @@ What's imported and what isn't:
 - ACLs, access rules, delay pools in the standard format, and a simple parent proxy -the latter is imported **disabled**, to test it before turning it on.
 - Users (htpasswd) are **not** imported -they need to be created by hand afterward.
 - NTLM/AD, external groups, squidGuard and other directives with no equivalent in the panel are listed in the report as unsupported, never imported silently.
+
+## Accepted formats when migrating
+
+When importing from another Squid you can upload the configuration folder compressed as **.zip, .tar.gz, .rar or .7z** (no password) or its loose files. For \`.rar\` and \`.7z\` the server needs the \`libarchive-tools\` package, which the installer already includes.
+
+## DNS of the source Squid
+
+If the source Squid used DNS servers that **do not respond from this server** (typical when changing networks), the report warns you before importing and, by default, **does not import them**: with an unreachable DNS Squid could not resolve names and "Apply changes" would refuse on purpose. You can tick the box if you still want them.
 `.trim(),
   pt: `
 ## Para que serve
@@ -73,5 +89,13 @@ O que é importado e o que não é:
 - ACLs, regras de acesso, delay pools no formato padrão, e um proxy pai simples -este último é importado **desativado**, para testá-lo antes de ativar.
 - Os usuários (htpasswd) **não** são importados -precisam ser criados manualmente depois.
 - NTLM/AD, grupos externos, squidGuard e outras diretivas sem equivalente no painel são listadas no relatório como não suportadas, nunca importadas silenciosamente.
+
+## Formatos aceitos ao migrar
+
+Ao importar de outro Squid você pode enviar a pasta de configuração compactada em **.zip, .tar.gz, .rar ou .7z** (sem senha) ou seus arquivos soltos. Para \`.rar\` e \`.7z\` o servidor precisa do pacote \`libarchive-tools\`, que o instalador já inclui.
+
+## DNS do Squid de origem
+
+Se o Squid de origem usava servidores DNS que **não respondem a partir deste servidor** (típico ao mudar de rede), o relatório avisa antes de importar e, por padrão, **não os importa**: com um DNS inalcançável o Squid não resolveria nomes e «Aplicar alterações» se recusaria de propósito. Você pode marcar a caixa se ainda assim quiser importá-los.
 `.trim(),
 }

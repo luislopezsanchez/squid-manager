@@ -57,3 +57,25 @@ valor fuera de la lista se rechaza con HTTP 400.
 
 Ejemplo de configuración: host `172.31.27.50`, puerto `514`, protocolo `udp`,
 formato `rfc3164`, facility `local0`.
+
+---
+
+## Notificaciones, reporte diario y zona horaria (0.25.0)
+
+- **Avisos por correo con formato** (HTML + texto plano) para todos los eventos; dos nuevos:
+  *cuota agotada* e *intentos de entrar a sitios bloqueados* (umbral configurable).
+- **Reporte diario** por correo: requiere SMTP y un administrador con correo; hora configurable
+  (por defecto 23:55). `POST /api/notifications/daily-report/send-now` envía uno de prueba.
+- **Zona horaria** (Sistema → Configuración, `GET/PUT /api/system/timezone`): define la medianoche
+  de las cuotas, el corte de los gráficos por día y la hora del reporte.
+- **ACLs**: `GET /api/acls/usage` alimenta la columna «Uso».
+- **Actividad de red**: `GET /api/panel/actividad-serie?tipo=...` (gráfica por pestaña) y
+  `GET /api/panel/rendimiento-serie` (Latencia y errores). El PDF recoge todas las pestañas.
+
+## Requisitos de sistema añadidos
+
+`libarchive-tools` (comando `bsdtar`) para importar `.rar` / `.7z`; ya lo instalan `install-nativo.sh`
+y el Dockerfile del backend.
+
+Al cambiar `cache_dir`, «Aplicar cambios» **reinicia** Squid en vez de recargarlo (Squid no puede
+crear el almacenamiento en disco con `-k reconfigure`).

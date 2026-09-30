@@ -43,6 +43,12 @@ Ningún ajuste de esta página cambia nada en Squid hasta que se pulsa **Aplicar
 
 - **visible_hostname** — el nombre con el que este proxy se identifica ante otros. Tiene que ser distinto en cada proxy de una cadena: Squid rechaza como bucle de reenvío cualquier petición cuya cabecera \`Via\` ya lleve su propio nombre. Ejemplo: \`squidmanager-suc-norte\`.
 - **error_language** — idioma de las páginas de error que Squid muestra al usuario (por ejemplo, "Acceso denegado"). Ejemplo: \`es\`, \`en\`, \`pt\`.
+
+## Zona horaria
+
+En la parte de arriba puedes elegir la **zona horaria de la instalación**. Decide cuándo empieza el día para SquidManager: la medianoche en que se restablecen las cuotas diarias (y el lunes o el día 1 en las semanales y mensuales), el corte de los gráficos por día y la hora del reporte diario.
+
+Ejemplo: si el servidor está en UTC y tu oficina en La Habana, sin ajustarla las cuotas diarias se restablecerían a las 20:00 o 19:00 hora local. Elige \`America/Havana\` y se restablecerán a la medianoche real. Por defecto se usa la zona del servidor. No cambia la hora del sistema operativo.
 `.trim(),
   en: `
 ## What this is for
@@ -85,6 +91,12 @@ No setting on this page changes anything in Squid until **Apply changes** (the s
 
 - **visible_hostname** — the name this proxy identifies itself with to others. It has to be different on every proxy in a chain: Squid rejects as a forwarding loop any request whose \`Via\` header already carries its own name. Example: \`squidmanager-north-branch\`.
 - **error_language** — language of the error pages Squid shows the user (for example, "Access denied"). Example: \`es\`, \`en\`, \`pt\`.
+
+## Time zone
+
+At the top you can pick the **installation's time zone**. It decides when the day starts for SquidManager: the midnight when daily quotas reset (and Monday or the 1st for weekly and monthly ones), the cut-off of per-day charts and the time of the daily report.
+
+Example: if the server is in UTC and your office in Havana, unadjusted daily quotas would reset at 19:00 or 20:00 local time. Pick \`America/Havana\` and they reset at real midnight. The server's zone is used by default. It does not change the operating system clock.
 `.trim(),
   pt: `
 ## Para que serve
@@ -127,5 +139,11 @@ Nenhum ajuste desta página muda nada no Squid até que se clique em **Aplicar a
 
 - **visible_hostname** — o nome com o qual este proxy se identifica para outros. Precisa ser diferente em cada proxy de uma cadeia: o Squid rejeita como loop de encaminhamento qualquer requisição cujo cabeçalho \`Via\` já carregue seu próprio nome. Exemplo: \`squidmanager-filial-norte\`.
 - **error_language** — idioma das páginas de erro que o Squid mostra ao usuário (por exemplo, "Acesso negado"). Exemplo: \`es\`, \`en\`, \`pt\`.
+
+## Fuso horário
+
+No topo você pode escolher o **fuso horário da instalação**. Ele define quando o dia começa para o SquidManager: a meia-noite em que as cotas diárias são reiniciadas (e a segunda-feira ou o dia 1 nas semanais e mensais), o corte dos gráficos por dia e o horário do relatório diário.
+
+Exemplo: se o servidor está em UTC e seu escritório em Havana, sem ajustar as cotas diárias seriam reiniciadas às 19:00 ou 20:00 locais. Escolha \`America/Havana\` e serão reiniciadas na meia-noite real. Por padrão usa-se o fuso do servidor. Não altera o relógio do sistema operacional.
 `.trim(),
 }

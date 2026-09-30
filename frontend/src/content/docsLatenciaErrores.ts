@@ -21,6 +21,15 @@ Igual que Actividad de red, esta sección **no configura nada** — es salida de
 ## Filtro de tiempo y drill-down
 
 Mismo filtro que Actividad de red (Recientes / última hora / 24 horas / 7 días), arriba a la derecha. Al hacer clic en cualquier dominio — de "Dominios más lentos" o de "Por dominio" en Errores — se abre el detalle con las peticiones concretas de ese dominio en la ventana elegida.
+
+## Cómo leer los gráficos
+
+- **Indicadores con color**: verde si el sitio responde rápido (menos de 300 ms de media), ámbar si se nota (hasta 1 s) y rojo si es lento.
+- **Latencia a lo largo del tiempo**: cuándo se puso lento el servicio.
+- **¿Qué tan rápidas son las peticiones?**: cuántas caen en cada rango. Mucho verde es buena señal; las barras rojas son los casos lentos.
+- **Errores**: tasa de error sobre el total, errores del servidor (5xx, lo más importante) frente a no encontrados (4xx, enlaces rotos), y cuándo fallaron más.
+
+Ejemplo: una tasa del 2,5 % con muchos 5xx de un solo dominio suele ser ese sitio, no tu proxy.
 `.trim(),
   en: `
 ## What this is for
@@ -41,6 +50,15 @@ Just like Network activity, this section **does not configure anything** — it'
 ## Time filter and drill-down
 
 Same filter as Network activity (Recent / last hour / 24 hours / 7 days), top right. Clicking any domain — from "Slowest domains" or "By domain" in Errors — opens the detail view with the actual requests for that domain in the chosen window.
+
+## How to read the charts
+
+- **Colored indicators**: green if the site answers fast (under 300 ms on average), amber if noticeable (up to 1 s) and red if slow.
+- **Latency over time**: when the service got slow.
+- **How fast are the requests?**: how many fall in each range. Lots of green is good; red bars are the slow cases.
+- **Errors**: error rate over the total, server errors (5xx, the most important) versus not found (4xx, broken links), and when they failed most.
+
+Example: a 2.5 % rate with many 5xx from a single domain is usually that site, not your proxy.
 `.trim(),
   pt: `
 ## Para que serve
@@ -61,5 +79,14 @@ Assim como Atividade de rede, esta seção **não configura nada** — é saída
 ## Filtro de tempo e drill-down
 
 Mesmo filtro que Atividade de rede (Recentes / última hora / 24 horas / 7 dias), no canto superior direito. Ao clicar em qualquer domínio — de "Domínios mais lentos" ou de "Por domínio" em Erros — abre o detalhe com as requisições concretas daquele domínio na janela escolhida.
+
+## Como ler os gráficos
+
+- **Indicadores com cor**: verde se o site responde rápido (menos de 300 ms em média), âmbar se é perceptível (até 1 s) e vermelho se é lento.
+- **Latência ao longo do tempo**: quando o serviço ficou lento.
+- **Quão rápidas são as requisições?**: quantas caem em cada faixa. Muito verde é bom sinal; as barras vermelhas são os casos lentos.
+- **Erros**: taxa de erro sobre o total, erros do servidor (5xx, o mais importante) versus não encontrados (4xx, links quebrados), e quando mais falharam.
+
+Exemplo: uma taxa de 2,5 % com muitos 5xx de um único domínio costuma ser esse site, não o seu proxy.
 `.trim(),
 }

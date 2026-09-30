@@ -34,6 +34,13 @@ Una **Clase 2** asociada a la ACL \`streaming_video\`, con:
 - Por usuario: restore \`512 KB/s\`, límite \`1 MB/s\` (cada persona individual queda tope en medio megabyte por segundo sostenido).
 
 Con esto, ver un video de a uno anda bien, pero diez personas mirando streaming a la vez no saturan el enlace completo -cada una cede lugar a las demás dentro del límite global.
+
+## ¿Cómo se aplica el límite?
+
+- **Un límite total**: todo lo que elegiste comparte la velocidad. Ejemplo: con 512 KB/s, si 10 personas navegan a la vez, se reparten esos 512 KB/s.
+- **Un límite por dispositivo**: cada computadora o teléfono (dirección IP) desde el que se navegue con lo elegido recibe el límite por separado. Ejemplo: con 512 KB/s, si 3 equipos descargan a la vez, cada uno recibe hasta 512 KB/s.
+
+Los «dispositivos» no son los objetos que eliges (usuarios, ACLs, categorías): son los equipos desde los que esas personas navegan.
 `.trim(),
   en: `
 ## What this is for
@@ -67,6 +74,13 @@ A **Class 2** pool tied to the \`video_streaming\` ACL, with:
 - Per user: restore \`512 KB/s\`, limit \`1 MB/s\` (each individual person is capped at half a megabyte per second sustained).
 
 With this, watching a video alone works fine, but ten people streaming at once don't saturate the whole link -each one yields room to the others within the global cap.
+
+## How is the limit applied?
+
+- **One total limit**: everything you chose shares the speed. Example: with 512 KB/s, if 10 people browse at once they split those 512 KB/s.
+- **One limit per device**: each computer or phone (IP address) browsing with what you chose gets the limit separately. Example: with 512 KB/s, if 3 devices download at once each gets up to 512 KB/s.
+
+"Devices" are not the objects you pick (users, ACLs, categories): they are the machines those people browse from.
 `.trim(),
   pt: `
 ## Para que serve
@@ -100,5 +114,12 @@ Uma **Classe 2** associada à ACL \`streaming_video\`, com:
 - Por usuário: restore \`512 KB/s\`, limite \`1 MB/s\` (cada pessoa individual fica limitada a meio megabyte por segundo sustentado).
 
 Com isso, assistir a um vídeo sozinho funciona bem, mas dez pessoas assistindo streaming ao mesmo tempo não saturam o link inteiro -cada uma cede espaço para as outras dentro do limite global.
+
+## Como o limite é aplicado?
+
+- **Um limite total**: tudo o que você escolheu compartilha a velocidade. Exemplo: com 512 KB/s, se 10 pessoas navegam ao mesmo tempo, dividem esses 512 KB/s.
+- **Um limite por dispositivo**: cada computador ou telefone (endereço IP) que navegue com o que foi escolhido recebe o limite separadamente. Exemplo: com 512 KB/s, se 3 equipamentos baixam ao mesmo tempo, cada um recebe até 512 KB/s.
+
+Os «dispositivos» não são os objetos que você escolhe (usuários, ACLs, categorias): são as máquinas a partir das quais essas pessoas navegam.
 `.trim(),
 }
