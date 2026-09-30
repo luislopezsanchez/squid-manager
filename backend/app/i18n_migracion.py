@@ -175,6 +175,7 @@ NUEVAS: dict[str, dict[str, str]] = {
         "No se pudo descomprimir «{n}»: puede estar dañado o protegido con contraseña.": "Could not extract «{n}»: it may be damaged or password-protected.",
         "«{n}» tardó demasiado en descomprimirse.": "«{n}» took too long to extract.",
         "El archivo comprimido tiene demasiados archivos.": "The compressed file has too many files.",
+        "Squid reiniciado porque cambió la caché en disco: {m}": "Squid restarted because the disk cache changed: {m}",
     },
     "pt": {
         "la lista «{ruta}» no se subió junto con el squid.conf (súbela para importar esta ACL)":
@@ -441,6 +442,7 @@ _VARIOS = {
         "No se pudo descomprimir «{n}»: puede estar dañado o protegido con contraseña.": "Não foi possível descompactar «{n}»: pode estar danificado ou protegido por senha.",
         "«{n}» tardó demasiado en descomprimirse.": "«{n}» demorou demais para descompactar.",
         "El archivo comprimido tiene demasiados archivos.": "O arquivo compactado tem arquivos demais.",
+        "Squid reiniciado porque cambió la caché en disco: {m}": "Squid reiniciado porque a cache em disco mudou: {m}",
     },
 }
 for _i, _d in _VARIOS.items():

@@ -602,6 +602,11 @@ def restart_squid() -> tuple[bool, str]:
 _apply_lock = threading.Lock()
 
 
+def _lineas_cache_dir(texto: str) -> list[str]:
+    """Las directivas `cache_dir` de un squid.conf, normalizadas (espacios colapsados)."""
+    return sorted(" ".join(l.split()) for l in texto.splitlines() if l.strip().startswith("cache_dir "))
+
+
 def apply_squid_config(db) -> dict:
     """Aplica la configuración de Squid, serializado: una ejecución a la vez."""
     from app.services import apply_progress
@@ -795,6 +800,16 @@ def _apply_squid_config(db) -> dict:
 
     # 3. Escribir la configuración ya validada.
     apply_progress.avanzar(apply_progress.PASO_ESCRIBIENDO)
+    try:
+        with open(settings.SQUID_CONFIG_PATH) as f:
+            config_previa = f.read()
+    except OSError:
+        config_previa = ""
+    # Squid no sabe crear ni cambiar un `cache_dir` con `-k reconfigure`: si el almacenamiento
+    # en disco cambia (p. ej. en una instalación nueva, que arranca sin caché en disco y en
+    # el primer «Aplicar cambios» recibe `cache_dir ufs ...`), el proceso se aborta con
+    # «assertion failed: store_swapout.cc» y el proxy queda caído. Hace falta un reinicio.
+    cache_cambio = bool(config_previa) and _lineas_cache_dir(config_previa) != _lineas_cache_dir(config_text)
     with open(settings.SQUID_CONFIG_PATH, "w") as f:
         f.write(config_text)
 
@@ -843,6 +858,17 @@ def _apply_squid_config(db) -> dict:
         return {
             "status": "ok" if ok else "warning",
             "message": f"Puerto actualizado: {restart_msg}",
+            "needs_restart": False,
+            "warnings": warnings,
+            "config_preview": preview,
+        }
+
+    # 5a-bis. Cambió el almacenamiento de caché en disco: reiniciar (ver arriba).
+    if cache_cambio:
+        ok, restart_msg = restart_squid()
+        return {
+            "status": "ok" if ok else "warning",
+            "message": f"Squid reiniciado porque cambió la caché en disco: {restart_msg}",
             "needs_restart": False,
             "warnings": warnings,
             "config_preview": preview,

@@ -190,3 +190,13 @@ def test_usos_de_todas_las_acls():
     u = usos_de_todas(DB())
     assert set(u) == {"a", "b", "c"}
     assert len(u["b"]) == 2 and "ancho de banda #3" in u["c"][0]
+
+
+def test_cambio_de_cache_dir_exige_reinicio():
+    from app.services.squid_service import _lineas_cache_dir
+    sin = "http_port 3128\nacl x src 1.1.1.1\n"
+    con = sin + "cache_dir ufs /var/spool/squid 100 16 256\n"
+    assert _lineas_cache_dir(sin) == []
+    assert _lineas_cache_dir(con) != _lineas_cache_dir(sin)            # instalación nueva → hay que reiniciar
+    assert _lineas_cache_dir(con) == _lineas_cache_dir(con.replace("ufs /var", "ufs   /var"))  # espacios no cuentan
+    assert _lineas_cache_dir(con) != _lineas_cache_dir(con.replace("100", "200"))
