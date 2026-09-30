@@ -5,6 +5,7 @@ import { formatBytes, formatNumber } from '../utils/format'
 import { useToast } from '../components/Toast'
 import { IconDownload } from '../components/Icons'
 import { LoadingState, ErrorState } from '../components/AsyncState'
+import { ResumenActividad } from '../components/ResumenActividad'
 import {
   FilaBarra, AnilloConcentracion, ModalDetalle, SelectorVentana, VENTANAS,
   type FilaDetalle, type Ventana, type RangoFechasInput,
@@ -63,7 +64,7 @@ const EXPLICACIONES: Record<Pestana, string> = {
 
 export default function ActividadRed() {
   const [pestana, setPestana] = useState<Pestana>('usuarios')
-  const [ventana, setVentana] = useState<Ventana>('')
+  const [ventana, setVentana] = useState<Ventana>('24h')
   const [rangoInput, setRangoInput] = useState<RangoFechasInput>({ desde: '', hasta: '' })
   const [porDatos, setPorDatos] = useState(true) // aplica a "usuarios" y "dominios"
   const [usuarios, setUsuarios] = useState<FilaUsuario[] | null>(null)
@@ -326,6 +327,16 @@ export default function ActividadRed() {
       </div>
 
       <p className="text-sm text-ink-2 mb-4 max-w-3xl">{EXPLICACIONES[pestana]}</p>
+
+      {pestana !== 'cuota-excedida' && pestana !== 'ips-compartidas' && (
+        <ResumenActividad
+          ventana={ventana}
+          filas={filas}
+          total={total}
+          formato={(pestana === 'usuarios' || pestana === 'dominios') && porDatos ? formatBytes : formatNumber}
+          tituloReparto={PESTANAS.find(x => x.id === pestana)?.label ?? ''}
+        />
+      )}
 
       {pestana === 'cuota-excedida' ? (
         // Tampoco entra en el modelo de ranking-contra-un-máximo: acá lo

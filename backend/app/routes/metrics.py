@@ -260,6 +260,30 @@ def usuarios_conectados_route(_: Admin = Depends(get_current_admin)):
     return get_realtime_traffic()["active_users"]
 
 
+@router.get("/panorama")
+def panorama_route(
+    ventana: str = Query("24h", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    """Panorama del servicio en 24h, 7d o 30d: indicadores con su comparación
+    contra el periodo anterior, series, reparto de respuestas, rankings,
+    quién crece o decrece y mapa de calor. Sale de los agregados por hora
+    (rollup_service), no del access.log: responde en milisegundos. Suma el
+    estado actual de cuotas y las anomalías recientes."""
+    from app.services import rollup_service
+    from app.services.quota_service import contar_cuotas_en_riesgo
+
+    segundos = {"24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400}[ventana]
+    if not rollup_service.disponible(segundos):
+        return {"disponible": False}
+    datos = rollup_service.panorama(segundos)
+    datos["disponible"] = True
+    datos["cuotas"] = {"en_riesgo": contar_cuotas_en_riesgo(db), "excedidas": cuotas_excedidas(db)}
+    datos["anomalias"] = get_anomalias_recientes(horas=segundos / 3600 if segundos <= 7 * 86400 else 168, limit=8)
+    return datos
+
+
 @router.get("/anomalias-recientes")
 def anomalias_recientes(
     horas: float = Query(24, ge=1, le=168),

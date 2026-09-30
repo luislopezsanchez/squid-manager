@@ -8,6 +8,7 @@ import { SelectorVentana, type Ventana } from '../components/ReportWidgets'
 import { LineAreaChart } from '../components/LineAreaChart'
 import { IconActivity } from '../components/Icons'
 import { LoadingState } from '../components/AsyncState'
+import { TendenciasGlobales } from '../components/TendenciasGlobales'
 
 type Punto = { timestamp: number; bytes: number; requests: number }
 type Tendencia = { points: Punto[]; user: string | null; domain: string | null }
@@ -60,8 +61,13 @@ export default function Tendencias() {
     <div className="p-6 md:p-8">
       <h1 className="text-2xl font-bold text-ink mb-1">{traducir("Tendencias")}</h1>
       <p className="text-sm text-ink-3 mb-6">
-        {traducir("Cómo evolucionó un usuario o sitio a lo largo del tiempo.")}
+        {traducir("Cómo evoluciona la navegación del servicio entero y, más abajo, la de un usuario o sitio en concreto.")}
       </p>
+
+      <TendenciasGlobales />
+
+      <h2 className="text-lg font-semibold text-ink mb-1">{traducir("Consulta puntual")}</h2>
+      <p className="text-sm text-ink-3 mb-4">{traducir("Cómo evolucionó un usuario o sitio a lo largo del tiempo.")}</p>
 
       <div className="card p-4 mb-4 flex flex-wrap items-end gap-3">
         <div className="flex gap-1 bg-line-soft p-1 rounded-lg">

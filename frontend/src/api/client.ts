@@ -409,6 +409,7 @@ export const api = {
     request<{ granularidad: 'minuto' | 'hora' | 'dia'; puntos: { timestamp: number; bytes: number; requests: number }[] }>(
       `/panel/volumen-por-periodo${ventana ? `?ventana=${ventana}` : ''}`
     ),
+  getPanorama: (ventana: '24h' | '7d' | '30d') => request<any>(`/panel/panorama?ventana=${ventana}`),
   getTendenciaTrafico: (params: { user?: string; domain?: string; ventana?: string; buckets?: number }) => {
     const qs = new URLSearchParams()
     if (params.user) qs.set('user', params.user)

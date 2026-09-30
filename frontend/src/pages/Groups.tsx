@@ -311,9 +311,8 @@ export default function Groups() {
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-xs text-blue-800">
-        <strong>{traducir("Grupos: políticas por conjunto de usuarios.")}</strong> Cada grupo genera una ACL{" "}
-        <code>proxy_auth</code> en Squid. Para aplicar una política, crea una <strong>{traducir("regla de acceso")}</strong>{" "}
-        que referencie el nombre del grupo (ej. <code>{traducir("allow ventas")}</code>).
+        <strong>{traducir("Grupos: políticas por conjunto de usuarios.")}</strong>{" "}
+        {traducir("Cada grupo genera una ACL proxy_auth en Squid. Para aplicar una política, crea una regla de acceso que referencie el nombre del grupo (ej. allow ventas).")}
       </div>
 
       {showForm && (

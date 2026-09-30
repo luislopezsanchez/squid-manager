@@ -637,3 +637,104 @@ def opciones_de_filtro(horas: int = 24) -> dict:
         "statuses": [int(r[0]) for r in estados],
         "top_domains": sorted(r[0] for r in dominios),
     }
+
+
+# ---------------------------------------------------------------------------
+# Panorama / Tendencias: todo lo que necesitan las pantallas de análisis, de una vez
+# ---------------------------------------------------------------------------
+
+def _kpis(h0: int, h1: int) -> dict:
+    p = {"h0": h0, "h1": h1}
+    t = _q("SELECT COALESCE(SUM(requests),0), COALESCE(SUM(bytes),0), COALESCE(SUM(denied),0), "
+           "COALESCE(SUM(errors),0), COALESCE(SUM(hits),0), COALESCE(SUM(misses),0), "
+           "COALESCE(SUM(bytes_hit),0), COALESCE(SUM(lat_sum),0), COALESCE(SUM(lat_n),0) "
+           "FROM ru_total WHERE h BETWEEN :h0 AND :h1", p)[0]
+    usuarios = _q("SELECT COUNT(DISTINCT username) FROM ru_user WHERE h BETWEEN :h0 AND :h1", p)[0][0]
+    dominios = _q("SELECT COUNT(DISTINCT domain) FROM ru_domain WHERE h BETWEEN :h0 AND :h1", p)[0][0]
+    hits, misses = int(t[4]), int(t[5])
+    return {
+        "requests": int(t[0]), "bytes": int(t[1]), "denied": int(t[2]), "errors": int(t[3]),
+        "cache_hits": hits, "cache_misses": misses, "cache_bytes_saved": int(t[6]),
+        "cache_hit_ratio": round(hits / (hits + misses) * 100, 1) if (hits + misses) else None,
+        "latency_avg_ms": round(int(t[7]) / int(t[8])) if t[8] else None,
+        "users": int(usuarios), "domains": int(dominios),
+    }
+
+
+def _movers(h0: int, h1: int, ph0: int, tabla: str, col: str, metrica: str, limite: int = 5) -> dict:
+    """Quién creció, quién bajó y quién es nuevo, comparando este periodo con el anterior."""
+    rows = _q(
+        f"SELECT {col}, SUM(CASE WHEN h >= :h0 THEN {metrica} ELSE 0 END) AS cur, "
+        f"SUM(CASE WHEN h < :h0 THEN {metrica} ELSE 0 END) AS prev FROM {tabla} "
+        f"WHERE h BETWEEN :ph0 AND :h1 GROUP BY {col}",
+        {"h0": h0, "h1": h1, "ph0": ph0},
+    )
+    todos = [{"nombre": r[0], "actual": int(r[1]), "anterior": int(r[2])} for r in rows]
+    nuevos = sorted((x for x in todos if x["anterior"] == 0 and x["actual"] > 0), key=lambda x: -x["actual"])[:limite]
+    suben = sorted((x for x in todos if x["anterior"] > 0 and x["actual"] > x["anterior"]),
+                   key=lambda x: -(x["actual"] - x["anterior"]))[:limite]
+    bajan = sorted((x for x in todos if x["anterior"] > 0 and x["actual"] < x["anterior"]),
+                   key=lambda x: -(x["anterior"] - x["actual"]))[:limite]
+    return {"nuevos": nuevos, "suben": suben, "bajan": bajan}
+
+
+def panorama(seconds: int) -> dict:
+    """Resumen del servicio en una ventana (24h / 7d / 30d): indicadores con su
+    comparación contra el periodo anterior de igual duración, series para los
+    gráficos, reparto por tipo de respuesta, rankings, quién crece o decrece,
+    y el mapa de calor por día de la semana y hora."""
+    ahora = time.time()
+    h1 = _hora(ahora)
+    h0 = _hora(ahora - seconds)
+    ph1 = h0 - 3600
+    ph0 = _hora(ahora - 2 * seconds)
+    p = {"h0": h0, "h1": h1}
+
+    actual, anterior = _kpis(h0, h1), _kpis(ph0, ph1)
+
+    horas = serie_total(seconds, None, None)
+    if seconds > 2 * 86400:  # ventanas largas: un punto por día
+        dias: dict[float, dict] = {}
+        for x in horas:
+            d = datetime.fromtimestamp(x["timestamp"]).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            g = dias.setdefault(d, {"timestamp": d, "requests": 0, "bytes": 0, "denied": 0, "errors": 0, "hits": 0, "misses": 0, "_ls": 0, "_ln": 0})
+            for k in ("requests", "bytes", "denied", "errors", "hits", "misses"):
+                g[k] += x[k]
+        serie = [{k: v for k, v in dias[d].items() if not k.startswith("_")} for d in sorted(dias)]
+        granularidad = "dia"
+    else:
+        serie, granularidad = horas, "hora"
+
+    clases = {"2xx": 0, "3xx": 0, "politica": 0, "4xx": 0, "5xx": 0, "otros": 0}
+    for status, n in _q("SELECT status, SUM(n) FROM ru_status WHERE h BETWEEN :h0 AND :h1 GROUP BY status", p):
+        n = int(n)
+        if 200 <= status < 300:
+            clases["2xx"] += n
+        elif 300 <= status < 400:
+            clases["3xx"] += n
+        elif status in _CODIGOS_POLITICA:
+            clases["politica"] += n
+        elif 400 <= status < 500:
+            clases["4xx"] += n
+        elif status >= 500:
+            clases["5xx"] += n
+        else:
+            clases["otros"] += n
+
+    # Mapa de calor: peticiones por día de la semana (0=lunes) y hora local.
+    mapa = [[0] * 24 for _ in range(7)]
+    for x in horas:
+        dt = datetime.fromtimestamp(x["timestamp"])
+        mapa[dt.weekday()][dt.hour] += x["requests"]
+
+    return {
+        "ventana_segundos": seconds, "granularidad": granularidad,
+        "actual": actual, "anterior": anterior,
+        "serie": serie, "clases_http": clases, "mapa_calor": mapa,
+        "top_usuarios": top_users(6, "bytes", seconds, None, None),
+        "top_dominios": top_domains(6, False, "requests", seconds, None, None),
+        "top_bloqueados_dominio": top_domains(6, True, "requests", seconds, None, None),
+        "top_bloqueados_usuario": [{"user": u, "blocked_requests": n} for u, n in top_blocked_users(6, seconds, None, None)[0]],
+        "movers_usuarios": _movers(h0, h1, ph0, "ru_user", "username", "bytes"),
+        "movers_dominios": _movers(h0, h1, ph0, "ru_domain", "domain", "requests"),
+    }

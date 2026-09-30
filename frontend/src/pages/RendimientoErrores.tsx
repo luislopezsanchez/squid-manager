@@ -49,7 +49,7 @@ const EXPLICACIONES: Record<Pestana, string> = {
 
 export default function RendimientoErrores() {
   const [pestana, setPestana] = useState<Pestana>('latencia')
-  const [ventana, setVentana] = useState<Ventana>('')
+  const [ventana, setVentana] = useState<Ventana>('24h')
   const [latencia, setLatencia] = useState<Latencia | null>(null)
   const [errores, setErrores] = useState<ErroresHttp | null>(null)
   const [loading, setLoading] = useState(true)

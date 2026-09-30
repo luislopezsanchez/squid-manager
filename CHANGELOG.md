@@ -7,6 +7,33 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Mejorado (análisis con gráficos — Fase 6 del plan de mejora)
+
+- **Panorama rediseñado** (`GET /api/panel/panorama?ventana=24h|7d|30d`, sale de
+  los agregados por hora: 20-110 ms): seis indicadores con su variación contra el
+  periodo anterior de igual duración (los que suben «mal», como errores o bloqueos,
+  se pintan al revés y siempre con flecha y texto), tráfico transferido,
+  peticiones permitidas/bloqueadas, reparto de respuestas por tipo (2xx, 3xx,
+  bloqueadas por política, 4xx, 5xx), evolución del acierto de caché (con huecos,
+  no ceros inventados, en las horas sin tráfico), los cuatro rankings (quién
+  consume, qué se visita, qué se bloquea, quién choca con la política), un bloque
+  «Requiere tu atención» (cuotas agotadas o por encima del 80% y anomalías
+  recientes) y un mapa de calor por día de la semana y hora.
+- **Tendencias**: nueva sección «Tendencias del servicio» sobre la consulta puntual
+  de usuario o sitio que ya existía: indicadores con comparación, evolución de
+  tráfico y peticiones, quién sube/baja/es nuevo entre usuarios y entre sitios,
+  frases automáticas (momento de más actividad, día que concentra el tráfico,
+  un usuario que genera más del 40% del total) y las horas de más actividad.
+- **Actividad de red**: cada pestaña abre con un resumen visual (dona con el
+  peso de los tres primeros sobre el total real de la ventana y la evolución del
+  tráfico). La ventana por defecto pasa de «últimas 1.000 peticiones» a 24 h (en
+  Actividad y en Latencia y errores): con los agregados ya es instantánea.
+- **Kit de gráficos común** (`components/charts.tsx`, sobre Recharts, cargado solo
+  en las páginas de análisis): una sola definición de colores, ejes y tooltips
+  (guía vertical al pasar el ratón), series en orden fijo con paleta validada,
+  una sola escala por gráfico (nunca doble eje), estados con texto además de color.
+- Grupos: el aviso de la cabecera estaba en español fijo; ahora se traduce.
+
 ### Añadido / Mejorado (ancho de banda — Fase 5 del plan de mejora)
 
 - **Reglas de ancho de banda con varios objetivos y selector visual.** «Aplica a»
