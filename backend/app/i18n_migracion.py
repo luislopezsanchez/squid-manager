@@ -166,6 +166,15 @@ NUEVAS: dict[str, dict[str, str]] = {
         "Solo se puede generar credenciales de usuarios locales.": "Credentials can only be generated for local users.",
         "No existe.": "It does not exist.",
         "Ya existe un usuario LDAP con ese nombre.": "An LDAP user with that name already exists.",
+        "Para activar el reporte diario hace falta un servidor SMTP configurado y un correo en la cuenta de administrador.": "To enable the daily report you need a configured SMTP server and an email on the administrator account.",
+        "Falta configurar el SMTP o un correo en la cuenta de administrador": "The SMTP server or an administrator email is not configured",
+        "Zona horaria no válida": "Invalid time zone",
+        "Este servidor no puede leer archivos .rar / .7z (falta el paquete libarchive-tools). Instálalo, o sube un .zip / .tar.gz.": "This server cannot read .rar / .7z files (the libarchive-tools package is missing). Install it, or upload a .zip / .tar.gz.",
+        "No se pudo leer «{n}»: puede estar dañado, protegido con contraseña o ser un formato no compatible.": "Could not read «{n}»: it may be damaged, password-protected or an unsupported format.",
+        "«{n}» tardó demasiado en abrirse.": "«{n}» took too long to open.",
+        "No se pudo descomprimir «{n}»: puede estar dañado o protegido con contraseña.": "Could not extract «{n}»: it may be damaged or password-protected.",
+        "«{n}» tardó demasiado en descomprimirse.": "«{n}» took too long to extract.",
+        "El archivo comprimido tiene demasiados archivos.": "The compressed file has too many files.",
     },
     "pt": {
         "la lista «{ruta}» no se subió junto con el squid.conf (súbela para importar esta ACL)":
@@ -423,6 +432,15 @@ _VARIOS = {
         "«{t}» no es un puerto o rango válido (ej: 873 o 8000-8100).": "«{t}» não é uma porta ou intervalo válido (ex.: 873 ou 8000-8100).",
         "El facility no es válido: usa local0 (recomendado) u otro de la lista.": "O facility não é válido: use local0 (recomendado) ou outro da lista.",
         "«{n}» viene de una carga masiva: no se le cambia el tipo a mano.": "«{n}» vem de uma carga em massa: seu tipo não é alterado à mão.",
+        "Para activar el reporte diario hace falta un servidor SMTP configurado y un correo en la cuenta de administrador.": "Para ativar o relatório diário é preciso um servidor SMTP configurado e um e-mail na conta de administrador.",
+        "Falta configurar el SMTP o un correo en la cuenta de administrador": "Falta configurar o SMTP ou um e-mail na conta de administrador",
+        "Zona horaria no válida": "Fuso horário inválido",
+        "Este servidor no puede leer archivos .rar / .7z (falta el paquete libarchive-tools). Instálalo, o sube un .zip / .tar.gz.": "Este servidor não consegue ler arquivos .rar / .7z (falta o pacote libarchive-tools). Instale-o ou envie um .zip / .tar.gz.",
+        "No se pudo leer «{n}»: puede estar dañado, protegido con contraseña o ser un formato no compatible.": "Não foi possível ler «{n}»: pode estar danificado, protegido por senha ou ser um formato incompatível.",
+        "«{n}» tardó demasiado en abrirse.": "«{n}» demorou demais para abrir.",
+        "No se pudo descomprimir «{n}»: puede estar dañado o protegido con contraseña.": "Não foi possível descompactar «{n}»: pode estar danificado ou protegido por senha.",
+        "«{n}» tardó demasiado en descomprimirse.": "«{n}» demorou demais para descompactar.",
+        "El archivo comprimido tiene demasiados archivos.": "O arquivo compactado tem arquivos demais.",
     },
 }
 for _i, _d in _VARIOS.items():

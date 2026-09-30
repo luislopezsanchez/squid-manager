@@ -65,6 +65,9 @@ export default function LogsViewer() {
   const [fDomain, setFDomain] = useState('')
   const [fDenied, setFDenied] = useState(false)
   const [disconnecting, setDisconnecting] = useState('')
+  // IPs con conexiones abiertas AHORA (memoria viva de Squid). El botón de cortar solo
+  // tiene sentido para ellas: en una fila vieja no habría nada que terminar.
+  const [ipsActivas, setIpsActivas] = useState<Set<string> | null>(null)
 
   const { showToast, ToastContainer } = useToast()
 
@@ -98,11 +101,18 @@ export default function LogsViewer() {
     }).catch(e => showToast(e.message, 'error')).finally(() => setLoading(false))
   }, [offset, fUser, fStatus, fDomain, fDenied])
 
+  const cargarActivas = useCallback(() => {
+    api.getActiveConnections()
+      .then((r: any) => setIpsActivas(r.error ? null : new Set<string>((r.clientes || []).filter((c: any) => c.conexiones_activas > 0).map((c: any) => c.address))))
+      .catch(() => setIpsActivas(null))
+  }, [])
+
   const loadStats = useCallback(() => {
     api.getLogStats().then(setStats).catch(() => {})
   }, [])
 
   useEffect(() => { loadLogs() }, [loadLogs])
+  useEffect(() => { cargarActivas() }, [cargarActivas, entries])
   // Las opciones de los filtros no cambian cada 5 s: se piden una sola vez.
   useEffect(() => { loadStats() }, [loadStats])
 
@@ -268,11 +278,15 @@ export default function LogsViewer() {
                   <td className="px-4 py-2 text-right text-xs font-mono text-ink-3">{formatBytes(e.bytes)}</td>
                   <td className="px-4 py-2 text-right text-xs font-mono text-ink-3">{e.elapsed_ms}ms</td>
                   <td className="px-4 py-2 text-right">
-                    <button onClick={() => handleDisconnect(e.client_ip)} disabled={disconnecting === e.client_ip}
+                    {ipsActivas === null || ipsActivas.has(e.client_ip) ? (
+                      <button onClick={() => handleDisconnect(e.client_ip)} disabled={disconnecting === e.client_ip}
                       className="text-xs font-medium text-danger hover:underline disabled:opacity-50 disabled:cursor-wait"
                       title={traducir("Termina las conexiones que este cliente tenga abiertas ahora mismo -no le bloquea el acceso futuro")}>
                       {disconnecting === e.client_ip ? traducir('Terminando…') : traducir('Terminar conexión')}
                     </button>
+                    ) : (
+                      <span className="text-xs text-ink-3" title={traducir("Este cliente no tiene ninguna conexión abierta ahora mismo")}>{traducir("Sin conexión activa")}</span>
+                    )}
                   </td>
                 </tr>
               ))}

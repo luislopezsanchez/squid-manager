@@ -7,6 +7,41 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Mejorado (revisión del usuario, tras probar las fases 0-10)
+
+- **Actividad de red**: «IPs compartidas» y «Cuota excedida» muestran desde cuándo
+  y hasta cuándo se vio cada caso, cuándo se agotó la cuota y cuándo se restablece
+  (migración 0046, `quota_exceeded_at`). Cada pestaña tiene su propia gráfica de
+  evolución (usuarios activos, sitios distintos, bloqueos, IPs compartidas) en lugar
+  de repetir el tráfico, sin huecos que unan momentos lejanos con una recta
+  (`GET /api/panel/actividad-serie`). El PDF se rehízo: todas las pestañas, sus
+  gráficas, rango libre, zona horaria e idioma del panel.
+- **Dashboard**: «Cuentas en un mismo equipo» indica desde/hasta cuándo se vio cada IP.
+- **Latencia y errores** rediseñada: indicadores con color, latencia en el tiempo,
+  histograma por rangos, tasa de error, 5xx frente a 4xx y errores en el tiempo.
+- **Tendencias**: «quién cambió / qué cambió» ahora son barras divergentes
+  (más que antes / menos que antes / nuevo) con el antes → ahora de cada fila.
+- **Zona horaria** en Configuración: las cuotas se reinician a la medianoche de la
+  zona elegida (no la del servidor), y los gráficos por día y el reporte diario
+  la usan también.
+- **Notificaciones**: nuevos avisos por correo/Telegram cuando un usuario agota su
+  cuota y cuando insiste en sitios bloqueados (con el umbral configurable y los
+  sitios a los que entró), y **reporte diario por correo** en HTML (resumen de 24 h:
+  usuarios, sitios, datos, tops, bloqueados, cuotas, alertas). Solo se puede activar
+  con SMTP configurado y un administrador con correo.
+- **Backup y migración**: acepta también `.rar` y `.7z` (vía `bsdtar`, paquete
+  `libarchive-tools`, ya añadido al instalador y al Dockerfile). Si los DNS del Squid
+  de origen no responden desde este servidor, el informe avisa y ofrece no importarlos.
+- **Ancho de banda**: la opción «Por equipo» se explica como «límite por dispositivo»,
+  con ejemplos.
+- **Registros**: «Terminar conexión» solo aparece si el cliente tiene conexiones abiertas.
+- **Usuarios**: el buscador también encuentra por correo.
+
+### Corregido
+
+- **Asistente con Gemini**: error 400 «Role 'function' is not supported» en los
+  modelos nuevos; la respuesta de las herramientas ahora va con rol `user`.
+
 ### Mejorado (Cierre — Fase 10 del plan de mejora)
 
 - **Contacto rediseñado**: formulario más la ayuda rápida, los datos de tu

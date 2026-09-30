@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     apache2-utils \
+    libarchive-tools \
     curl \
     ca-certificates \
     gnupg \

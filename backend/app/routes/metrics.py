@@ -16,7 +16,7 @@ cualquier lentitud puntual (Cache Manager lento, ventana de 7 días grande) se
 notaba en todo el panel, no solo en la tarjeta que la pidió.
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import Request, APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -123,14 +123,18 @@ def totales_actividad(
 
 @router.get("/actividad/export-pdf")
 def actividad_export_pdf(
-    ventana: str | None = Query(None, description="1h, 24h, 7d — vacío = últimas 1000 peticiones"),
+    request: Request,
+    ventana: str | None = Query(None, description="1h, 24h, 7d, 30d — vacío = últimas 1000 peticiones"),
+    desde: float | None = Query(None, description=_DESDE_DESC),
+    hasta: float | None = Query(None, description=_HASTA_DESC),
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    """Informe ejecutivo en PDF de Actividad de red -mismos datos que ya se
-    ven en el panel (top usuarios/dominios/bloqueados + totales reales),
-    para adjuntar o imprimir sin depender de una captura de pantalla."""
-    pdf_bytes = generar_pdf_actividad(ventana, db=db)
+    """Informe en PDF de Actividad de red: todas las pestañas, con sus gráficas,
+    el periodo elegido (ventana o rango libre) y en el idioma del panel."""
+    from app.i18n import idioma_de_cabecera
+    idioma = idioma_de_cabecera(request.headers.get("accept-language"))
+    pdf_bytes = generar_pdf_actividad(ventana, db=db, idioma=idioma, desde=desde, hasta=hasta)
     stamp = utcnow().strftime("%Y%m%d-%H%M%S")
     return StreamingResponse(
         iter([pdf_bytes]),
@@ -192,6 +196,37 @@ def volumen_por_periodo(
     """Volumen de tráfico en baldes que se adaptan a la ventana elegida
     (minutos/horas/días), para Panorama."""
     return get_volumen_por_periodo(seconds=_ventana_a_segundos(ventana))
+
+
+@router.get("/actividad-serie")
+def actividad_serie(
+    tipo: str = Query(..., pattern="^(usuarios|dominios|bloqueados-dominio|bloqueados-usuario|ips-compartidas)$"),
+    ventana: str | None = Query(None, description="24h, 7d, 30d"),
+    desde: float | None = Query(None, description=_DESDE_DESC),
+    hasta: float | None = Query(None, description=_HASTA_DESC),
+    _: Admin = Depends(get_current_admin),
+):
+    """Evolución en el tiempo propia de cada pestaña de Actividad de red."""
+    from app.services import rollup_service
+    seconds = _ventana_a_segundos(ventana)
+    if not rollup_service.disponible(seconds, desde, hasta):
+        return {"granularidad": "hora", "puntos": []}
+    return rollup_service.actividad_serie(tipo, seconds, desde, hasta)
+
+
+@router.get("/rendimiento-serie")
+def rendimiento_serie(
+    ventana: str | None = Query(None, description="24h, 7d, 30d"),
+    desde: float | None = Query(None, description=_DESDE_DESC),
+    hasta: float | None = Query(None, description=_HASTA_DESC),
+    _: Admin = Depends(get_current_admin),
+):
+    """Latencia media y errores a lo largo del tiempo (Latencia y errores)."""
+    from app.services import rollup_service
+    seconds = _ventana_a_segundos(ventana)
+    if not rollup_service.disponible(seconds, desde, hasta):
+        return {"granularidad": "hora", "puntos": []}
+    return rollup_service.rendimiento_serie(seconds, desde, hasta)
 
 
 @router.get("/latencia")

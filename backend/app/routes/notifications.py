@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.models.admin import Admin
@@ -10,6 +10,7 @@ from app.models.audit_log import AuditLog
 from app.models.notification_config import NotificationConfig
 from app.models.smtp_config import SmtpConfig
 from app.services.auth_service import get_current_admin, require_writer
+from app.services.daily_report_service import condiciones, guardar_idioma, enviar as enviar_reporte
 from app.services.notification_service import test_email, test_telegram, send_email, send_telegram
 
 router = APIRouter()
@@ -29,6 +30,14 @@ class NotificationConfigIn(BaseModel):
     notify_on_rule_change: bool = False
     notify_on_security_alert: bool = True
     notify_on_node_down: bool = True
+    notify_on_quota_reached: bool = True
+    notify_on_blocked_access: bool = False
+    blocked_threshold: int = Field(10, ge=3, le=1000)
+
+    daily_report_enabled: bool = False
+    daily_report_time: str = Field("23:55", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    # Idioma del panel al guardar: el reporte se redacta en ese idioma.
+    idioma: str | None = None
 
 
 class TestEmailIn(BaseModel):
@@ -72,6 +81,13 @@ def get_config(
         "notify_on_rule_change": config.notify_on_rule_change,
         "notify_on_security_alert": config.notify_on_security_alert,
         "notify_on_node_down": config.notify_on_node_down,
+        "notify_on_quota_reached": config.notify_on_quota_reached,
+        "notify_on_blocked_access": config.notify_on_blocked_access,
+        "blocked_threshold": config.blocked_threshold,
+        "daily_report_enabled": config.daily_report_enabled,
+        "daily_report_time": config.daily_report_time,
+        # Qué falta para poder activar el reporte diario (la pantalla lo explica).
+        "daily_report_requisitos": condiciones(db),
     }
 
 
@@ -99,6 +115,18 @@ def update_config(
     config.notify_on_rule_change = data.notify_on_rule_change
     config.notify_on_security_alert = data.notify_on_security_alert
     config.notify_on_node_down = data.notify_on_node_down
+    config.notify_on_quota_reached = data.notify_on_quota_reached
+    config.notify_on_blocked_access = data.notify_on_blocked_access
+    config.blocked_threshold = data.blocked_threshold
+    if data.daily_report_enabled and not condiciones(db)["ok"]:
+        raise HTTPException(
+            400,
+            "Para activar el reporte diario hace falta un servidor SMTP configurado y un correo en la cuenta de administrador.",
+        )
+    config.daily_report_enabled = data.daily_report_enabled
+    config.daily_report_time = data.daily_report_time
+    if data.idioma:
+        guardar_idioma(db, data.idioma)
 
     db.add(AuditLog(
         admin_id=current_admin.id, admin_username=current_admin.username,
@@ -162,3 +190,15 @@ def test_telegram_endpoint(
     tmp.telegram_chat_id = data.telegram_chat_id or saved.telegram_chat_id
 
     return test_telegram(tmp)
+
+
+@router.post("/daily-report/send-now")
+def enviar_reporte_ahora(
+    db: Session = Depends(get_db),
+    _: Admin = Depends(require_writer),
+):
+    """Manda el reporte diario ahora mismo (las últimas 24 h) para ver cómo queda."""
+    r = enviar_reporte(db)
+    if not r["ok"] and r["message"].startswith("Falta configurar"):
+        raise HTTPException(400, r["message"])  # así se traduce al idioma del panel
+    return r

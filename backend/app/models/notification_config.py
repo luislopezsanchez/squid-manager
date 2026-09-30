@@ -32,6 +32,15 @@ class NotificationConfig(Base):
     # notify_on_security_alert: es una condición detectada sola, no una
     # acción deliberada de un admin (a diferencia de apply/user_change/etc).
     notify_on_node_down = Column(Boolean, default=True, nullable=False)
+    # Un usuario (o grupo) agotó su cuota de navegación.
+    notify_on_quota_reached = Column(Boolean, default=True, nullable=False)
+    # Un usuario insiste contra las reglas de denegación (blocked_threshold
+    # peticiones bloqueadas en 10 minutos).
+    notify_on_blocked_access = Column(Boolean, default=False, nullable=False)
+    blocked_threshold = Column(Integer, default=10, nullable=False)
+    # Reporte diario por correo a los administradores con email.
+    daily_report_enabled = Column(Boolean, default=False, nullable=False)
+    daily_report_time = Column(String(5), default="23:55", nullable=False)
 
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

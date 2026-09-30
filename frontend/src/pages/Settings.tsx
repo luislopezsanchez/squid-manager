@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
+import { ZonaHoraria } from '../components/ZonaHoraria'
 
 interface Setting {
   value: string
@@ -102,6 +103,8 @@ export default function Settings() {
         </span>
         {': '}{traducir("cada ajuste se guarda en la BD, pero Squid no lo usa hasta pulsar «Aplicar cambios» arriba.")}
       </p>
+
+      <ZonaHoraria />
 
       {error && <div className="mb-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{error}</div>}
 

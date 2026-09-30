@@ -88,18 +88,24 @@ def _detectar_fuerza_bruta(entries: list[dict]) -> list[tuple[str, str, str]]:
     ]
 
 
-def _detectar_bloqueos_en_racha(entries: list[dict]) -> list[tuple[str, str, str]]:
+def _detectar_bloqueos_en_racha(entries: list[dict], umbral: int | None = None) -> list[tuple[str, str, str]]:
+    umbral = umbral or _UMBRAL_BLOQUEOS_USUARIO
     bloqueos = Counter(e["user"] for e in entries if e["denied"] and e["user"] and e["user"] != "-")
     minutos = _VENTANA_SEGUNDOS // 60
-    return [
-        (
+    alertas = []
+    for user, n in bloqueos.items():
+        if n < umbral:
+            continue
+        # A qué sitios chocó: es lo primero que el admin quiere saber.
+        sitios = Counter(e["domain"] for e in entries if e["denied"] and e["user"] == user and e.get("domain"))
+        lista = ", ".join(f"{d} ({c})" for d, c in sitios.most_common(3))
+        alertas.append((
             f"bloqueos:{user}",
-            "SquidManager: bloqueos repetidos",
-            f"El usuario {user} tuvo {n} peticiones bloqueadas en los "
-            f"últimos {minutos} minutos.",
-        )
-        for user, n in bloqueos.items() if n >= _UMBRAL_BLOQUEOS_USUARIO
-    ]
+            f"SquidManager: {user} intenta entrar a sitios bloqueados",
+            f"El usuario {user} tuvo {n} peticiones bloqueadas en los últimos {minutos} minutos. "
+            f"Sitios: {lista}.",
+        ))
+    return alertas
 
 
 def _detectar_pico_trafico(entries: list[dict], historial: list[float]) -> tuple[list[tuple[str, str, str]], float]:
@@ -134,11 +140,25 @@ def _aplicar_cooldown(
     return pendientes
 
 
+def _umbral_bloqueos() -> int:
+    """Umbral configurado en Notificaciones (por defecto, el de siempre)."""
+    db = SessionLocal()
+    try:
+        from app.models.notification_config import NotificationConfig
+        c = db.query(NotificationConfig).first()
+        return int(c.blocked_threshold) if c and c.blocked_threshold else _UMBRAL_BLOQUEOS_USUARIO
+    except Exception:
+        return _UMBRAL_BLOQUEOS_USUARIO
+    finally:
+        db.close()
+
+
 def _tick() -> None:
     ahora = time.time()
     entries = get_recent_entries(_VENTANA_SEGUNDOS)
 
-    alertas = _detectar_fuerza_bruta(entries) + _detectar_bloqueos_en_racha(entries)
+    umbral = _umbral_bloqueos()
+    alertas = _detectar_fuerza_bruta(entries) + _detectar_bloqueos_en_racha(entries, umbral)
     pico, total_bytes = _detectar_pico_trafico(entries, list(_historial_bytes))
     alertas += pico
     _historial_bytes.append(total_bytes)
@@ -151,7 +171,9 @@ def _tick() -> None:
     try:
         for clave, asunto, mensaje in pendientes:
             logger.warning(f"Anomalía detectada ({clave}): {mensaje}")
-            notify_now(db, "security_alert", asunto, mensaje)
+            # Los bloqueos tienen su propio aviso (se activa aparte en Notificaciones).
+            evento = "blocked_access" if clave.startswith("bloqueos:") else "security_alert"
+            notify_now(db, evento, asunto, mensaje)
             _historial.append({"ts": ahora, "clave": clave, "asunto": asunto, "mensaje": mensaje})
     finally:
         db.close()

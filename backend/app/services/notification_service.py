@@ -18,6 +18,8 @@ EVENT_CONFIG_MAP = {
     "rule_change": "notify_on_rule_change",
     "security_alert": "notify_on_security_alert",
     "node_down": "notify_on_node_down",
+    "quota_reached": "notify_on_quota_reached",
+    "blocked_access": "notify_on_blocked_access",
 }
 
 
@@ -87,7 +89,8 @@ def notify_now(db, event_type: str, subject: str, message: str) -> None:
         notify(snapshot, subject, message)
 
 
-def _enviar_smtp(config, destinatarios: list[str], subject: str, body: str, reply_to: str | None = None) -> tuple[bool, str]:
+def _enviar_smtp(config, destinatarios: list[str], subject: str, body: str, reply_to: str | None = None,
+                 html_body: str | None = None) -> tuple[bool, str]:
     """Mecánica SMTP compartida: arma el mensaje y lo entrega al servidor
     configurado. `send_email` (destinatarios de la config) y
     `send_contact_message` (destinatario fijo de soporte) comparten esto en
@@ -103,7 +106,7 @@ def _enviar_smtp(config, destinatarios: list[str], subject: str, body: str, repl
     encryption = (config.smtp_encryption or "starttls").lower()
 
     try:
-        msg = MIMEMultipart()
+        msg = MIMEMultipart("alternative") if html_body else MIMEMultipart()
         from_addr = config.smtp_from or config.smtp_user or "squidmanager@localhost"
         msg["From"] = from_addr
         msg["To"] = ", ".join(destinatarios)
@@ -111,6 +114,8 @@ def _enviar_smtp(config, destinatarios: list[str], subject: str, body: str, repl
         if reply_to:
             msg["Reply-To"] = reply_to
         msg.attach(MIMEText(body, "plain", "utf-8"))
+        if html_body:  # el cliente de correo elige la última parte que sepa mostrar
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
 
         # Conexión según el método de cifrado
         if encryption == "ssl":

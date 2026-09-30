@@ -20,6 +20,7 @@ import pytest
 # Binario -> paquete de Debian/Ubuntu que lo proporciona.
 PROVEEDORES = {
     "htpasswd": "apache2-utils",
+    "bsdtar": "libarchive-tools",
     "openssl": "openssl",
     "logrotate": "logrotate",
     "systemctl": None,   # parte del sistema, no se instala

@@ -701,9 +701,8 @@ export default function ProxyUsers() {
       if (statusFilter === 'disabled' && u.enabled) return false
       if (connectedFilter === 'connected' && !connectedUsers.has(u.username)) return false
       if (!q) return true
-      const haystack = u.source === 'ldap'
-        ? `${u.username} ${u.display_name ?? ''} ${u.email ?? ''}`
-        : `${u.username} ${u.display_name ?? ''}`
+      // El correo cuenta para todos (locales y LDAP): se puede buscar a alguien por su email.
+      const haystack = `${u.username} ${u.display_name ?? ''} ${u.email ?? ''}`
       return haystack.toLowerCase().includes(q)
     })
     // Orden elegido con el clic en el encabezado (por defecto, por usuario).

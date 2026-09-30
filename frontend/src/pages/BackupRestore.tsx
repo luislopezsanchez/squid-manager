@@ -282,13 +282,15 @@ function Migrar({ showToast }: { showToast: (m: string, t?: 'success' | 'error' 
   const [aplicando, setAplicando] = useState(false)
   const [informe, setInforme] = useState<any>(null)
   const [importarUsuarios, setImportarUsuarios] = useState(true)
+  // Si los DNS del Squid de origen no responden desde aquí, por defecto NO se importan.
+  const [importarDns, setImportarDns] = useState(true)
   const [resultado, setResultado] = useState<any>(null)
 
   const elegir = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     if (files.length === 0) return
     setAnalizando(true); setInforme(null); setResultado(null)
-    try { setInforme(await api.analyzeSquidConf(files)) }
+    try { const inf = await api.analyzeSquidConf(files); setImportarDns(!inf.dns || inf.dns.alcanzable); setInforme(inf) }
     catch (err: any) { showToast(err.message, 'error') } finally { setAnalizando(false); if (inputRef.current) inputRef.current.value = '' }
   }
 
@@ -296,7 +298,7 @@ function Migrar({ showToast }: { showToast: (m: string, t?: 'success' | 'error' 
     if (!informe?.token) return
     setAplicando(true)
     try {
-      const r = await api.applySquidImport(informe.token, importarUsuarios)
+      const r = await api.applySquidImport(informe.token, importarUsuarios, importarDns)
       notificarCambioPendiente()
       setResultado(r.details); setInforme(null)
       showToast(traducir("Importación aplicada"), 'success')
@@ -311,7 +313,7 @@ function Migrar({ showToast }: { showToast: (m: string, t?: 'success' | 'error' 
     <div className="card p-6 mb-6">
       <h3 className="font-medium text-ink mb-1">{traducir("Migrar desde un Squid que no usa SquidManager")}</h3>
       <p className="text-sm text-ink-3 mb-4">
-        {traducir("Sube la carpeta de configuración de tu Squid comprimida (.zip o .tar.gz) o sus archivos sueltos: el squid.conf, las listas que referencia (IPs, dominios, regex) y los archivos de usuarios (htpasswd / htdigest). Verás un informe detallado antes de importar nada.")}
+        {traducir("Sube la carpeta de configuración de tu Squid comprimida (.zip, .tar.gz, .rar o .7z) o sus archivos sueltos: el squid.conf, las listas que referencia (IPs, dominios, regex) y los archivos de usuarios (htpasswd/htdigest). No hace falta que el Squid de origen use SquidManager.")}
       </p>
 
       {!informe && !resultado && (
@@ -320,7 +322,7 @@ function Migrar({ showToast }: { showToast: (m: string, t?: 'success' | 'error' 
           <button className="btn btn-primary" onClick={() => inputRef.current?.click()} disabled={analizando}>
             {analizando ? <IconSpinner className="animate-spin" /> : <IconFile />}{analizando ? traducir('Analizando…') : traducir('Elegir archivos y analizar')}
           </button>
-          <p className="text-[12px] text-ink-3 mt-3">{traducir("Si tu copia es un .rar o .7z, descomprímela y vuelve a comprimirla como .zip o .tar.gz.")}</p>
+          <p className="text-[12px] text-ink-3 mt-3">{traducir("Acepta .zip, .tar.gz, .rar y .7z (sin contraseña).")}</p>
         </>
       )}
 
@@ -341,6 +343,20 @@ function Migrar({ showToast }: { showToast: (m: string, t?: 'success' | 'error' 
             <Casillero etiqueta={traducir("No se importan")} valor={r.directivas_no_soportadas + r.acls_ignoradas + r.reglas_ignoradas} tono="aviso" />
             <Casillero etiqueta={traducir("No reconocidas")} valor={r.directivas_desconocidas} tono="neutro" />
           </div>
+
+          {informe.dns && (
+            informe.dns.alcanzable ? (
+              <div className="note note-info mb-2"><p className="note-text">{traducir("Los servidores DNS de ese Squid responden desde este servidor, se importarán tal cual.")}</p></div>
+            ) : (
+              <div className="bg-amber-50 text-amber-900 border border-amber-200 text-[13px] p-3 rounded-lg mb-3">
+                <strong>⚠ {traducir("Los servidores DNS de ese Squid no responden desde este servidor")}</strong>
+                <p className="mt-1">{traducir("El Squid de origen usaba estos servidores DNS: {s}. Desde este servidor no responden ({m}). Si los importas, «Aplicar cambios» se negará a propósito hasta que cambies los DNS, porque Squid dejaría de resolver nombres y nadie podría navegar.", { s: informe.dns.servidores.join(', '), m: informe.dns.mensaje })}</p>
+                <label className="flex items-center gap-2 mt-2">
+                  <input type="checkbox" checked={importarDns} onChange={e => setImportarDns(e.target.checked)} />{traducir("Importar también esos servidores DNS (no recomendado)")}
+                </label>
+              </div>
+            )
+          )}
 
           {informe.notas?.map((n: string, i: number) => <div key={i} className="note note-info mb-2"><p className="note-text">{n}</p></div>)}
 

@@ -403,8 +403,16 @@ export const api = {
     ].filter(Boolean).join('&')
     return request<any>(`/panel/totales-actividad${params ? `?${params}` : ''}`)
   },
-  actividadExportPdfUrl: (ventana?: string) =>
-    `${API_BASE}/panel/actividad/export-pdf${ventana ? `?ventana=${ventana}` : ''}`,
+  actividadExportPdfUrl: (ventana?: string, rango?: RangoFechas) =>
+    `${API_BASE}/panel/actividad/export-pdf?${rango ? `desde=${rango.desde}&hasta=${rango.hasta}` : ventana ? `ventana=${ventana}` : ''}`,
+  getActividadSerie: (tipo: string, ventana?: string, rango?: RangoFechas) =>
+    request<{ granularidad: 'minuto' | 'hora' | 'dia'; puntos: Record<string, number>[] }>(
+      `/panel/actividad-serie?tipo=${tipo}${ventana ? `&ventana=${ventana}` : ''}${_rangoQuery(rango)}`
+    ),
+  getRendimientoSerie: (ventana: string) => request<{ granularidad: 'hora' | 'dia'; puntos: Record<string, number>[] }>(`/panel/rendimiento-serie?ventana=${ventana}`),
+  getTimezone: () => request<any>('/system/timezone'),
+  setTimezone: (zona: string | null) => request<any>('/system/timezone', { method: 'PUT', body: JSON.stringify({ zona }) }),
+  sendDailyReportNow: () => request<any>('/notifications/daily-report/send-now', { method: 'POST' }),
   getAnomaliasRecientes: (horas = 24, limit = 10) =>
     request<any>(`/panel/anomalias-recientes?horas=${horas}&limit=${limit}`),
   getVolumenPorPeriodo: (ventana?: string) =>
@@ -464,10 +472,11 @@ export const api = {
     for (const f of files) formData.append('files', f)
     return request<any>('/backup/analyze-squid-conf', { method: 'POST', body: formData })
   },
-  applySquidImport: (token: string, importarUsuarios = true) => {
+  applySquidImport: (token: string, importarUsuarios = true, importarDns = true) => {
     const formData = new FormData()
     formData.append('token', token)
     formData.append('importar_usuarios', String(importarUsuarios))
+    formData.append('importar_dns', String(importarDns))
     return request<any>('/backup/apply-squid-import', { method: 'POST', body: formData })
   },
 

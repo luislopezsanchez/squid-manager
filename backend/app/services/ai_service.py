@@ -1040,7 +1040,10 @@ def preguntar_agentico(db: Session, config: AiConfig, pregunta: str) -> dict:
                 {"functionResponse": {"name": ll["nombre"], "response": _registrar_resultado(ll["nombre"], ll["argumentos"])}}
                 for ll in resultado["llamadas"]
             ]
-            contents.append({"role": "function", "parts": partes})
+            # Los modelos nuevos de Gemini rechazan el rol "function" (error 400
+            # "Role 'function' is not supported"); "user" lo aceptan todos, y las
+            # partes del modelo se reenvían tal cual (con su thoughtSignature).
+            contents.append({"role": "user", "parts": partes})
     elif es_anthropic:
         messages = [{"role": "user", "content": pregunta}]
         for _ in range(_MAX_ITERACIONES_AGENTE):

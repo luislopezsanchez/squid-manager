@@ -143,6 +143,9 @@ PAQUETES=(
     # cada usuario del proxy. Sin el, crear un usuario falla y el mensaje ni
     # siquiera tiene sentido en esta instalacion ("reconstruye la imagen").
     apache2-utils
+    # libarchive-tools trae bsdtar: lo usa Backup y migracion para leer un .rar / .7z
+    # con el directorio del Squid de origen (licencia libre, sin unrar).
+    libarchive-tools
     openssl ca-certificates logrotate cron git curl
     # sudo: lo usa el propio script mas abajo (crear la base como el usuario
     # postgres, "visudo -cf" al final) y, en tiempo de ejecucion, el backend

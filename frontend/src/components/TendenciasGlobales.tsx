@@ -14,24 +14,51 @@ const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', '
 type Mover = { nombre: string; actual: number; anterior: number }
 type Movers = { nuevos: Mover[]; suben: Mover[]; bajan: Mover[] }
 
-function ListaMovers({ titulo, items, formato, tono }: { titulo: string; items: Mover[]; formato: (n: number) => string; tono: string }) {
+const SUBE = SERIE[1]   // naranja: consume más que antes
+const BAJA = SERIE[0]   // azul: consume menos
+const NUEVO = SERIE[2]  // verde: no estaba en el periodo anterior
+
+/** Cambios frente al periodo anterior como barras divergentes: a la derecha del eje, lo que
+ * subió; a la izquierda, lo que bajó. Cada fila dice cuánto era antes y cuánto es ahora. */
+function CambiosDivergentes({ movers, formato, unidad }: { movers: Movers; formato: (n: number) => string; unidad: string }) {
+  const filas = [
+    ...movers.suben.map(m => ({ ...m, tipo: 'sube' as const })),
+    ...movers.nuevos.map(m => ({ ...m, tipo: 'nuevo' as const })),
+    ...movers.bajan.map(m => ({ ...m, tipo: 'baja' as const })),
+  ].map(m => ({ ...m, delta: m.actual - m.anterior }))
+  if (filas.length === 0) return <p className="text-[13px] text-ink-3 py-4">{traducir("Sin cambios destacables frente al periodo anterior.")}</p>
+  filas.sort((x, y) => y.delta - x.delta)
+  const max = Math.max(...filas.map(f => Math.abs(f.delta)), 1)
   return (
     <div>
-      <h4 className="text-[12px] font-semibold uppercase tracking-wide text-ink-3 mb-2">{titulo}</h4>
-      {items.length === 0 ? <p className="text-[13px] text-ink-3">{traducir("Nada destacable.")}</p> : (
-        <ul className="space-y-1.5">
-          {items.map(m => {
-            const pct = m.anterior > 0 ? Math.round(((m.actual - m.anterior) / m.anterior) * 100) : null
-            return (
-              <li key={m.nombre} className="flex items-baseline gap-2 text-[13px]">
-                <span className="truncate text-ink" title={m.nombre}>{m.nombre}</span>
-                <span className="ml-auto flex-none tabular text-ink-2">{formato(m.actual)}</span>
-                <span className={`flex-none w-14 text-right tabular text-[12px] ${tono}`}>{pct == null ? traducir('nuevo') : pct > 999 ? '>999%' : `${pct > 0 ? '+' : ''}${pct}%`}</span>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-ink-3 mb-3">
+        <span className="flex items-center gap-1.5"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: BAJA }} />{traducir("Menos que antes")}</span>
+        <span className="flex items-center gap-1.5"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: SUBE }} />{traducir("Más que antes")}</span>
+        <span className="flex items-center gap-1.5"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: NUEVO }} />{traducir("Nuevo en este periodo")}</span>
+      </div>
+      <ul className="space-y-2">
+        {filas.map(f => {
+          const ancho = Math.max((Math.abs(f.delta) / max) * 50, 1.5)
+          const color = f.tipo === 'nuevo' ? NUEVO : f.delta >= 0 ? SUBE : BAJA
+          const signo = f.delta >= 0 ? '+' : '−'
+          return (
+            <li key={f.nombre} className="grid grid-cols-[minmax(0,9rem)_1fr] sm:grid-cols-[minmax(0,12rem)_1fr] gap-3 items-center text-[13px]"
+              title={`${f.nombre}: ${formato(f.anterior)} → ${formato(f.actual)} ${unidad}`}>
+              <span className="truncate text-ink">{f.nombre}</span>
+              <div>
+                <div className="relative h-4">
+                  <span className="absolute inset-y-0 left-1/2 w-px bg-line" aria-hidden="true" />
+                  <span className="absolute top-0.5 bottom-0.5 rounded-sm"
+                    style={{ background: color, width: `${ancho}%`, ...(f.delta >= 0 ? { left: '50%' } : { right: '50%' }) }} />
+                </div>
+                <p className="text-[11px] text-ink-3 tabular mt-0.5">
+                  {f.tipo === 'nuevo' ? traducir('nuevo') : `${formato(f.anterior)} → ${formato(f.actual)}`} · <span style={{ color }}>{signo}{formato(Math.abs(f.delta))}</span>
+                </p>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
@@ -119,19 +146,11 @@ export function TendenciasGlobales() {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
-            <TarjetaGrafico titulo={traducir("Usuarios: quién cambió")} subtitulo={traducir("Tráfico de este periodo frente al anterior")}>
-              <div className="grid grid-cols-1 gap-5">
-                <ListaMovers titulo={traducir("Suben")} items={(d.movers_usuarios as Movers).suben} formato={formatBytes} tono="text-danger" />
-                <ListaMovers titulo={traducir("Bajan")} items={(d.movers_usuarios as Movers).bajan} formato={formatBytes} tono="text-ok" />
-                <ListaMovers titulo={traducir("Nuevos")} items={(d.movers_usuarios as Movers).nuevos} formato={formatBytes} tono="text-ink-3" />
-              </div>
+            <TarjetaGrafico titulo={traducir("Usuarios: quién consume más o menos que antes")} subtitulo={traducir("Cambio en el tráfico de cada usuario frente al periodo anterior, de los que más variaron")}>
+              <CambiosDivergentes movers={d.movers_usuarios as Movers} formato={formatBytes} unidad={traducir("de tráfico")} />
             </TarjetaGrafico>
-            <TarjetaGrafico titulo={traducir("Sitios: qué cambió")} subtitulo={traducir("Peticiones de este periodo frente al anterior")}>
-              <div className="grid grid-cols-1 gap-5">
-                <ListaMovers titulo={traducir("Suben")} items={(d.movers_dominios as Movers).suben} formato={formatNumber} tono="text-danger" />
-                <ListaMovers titulo={traducir("Bajan")} items={(d.movers_dominios as Movers).bajan} formato={formatNumber} tono="text-ok" />
-                <ListaMovers titulo={traducir("Nuevos")} items={(d.movers_dominios as Movers).nuevos} formato={formatNumber} tono="text-ink-3" />
-              </div>
+            <TarjetaGrafico titulo={traducir("Sitios: cuáles se visitan más o menos que antes")} subtitulo={traducir("Cambio en las peticiones a cada sitio frente al periodo anterior, de los que más variaron")}>
+              <CambiosDivergentes movers={d.movers_dominios as Movers} formato={formatNumber} unidad={traducir("peticiones")} />
             </TarjetaGrafico>
           </div>
 

@@ -15,6 +15,8 @@ class _FakeQuota:
         self.quota_period = "monthly"
         self.quota_action = quota_action
         self.quota_action_applied = quota_action_applied
+        self.quota_exceeded_at = None
+        self.quota_period_started_at = None
 
 
 class _FakeQuery:

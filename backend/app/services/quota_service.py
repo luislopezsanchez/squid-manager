@@ -116,18 +116,22 @@ def proximo_reinicio(inicio: datetime, period: str) -> datetime:
     cortado pasadas las 00:00 y parecía que el restablecimiento no
     funcionaba, cuando solo corría con otro reloj.
 
-    La zona horaria es la del sistema (`timedatectl`): si el servidor está en
-    UTC y la oficina no, «medianoche» será la de UTC.
+    La zona horaria se elige en Sistema → Configuración (por defecto, la del
+    sistema): si el servidor está en UTC y la oficina no, conviene elegirla.
     """
-    local = datetime.fromtimestamp(calendar.timegm(inicio.timetuple()))
+    from app.services import timezone_service as tzs
+    local = tzs.utc_naive_a_local(inicio)
     hoy = local.replace(hour=0, minute=0, second=0, microsecond=0)
     if period == "weekly":
-        frontera = hoy + timedelta(days=7 - local.weekday())
+        dia = hoy.date() + timedelta(days=7 - local.weekday())
     elif period == "monthly":
-        frontera = (hoy.replace(day=1) + timedelta(days=32)).replace(day=1)
+        dia = (hoy.replace(day=1) + timedelta(days=32)).replace(day=1).date()
     else:  # 'daily' y cualquier valor inesperado, por seguridad
-        frontera = hoy + timedelta(days=1)
-    return datetime.fromtimestamp(time.mktime(frontera.timetuple()), timezone.utc).replace(tzinfo=None)
+        dia = hoy.date() + timedelta(days=1)
+    # Se arma la medianoche del día destino en la zona (no `hoy + 24 h`, que se
+    # desfasaría una hora en los cambios de horario de verano).
+    frontera = datetime(dia.year, dia.month, dia.day, tzinfo=local.tzinfo)
+    return tzs.local_a_utc_naive(frontera)
 
 
 def anotar_reinicio(cuota) -> None:
@@ -313,6 +317,28 @@ def revertir_accion(db, quota: NavigationQuota) -> None:
         apply_squid_config(db)
 
 
+def _avisar_cuota(db, quota) -> None:
+    """Notifica (email/Telegram, si el evento está activo) que una cuota se agotó."""
+    try:
+        from app.services.notification_service import notify_now
+        nombre = getattr(quota, "username", None) or getattr(quota, "group_name", "")
+        tipo = "usuario" if hasattr(quota, "username") else "grupo"
+        accion = "limitada la velocidad" if quota.quota_action == "throttle" else "cortado el acceso"
+        usado = quota.quota_bytes_used / 1048576
+        limite = quota.quota_bytes / 1048576
+        notify_now(
+            db, "quota_reached", f"SquidManager: cuota agotada ({nombre})",
+            f"El {tipo} {nombre} llegó a su cuota {_PERIODOS.get(quota.quota_period, quota.quota_period)}: "
+            f"{usado:,.0f} MB de {limite:,.0f} MB. Se ha {accion}. "
+            f"Se restablece en el próximo reinicio del periodo.",
+        )
+    except Exception as e:  # un fallo al avisar no debe frenar el control de cuotas
+        logger.warning(f"No se pudo notificar la cuota agotada: {e}")
+
+
+_PERIODOS = {"daily": "diaria", "weekly": "semanal", "monthly": "mensual"}
+
+
 def _procesar_cuota(db, quota: NavigationQuota, ahora: datetime) -> None:
     if not quota.quota_period_started_at:
         quota.quota_period_started_at = ahora
@@ -326,6 +352,7 @@ def _procesar_cuota(db, quota: NavigationQuota, ahora: datetime) -> None:
         quota.quota_bytes_used = 0
         quota.quota_period_started_at = ahora
         quota.quota_action_applied = False
+        quota.quota_exceeded_at = None
         db.commit()
         return
 
@@ -335,7 +362,9 @@ def _procesar_cuota(db, quota: NavigationQuota, ahora: datetime) -> None:
         else:
             _cortar(db, quota)
         quota.quota_action_applied = True
+        quota.quota_exceeded_at = ahora
         db.commit()
+        _avisar_cuota(db, quota)
 
 
 def _miembros_actuales(db, group_name: str) -> list[str]:
@@ -460,6 +489,7 @@ def _procesar_cuota_grupo(db, quota: GroupQuota, ahora: datetime) -> None:
         quota.quota_bytes_used = 0
         quota.quota_period_started_at = ahora
         quota.quota_action_applied = False
+        quota.quota_exceeded_at = None
         db.commit()
         return
 
@@ -469,7 +499,9 @@ def _procesar_cuota_grupo(db, quota: GroupQuota, ahora: datetime) -> None:
         else:
             _cortar_grupo(db, quota)
         quota.quota_action_applied = True
+        quota.quota_exceeded_at = ahora
         db.commit()
+        _avisar_cuota(db, quota)
 
 
 def _acumular_consumo(db, lines: list[str]) -> None:
@@ -557,6 +589,10 @@ def start_quota_tracker() -> None:
     thread.start()
 
 
+def _epoch(dt) -> int | None:
+    return calendar.timegm(dt.timetuple()) if dt else None
+
+
 def cuotas_excedidas(db) -> list[dict]:
     """Cuotas (individuales y de grupo) que ya llegaron o pasaron su
     límite -para la pestaña "Cuota excedida" de Actividad de red y su
@@ -575,6 +611,8 @@ def cuotas_excedidas(db) -> list[dict]:
                 "quota_bytes": q.quota_bytes, "quota_bytes_used": q.quota_bytes_used,
                 "quota_period": q.quota_period, "quota_action": q.quota_action,
                 "quota_action_applied": q.quota_action_applied,
+                "excedida_en": _epoch(q.quota_exceeded_at),
+                "proximo_reinicio": _epoch(proximo_reinicio(q.quota_period_started_at, q.quota_period)) if q.quota_period_started_at else None,
             })
     for q in db.query(GroupQuota).all():
         if q.quota_bytes > 0 and q.quota_bytes_used >= q.quota_bytes:
@@ -583,6 +621,8 @@ def cuotas_excedidas(db) -> list[dict]:
                 "quota_bytes": q.quota_bytes, "quota_bytes_used": q.quota_bytes_used,
                 "quota_period": q.quota_period, "quota_action": q.quota_action,
                 "quota_action_applied": q.quota_action_applied,
+                "excedida_en": _epoch(q.quota_exceeded_at),
+                "proximo_reinicio": _epoch(proximo_reinicio(q.quota_period_started_at, q.quota_period)) if q.quota_period_started_at else None,
             })
     filas.sort(key=lambda f: f["quota_bytes_used"] / f["quota_bytes"], reverse=True)
     return filas

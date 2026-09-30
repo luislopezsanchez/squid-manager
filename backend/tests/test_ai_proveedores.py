@@ -150,3 +150,10 @@ def test_consulta_or_en_ingles_y_portugues_usa_sus_palabras_vacias():
 def test_consulta_or_acota_la_cantidad_de_terminos_y_solo_deja_caracteres_seguros():
     q = ai_service._consulta_or("uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce " + "x'; DROP TABLE")
     assert q.count("|") <= 11 and "'" not in q and ";" not in q
+
+
+def test_gemini_no_usa_el_rol_function():
+    """Gemini 3.x devuelve 400 si la respuesta de una herramienta va con rol 'function'."""
+    import inspect
+    from app.services import ai_service
+    assert '"role": "function"' not in inspect.getsource(ai_service)

@@ -1,4 +1,4 @@
-import { traducir } from '../i18n'
+import { traducir, idiomaActual } from '../i18n'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
@@ -17,6 +17,12 @@ interface NotifConfig {
   notify_on_rule_change: boolean
   notify_on_security_alert: boolean
   notify_on_node_down: boolean
+  notify_on_quota_reached: boolean
+  notify_on_blocked_access: boolean
+  blocked_threshold: number
+  daily_report_enabled: boolean
+  daily_report_time: string
+  daily_report_requisitos: { smtp: boolean; admin_con_email: boolean; destinatarios: string[]; ok: boolean }
 }
 
 export default function Notifications() {
@@ -27,6 +33,7 @@ export default function Notifications() {
   const [telegramToken, setTelegramToken] = useState('')
   const [testingEmail, setTestingEmail] = useState(false)
   const [testingTelegram, setTestingTelegram] = useState(false)
+  const [enviandoReporte, setEnviandoReporte] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
   const cargar = () => {
@@ -54,6 +61,12 @@ export default function Notifications() {
         notify_on_rule_change: config.notify_on_rule_change,
         notify_on_security_alert: config.notify_on_security_alert,
         notify_on_node_down: config.notify_on_node_down,
+        notify_on_quota_reached: config.notify_on_quota_reached,
+        notify_on_blocked_access: config.notify_on_blocked_access,
+        blocked_threshold: Number(config.blocked_threshold) || 10,
+        daily_report_enabled: config.daily_report_enabled,
+        daily_report_time: config.daily_report_time,
+        idioma: idiomaActual(),
       }
       await api.updateNotificationConfig(payload)
       showToast(traducir("Configuración guardada correctamente"), 'success')
@@ -80,6 +93,18 @@ export default function Notifications() {
       showToast(e.message, 'error')
     } finally {
       setTestingEmail(false)
+    }
+  }
+
+  const enviarReporte = async () => {
+    setEnviandoReporte(true)
+    try {
+      const r = await api.sendDailyReportNow()
+      showToast(r.message, r.ok ? 'success' : 'error')
+    } catch (e: any) {
+      showToast(e.message, 'error')
+    } finally {
+      setEnviandoReporte(false)
     }
   }
 
@@ -189,12 +214,14 @@ export default function Notifications() {
         <h3 className="font-medium text-ink mb-4">{traducir("Eventos a notificar")}</h3>
         <div className="space-y-3">
           {[
-            { key: 'notify_on_apply', label: traducir("Aplicación de cambios (reconfigure de Squid)"), desc: 'Cuando alguien pulsa "Aplicar Cambios"' },
-            { key: 'notify_on_user_change', label: traducir("Cambios en usuarios del proxy"), desc: 'Crear, editar o eliminar usuarios' },
-            { key: 'notify_on_acl_change', label: traducir("Cambios en ACLs"), desc: 'Crear, editar o eliminar ACLs' },
-            { key: 'notify_on_rule_change', label: traducir("Cambios en reglas de acceso"), desc: 'Crear, editar, reordenar o eliminar reglas' },
+            { key: 'notify_on_apply', label: traducir("Aplicación de cambios (reconfigure de Squid)"), desc: traducir('Cuando alguien pulsa "Aplicar Cambios"') },
+            { key: 'notify_on_user_change', label: traducir("Cambios en usuarios del proxy"), desc: traducir('Crear, editar o eliminar usuarios') },
+            { key: 'notify_on_acl_change', label: traducir("Cambios en ACLs"), desc: traducir('Crear, editar o eliminar ACLs') },
+            { key: 'notify_on_rule_change', label: traducir("Cambios en reglas de acceso"), desc: traducir('Crear, editar, reordenar o eliminar reglas') },
             { key: 'notify_on_security_alert', label: traducir("Alertas de seguridad"), desc: traducir("Fuerza bruta, bloqueos en racha o picos de tráfico detectados automáticamente") },
             { key: 'notify_on_node_down', label: traducir("Estado de nodos (Monitoreo Centralizado)"), desc: traducir("Un nodo configurado deja de responder, o su Squid deja de responder aunque el panel siga arriba -y cuando vuelve a estar en línea") },
+            { key: 'notify_on_quota_reached', label: traducir("Cuota agotada"), desc: traducir("Un usuario o grupo llegó al límite de su cuota de navegación (se le corta o se le limita la velocidad)") },
+            { key: 'notify_on_blocked_access', label: traducir("Intentos de entrar a sitios bloqueados"), desc: traducir("Un usuario insiste contra una regla de denegación: se avisa con el usuario y los sitios a los que intentó entrar") },
           ].map(item => (
             <label key={item.key} className="flex items-start gap-3 cursor-pointer">
               <input type="checkbox"
@@ -207,6 +234,55 @@ export default function Notifications() {
               </span>
             </label>
           ))}
+        </div>
+        {config.notify_on_blocked_access && (
+          <div className="mt-4 pt-4 border-t border-line-soft flex flex-wrap items-center gap-3 text-sm">
+            <label htmlFor="blocked-threshold" className="text-ink-2">{traducir("Avisar cuando un usuario acumule")}</label>
+            <input id="blocked-threshold" type="number" min={3} max={1000} value={config.blocked_threshold}
+              onChange={e => setConfig({ ...config, blocked_threshold: Number(e.target.value) })} className="input text-sm w-24" />
+            <span className="text-ink-2">{traducir("peticiones bloqueadas en 10 minutos")}</span>
+            <span className="text-xs text-ink-3 w-full">{traducir("Se avisa una sola vez por usuario y por hora, aunque siga intentándolo.")}</span>
+          </div>
+        )}
+        {!config.email_enabled && !config.telegram_enabled && (
+          <p className="text-xs text-warn bg-warn-soft rounded-lg p-3 mt-4">{traducir("Ningún canal está habilitado: activa el correo o Telegram arriba para que estos avisos lleguen.")}</p>
+        )}
+      </div>
+
+      {/* Reporte diario */}
+      <div className="card p-6 mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-medium text-ink">{traducir("Reporte diario por correo")}</h3>
+          <label className={`flex items-center gap-2 ${config.daily_report_requisitos.ok ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}>
+            <input type="checkbox" checked={config.daily_report_enabled} disabled={!config.daily_report_requisitos.ok && !config.daily_report_enabled}
+              onChange={e => setConfig({ ...config, daily_report_enabled: e.target.checked })}
+              className="w-4 h-4" style={{ accentColor: '#0B497C' }} />
+            <span className="text-sm">{traducir("Habilitar")}</span>
+          </label>
+        </div>
+        <p className="text-xs text-ink-3 mb-3">{traducir("Al final del día se envía a los administradores un resumen de las últimas 24 horas: usuarios y sitios, datos y peticiones, los que más navegaron, los sitios bloqueados más intentados, cuotas agotadas y alertas detectadas.")}</p>
+        <ul className="text-xs space-y-1 mb-4">
+          <li className={config.daily_report_requisitos.smtp ? 'text-ok' : 'text-danger'}>
+            {config.daily_report_requisitos.smtp ? '✓' : '✗'} {traducir("Servidor SMTP configurado")}{' '}
+            {!config.daily_report_requisitos.smtp && <Link to="/smtp" className="underline font-medium">{traducir("Configurar SMTP")}</Link>}
+          </li>
+          <li className={config.daily_report_requisitos.admin_con_email ? 'text-ok' : 'text-danger'}>
+            {config.daily_report_requisitos.admin_con_email ? '✓' : '✗'} {traducir("Administrador con correo")}
+            {config.daily_report_requisitos.admin_con_email
+              ? <span className="text-ink-3"> — {config.daily_report_requisitos.destinatarios.join(', ')}</span>
+              : <>{' '}<Link to="/admins" className="underline font-medium">{traducir("Agregar un correo a la cuenta")}</Link></>}
+          </li>
+        </ul>
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label htmlFor="report-time" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Hora de envío (zona horaria de la instalación)")}</label>
+            <input id="report-time" type="time" value={config.daily_report_time}
+              onChange={e => setConfig({ ...config, daily_report_time: e.target.value })} className="input text-sm w-32" />
+          </div>
+          <button onClick={enviarReporte} disabled={enviandoReporte || !config.daily_report_requisitos.ok}
+            className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#48B3D0' }}>
+            {enviandoReporte ? traducir('Enviando…') : traducir('Enviar el reporte ahora')}
+          </button>
         </div>
       </div>
 

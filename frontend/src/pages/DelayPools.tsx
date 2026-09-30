@@ -334,14 +334,18 @@ export default function DelayPools() {
                     <p className="field-help mt-1">{traducir("1 MB/s equivale a unos 8 Mbit/s.")}</p>
                   </div>
                   <div>
-                    <div className="field-label mb-1.5">{traducir("¿Cómo se reparte?")}</div>
-                    <label className="flex items-start gap-2 text-sm text-ink-2 cursor-pointer mb-1.5">
+                    <div className="field-label mb-1.5">{traducir("¿Cómo se aplica el límite?")}</div>
+                    <label className="flex items-start gap-2 text-sm text-ink-2 cursor-pointer mb-2">
                       <input type="radio" className="mt-1" checked={compartido} onChange={() => setCompartido(true)} />
-                      <span>{traducir("Compartido: entre todo lo elegido suman este límite")}</span>
+                      <span>{traducir("Un límite total: todo lo elegido comparte esta velocidad")}
+                        <span className="block text-[11.5px] text-ink-3">{traducir("Ej.: con {v}, si 10 personas navegan a la vez, se reparten esos {v} entre todas.", { v: `${velocidad} ${UNIDADES.find(u => u.value === unidad)?.label ?? ''}` })}</span>
+                      </span>
                     </label>
                     <label className="flex items-start gap-2 text-sm text-ink-2 cursor-pointer">
                       <input type="radio" className="mt-1" checked={!compartido} onChange={() => setCompartido(false)} />
-                      <span>{traducir("Por equipo: cada equipo (IP) tiene este límite")}</span>
+                      <span>{traducir("Un límite por dispositivo: cada computadora o teléfono (dirección IP) desde el que se navegue con lo elegido recibe este límite por separado")}
+                        <span className="block text-[11.5px] text-ink-3">{traducir("Ej.: con {v}, si 3 equipos descargan a la vez, cada uno recibe hasta {v}.", { v: `${velocidad} ${UNIDADES.find(u => u.value === unidad)?.label ?? ''}` })}</span>
+                      </span>
                     </label>
                   </div>
                 </div>
@@ -409,7 +413,7 @@ export default function DelayPools() {
                     </td>
                     <td className="px-5 py-3 tabular">
                       <span className="inline-flex items-center gap-1.5"><IconGauge className="w-3.5 h-3.5 text-ink-3" />{formatVelocidad(bps)}</span>
-                      <span className="block text-[11px] text-ink-3">{p.targets ? (p.shared ? traducir("compartido") : traducir("por equipo")) : (p.pool_class === 2 ? traducir("por equipo") : traducir("compartido"))}</span>
+                      <span className="block text-[11px] text-ink-3">{p.targets ? (p.shared ? traducir("límite total") : traducir("por dispositivo")) : (p.pool_class === 2 ? traducir("por dispositivo") : traducir("límite total"))}</span>
                     </td>
                     <td className="px-5 py-3">
                       <button onClick={() => handleToggle(p)} title={p.enabled ? traducir("Clic para desactivar") : traducir("Clic para activar")}

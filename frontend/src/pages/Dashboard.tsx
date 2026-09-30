@@ -5,7 +5,7 @@ import { IconActivity, IconAlert, IconArrowDown, IconArrowUp, IconBackup, IconBo
 import { api, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
-import { formatBytes, formatRate, formatNumber } from '../utils/format'
+import { formatBytes, formatRate, formatNumber, formatFechaHora } from '../utils/format'
 import { monotonePath, niceCeilBytes, formatearEtiquetaGranularidad, formatearFechaCompletaGranularidad, type Granularidad } from '../utils/chart'
 import { LineAreaChart } from '../components/LineAreaChart'
 
@@ -49,7 +49,7 @@ interface DashboardData {
   top_users: { user: string; bytes: number; requests: number }[]
   top_domains: { domain: string; requests: number; bytes: number }[]
   top_blocked: { domain: string; requests: number; bytes: number }[]
-  ips_compartidas: { ip: string; usuarios: string[]; requests: number }[]
+  ips_compartidas: { ip: string; usuarios: string[]; requests: number; primera_vez?: number; ultima_vez?: number }[]
   system: {
     cpu: { percent: number; load_1?: number; load_5?: number; load_15?: number }
     memory: { total: number; used: number; percent: number }
@@ -1528,7 +1528,7 @@ export default function Dashboard() {
               <InfoTip text={traducir("Direcciones IP desde las que navegó más de un usuario autenticado distinto. No es un veredicto -puede ser un equipo compartido de verdad-, pero es una señal que vale la pena revisar: credenciales que circulan entre personas se ven así.")} />
             </div>
           </div>
-          <p className="text-[11px] text-ink-3 mb-4">{traducir("Mismo equipo (IP), más de una cuenta autenticada · últimas 24 horas")}</p>
+          <p className="text-[11px] text-ink-3 mb-4">{traducir("Mismo equipo (IP), más de una cuenta autenticada · últimas 24 horas. Cada caso sale de la lista 24 h después de la última vez que se vio.")}</p>
           {data.ips_compartidas.length === 0 ? (
             <p className="text-sm text-ink-3">{traducir("No se detectaron IPs con más de un usuario en esta ventana.")}</p>
           ) : (
@@ -1538,6 +1538,11 @@ export default function Dashboard() {
                   <div className="min-w-0">
                     <span className="font-mono text-xs text-ink-2">{row.ip}</span>
                     <p className="text-[11px] text-ink-3 truncate">{row.usuarios.join(', ')}</p>
+                    {row.primera_vez && row.ultima_vez && (
+                      <p className="text-[11px] text-ink-3 tabular">
+                        {traducir("Visto")}: {formatFechaHora(row.primera_vez)} → {formatFechaHora(row.ultima_vez)}
+                      </p>
+                    )}
                   </div>
                   <span className="pill-warn px-2 py-0.5 rounded-full text-[10px] font-bold flex-none">
                     {traducir("{n} cuentas", { n: row.usuarios.length })}

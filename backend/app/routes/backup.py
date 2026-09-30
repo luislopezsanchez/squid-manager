@@ -596,9 +596,73 @@ MAX_TEXTO_POR_ARCHIVO = 6 * 1024 * 1024
 MAX_TEXTO_TOTAL = 40 * 1024 * 1024
 
 
+def _extraer_con_bsdtar(nombre: str, datos: bytes):
+    """Lee un .rar / .7z / .tar.xz / .tar.bz2 con `bsdtar` (libarchive, licencia libre:
+    a diferencia de `unrar` no hace falta nada propietario). Se extrae a un directorio
+    temporal con límites de cantidad, tamaño por archivo y tiempo; solo se devuelven
+    archivos regulares (los enlaces simbólicos se ignoran) y el directorio se borra siempre."""
+    import os
+    import resource
+    import shutil
+    import subprocess
+    import tempfile
+
+    if not shutil.which("bsdtar"):
+        raise HTTPException(
+            400,
+            detail="Este servidor no puede leer archivos .rar / .7z (falta el paquete libarchive-tools). "
+                   "Instálalo, o sube un .zip / .tar.gz.",
+        )
+    tmp = tempfile.mkdtemp(prefix="sm-import-")
+    try:
+        ruta_arch = os.path.join(tmp, "entrada" + os.path.splitext(nombre)[1].lower())
+        with open(ruta_arch, "wb") as fh:
+            fh.write(datos)
+        try:
+            listado = subprocess.run(["bsdtar", "-tf", ruta_arch], capture_output=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            raise HTTPException(400, detail=f"«{nombre}» tardó demasiado en abrirse.")
+        if listado.returncode != 0:
+            raise HTTPException(
+                400,
+                detail=f"No se pudo leer «{nombre}»: puede estar dañado, protegido con contraseña o ser un formato no compatible.",
+            )
+        if len(listado.stdout.splitlines()) > MAX_ARCHIVO_COMPRIMIDO_MIEMBROS:
+            raise HTTPException(400, detail="El archivo comprimido tiene demasiados archivos.")
+
+        destino = os.path.join(tmp, "contenido")
+        os.mkdir(destino)
+
+        def _limites():  # ningún archivo extraído puede pasar de MAX_TEXTO_POR_ARCHIVO * 4
+            tope = MAX_TEXTO_POR_ARCHIVO * 4
+            resource.setrlimit(resource.RLIMIT_FSIZE, (tope, tope))
+
+        try:
+            r = subprocess.run(
+                ["bsdtar", "-xf", ruta_arch, "-C", destino, "--no-same-owner", "--no-same-permissions"],
+                capture_output=True, timeout=60, preexec_fn=_limites,
+            )
+        except subprocess.TimeoutExpired:
+            raise HTTPException(400, detail=f"«{nombre}» tardó demasiado en descomprimirse.")
+        if r.returncode != 0:
+            raise HTTPException(400, detail=f"No se pudo descomprimir «{nombre}»: puede estar dañado o protegido con contraseña.")
+
+        salida = []
+        for raiz, _dirs, archivos in os.walk(destino, followlinks=False):
+            for a in archivos:
+                p = os.path.join(raiz, a)
+                if os.path.islink(p) or not os.path.isfile(p) or os.path.getsize(p) > MAX_TEXTO_POR_ARCHIVO:
+                    continue
+                with open(p, "rb") as fh:
+                    salida.append((os.path.relpath(p, destino), fh.read()))
+        return salida
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def _expandir_subidas(subidas: list[tuple[str, bytes]]) -> dict[str, str]:
     """Convierte lo subido en {nombre: texto}. Acepta los archivos sueltos y
-    también un .zip / .tar / .tar.gz / .tgz con todo el directorio del Squid de
+    también un .zip / .tar / .tar.gz / .tgz / .rar / .7z con todo el directorio del Squid de
     origen (lo habitual al migrar: se comprime /etc/squid y se sube). Solo se
     leen archivos de texto; carpetas, enlaces y binarios se ignoran, con
     límites de cantidad y tamaño."""
@@ -646,8 +710,9 @@ def _expandir_subidas(subidas: list[tuple[str, bytes]]) -> dict[str, str]:
                             f = t.extractfile(m)
                             if f:
                                 _agregar(m.name, f.read())
-            elif bajo.endswith((".rar", ".7z")):
-                raise HTTPException(400, detail="Los .rar y .7z no se pueden leer aquí: descomprímelo y sube los archivos (o un .zip / .tar.gz).")
+            elif bajo.endswith((".rar", ".7z", ".tar.xz", ".tar.bz2", ".tbz2")):
+                for ruta, contenido in _extraer_con_bsdtar(nombre, datos):
+                    _agregar(ruta, contenido)
             else:
                 _agregar(nombre, datos)
         except (zipfile.BadZipFile, tarfile.TarError) as e:
@@ -713,10 +778,23 @@ async def analyze_squid_conf(
     def _regla_dict(r):
         return {"action": r.action, "acl_names": r.acl_names, "estado": r.estado, "motivo": _t(r.motivo)}
 
+    # Los DNS del Squid de origen pueden no ser alcanzables desde ESTE servidor (otra red):
+    # se comprueba aquí para avisar antes de importar, no al pulsar «Aplicar cambios».
+    dns_info = None
+    dns_setting = next((s for s in resultado.settings if s.key == "dns_nameservers"), None)
+    if dns_setting:
+        from app.services.dns_service import parsear_lista, validar_servidores, probar_servidores
+        servidores = parsear_lista(dns_setting.value)
+        if servidores:
+            valido, msg = validar_servidores(servidores)
+            ok, msg = (probar_servidores(servidores) if valido else (False, msg))
+            dns_info = {"servidores": servidores, "alcanzable": bool(ok), "mensaje": msg}
+
     return {
         "status": "ok",
         "token": token,
         "principal": principal,
+        "dns": dns_info,
         "archivos_leidos": sorted(contenidos),
         "resumen": resultado.resumen(),
         "acls": [_acl_dict(a) for a in resultado.acls],
@@ -762,6 +840,7 @@ def apply_squid_import(
     request: Request,
     token: str = Form(...),
     importar_usuarios: bool = Form(True),
+    importar_dns: bool = Form(True),
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_writer),
 ):
@@ -779,6 +858,8 @@ def apply_squid_import(
 
     if not importar_usuarios:
         resultado.usuarios = []
+    if not importar_dns:
+        resultado.settings = [x for x in resultado.settings if x.key != "dns_nameservers"]
 
     detalle = import_svc.aplicar(db, resultado)
 

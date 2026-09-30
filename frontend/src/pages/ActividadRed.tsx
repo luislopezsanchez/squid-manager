@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { traducir } from '../i18n'
 import { api, getToken, type RangoFechas } from '../api/client'
-import { formatBytes, formatNumber } from '../utils/format'
+import { idiomaActual } from '../i18n'
+import { formatBytes, formatNumber, formatFechaHora } from '../utils/format'
 import { useToast } from '../components/Toast'
 import { IconDownload } from '../components/Icons'
 import { LoadingState, ErrorState } from '../components/AsyncState'
@@ -15,11 +16,12 @@ type FilaUsuario = { user: string; bytes: number; requests: number }
 type FilaDominio = { domain: string; requests: number; bytes: number }
 type FilaBloqueado = { user: string; blocked_requests: number; account_status: 'enabled' | 'disabled' | 'unknown' }
 type RespuestaBloqueados = { users: FilaBloqueado[]; anonymous_blocked: number }
-type FilaIpCompartida = { ip: string; usuarios: string[]; requests: number }
+type FilaIpCompartida = { ip: string; usuarios: string[]; requests: number; primera_vez?: number; ultima_vez?: number }
 type FilaCuotaExcedida = {
   tipo: 'usuario' | 'grupo'; nombre: string
   quota_bytes: number; quota_bytes_used: number
   quota_period: string; quota_action: 'cut' | 'throttle'; quota_action_applied: boolean
+  excedida_en?: number | null; proximo_reinicio?: number | null
 }
 type Totales = {
   usuarios: { count: number; bytes: number; requests: number }
@@ -55,10 +57,10 @@ const EXPLICACIONES: Record<Pestana, string> = {
     "Quién insiste más contra la política. Unos pocos bloqueos son ruido normal (un enlace viejo, una redirección); una cifra alta y sostenida de la misma persona sí amerita una conversación."
   ),
   'ips-compartidas': traducir(
-    "Direcciones IP desde las que navegó más de un usuario autenticado distinto. No es un veredicto -puede ser un equipo compartido de verdad (una sala, un kiosco)-, pero es una señal que vale la pena revisar: credenciales que circulan entre personas se ven así."
+    "Direcciones IP desde las que navegó más de un usuario autenticado distinto. No es un veredicto -puede ser un equipo compartido de verdad (una sala, un kiosco)-, pero es una señal que vale la pena revisar: credenciales que circulan entre personas se ven así. Cada fila indica desde cuándo y hasta cuándo se vio esa situación: sale de la lista cuando pasa la ventana elegida sin que vuelva a repetirse."
   ),
   'cuota-excedida': traducir(
-    "Quién llegó o pasó el límite de su cuota de navegación ahora mismo -por usuario o por grupo. A diferencia del resto de esta página, esto no depende de la ventana de tiempo elegida arriba: es el estado actual, tal como lo gestiona Gestión → Cuotas."
+    "Quién llegó o pasó el límite de su cuota de navegación ahora mismo -por usuario o por grupo. A diferencia del resto de esta página, esto no depende de la ventana de tiempo elegida arriba: es el estado actual, tal como lo gestiona Gestión → Cuotas. Una cuota sale de esta lista cuando llega la fecha de restablecimiento que se indica en cada fila (o si se sube o se quita el límite)."
   ),
 }
 
@@ -160,7 +162,7 @@ export default function ActividadRed() {
   const exportarPdf = () => {
     setExportando(true)
     const token = getToken()
-    fetch(api.actividadExportPdfUrl(ventana !== 'custom' ? (ventana || undefined) : undefined), { headers: { Authorization: `Bearer ${token}` } })
+    fetch(api.actividadExportPdfUrl(ventana !== 'custom' ? (ventana || undefined) : undefined, rango), { headers: { Authorization: `Bearer ${token}`, 'Accept-Language': idiomaActual() } })
       .then(r => {
         if (!r.ok) throw new Error('export failed')
         return r.blob()
@@ -257,6 +259,11 @@ export default function ActividadRed() {
     total = totales.usuarios_bloqueados_requests
   }
 
+  if (pestana === 'ips-compartidas' && ipsCompartidas) {
+    filas = ipsCompartidas.map(r => ({ etiqueta: r.ip, valor: r.requests, valorFormateado: formatNumber(r.requests) }))
+    total = ipsCompartidas.reduce((a, r) => a + r.requests, 0)
+  }
+
   const top3 = filas.slice(0, 3).reduce((acc, f) => acc + f.valor, 0)
   const pctTop3 = total > 0 ? (top3 / total) * 100 : 0
   const totalFormateado = (pestana === 'usuarios' || pestana === 'dominios') && porDatos ? formatBytes(total) : formatNumber(total)
@@ -328,8 +335,11 @@ export default function ActividadRed() {
 
       <p className="text-sm text-ink-2 mb-4 max-w-3xl">{EXPLICACIONES[pestana]}</p>
 
-      {pestana !== 'cuota-excedida' && pestana !== 'ips-compartidas' && (
+      {pestana !== 'cuota-excedida' && (
         <ResumenActividad
+          tipo={pestana}
+          rango={rango}
+          porDatos={porDatos}
           ventana={ventana}
           filas={filas}
           total={total}
@@ -366,6 +376,10 @@ export default function ActividadRed() {
                         <p className="text-xs text-ink-3 tabular">
                           {formatBytes(q.quota_bytes_used)} / {formatBytes(q.quota_bytes)} ({Math.round(pct)}%)
                         </p>
+                        <p className="text-[11px] text-ink-3 tabular">
+                          {q.excedida_en ? `${traducir("Excedida el")} ${formatFechaHora(q.excedida_en)}` : traducir("Excedida (fecha no registrada)")}
+                          {q.proximo_reinicio ? ` · ${traducir("Se restablece el")} ${formatFechaHora(q.proximo_reinicio)}` : ''}
+                        </p>
                       </div>
                     </div>
                     <span className={`px-2 py-1 rounded-full text-xs font-bold flex-none ${estado.clase}`}>{estado.texto}</span>
@@ -392,6 +406,11 @@ export default function ActividadRed() {
                     <div className="min-w-0">
                       <p className="font-mono text-sm text-ink">{row.ip}</p>
                       <p className="text-xs text-ink-3 mt-0.5 truncate">{row.usuarios.join(', ')}</p>
+                      {row.primera_vez && row.ultima_vez && (
+                        <p className="text-[11px] text-ink-3 mt-0.5 tabular" title={traducir("Desde cuándo y hasta cuándo se vio esta IP con más de una cuenta. Sale de la lista cuando pasa la ventana elegida sin repetirse.")}>
+                          {traducir("Visto")}: {formatFechaHora(row.primera_vez)} → {formatFechaHora(row.ultima_vez)}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="text-right flex-none">

@@ -27,5 +27,7 @@ class GroupQuota(Base):
     quota_bytes_used = Column(BigInteger, default=0, nullable=False)
     quota_period_started_at = Column(DateTime, nullable=True)
     quota_action_applied = Column(Boolean, default=False, nullable=False)
+    # Cuándo se agotó (UTC): Actividad de red lo muestra; se borra al reiniciarse el periodo.
+    quota_exceeded_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

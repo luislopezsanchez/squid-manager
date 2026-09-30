@@ -36,6 +36,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
+from app.services import timezone_service as _tzs
 from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -504,13 +505,87 @@ def top_blocked_users(limit, seconds, desde, hasta) -> tuple[list[tuple[str, int
 
 
 def ips_compartidas(limit, seconds, desde, hasta) -> list[dict]:
+    """IPs con más de un usuario. `desde`/`hasta` (epoch) acotan CUÁNDO se vio
+    la situación: la primera y la última hora con actividad de esa IP, que es
+    lo que permite saber si una fila sigue vigente o ya salió de la ventana."""
     rows = _q(
         "SELECT ip, COUNT(DISTINCT username) AS nu, SUM(requests) AS req, "
-        "ARRAY_AGG(DISTINCT username) FROM ru_ipuser WHERE h BETWEEN :h0 AND :h1 "
+        "ARRAY_AGG(DISTINCT username), MIN(h), MAX(h) FROM ru_ipuser WHERE h BETWEEN :h0 AND :h1 "
         "GROUP BY ip HAVING COUNT(DISTINCT username) >= 2 ORDER BY nu DESC, req DESC LIMIT :n",
         {**_p(seconds, desde, hasta), "n": limit},
     )
-    return [{"ip": r[0], "usuarios": sorted(r[3]), "requests": int(r[2])} for r in rows]
+    return [{"ip": r[0], "usuarios": sorted(r[3]), "requests": int(r[2]),
+             "primera_vez": int(r[4]), "ultima_vez": int(r[5]) + 3599} for r in rows]
+
+
+def _rellenar(puntos: list[dict], por_hora: bool, p: dict, vacio: dict) -> list[dict]:
+    """Completa con ceros las horas (o días) sin actividad: sin esto la gráfica une con una
+    línea recta dos momentos separados por un hueco (p. ej. el servidor apagado una noche)
+    y parece que hubo actividad donde no la hubo."""
+    if not puntos:
+        return puntos
+    paso = 3600
+    ini, fin = p["h0"], p["h1"]
+    if not por_hora:
+        ini, fin = _tzs.inicio_dia(ini), _tzs.inicio_dia(fin)
+    por_t = {x["timestamp"]: x for x in puntos}
+    salida, t = [], ini
+    while t <= fin and len(salida) < 2000:
+        salida.append(por_t.get(t) or {"timestamp": t, **vacio})
+        if por_hora:
+            t += paso
+        else:  # siguiente medianoche local (un día puede durar 23 o 25 h por el horario de verano)
+            d = datetime.fromtimestamp(t, _tzs.get_tz()) + __import__("datetime").timedelta(days=1, hours=2)
+            t = _tzs.inicio_dia(d.timestamp())
+    # Timestamps que no cayeron en la rejilla (bordes de zona) no se pierden.
+    extra = [x for k, x in por_t.items() if k not in {y["timestamp"] for y in salida}]
+    return sorted(salida + extra, key=lambda x: x["timestamp"])
+
+
+def actividad_serie(tipo: str, seconds, desde, hasta) -> dict:
+    """Serie para la tarjeta de evolución de cada pestaña de Actividad de red:
+    cada una muestra algo propio (no el mismo tráfico en todas). Por hora hasta
+    24 h, por día (de la zona horaria de la instalación) en ventanas mayores."""
+    p = _p(seconds, desde, hasta)
+    largo = seconds if seconds else (hasta - desde)
+    por_hora = largo <= 86400
+    cubo = (lambda h: h) if por_hora else (lambda h: _tzs.inicio_dia(h))
+
+    def distintos(sql: str) -> dict:
+        acc: dict = {}
+        for h, *k in _q(sql, p):
+            acc.setdefault(cubo(h), set()).add(tuple(k))
+        return acc
+
+    if tipo == "usuarios":
+        u = distintos("SELECT DISTINCT h, username FROM ru_user WHERE h BETWEEN :h0 AND :h1")
+        datos = volumen_por_periodo(seconds, desde, hasta)["puntos"]
+        pts = {x["timestamp"]: {**x, "usuarios": 0} for x in datos}
+        for t, conj in u.items():
+            pts.setdefault(t, {"timestamp": t, "bytes": 0, "requests": 0})["usuarios"] = len(conj)
+        puntos = [{"usuarios": 0, **pts[k]} for k in sorted(pts)]
+    elif tipo == "dominios":
+        d = distintos("SELECT DISTINCT h, domain FROM ru_domain WHERE h BETWEEN :h0 AND :h1")
+        puntos = [{"timestamp": t, "sitios": len(c)} for t, c in sorted(d.items())]
+    elif tipo == "bloqueados-dominio":
+        acc: dict = {}
+        for h, n in _q("SELECT h, denied FROM ru_total WHERE h BETWEEN :h0 AND :h1 ORDER BY h", p):
+            acc[cubo(h)] = acc.get(cubo(h), 0) + int(n)
+        puntos = [{"timestamp": t, "bloqueadas": n} for t, n in sorted(acc.items())]
+    elif tipo == "bloqueados-usuario":
+        u = distintos("SELECT DISTINCT h, username FROM ru_user WHERE h BETWEEN :h0 AND :h1 AND denied > 0")
+        puntos = [{"timestamp": t, "usuarios": len(c)} for t, c in sorted(u.items())]
+    elif tipo == "ips-compartidas":
+        por: dict = {}
+        for h, ip, user in _q("SELECT h, ip, username FROM ru_ipuser WHERE h BETWEEN :h0 AND :h1", p):
+            por.setdefault(cubo(h), {}).setdefault(ip, set()).add(user)
+        puntos = [{"timestamp": t, "ips": sum(1 for us in ips.values() if len(us) >= 2)} for t, ips in sorted(por.items())]
+    else:
+        puntos = []
+    vacio = {"usuarios": {"bytes": 0, "requests": 0, "usuarios": 0}, "dominios": {"sitios": 0},
+             "bloqueados-dominio": {"bloqueadas": 0}, "bloqueados-usuario": {"usuarios": 0},
+             "ips-compartidas": {"ips": 0}}.get(tipo, {})
+    return {"granularidad": "hora" if por_hora else "dia", "puntos": _rellenar(puntos, por_hora, p, vacio)}
 
 
 def _percentil(hist: list[int], p: float) -> int | None:
@@ -545,7 +620,8 @@ def latencia(limit, seconds, desde, hasta) -> dict:
               "GROUP BY domain HAVING SUM(lat_n) >= 3 ORDER BY SUM(lat_sum)::float/SUM(lat_n) DESC LIMIT :n",
               {**p, "n": limit})
     dominios = [{"domain": r[0], "avg_ms": round(int(r[1]) / int(r[2])), "samples": int(r[2])} for r in rows]
-    return {**resumen, "domains": dominios}
+    histograma = [{"hasta_ms": LAT_EDGES[i] if i < len(LAT_EDGES) else None, "n": hist[i]} for i in range(len(hist))]
+    return {**resumen, "domains": dominios, "histograma": histograma}
 
 
 def errores_http(limit, seconds, desde, hasta) -> dict:
@@ -557,8 +633,10 @@ def errores_http(limit, seconds, desde, hasta) -> dict:
     por_dominio = _q(
         "SELECT domain, SUM(errors) FROM ru_domain WHERE h BETWEEN :h0 AND :h1 AND errors > 0 "
         "GROUP BY domain ORDER BY SUM(errors) DESC, domain LIMIT :n", {**p, "n": limit})
+    peticiones = _q("SELECT COALESCE(SUM(requests),0) FROM ru_total WHERE h BETWEEN :h0 AND :h1", p)[0][0]
     return {
         "total": int(total),
+        "peticiones": int(peticiones),
         "by_code": [{"code": int(r[0]), "count": int(r[1])} for r in por_codigo],
         "by_domain": [{"domain": r[0], "count": int(r[1])} for r in por_dominio],
     }
@@ -601,11 +679,38 @@ def volumen_por_periodo(seconds, desde, hasta) -> dict:
                 "puntos": [{"timestamp": x["timestamp"], "bytes": x["bytes"], "requests": x["requests"]} for x in horas]}
     dias: dict[float, dict] = {}
     for x in horas:
-        d = datetime.fromtimestamp(x["timestamp"]).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        d = _tzs.inicio_dia(x["timestamp"])
         g = dias.setdefault(d, {"timestamp": d, "bytes": 0, "requests": 0})
         g["bytes"] += x["bytes"]
         g["requests"] += x["requests"]
     return {"granularidad": "dia", "puntos": [dias[k] for k in sorted(dias)]}
+
+
+def rendimiento_serie(seconds, desde, hasta) -> dict:
+    """Latencia media y errores a lo largo del tiempo, por hora (hasta 24 h) o por día."""
+    horas = serie_total(seconds, desde, hasta)
+    largo = seconds if seconds else (hasta - desde)
+    por_hora = largo <= 86400
+    acc: dict = {}
+    for x in horas:
+        t = x["timestamp"] if por_hora else _tzs.inicio_dia(x["timestamp"])
+        g = acc.setdefault(t, {"requests": 0, "errors": 0, "ls": 0, "ln": 0})
+        g["requests"] += x["requests"]
+        g["errors"] += x["errors"]
+    # Latencia: suma y cuenta reales (no promedio de promedios).
+    p = _p(seconds, desde, hasta)
+    for h, ls, ln in _q("SELECT h, lat_sum, lat_n FROM ru_total WHERE h BETWEEN :h0 AND :h1", p):
+        t = h if por_hora else _tzs.inicio_dia(h)
+        if t in acc:
+            acc[t]["ls"] += int(ls)
+            acc[t]["ln"] += int(ln)
+    puntos = [{
+        "timestamp": t, "latencia_ms": round(g["ls"] / g["ln"]) if g["ln"] else None,
+        "errores": g["errors"], "peticiones": g["requests"],
+        "tasa_error": round(g["errors"] / g["requests"] * 100, 2) if g["requests"] else 0,
+    } for t, g in sorted(acc.items())]
+    puntos = _rellenar(puntos, por_hora, p, {"latencia_ms": None, "errores": 0, "peticiones": 0, "tasa_error": 0})
+    return {"granularidad": "hora" if por_hora else "dia", "puntos": puntos}
 
 
 def serie_entidad(user, domain, seconds, desde, hasta) -> list[dict]:
@@ -696,7 +801,7 @@ def panorama(seconds: int) -> dict:
     if seconds > 2 * 86400:  # ventanas largas: un punto por día
         dias: dict[float, dict] = {}
         for x in horas:
-            d = datetime.fromtimestamp(x["timestamp"]).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            d = _tzs.inicio_dia(x["timestamp"])
             g = dias.setdefault(d, {"timestamp": d, "requests": 0, "bytes": 0, "denied": 0, "errors": 0, "hits": 0, "misses": 0, "_ls": 0, "_ln": 0})
             for k in ("requests", "bytes", "denied", "errors", "hits", "misses"):
                 g[k] += x[k]
@@ -724,7 +829,7 @@ def panorama(seconds: int) -> dict:
     # Mapa de calor: peticiones por día de la semana (0=lunes) y hora local.
     mapa = [[0] * 24 for _ in range(7)]
     for x in horas:
-        dt = datetime.fromtimestamp(x["timestamp"])
+        dt = datetime.fromtimestamp(x["timestamp"], _tzs.get_tz())
         mapa[dt.weekday()][dt.hour] += x["requests"]
 
     return {
