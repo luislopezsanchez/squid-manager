@@ -166,9 +166,17 @@ def _escribir_estado(estado: dict) -> None:
     consolidate-monthly-logs.sh para no dejar el archivo a medias si el
     proceso se corta a mitad de escritura.
     """
+    contenido = json.dumps(estado, ensure_ascii=False, indent=2) + "\n"
     tmp = ESTADO_PATH.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(estado, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, ESTADO_PATH)
+    try:
+        tmp.write_text(contenido, encoding="utf-8")
+        os.replace(tmp, ESTADO_PATH)
+    except PermissionError:
+        # El directorio del backend puede no ser escribible por el usuario del servicio (pasa si
+        # quedó como propiedad de root) aunque el propio archivo de estado sí lo sea: no se puede
+        # crear el temporal, pero sí reescribir el archivo en su sitio. Sin esto, cada comprobación
+        # de actualizaciones fallaba en el registro con «Permission denied».
+        ESTADO_PATH.write_text(contenido, encoding="utf-8")
 
 
 def _unidad_en_curso() -> bool:

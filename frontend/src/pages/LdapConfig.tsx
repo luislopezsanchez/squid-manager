@@ -53,7 +53,7 @@ export default function LdapConfig() {
     setSyncing(true)
     try {
       const result = await api.syncLdapUsers()
-      showToast(`Sincronizados ${result.synced} usuarios del directorio. Gestiónalos en Usuarios.`, 'success')
+      showToast(traducir('Sincronizados {n} usuarios del directorio. Gestiónalos en Usuarios.', { n: result.synced }), 'success')
       api.listLdapUsers().then(u => setLdapUserCount(u.length)).catch(() => {})
     } catch (e: any) {
       showToast(`Error al sincronizar: ${e.message}`, 'error')

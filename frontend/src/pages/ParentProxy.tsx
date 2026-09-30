@@ -73,7 +73,7 @@ export default function ParentProxy() {
         return
       }
       set('ca_cert', texto.trim())
-      showToast(`Certificado cargado desde ${archivo.name}`)
+      showToast(traducir('Certificado cargado desde {f}', { f: archivo.name }))
     }
     lector.onerror = () => showToast(traducir("No se pudo leer el archivo"), 'error')
     lector.readAsText(archivo)

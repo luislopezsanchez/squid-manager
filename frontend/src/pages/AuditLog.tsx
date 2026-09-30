@@ -34,16 +34,22 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
 }
 
 const ENTITY_LABELS: Record<string, string> = {
-  proxy_user: 'Usuario del Proxy',
+  proxy_user: traducir('Usuario del Proxy'),
   acl: 'ACL',
-  access_rule: 'Regla de Acceso',
+  access_rule: traducir('Regla de Acceso'),
   delay_pool: 'Delay Pool',
-  admin: 'Administrador',
-  ldap_user: 'Usuario LDAP',
-  user_group: 'Grupo',
-  syslog_config: 'Syslog externo',
+  admin: traducir('Administrador'),
+  ldap_user: traducir('Usuario LDAP'),
+  user_group: traducir('Grupo'),
+  syslog_config: traducir('Syslog externo'),
   backup: 'Backup',
-  squid_conf: 'Configuración de Squid',
+  squid_conf: traducir('Configuración de Squid'),
+  navigation_quota: traducir('Cuota de usuario'),
+  group_quota: traducir('Cuota de grupo'),
+  module: traducir('Módulo'),
+  ai_config: traducir('Asistente de IA'),
+  central_monitor_config: traducir('Panel central'),
+  monitored_node: traducir('Nodo del Panel central'),
 }
 
 export default function AuditLog() {

@@ -34,6 +34,7 @@ import { DOC_CATEGORIAS } from '../content/docsCategorias'
 import { DOC_BUSCAR_REFERENCIAS } from '../content/docsBuscarReferencias'
 import { DOC_ASISTENTE } from '../content/docsAsistente'
 import { DOC_ACTUALIZACIONES } from '../content/docsActualizaciones'
+import { DOC_MODULOS } from '../content/docsModulos'
 
 type Articulo = { slug: string; titulo: string; listo: boolean; contenido?: Record<'es' | 'en' | 'pt', string> }
 type Grupo = { id: string; titulo: string; Icon: (p: { className?: string }) => JSX.Element; articulos: Articulo[] }
@@ -94,6 +95,7 @@ const GRUPOS: Grupo[] = [
       { slug: 'backup-y-migracion', titulo: traducir('Backup y migración'), listo: true, contenido: DOC_BACKUP_MIGRACION },
       { slug: 'administradores', titulo: traducir('Administradores'), listo: true, contenido: DOC_ADMINISTRADORES },
       { slug: 'asistente-ai', titulo: traducir('Asistente AI'), listo: true, contenido: DOC_ASISTENTE },
+      { slug: 'modulos', titulo: traducir('Módulos'), listo: true, contenido: DOC_MODULOS },
       { slug: 'actualizaciones', titulo: traducir('Actualizaciones'), listo: true, contenido: DOC_ACTUALIZACIONES },
     ],
   },

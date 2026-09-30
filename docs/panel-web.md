@@ -28,3 +28,32 @@ El panel se organiza en tres grupos:
 Ver también [caracteristicas.md](caracteristicas.md) para el detalle de qué
 hace cada función, y [api-reference.md](api-reference.md) para los endpoints
 que usa cada sección.
+
+---
+
+## Módulos, Contacto y Syslog (cierre del plan de mejora)
+
+### Módulos (Sistema → Módulos)
+
+Enciende o apaga las partes opcionales del panel. Todos vienen activos salvo
+**Panel central**, que se habilita a mano. Apagar un módulo no borra sus datos.
+
+```bash
+# Consultar el estado desde la API (sesión de administrador)
+curl -b cookies.txt https://panel:3000/api/modules
+```
+
+### Contacto
+
+Formulario de reporte/sugerencia, datos de la instalación (versión, modo de
+despliegue, Squid, sistema) con botón **Copiar** y casilla para adjuntarlos al
+mensaje, y el bloque de copyright/licencia/terceros. `GET /api/contact/info`
+devuelve esos datos.
+
+### Syslog: facility
+
+Usa `local0`–`local7` para tus propios servicios; se recomienda `local0`. Un
+valor fuera de la lista se rechaza con HTTP 400.
+
+Ejemplo de configuración: host `172.31.27.50`, puerto `514`, protocolo `udp`,
+formato `rfc3164`, facility `local0`.

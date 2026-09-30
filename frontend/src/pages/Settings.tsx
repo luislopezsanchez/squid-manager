@@ -75,7 +75,7 @@ export default function Settings() {
       const setting = settings[key]
       await api.updateSetting(key, setting.value, setting.category, setting.description || '')
       notificarCambioPendiente()
-      showToast(`Configuración "${key}" guardada correctamente`)
+      showToast(traducir('Configuración «{k}» guardada correctamente', { k: key }))
     } catch (e: any) {
       setError(e.message)
       showToast(`Error al guardar: ${e.message}`, 'error')

@@ -26,15 +26,15 @@ export default function ChangePassword() {
     setError('')
 
     if (next.length < MIN_LENGTH) {
-      setError(`La contraseña nueva debe tener al menos ${MIN_LENGTH} caracteres.`)
+      setError(traducir('La contraseña nueva debe tener al menos {n} caracteres.', { n: MIN_LENGTH }))
       return
     }
     if (next !== repeat) {
-      setError('Las dos contraseñas nuevas no coinciden.')
+      setError(traducir('Las dos contraseñas nuevas no coinciden.'))
       return
     }
     if (next === current) {
-      setError('La contraseña nueva debe ser distinta de la actual.')
+      setError(traducir('La contraseña nueva debe ser distinta de la actual.'))
       return
     }
 

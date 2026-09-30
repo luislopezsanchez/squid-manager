@@ -117,3 +117,13 @@ proxy — no compromete el principio de que un viewer no puede modificar nada.
 - Depende de la disponibilidad y las cuotas de los dos servicios externos
   elegidos; un error de esos servicios se traduce en un mensaje de error
   claro, no en una respuesta a medias.
+
+---
+
+## Un solo proveedor (Fase 9)
+
+Elige un proveedor de la lista (Anthropic, OpenAI, Gemini, Groq, OpenRouter,
+DeepSeek, Mistral, NVIDIA NIM, Ollama Cloud, Ollama en tu red) o **Personalizado**
+con URL y clave (vLLM, LM Studio, LiteLLM…). Ejemplo personalizado:
+`http://192.168.1.50:1234/v1`, clave vacía si no la exige. La búsqueda en la
+documentación es local (texto completo de PostgreSQL) y se reindexa sola.

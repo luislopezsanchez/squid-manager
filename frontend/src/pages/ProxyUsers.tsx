@@ -928,11 +928,9 @@ export default function ProxyUsers() {
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-xs text-blue-800">
-        <strong>{traducir("Bloquear acceso")}</strong> deshabilita al usuario: no puede navegar hasta que lo vuelvas a habilitar.
-        Es la única forma de interrumpir a alguien de verdad — cambiar solo la contraseña no lo hace, porque el
-        navegador reenvía la que ya tiene guardada sin preguntar nada mientras siga siendo válida.
-        La validación de Squid vive <strong>{`${2} horas`}</strong> por defecto (configurable en <em>credentialsttl</em>).
-        Los usuarios <strong>LDAP</strong> se sincronizan desde <em>{traducir("LDAP / Active Directory")}</em>{traducir(", pero se habilitan y deshabilitan desde aquí.")}</div>
+        <strong>{traducir("Bloquear acceso")}</strong>{" "}
+        {traducir("deshabilita al usuario: no puede navegar hasta que lo vuelvas a habilitar. Es la única forma de interrumpir a alguien de verdad — cambiar solo la contraseña no lo hace, porque el navegador reenvía la que ya tiene guardada sin preguntar nada mientras siga siendo válida. La validación de Squid vive 2 horas por defecto (configurable en credentialsttl).")}{" "}
+        {traducir("Los usuarios LDAP se sincronizan desde LDAP / Active Directory, pero se habilitan y deshabilitan desde aquí.")}</div>
 
       {showForm && (
         <ModalCrearUsuario
@@ -1053,7 +1051,7 @@ export default function ProxyUsers() {
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
                       u.enabled ? 'pill-ok' : 'pill-danger'
                     }`}>
-                      {u.enabled ? 'Activo' : 'Inactivo'}
+                      {u.enabled ? traducir('Activo') : traducir('Inactivo')}
                     </span>
                   </td>
                   <td className="px-6 py-4">

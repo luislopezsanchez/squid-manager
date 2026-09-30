@@ -54,3 +54,46 @@ def enviar_contacto(datos: ContactoIn, db: Session = Depends(get_db), admin: Adm
     db.commit()
 
     return {"guardado": True, "enviado_por_email": enviado, "detalle": detalle}
+
+
+_INICIO = None
+_INFO_CACHE: dict = {}
+
+
+@router.get("/info")
+def informacion_de_la_instalacion(_: Admin = Depends(get_current_admin)):
+    """Datos técnicos NO sensibles de esta instalación (versión, modo de despliegue, versión de Squid,
+    sistema operativo) para adjuntarlos a un reporte: quien da soporte siempre los pide primero.
+    Nunca incluye direcciones, nombres de usuario, rutas internas ni claves."""
+    import os
+    import platform
+    import subprocess
+    import time
+
+    from app.config import settings
+
+    global _INICIO
+    if _INICIO is None:
+        _INICIO = time.time()
+    if "squid" not in _INFO_CACHE:
+        try:
+            salida = subprocess.run(["squid", "-v"], capture_output=True, text=True, timeout=5).stdout.splitlines()
+            _INFO_CACHE["squid"] = salida[0].replace("Squid Cache: Version ", "") if salida else "—"
+        except Exception:
+            _INFO_CACHE["squid"] = "—"
+        so = platform.system()
+        try:
+            for linea in open("/etc/os-release", encoding="utf-8"):
+                if linea.startswith("PRETTY_NAME="):
+                    so = linea.split("=", 1)[1].strip().strip('"')
+        except OSError:
+            pass
+        _INFO_CACHE["so"] = so
+    return {
+        "app_version": settings.APP_VERSION,
+        "deploy_mode": os.environ.get("DEPLOY_MODE", "docker"),
+        "squid_version": _INFO_CACHE["squid"],
+        "sistema": _INFO_CACHE["so"],
+        "python": platform.python_version(),
+        "panel_activo_desde_horas": round((time.time() - _INICIO) / 3600, 1),
+    }

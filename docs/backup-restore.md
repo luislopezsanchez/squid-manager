@@ -121,3 +121,25 @@ Si tienes un Squid configurado a mano y quieres migrar a SquidManager, puedes su
 - Cambiarla invalida cualquier token emitido antes del cambio, cerrando las sesiones abiertas en otros navegadores
 - Panel → icono de llave en la barra lateral → **Cambiar contraseña**
 - Las cuentas nuevas (creadas por un superadmin) deben cambiar su contraseña obligatoriamente en el primer inicio de sesión
+
+---
+
+## Formato `.smbackup` (v2) e importación desde otro Squid
+
+- **Exportar**: Sistema → Backup y migración → Exportar. Genera un ZIP con
+  manifiesto (sha256), `config.json`, listas de ACL y, si pones contraseña,
+  `secrets.enc` (Fernet + scrypt) con claves y contraseñas.
+- **Importar entre SquidManagers**: el resultado es idéntico. Usa primero
+  **Simular** para ver el informe sin cambiar nada; modos *combinar* o *reemplazar*.
+- **Importar desde un Squid externo**: sube un `.zip`/`.tgz` con `squid.conf` y
+  sus ficheros (listas, htpasswd). Se convierten ACLs, reglas, puertos y usuarios
+  (las contraseñas htpasswd se conservan). Lo que no se puede traducir aparece en
+  el informe con su motivo.
+- La descarga de `squid.conf` suelto se eliminó: el backup es la vía oficial.
+
+Ejemplo:
+
+```bash
+# Tras restaurar, el servicio se recarga solo. Comprobar:
+systemctl status squidmanager
+```

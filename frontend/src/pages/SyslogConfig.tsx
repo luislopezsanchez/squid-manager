@@ -5,7 +5,19 @@ import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 
-const FACILITIES = ['local0', 'local1', 'local2', 'local3', 'local4', 'local5', 'local6', 'local7', 'user', 'daemon', 'syslog']
+// El facility es una «etiqueta de origen» del mensaje: el SIEM la usa para filtrar o enrutar. No
+// cambia lo que se envía ni la seguridad; solo debe ser algo que el receptor sepa distinguir.
+const FACILITIES: { id: string; titulo: string; ayuda: string }[] = [
+  { id: 'local0', titulo: 'local0 — recomendado', ayuda: 'Uso libre para aplicaciones propias. Es la opción estándar para enviar los logs de una aplicación a un SIEM: no se confunde con los mensajes del sistema operativo. Si dudas, deja esta.' },
+  ...['local1', 'local2', 'local3', 'local4', 'local5', 'local6', 'local7'].map(f => ({
+    id: f, titulo: f, ayuda: 'Uso libre, igual que local0. Sirve para separar este origen de otras aplicaciones que ya usan local0 en el mismo receptor.',
+  })),
+  { id: 'user', titulo: 'user', ayuda: 'Mensajes de programas de usuario en general. Muy genérico: se mezcla con lo de otras aplicaciones.' },
+  { id: 'daemon', titulo: 'daemon', ayuda: 'Servicios del sistema (demonios). Squid es un demonio, pero muchos receptores ya reservan esta etiqueta para el propio sistema operativo.' },
+  { id: 'syslog', titulo: 'syslog', ayuda: 'Reservado para mensajes internos del propio servicio syslog. No es adecuado para un proxy.' },
+  { id: 'auth', titulo: 'auth', ayuda: 'Seguridad y autenticación. Úsalo solo si el receptor trata estos logs como eventos de seguridad.' },
+  { id: 'authpriv', titulo: 'authpriv', ayuda: 'Autenticación privada (acceso a cuentas). Algunos receptores la tratan como confidencial.' },
+]
 
 export default function SyslogConfig() {
   const [config, setConfig] = useState<any>(null)
@@ -103,8 +115,9 @@ export default function SyslogConfig() {
           <div>
             <label htmlFor="syslog-facility" className="field-label block mb-1.5">{traducir("Facility")}</label>
             <select id="syslog-facility" value={config.facility} onChange={e => setConfig({ ...config, facility: e.target.value })} className="input text-sm">
-              {FACILITIES.map(f => <option key={f} value={f}>{f}</option>)}
+              {FACILITIES.map(f => <option key={f.id} value={f.id}>{f.titulo}</option>)}
             </select>
+            <p className="field-help mt-1">{traducir(FACILITIES.find(f => f.id === config.facility)?.ayuda ?? '')}</p>
           </div>
           <div>
             <label htmlFor="syslog-rfc-format" className="field-label block mb-1.5">{traducir("Formato del mensaje syslog")}</label>

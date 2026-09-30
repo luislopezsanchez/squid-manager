@@ -7,6 +7,20 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Mejorado (Cierre — Fase 10 del plan de mejora)
+
+- **Contacto rediseñado**: formulario más la ayuda rápida, los datos de tu
+  instalación (con botón Copiar y opción de adjuntarlos al mensaje), y un bloque
+  claro de copyright, licencia freeware y software de terceros
+  (`GET /api/contact/info`).
+- **Syslog**: cada *facility* se explica en el selector (se recomienda `local0`)
+  y el backend rechaza valores inválidos.
+- **Actualizaciones**: si el fichero de estado no es escribible por el rename
+  atómico, se escribe en el sitio en vez de fallar.
+- **Traducciones**: revisión completa (es/en/pt) de textos fijos en pantallas y
+  de mensajes de error del backend con datos variables (plantillas dinámicas).
+- **Documentación**: nuevo artículo «Módulos» y textos revisados.
+
 ### Mejorado (Asistente de IA — Fase 9 del plan de mejora)
 
 - **Un solo proveedor, a elegir de una lista** (`GET /api/ai/proveedores`):

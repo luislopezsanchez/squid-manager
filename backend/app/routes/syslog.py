@@ -9,7 +9,7 @@ from app.models.admin import Admin
 from app.models.audit_log import AuditLog
 from app.models.syslog_config import SyslogConfig
 from app.services.auth_service import get_current_admin, require_writer
-from app.services.syslog_service import send_test_message
+from app.services.syslog_service import _FACILITY_CODES, send_test_message
 
 router = APIRouter()
 
@@ -78,6 +78,8 @@ def update_config(
         raise HTTPException(400, detail="rfc_format debe ser 'rfc3164' o 'rfc5424'")
     if data.log_format not in ("raw", "ndjson"):
         raise HTTPException(400, detail="log_format debe ser 'raw' o 'ndjson'")
+    if data.facility not in _FACILITY_CODES:
+        raise HTTPException(400, detail="El facility no es válido: usa local0 (recomendado) u otro de la lista.")
     if data.enabled and not data.host:
         raise HTTPException(400, detail="Hace falta un host de destino para habilitar el reenvío")
 

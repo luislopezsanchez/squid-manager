@@ -280,6 +280,7 @@ export const api = {
 
   // Contacto (Ayuda > Contacto): reporta un error o sugerencia sobre
   // SquidManager mismo al soporte del producto.
+  getContactInfo: () => request<any>('/contact/info'),
   sendContact: (data: { categoria: string; mensaje: string; email_respuesta?: string }) =>
     request<any>('/contact', { method: 'POST', body: JSON.stringify(data) }),
 
