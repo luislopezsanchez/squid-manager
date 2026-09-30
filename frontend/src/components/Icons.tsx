@@ -330,3 +330,9 @@ export const IconFirefox = ({ className }: Props) => (
     <path d="M18.5 8.5c1 2.2.6 5-1.3 6.8-2.3 2.2-6 2.2-8.3 0-1-1-1.5-2.3-1.5-3.6" />
   </svg>
 )
+
+export const IconFolder = ({ className }: Props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className ?? 'w-5 h-5'}>
+    <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-10Z" />
+  </svg>
+)

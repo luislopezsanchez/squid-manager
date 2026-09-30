@@ -18,7 +18,7 @@ from app.models.ldap_user import LdapUser
 from app.models.navigation_quota import NavigationQuota
 from app.models.proxy_user import ProxyUser
 from app.services.auth_service import get_current_admin, require_writer
-from app.services.quota_service import ACCIONES_VALIDAS, PERIODOS_VALIDOS, revertir_accion
+from app.services.quota_service import ACCIONES_VALIDAS, PERIODOS_VALIDOS, anotar_reinicio, revertir_accion
 from app.utils import utcnow
 
 router = APIRouter()
@@ -45,6 +45,8 @@ class QuotaResponse(BaseModel):
     quota_bytes_used: int
     quota_period_started_at: datetime | None
     quota_action_applied: bool
+    # Cuándo se restablece el consumo (medianoche / lunes / día 1, hora del servidor).
+    quota_next_reset: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -111,7 +113,10 @@ def list_quotas(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    return db.query(NavigationQuota).order_by(NavigationQuota.username).all()
+    cuotas = db.query(NavigationQuota).order_by(NavigationQuota.username).all()
+    for q in cuotas:
+        anotar_reinicio(q)
+    return cuotas
 
 
 @router.put("/{username}", response_model=QuotaResponse)
@@ -122,7 +127,9 @@ def set_quota(
     current_admin: Admin = Depends(require_writer),
 ):
     """Crea o reemplaza la cuota de un usuario (local o LDAP)."""
-    return _upsert(db, current_admin, username, data)
+    quota = _upsert(db, current_admin, username, data)
+    anotar_reinicio(quota)
+    return quota
 
 
 @router.post("/bulk", response_model=QuotaBulkResult)
@@ -143,6 +150,8 @@ def set_quota_bulk(
             aplicadas.append(_upsert(db, current_admin, username, data))
         except HTTPException as e:
             errores.append(f"{username}: {e.detail}")
+    for q in aplicadas:
+        anotar_reinicio(q)
     return {"aplicadas": aplicadas, "errores": errores}
 
 

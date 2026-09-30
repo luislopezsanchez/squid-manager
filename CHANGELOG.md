@@ -7,6 +7,44 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Añadido / Mejorado (usuarios, grupos y cuotas — Fase 4 del plan de mejora)
+
+- **Tabla de Usuarios**: cada columna ordena al hacer clic (otro clic invierte;
+  «Conexión» pone primero a los conectados), botón «Limpiar filtros» cuando hay
+  búsqueda o filtros activos, y el correo se ve bajo el nombre.
+- **Correo electrónico opcional** en usuarios locales (migración 0041, en el
+  alta y en la edición, validado). Los usuarios LDAP ya lo traían: la
+  sincronización lee el atributo `mail` del directorio desde antes.
+- **Acciones en bloque** sobre los usuarios seleccionados: habilitar,
+  deshabilitar, eliminar y generar credenciales (además de aplicar cuota),
+  todas con confirmación (`POST /api/proxy-users/bulk`). El lote escribe el
+  htpasswd una vez y reinicia Squid una vez. Las credenciales generadas se
+  muestran una sola vez, con copiar y descargar CSV. Los usuarios LDAP solo
+  admiten habilitar/deshabilitar (viven en el directorio).
+- **Importar / exportar usuarios** (CSV, Excel `.xlsx` o TXT): plantilla
+  descargable, encabezados en español/inglés/portugués, «Revisar archivo»
+  (simulación que no toca nada) antes de «Importar», informe de filas con
+  error por número de fila, modo «omitir existentes» o «actualizar», y
+  contraseña generada para quien no la traiga. Un solo bcrypt por usuario en
+  paralelo (mil usuarios en segundos, no minutos). Nueva dependencia:
+  `openpyxl`. Exportar no incluye contraseñas.
+- **Quitar el acceso ya no bloquea la respuesta**: deshabilitar, eliminar o
+  resetear la contraseña guardan el cambio y purgan la caché de credenciales
+  de Squid (reinicio) DESPUÉS de responder.
+- **Cuotas: periodos alineados al calendario.** «Diaria» se restablece a la
+  medianoche, «semanal» el lunes y «mensual» el día 1 (hora del servidor;
+  revisar `timedatectl`). Antes corrían desde el momento en que se creó la
+  cuota (una diaria creada a las 15:00 se restablecía a las 15:00 del día
+  siguiente), y un usuario cortado a las 23:00 seguía cortado pasadas las 00:00
+  aunque el restablecimiento sí funcionaba. Validado de extremo a extremo:
+  tanto «cortar» (el usuario vuelve a estar habilitado) como «limitar
+  velocidad» (se retira el pool) se revierten solos al empezar el periodo. La
+  tabla de Usuarios muestra «Se restablece <fecha>» (`quota_next_reset`).
+- **Grupos como carpetas**: tarjetas compactas en cuadrícula (nombre,
+  etiquetas, avatares y nº de miembros) y un detalle en ventana para gestionar
+  los miembros. Añadir/quitar es optimista (la pantalla cambia al instante;
+  si el servidor falla, se recarga y se avisa).
+
 ### Mejorado (interfaz — Fase 3 del plan de mejora)
 
 - **Confirmaciones con el diseño de la plataforma** en lugar del `confirm()`

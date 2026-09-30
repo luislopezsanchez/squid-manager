@@ -10,6 +10,7 @@ class ProxyUserCreate(BaseModel):
     # Mismo campo que LdapUser.display_name -acá opcional y a mano, en vez
     # de sincronizado desde un directorio.
     display_name: str | None = Field(None, max_length=255)
+    email: str | None = Field(None, max_length=255)
     enabled: bool = True
     expires_at: datetime | None = None
 
@@ -17,6 +18,7 @@ class ProxyUserCreate(BaseModel):
 class ProxyUserUpdate(BaseModel):
     password: str | None = Field(None, min_length=8, max_length=100)
     display_name: str | None = Field(None, max_length=255)
+    email: str | None = Field(None, max_length=255)
     enabled: bool | None = None
     expires_at: datetime | None = None
 
@@ -25,6 +27,7 @@ class ProxyUserResponse(BaseModel):
     id: int
     username: str
     display_name: str | None = None
+    email: str | None = None
     enabled: bool
     expires_at: datetime | None = None
     # True si el usuario puede navegar ahora mismo: habilitado y sin caducar.

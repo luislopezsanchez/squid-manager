@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
 import Modal from '../components/Modal'
-import { IconSpinner } from '../components/Icons'
+import { IconSpinner, IconFolder, IconTrash } from '../components/Icons'
 import { normalizarNombreAcl } from '../utils/aclNames'
 import { confirmar } from '../components/ConfirmDialog'
 
@@ -195,13 +195,8 @@ export default function Groups() {
   const [showForm, setShowForm] = useState(false)
   const [newGroup, setNewGroup] = useState<FormGroup>(FORM_VACIO)
   const [newMember, setNewMember] = useState<Record<number, string>>({})
-  // Quitar a alguien de un grupo local dispara purge_credentials() en el
-  // backend (reinicio de Squid para invalidar credenciales ya validadas,
-  // ver user_groups.py) -mucho más lento que agregar, que no lo necesita.
-  // Sin este estado, un click no mostraba ningún cambio durante ese rato y
-  // parecía colgado -invitando a hacer click de nuevo (o a los dos: "quitar"
-  // y "agregar" a la vez) mientras la primera petición seguía en vuelo.
-  const [removingMember, setRemovingMember] = useState<string | null>(null)
+  // Grupo abierto en el detalle (modal): ahí se gestionan sus miembros.
+  const [abierto, setAbierto] = useState<number | null>(null)
   const [allUsers, setAllUsers] = useState<string[]>([])
   const [ldapEnabled, setLdapEnabled] = useState(false)
   const [ldapGroups, setLdapGroups] = useState<string[]>([])
@@ -256,29 +251,37 @@ export default function Groups() {
     } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
   }
 
+  // Añadir/quitar miembros es OPTIMISTA: la pantalla cambia al instante y, si
+  // el servidor falla, se vuelve a cargar el estado real y se avisa. El
+  // servidor confirma el cambio en la base de datos al momento y aplica la
+  // configuración de Squid en segundo plano, así que no hay nada que esperar.
   const handleAddMember = async (groupId: number) => {
     const username = (newMember[groupId] || '').trim()
     if (!username) return
+    const grupo = groups.find(g => g.id === groupId)
+    if (grupo?.members.includes(username)) {
+      showToast(`"${username}" ${traducir("ya está en el grupo")}`, 'warning')
+      return
+    }
+    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, members: [...g.members, username] } : g))
+    setNewMember(prev => ({ ...prev, [groupId]: '' }))
     try {
       await api.addGroupMember(groupId, username)
-      setNewMember(prev => ({ ...prev, [groupId]: '' }))
+      notificarCambioPendiente()
+    } catch (e: any) {
       loadGroups()
-      showToast(`Usuario "${username}" añadido al grupo`)
-    } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
+      showToast(`Error: ${e.message}`, 'error')
+    }
   }
 
   const handleRemoveMember = async (groupId: number, username: string) => {
-    const clave = `${groupId}:${username}`
-    if (removingMember === clave) return
-    setRemovingMember(clave)
+    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, members: g.members.filter(m => m !== username) } : g))
     try {
       await api.removeGroupMember(groupId, username)
-      loadGroups()
-      showToast(`Usuario "${username}" eliminado del grupo`)
+      notificarCambioPendiente()
     } catch (e: any) {
+      loadGroups()
       showToast(`Error: ${e.message}`, 'error')
-    } finally {
-      setRemovingMember(null)
     }
   }
 
@@ -340,78 +343,42 @@ export default function Groups() {
       ) : loadError && groups.length === 0 ? (
         <ErrorState onRetry={loadGroups} />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid gap-x-4 gap-y-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' }}>
           {filteredGroups.map(group => (
-            <div key={group.id} className="card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-semibold text-ink">{group.name}</h3>
-                    {group.source === 'ldap' && (
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 font-medium">
-                        {traducir("LDAP / AD")}
-                      </span>
-                    )}
-                    {group.no_bump && (
-                      <span
-                        className="text-[11px] px-1.5 py-0.5 rounded bg-warn-soft text-warn font-medium"
-                        title={traducir("El tráfico HTTPS de este grupo no se descifra. El bloqueo por dominio le sigue afectando.")}
-                      >{traducir("HTTPS sin interceptar")}</span>
-                    )}
-                  </div>
-                  {group.description && <p className="text-sm text-ink-3">{group.description}</p>}
+            <button key={group.id} onClick={() => setAbierto(group.id)} className="folder-card group"
+              title={group.description || group.name}>
+              <div className="flex items-start gap-2.5">
+                <IconFolder className="w-6 h-6 flex-none text-brand-600" />
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-ink truncate">{group.name}</h3>
+                  <p className="text-xs text-ink-3 truncate min-h-[16px]">{group.description || '\u00A0'}</p>
                 </div>
-                <button onClick={() => handleDelete(group.id, group.name)}
-                  className="text-danger hover:text-danger text-sm">{traducir("Eliminar")}</button>
               </div>
-
-              {group.source === 'ldap' ? (
-                <p className="text-sm text-ink-2 bg-brand-50 rounded-lg p-3">
-                  {traducir("Pertenencia consultada en vivo en el directorio: ")}
-                  <span className="font-mono font-medium">{group.ldap_group_name}</span>
-                  {group.ldap_group_nested && (
-                    <span className="block text-xs text-ink-3 mt-1">{traducir("Incluye subgrupos anidados (Active Directory)")}</span>
-                  )}
-                </p>
-              ) : (
-                <>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {group.members.map(m => {
-                      const quitando = removingMember === `${group.id}:${m}`
-                      return (
-                        <span key={m} className={`inline-flex items-center gap-1 bg-primary-50 text-primary-800 px-2 py-1 rounded-full text-xs font-medium ${quitando ? 'opacity-60' : ''}`}>
-                          {m}
-                          <button onClick={() => handleRemoveMember(group.id, m)} disabled={quitando}
-                            title={quitando ? traducir("Quitando…") : undefined}
-                            className="text-primary-500 hover:text-danger disabled:hover:text-primary-500 disabled:cursor-wait w-3.5 h-3.5 flex items-center justify-center">
-                            {quitando ? <IconSpinner className="w-3 h-3 animate-spin" /> : '×'}
-                          </button>
-                        </span>
-                      )
-                    })}
-                    {group.members.length === 0 && (
-                      <span className="text-xs text-ink-3">{traducir("Sin miembros")}</span>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newMember[group.id] || ''}
-                      onChange={e => setNewMember(prev => ({ ...prev, [group.id]: e.target.value }))}
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember(group.id) } }}
-                      disabled={removingMember?.startsWith(`${group.id}:`)}
-                      className="flex-1 px-3 py-1.5 border border-line rounded-lg text-sm disabled:opacity-50"
-                      placeholder={traducir("nombre de usuario (local o LDAP)")}
-                      list="member-options"
-                    />
-                    <button onClick={() => handleAddMember(group.id)}
-                      disabled={removingMember?.startsWith(`${group.id}:`)}
-                      className="btn btn-primary btn-sm disabled:opacity-50">{traducir("Añadir")}</button>
-                  </div>
-                </>
-              )}
-            </div>
+              <div className="flex flex-wrap items-center gap-1.5 mt-3 min-h-[20px]">
+                {group.source === 'ldap' && (
+                  <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 font-medium">{traducir("LDAP / AD")}</span>
+                )}
+                {group.no_bump && (
+                  <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-warn-soft text-warn font-medium">{traducir("HTTPS sin interceptar")}</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-line-soft">
+                {group.source === 'ldap' ? (
+                  <span className="text-xs text-ink-3">{traducir("Miembros en el directorio")}</span>
+                ) : (
+                  <>
+                    <div className="flex -space-x-1.5">
+                      {group.members.slice(0, 4).map(m => (
+                        <span key={m} title={m} className="avatar-sq !w-6 !h-6 !text-[10px] ring-2 ring-white bg-brand-50 text-brand-700">{m.slice(0, 2).toUpperCase()}</span>
+                      ))}
+                    </div>
+                    <span className="text-xs text-ink-3 tabular">
+                      {group.members.length === 0 ? traducir("Sin miembros") : traducir("{n} miembros", { n: group.members.length })}
+                    </span>
+                  </>
+                )}
+              </div>
+            </button>
           ))}
           {filteredGroups.length === 0 && (
             <div className="col-span-full text-center py-12 text-ink-3">
@@ -422,6 +389,65 @@ export default function Groups() {
           )}
         </div>
       )}
+
+      {(() => {
+        const group = groups.find(g => g.id === abierto)
+        if (!group) return null
+        return (
+          <Modal title={group.name} onClose={() => setAbierto(null)} maxWidth="max-w-lg">
+            {group.description && <p className="text-sm text-ink-3 -mt-2 mb-3">{group.description}</p>}
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {group.source === 'ldap' && <span className="text-[11px] px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 font-medium">{traducir("LDAP / AD")}</span>}
+              {group.no_bump && (
+                <span className="text-[11px] px-1.5 py-0.5 rounded bg-warn-soft text-warn font-medium"
+                  title={traducir("El tráfico HTTPS de este grupo no se descifra. El bloqueo por dominio le sigue afectando.")}>{traducir("HTTPS sin interceptar")}</span>
+              )}
+            </div>
+
+            {group.source === 'ldap' ? (
+              <p className="text-sm text-ink-2 bg-brand-50 rounded-lg p-3">
+                {traducir("Pertenencia consultada en vivo en el directorio: ")}
+                <span className="font-mono font-medium">{group.ldap_group_name}</span>
+                {group.ldap_group_nested && (
+                  <span className="block text-xs text-ink-3 mt-1">{traducir("Incluye subgrupos anidados (Active Directory)")}</span>
+                )}
+              </p>
+            ) : (
+              <>
+                <div className="text-xs font-medium uppercase tracking-wide text-ink-3 mb-2">{traducir("Miembros")} ({group.members.length})</div>
+                <div className="flex flex-wrap gap-2 mb-4 max-h-56 overflow-y-auto">
+                  {group.members.map(m => (
+                    <span key={m} className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 px-2 py-1 rounded-full text-xs font-medium">
+                      {m}
+                      <button onClick={() => handleRemoveMember(group.id, m)} aria-label={`${traducir("Quitar")} ${m}`}
+                        className="text-brand-600 hover:text-danger w-3.5 h-3.5 flex items-center justify-center">×</button>
+                    </span>
+                  ))}
+                  {group.members.length === 0 && <span className="text-xs text-ink-3">{traducir("Sin miembros")}</span>}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text" autoFocus
+                    value={newMember[group.id] || ''}
+                    onChange={e => setNewMember(prev => ({ ...prev, [group.id]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMember(group.id) } }}
+                    className="input flex-1"
+                    placeholder={traducir("nombre de usuario (local o LDAP)")}
+                    list="member-options"
+                  />
+                  <button onClick={() => handleAddMember(group.id)} className="btn btn-primary">{traducir("Añadir")}</button>
+                </div>
+              </>
+            )}
+
+            <div className="mt-6 pt-4 border-t border-line-soft flex justify-between items-center">
+              <button onClick={async () => { await handleDelete(group.id, group.name); setAbierto(null) }}
+                className="btn btn-outline text-danger"><IconTrash />{traducir("Eliminar grupo")}</button>
+              <button onClick={() => setAbierto(null)} className="btn btn-primary">{traducir("Cerrar")}</button>
+            </div>
+          </Modal>
+        )
+      })()}
     </div>
   )
 }

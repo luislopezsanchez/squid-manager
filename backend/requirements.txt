@@ -51,3 +51,6 @@ pytest==9.0.3
 # de weasyprint, no hace falta tocar install-nativo.sh para instalar nada
 # a nivel SO en una instalacion nativa.
 reportlab==4.2.5
+# Importar/exportar usuarios en Excel (.xlsx) -carga masiva de cuentas, ver
+# app/services/user_import_service.py.
+openpyxl==3.1.5

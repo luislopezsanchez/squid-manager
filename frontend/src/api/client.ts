@@ -154,6 +154,18 @@ export const api = {
   updateUser: (id: number, data: any) => request<any>(`/proxy-users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteUser: (id: number) => request<void>(`/proxy-users/${id}`, { method: 'DELETE' }),
   toggleUser: (id: number) => request<any>(`/proxy-users/${id}/toggle`, { method: 'PATCH' }),
+  // Acciones en bloque, carga masiva y exportación de usuarios
+  bulkUsers: (action: 'enable' | 'disable' | 'delete' | 'reset_password', usernames: string[]) =>
+    request<any>('/proxy-users/bulk', { method: 'POST', body: JSON.stringify({ action, usernames }) }),
+  importUsers: (file: File, modo: string, simular: boolean) => {
+    const f = new FormData()
+    f.append('file', file)
+    f.append('modo', modo)
+    f.append('simular', String(simular))
+    return request<any>('/proxy-users/import', { method: 'POST', body: f })
+  },
+  exportUsersUrl: (format: 'csv' | 'xlsx') => `${API_BASE}/proxy-users/export?format=${format}`,
+  importTemplateUrl: (format: 'csv' | 'xlsx') => `${API_BASE}/proxy-users/import-template?format=${format}`,
 
   // ACLs
   listAcls: (params: { isCategory?: boolean } = {}) => {

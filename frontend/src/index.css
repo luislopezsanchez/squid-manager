@@ -207,6 +207,28 @@ h1, h2, h3, h4 {
     background: var(--brand-50);
     border-bottom: 1px solid var(--line);
   }
+  /* Tarjeta de grupo en forma de carpeta (Grupos de usuarios). */
+  .folder-card {
+    position: relative;
+    margin-top: 12px;
+    padding: 16px 16px 14px;
+    text-align: left;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 4px 14px 14px 14px;
+    transition: transform .15s, box-shadow .15s, border-color .15s;
+  }
+  .folder-card::before {
+    content: '';
+    position: absolute; top: -11px; left: -1px;
+    width: 42%; max-width: 96px; height: 11px;
+    background: var(--brand-50);
+    border: 1px solid var(--line); border-bottom: 0;
+    border-radius: 8px 8px 0 0;
+    transition: background .15s;
+  }
+  .folder-card:hover { transform: translateY(-2px); border-color: var(--brand-600); box-shadow: 0 6px 18px rgb(11 73 124 / .10); }
+  .folder-card:hover::before { background: var(--brand-600); border-color: var(--brand-600); }
   .table-panel thead th.text-right { text-align: right; }
   .table-panel thead th.text-center { text-align: center; }
   .table-panel tbody td {

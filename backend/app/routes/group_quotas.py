@@ -15,7 +15,7 @@ from app.models.audit_log import AuditLog
 from app.models.group_quota import GroupQuota
 from app.models.user_group import UserGroup
 from app.services.auth_service import get_current_admin, require_writer
-from app.services.quota_service import ACCIONES_VALIDAS, PERIODOS_VALIDOS, revertir_accion_grupo
+from app.services.quota_service import ACCIONES_VALIDAS, PERIODOS_VALIDOS, revertir_accion_grupo, anotar_reinicio
 from app.utils import utcnow
 
 router = APIRouter()
@@ -38,6 +38,7 @@ class GroupQuotaResponse(BaseModel):
     quota_bytes_used: int
     quota_period_started_at: datetime | None
     quota_action_applied: bool
+    quota_next_reset: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -73,7 +74,10 @@ def list_group_quotas(
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
 ):
-    return db.query(GroupQuota).order_by(GroupQuota.group_name).all()
+    cuotas = db.query(GroupQuota).order_by(GroupQuota.group_name).all()
+    for q in cuotas:
+        anotar_reinicio(q)
+    return cuotas
 
 
 @router.put("/{group_name}", response_model=GroupQuotaResponse)
@@ -109,6 +113,7 @@ def set_group_quota(
         new_value=f"{group_name}: {data.quota_bytes} bytes / {data.quota_period} / {data.quota_action}",
     ))
     db.commit()
+    anotar_reinicio(quota)
     return quota
 
 

@@ -15,6 +15,8 @@ class ProxyUser(Base):
     # LDAP lo trae sincronizado el propio directorio; acá lo escribe el
     # admin a mano al crear el usuario (o lo deja vacío).
     display_name = Column(String(255), nullable=True)
+    # Correo opcional (como LdapUser.email, que trae sincronizado el directorio).
+    email = Column(String(255), nullable=True)
     # Hash bcrypt para validación interna (API)
     password_hash = Column(String(255), nullable=False)
     # Hash htpasswd para Squid basic_ncsa_auth

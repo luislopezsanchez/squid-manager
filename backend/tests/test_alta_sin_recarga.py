@@ -81,7 +81,18 @@ def test_quitar_el_acceso_si_purga(funcion):
     `purge_credentials()` existe para tapar.
     """
     cuerpo = _cuerpo_de(_fuente(), funcion)
-    assert "purge_credentials" in cuerpo, (
+    # `_revocar` es el punto único que purga (en segundo plano tras responder,
+    # o en línea si no hay BackgroundTasks): las rutas lo llaman en vez de
+    # purge_credentials directo -ver test_revocar_purga_la_cache.
+    assert "purge_credentials" in cuerpo or "_revocar(" in cuerpo, (
         f"{funcion} ya no purga la caché de credenciales: quien pierda el acceso "
         "seguiría navegando hasta dos horas."
     )
+
+
+def test_revocar_purga_la_cache():
+    """`_revocar` termina siempre en purge_credentials: en línea sin
+    BackgroundTasks, y encolada (no omitida) cuando sí las hay."""
+    cuerpo = _cuerpo_de(_fuente(), "_revocar")
+    assert "purge_credentials()" in cuerpo
+    assert "background_tasks.add_task(purge_credentials)" in cuerpo

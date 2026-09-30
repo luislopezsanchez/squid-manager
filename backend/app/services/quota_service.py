@@ -24,7 +24,7 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.database import SessionLocal
@@ -102,6 +102,38 @@ def _save_offset(offset: int) -> None:
         Path(_STATE_FILE).write_text(json.dumps({"offset": offset}))
     except Exception:
         pass
+
+
+def proximo_reinicio(inicio: datetime, period: str) -> datetime:
+    """Cuándo se restablece la cuota, alineado al CALENDARIO (hora local del
+    servidor): 'daily' a la medianoche, 'weekly' el lunes a las 00:00,
+    'monthly' el día 1 a las 00:00. Devuelve UTC sin zona, como el resto de
+    fechas guardadas en la base.
+
+    Antes el periodo corría desde el momento en que se creó la cuota (una
+    cuota «diaria» creada a las 15:00 se restablecía a las 15:00 del día
+    siguiente, no a la medianoche): un usuario cortado a las 23:00 seguía
+    cortado pasadas las 00:00 y parecía que el restablecimiento no
+    funcionaba, cuando solo corría con otro reloj.
+
+    La zona horaria es la del sistema (`timedatectl`): si el servidor está en
+    UTC y la oficina no, «medianoche» será la de UTC.
+    """
+    local = datetime.fromtimestamp(calendar.timegm(inicio.timetuple()))
+    hoy = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == "weekly":
+        frontera = hoy + timedelta(days=7 - local.weekday())
+    elif period == "monthly":
+        frontera = (hoy.replace(day=1) + timedelta(days=32)).replace(day=1)
+    else:  # 'daily' y cualquier valor inesperado, por seguridad
+        frontera = hoy + timedelta(days=1)
+    return datetime.fromtimestamp(time.mktime(frontera.timetuple()), timezone.utc).replace(tzinfo=None)
+
+
+def anotar_reinicio(cuota) -> None:
+    """Deja en la fila (sin persistir) `quota_next_reset`, para las respuestas de la API."""
+    inicio = cuota.quota_period_started_at
+    cuota.quota_next_reset = proximo_reinicio(inicio, cuota.quota_period) if inicio else None
 
 
 def siguiente_inicio_periodo(inicio: datetime, period: str) -> datetime:
@@ -287,7 +319,7 @@ def _procesar_cuota(db, quota: NavigationQuota, ahora: datetime) -> None:
         db.commit()
         return
 
-    siguiente = siguiente_inicio_periodo(quota.quota_period_started_at, quota.quota_period)
+    siguiente = proximo_reinicio(quota.quota_period_started_at, quota.quota_period)
     if ahora >= siguiente:
         if quota.quota_action_applied:
             revertir_accion(db, quota)
@@ -421,7 +453,7 @@ def _procesar_cuota_grupo(db, quota: GroupQuota, ahora: datetime) -> None:
         db.commit()
         return
 
-    siguiente = siguiente_inicio_periodo(quota.quota_period_started_at, quota.quota_period)
+    siguiente = proximo_reinicio(quota.quota_period_started_at, quota.quota_period)
     if ahora >= siguiente:
         if quota.quota_action_applied:
             revertir_accion_grupo(db, quota)

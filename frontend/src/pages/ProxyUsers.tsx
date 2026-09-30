@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
-import { IconClose, IconEdit, IconKey, IconTrash, IconBan, IconCheck } from '../components/Icons'
+import { IconClose, IconEdit, IconKey, IconTrash, IconBan, IconCheck, IconDownload, IconUpload, IconSpinner, IconChevronUp, IconChevronDown } from '../components/Icons'
 import Modal from '../components/Modal'
 import { formatBytes } from '../utils/format'
 import { normalizarUsername } from '../utils/usernames'
@@ -12,6 +12,8 @@ import Pagination from '../components/Pagination'
 import { usePaginacion } from '../hooks/usePaginacion'
 import { TAMANO_UNITS, VELOCIDAD_UNITS, PERIODO_LABELS, detectarUnidad } from '../utils/quotaUnits'
 import { confirmar } from '../components/ConfirmDialog'
+import { CredencialesModal, ImportarUsuariosModal } from '../components/UsuariosMasivo'
+import { useDescarga } from '../utils/descarga'
 
 interface LocalUser {
   source: 'local'
@@ -21,6 +23,7 @@ interface LocalUser {
   // mano al crear el usuario, en vez de venir sincronizado de un
   // directorio.
   display_name: string | null
+  email?: string | null
   enabled: boolean
   expires_at: string | null
   created_at: string
@@ -50,6 +53,7 @@ interface Quota {
   quota_throttle_bytes_per_sec: number | null
   quota_bytes_used: number
   quota_period_started_at: string | null
+  quota_next_reset?: string | null
 }
 
 /**
@@ -58,6 +62,12 @@ interface Quota {
  * un registro corrupto igual podría no traerlo — mejor mostrar un guion que
  * el confuso "Invalid Date" de `new Date(undefined)`.
  */
+function formatFechaHora(value: string | null | undefined): string {
+  if (!value) return '—'
+  const d = new Date(value.endsWith('Z') || value.includes('+') ? value : value + 'Z')
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
+}
+
 function formatFecha(value: string | null | undefined): string {
   if (!value) return '—'
   const d = new Date(value)
@@ -366,8 +376,8 @@ function QuotaModal({ usernames, existing, onClose, onSave, onRemove }: {
 // claramente la acción de "estoy creando algo nuevo" de la lista de abajo.
 // Pedido en vivo, 2026-09-27.
 function ModalCrearUsuario({ newUser, setNewUser, error, onSave, onClose }: {
-  newUser: { username: string; display_name: string; password: string }
-  setNewUser: (v: { username: string; display_name: string; password: string }) => void
+  newUser: { username: string; display_name: string; email: string; password: string }
+  setNewUser: (v: { username: string; display_name: string; email: string; password: string }) => void
   error: string
   onSave: (e: React.FormEvent) => void
   onClose: () => void
@@ -406,6 +416,16 @@ function ModalCrearUsuario({ newUser, setNewUser, error, onSave, onClose }: {
               <p className="field-help mt-1">{traducir("Opcional -mismo campo que ya usan los usuarios LDAP, para identificar a la persona además del usuario.")}</p>
             </div>
             <div>
+              <label htmlFor="proxyuser-email" className="field-label block mb-1.5">{traducir("Correo electrónico")}</label>
+              <input
+                id="proxyuser-email"
+                type="email" value={newUser.email}
+                onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+                className="input" placeholder="usuario@empresa.com"
+              />
+              <p className="field-help mt-1">{traducir("Opcional. Sirve para identificar a la persona; si no lo pones, queda en blanco.")}</p>
+            </div>
+            <div>
               <label htmlFor="proxyuser-password" className="field-label block mb-1.5">{traducir("Contraseña")}</label>
               <input
                 id="proxyuser-password"
@@ -429,13 +449,15 @@ function ModalCrearUsuario({ newUser, setNewUser, error, onSave, onClose }: {
 
 /** Editar el nombre para mostrar de un usuario local ya creado -antes solo
  * se podía poner al crearlo, sin forma de corregirlo después. */
-function ModalEditarUsuario({ username, displayName, onClose, onSave }: {
+function ModalEditarUsuario({ username, displayName, email, onClose, onSave }: {
   username: string
   displayName: string
+  email: string
   onClose: () => void
-  onSave: (displayName: string) => Promise<void>
+  onSave: (displayName: string, email: string) => Promise<void>
 }) {
   const [value, setValue] = useState(displayName)
+  const [correo, setCorreo] = useState(email)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
@@ -444,7 +466,7 @@ function ModalEditarUsuario({ username, displayName, onClose, onSave }: {
     setErr('')
     setBusy(true)
     try {
-      await onSave(value)
+      await onSave(value, correo)
       onClose()
     } catch (e: any) {
       setErr(e.message)
@@ -462,6 +484,9 @@ function ModalEditarUsuario({ username, displayName, onClose, onSave }: {
           type="text" value={value} onChange={e => setValue(e.target.value)}
           className="input" placeholder={traducir("ej: Juan Pérez")} autoFocus
         />
+        <label htmlFor="edit-email" className="field-label block mb-1.5 mt-4">{traducir("Correo electrónico")}</label>
+        <input id="edit-email" type="email" value={correo} onChange={e => setCorreo(e.target.value)}
+          className="input" placeholder="usuario@empresa.com" />
         {err && <div className="mt-3 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{err}</div>}
         <div className="mt-5 flex items-center gap-3">
           <button type="submit" disabled={busy} className="btn btn-primary disabled:opacity-50">
@@ -474,13 +499,34 @@ function ModalEditarUsuario({ username, displayName, onClose, onSave }: {
   )
 }
 
+/** Encabezado de columna que ordena la tabla al hacer clic (otro clic invierte). */
+function ThOrden<K extends string>({ clave, orden, onClick, children }: {
+  clave: K
+  orden: { clave: K; asc: boolean }
+  onClick: (k: K) => void
+  children: React.ReactNode
+}) {
+  const activo = orden.clave === clave
+  return (
+    <th className="text-left" aria-sort={activo ? (orden.asc ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" onClick={() => onClick(clave)}
+        className={`inline-flex items-center gap-1 uppercase tracking-[inherit] font-bold hover:text-ink ${activo ? 'text-ink' : ''}`}>
+        {children}
+        {activo
+          ? (orden.asc ? <IconChevronUp className="w-3 h-3" /> : <IconChevronDown className="w-3 h-3" />)
+          : <span className="w-3 h-3 opacity-25"><IconChevronDown className="w-3 h-3" /></span>}
+      </button>
+    </th>
+  )
+}
+
 export default function ProxyUsers() {
   const [localUsers, setLocalUsers] = useState<LocalUser[]>([])
   const [ldapUsers, setLdapUsers] = useState<LdapUserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [showForm, setShowForm] = useState(false)
-  const [newUser, setNewUser] = useState({ username: '', display_name: '', password: '' })
+  const [newUser, setNewUser] = useState({ username: '', display_name: '', email: '', password: '' })
   const [error, setError] = useState('')
   // La búsqueda vive en la URL (?q=...), no solo en useState: así
   // sobrevive a un F5 -antes se perdía en cada recarga real de la página,
@@ -537,6 +583,15 @@ export default function ProxyUsers() {
   // esto, ponerle una cuota a 50 usuarios importados de AD era repetir el
   // mismo formulario 50 veces.
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Orden de la tabla: clic en el encabezado alterna ascendente/descendente.
+  type ClaveOrden = 'usuario' | 'origen' | 'estado' | 'conexion' | 'grupos' | 'cuota' | 'creado'
+  const [orden, setOrden] = useState<{ clave: ClaveOrden; asc: boolean }>({ clave: 'usuario', asc: true })
+  const alternarOrden = (clave: ClaveOrden) =>
+    setOrden(o => o.clave === clave ? { clave, asc: !o.asc } : { clave, asc: true })
+  const [credenciales, setCredenciales] = useState<{ usuario: string; password: string }[] | null>(null)
+  const [importarAbierto, setImportarAbierto] = useState(false)
+  const [formatoExport, setFormatoExport] = useState<'csv' | 'xlsx'>('xlsx')
+  const [masivoBusy, setMasivoBusy] = useState(false)
   // Acciones "en vuelo" por fila, para poder deshabilitar el botón exacto que
   // se apretó y mostrar que está trabajando. Sin esto, bloquear a alguien
   // (que reinicia Squid para purgar credenciales, unos segundos) no daba
@@ -558,6 +613,7 @@ export default function ProxyUsers() {
     forceRender(v => v + 1)
   }
   const { showToast, ToastContainer } = useToast()
+  const { descargando: exportando, descargar, etiqueta: etiquetaExport } = useDescarga(showToast)
 
   const loadUsers = (silent = false) => {
     // silent=true (sondeo periódico, ver el useEffect de más abajo): no
@@ -639,7 +695,7 @@ export default function ProxyUsers() {
 
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return allUsers.filter(u => {
+    const filtrados = allUsers.filter(u => {
       if (sourceFilter !== 'all' && u.source !== sourceFilter) return false
       if (statusFilter === 'enabled' && !u.enabled) return false
       if (statusFilter === 'disabled' && u.enabled) return false
@@ -650,7 +706,34 @@ export default function ProxyUsers() {
         : `${u.username} ${u.display_name ?? ''}`
       return haystack.toLowerCase().includes(q)
     })
-  }, [allUsers, search, sourceFilter, statusFilter, connectedFilter, connectedUsers])
+    // Orden elegido con el clic en el encabezado (por defecto, por usuario).
+    // Los empates se resuelven siempre por nombre para que el orden sea estable.
+    const valor = (u: UnifiedUser): number | string => {
+      switch (orden.clave) {
+        case 'origen': return u.source
+        case 'estado': return u.enabled ? 1 : 0
+        case 'conexion': return connectedUsers.has(u.username) ? 1 : 0
+        case 'grupos': return (groupsByUser.get(u.username) ?? []).length
+        case 'cuota': {
+          const c = quotasByUser.get(u.username)
+          return c && c.quota_bytes ? c.quota_bytes_used / c.quota_bytes : -1
+        }
+        case 'creado': return u.created_at ? new Date(u.created_at).getTime() : 0
+        default: return u.username.toLowerCase()
+      }
+    }
+    const signo = orden.asc ? 1 : -1
+    return filtrados.sort((a, b) => {
+      const va = valor(a), vb = valor(b)
+      const c = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
+      return c !== 0 ? c * signo : a.username.localeCompare(b.username)
+    })
+  }, [allUsers, search, sourceFilter, statusFilter, connectedFilter, connectedUsers, orden, groupsByUser, quotasByUser])
+
+  const hayFiltros = search.trim() !== '' || sourceFilter !== 'all' || statusFilter !== 'all' || connectedFilter !== 'all'
+  const limpiarFiltros = () => {
+    setSearch(''); setSourceFilter('all'); setStatusFilter('all'); setConnectedFilter('all')
+  }
 
   // Paginado en el cliente, no en el servidor: la lista ya se trae entera
   // (local + LDAP combinados, ver loadUsers) porque la búsqueda y los
@@ -674,10 +757,11 @@ export default function ProxyUsers() {
       await api.createUser({
         username: newUser.username,
         display_name: newUser.display_name.trim() || undefined,
+        email: newUser.email.trim() || undefined,
         password: newUser.password,
         enabled: true,
       })
-      setNewUser({ username: '', display_name: '', password: '' })
+      setNewUser({ username: '', display_name: '', email: '', password: '' })
       setShowForm(false)
       loadUsers()
       showToast(`Usuario "${newUser.username}" creado correctamente`)
@@ -775,6 +859,37 @@ export default function ProxyUsers() {
     )
   }
 
+  // Acciones en bloque sobre la selección. Todas piden confirmación antes de
+  // aplicarse; el backend hace el lote entero con un solo reinicio de Squid.
+  const accionMasiva = async (accion: 'enable' | 'disable' | 'delete' | 'reset_password') => {
+    const nombres = Array.from(selected)
+    const n = nombres.length
+    const textos = {
+      enable: [traducir("¿Habilitar a {n} usuarios seleccionados? Podrán volver a navegar.", { n }), traducir("Habilitar"), 'normal'],
+      disable: [traducir("¿Deshabilitar a {n} usuarios seleccionados? Dejarán de poder navegar hasta que los habilites.", { n }), traducir("Deshabilitar"), 'peligro'],
+      delete: [traducir("¿Eliminar a {n} usuarios seleccionados? Se borran del sistema y de sus grupos, y no se puede deshacer. Los usuarios LDAP se omiten: se gestionan en el directorio.", { n }), traducir("Eliminar"), 'peligro'],
+      reset_password: [traducir("¿Generar credenciales nuevas para {n} usuarios seleccionados? Sus contraseñas actuales dejarán de funcionar y verás las nuevas una sola vez. Los usuarios LDAP se omiten.", { n }), traducir("Generar credenciales"), 'peligro'],
+    } as const
+    const [mensaje, etiqueta, tono] = textos[accion]
+    if (!(await confirmar(mensaje, { confirmar: etiqueta, tono: tono as 'normal' | 'peligro' }))) return
+    setMasivoBusy(true)
+    try {
+      const r = await api.bulkUsers(accion, nombres)
+      notificarCambioPendiente()
+      loadUsers()
+      setSelected(new Set())
+      if (r.credenciales?.length) setCredenciales(r.credenciales)
+      const aviso = r.omitidos?.length
+        ? traducir("{ok} usuarios procesados, {om} omitidos: {detalle}", { ok: r.ok.length, om: r.omitidos.length, detalle: r.omitidos.slice(0, 3).map((o: any) => `${o.usuario} (${o.motivo})`).join('; ') })
+        : traducir("{ok} usuarios procesados", { ok: r.ok.length })
+      showToast(aviso, r.omitidos?.length ? 'warning' : 'success')
+    } catch (e: any) {
+      showToast(`Error: ${e.message}`, 'error')
+    } finally {
+      setMasivoBusy(false)
+    }
+  }
+
   const enabledCount = allUsers.filter(u => u.enabled).length
 
   return (
@@ -787,9 +902,24 @@ export default function ProxyUsers() {
             {allUsers.length} en total · {enabledCount} pueden navegar ahora mismo
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <button onClick={() => setImportarAbierto(true)} className="btn btn-outline" title={traducir("Carga masiva de usuarios desde un archivo CSV, Excel o de texto")}>
+            <IconUpload />{traducir("Importar")}
+          </button>
+          <div className="inline-flex">
+            <select value={formatoExport} onChange={e => setFormatoExport(e.target.value as 'csv' | 'xlsx')}
+              className="input rounded-r-none w-[88px]" aria-label={traducir("Formato de exportación")}>
+              <option value="xlsx">Excel</option>
+              <option value="csv">CSV</option>
+            </select>
+            <button onClick={() => descargar(api.exportUsersUrl(formatoExport), `usuarios-${new Date().toISOString().slice(0, 10)}.${formatoExport}`, traducir('Usuarios exportados'))}
+              disabled={exportando} className="btn btn-outline rounded-l-none border-l-0"
+              title={traducir("Descarga la lista de usuarios (sin contraseñas)")}>
+              {exportando ? <IconSpinner className="animate-spin" /> : <IconDownload />}{exportando ? etiquetaExport : traducir("Exportar")}
+            </button>
+          </div>
           <button
-            onClick={() => { setNewUser({ username: '', display_name: '', password: '' }); setError(''); setShowForm(true) }}
+            onClick={() => { setNewUser({ username: '', display_name: '', email: '', password: '' }); setError(''); setShowForm(true) }}
             className="btn btn-primary"
           >
             {traducir('+ Nuevo Usuario Local')}
@@ -835,6 +965,11 @@ export default function ProxyUsers() {
           <option value="all">{traducir("Conectados o no")}</option>
           <option value="connected">{traducir("Solo conectados ahora")}</option>
         </select>
+        {hayFiltros && (
+          <button onClick={limpiarFiltros} className="btn btn-outline flex-none" title={traducir("Quita la búsqueda y todos los filtros")}>
+            <IconClose />{traducir("Limpiar filtros")}
+          </button>
+        )}
       </div>
 
       {/* Barra de acción en bloque: solo aparece con algo seleccionado, para
@@ -845,11 +980,16 @@ export default function ProxyUsers() {
           <span className="text-sm font-medium text-brand-700">
             {traducir("{n} seleccionados", { n: selected.size })}
           </span>
-          <div className="flex items-center gap-3">
-            <button onClick={() => setQuotaModalFor(Array.from(selected))} className="btn btn-primary btn-sm">
-              {traducir("Aplicar cuota a los seleccionados")}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button onClick={() => setQuotaModalFor(Array.from(selected))} disabled={masivoBusy} className="btn btn-primary btn-sm">
+              {traducir("Aplicar cuota")}
             </button>
-            <button onClick={() => setSelected(new Set())} className="text-sm text-ink-3 hover:text-ink-2">
+            <button onClick={() => accionMasiva('enable')} disabled={masivoBusy} className="btn btn-outline btn-sm"><IconCheck />{traducir("Habilitar")}</button>
+            <button onClick={() => accionMasiva('disable')} disabled={masivoBusy} className="btn btn-outline btn-sm"><IconBan />{traducir("Deshabilitar")}</button>
+            <button onClick={() => accionMasiva('reset_password')} disabled={masivoBusy} className="btn btn-outline btn-sm"><IconKey />{traducir("Generar credenciales")}</button>
+            <button onClick={() => accionMasiva('delete')} disabled={masivoBusy} className="btn btn-danger btn-sm"><IconTrash />{traducir("Eliminar")}</button>
+            {masivoBusy && <IconSpinner className="animate-spin w-4 h-4 text-ink-3" />}
+            <button onClick={() => setSelected(new Set())} className="text-sm text-ink-3 hover:text-ink-2 ml-1">
               {traducir("Cancelar selección")}
             </button>
           </div>
@@ -869,13 +1009,13 @@ export default function ProxyUsers() {
                   <input type="checkbox" checked={filteredUsers.length > 0 && selected.size === filteredUsers.length}
                     onChange={toggleSelectedTodos} title={traducir("Seleccionar todos")} />
                 </th>
-                <th className="text-left">{traducir("Usuario")}</th>
-                <th className="text-left">{traducir("Origen")}</th>
-                <th className="text-left">{traducir("Estado")}</th>
-                <th className="text-left">{traducir("Conexión")}</th>
-                <th className="text-left">{traducir("Grupos")}</th>
-                <th className="text-left">{traducir("Cuota")}</th>
-                <th className="text-left">{traducir("Creado")}</th>
+                <ThOrden clave="usuario" orden={orden} onClick={alternarOrden}>{traducir("Usuario")}</ThOrden>
+                <ThOrden clave="origen" orden={orden} onClick={alternarOrden}>{traducir("Origen")}</ThOrden>
+                <ThOrden clave="estado" orden={orden} onClick={alternarOrden}>{traducir("Estado")}</ThOrden>
+                <ThOrden clave="conexion" orden={orden} onClick={alternarOrden}>{traducir("Conexión")}</ThOrden>
+                <ThOrden clave="grupos" orden={orden} onClick={alternarOrden}>{traducir("Grupos")}</ThOrden>
+                <ThOrden clave="cuota" orden={orden} onClick={alternarOrden}>{traducir("Cuota")}</ThOrden>
+                <ThOrden clave="creado" orden={orden} onClick={alternarOrden}>{traducir("Creado")}</ThOrden>
                 <th className="text-right">{traducir("Acciones")}</th>
               </tr>
             </thead>
@@ -897,6 +1037,9 @@ export default function ProxyUsers() {
                     </span>
                     {u.display_name && (
                       <span className="block text-xs font-normal text-ink-3">{u.display_name}</span>
+                    )}
+                    {u.email && (
+                      <span className="block text-xs font-normal text-ink-3">{u.email}</span>
                     )}
                   </td>
                   <td className="px-6 py-4">
@@ -955,6 +1098,9 @@ export default function ProxyUsers() {
                             {formatBytes(cuota.quota_bytes_used)} / {formatBytes(cuota.quota_bytes)}
                             <span className="text-ink-3"> · {PERIODO_LABELS[cuota.quota_period] || cuota.quota_period}</span>
                           </div>
+                          {cuota.quota_next_reset && (
+                            <div className="text-[11px] text-ink-3">{traducir("Se restablece")} {formatFechaHora(cuota.quota_next_reset)}</div>
+                          )}
                           <div className="w-28 h-1.5 rounded-full bg-line-soft mt-1 overflow-hidden">
                             <div
                               className={`h-full rounded-full ${cuota.quota_bytes_used >= cuota.quota_bytes ? 'bg-danger' : cuota.quota_bytes_used / cuota.quota_bytes > 0.8 ? 'bg-warn' : 'bg-ok'}`}
@@ -1040,11 +1186,26 @@ export default function ProxyUsers() {
         <ModalEditarUsuario
           username={editModalFor.username}
           displayName={editModalFor.display_name ?? ''}
+          email={editModalFor.email ?? ''}
           onClose={() => setEditModalFor(null)}
-          onSave={async (displayName) => {
-            await api.updateUser(editModalFor.id, { display_name: displayName || null })
+          onSave={async (displayName, email) => {
+            await api.updateUser(editModalFor.id, { display_name: displayName || null, email })
             showToast(traducir('Usuario actualizado correctamente'))
             loadUsers()
+          }}
+        />
+      )}
+
+      {credenciales && <CredencialesModal credenciales={credenciales} onClose={() => setCredenciales(null)} />}
+
+      {importarAbierto && (
+        <ImportarUsuariosModal
+          onClose={() => setImportarAbierto(false)}
+          onImportado={(r) => {
+            notificarCambioPendiente()
+            loadUsers()
+            showToast(traducir("Importación lista: {c} creados, {a} actualizados", { c: r.creados, a: r.actualizados }))
+            if (r.credenciales.length) setCredenciales(r.credenciales)
           }}
         />
       )}
