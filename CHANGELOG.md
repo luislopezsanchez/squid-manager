@@ -7,6 +7,22 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.25.0] - Sin publicar (rama pruebas)
 
+### Mejorado (pruebas de instalación y actualización)
+
+- **ACLs**: nueva columna «Uso» (En uso · N / Sin uso) con, al pasar el ratón, dónde se
+  usa cada ACL (`GET /api/acls/usage`).
+- **Instalación y actualización verificadas** en dos servidores limpios: instalación
+  desde cero de la rama pruebas, e instalación de main actualizada a pruebas tanto desde el
+  panel (Actualizaciones) como con `upgrade-nativo.sh`, conservando usuarios, ACLs y reglas.
+
+### Corregido
+
+- **Squid se caía en el primer «Aplicar cambios» de una instalación nueva**: la instalación
+  arranca Squid sin `cache_dir` y el primer «Aplicar» lo añade; Squid no sabe crear el
+  almacenamiento en disco con `-k reconfigure` y abortaba («assertion failed:
+  store_swapout.cc»), dejando el proxy caído. Ahora, si cambia `cache_dir`, el panel
+  reinicia Squid en vez de recargarlo.
+
 ### Mejorado (segunda revisión del usuario)
 
 - **Avisos por correo con formato**: todas las notificaciones (cambios, alertas de
