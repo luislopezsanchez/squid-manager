@@ -6,12 +6,10 @@ import { IconAssistant } from '../components/Icons'
 import { Markdown } from '../components/Markdown'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 
-const PROVEEDORES = [
-  { value: 'gemini', label: 'Gemini (Google)', ejemploModelo: 'gemini-flash-latest' },
-  { value: 'groq', label: 'Groq', ejemploModelo: 'openai/gpt-oss-20b' },
-  { value: 'nvidia_nim', label: 'NVIDIA NIM', ejemploModelo: 'meta/llama-3.1-8b-instruct' },
-  { value: 'ollama_cloud', label: 'Ollama Cloud', ejemploModelo: 'llama3.1' },
-]
+interface Proveedor {
+  id: string; nombre: string; tipo: string; url_defecto: string; url_editable: boolean
+  requiere_clave: boolean; modelo_ejemplo: string; agentico: boolean; ayuda: string
+}
 
 type Propuesta = { accion: string; argumentos: Record<string, any> }
 type Turno = {
@@ -21,11 +19,6 @@ type Turno = {
   propuesta?: Propuesta | null
   propuestaEstado?: 'pendiente' | 'aplicada' | 'descartada'
 }
-
-// Proveedores con soporte de tool-calling confirmado contra su
-// documentación oficial (ver docs/project-log.md) -Ollama Cloud queda
-// afuera del modo agéntico hasta confirmarlo.
-const PROVEEDORES_AGENTICO = ['gemini', 'groq', 'nvidia_nim']
 
 // La conversación se guarda en sessionStorage -viva mientras dure la
 // pestaña/sesión del navegador, como pidió el usuario, sin necesidad de
@@ -43,6 +36,7 @@ function cargarConversacion(): Turno[] {
 
 export default function Asistente() {
   const [config, setConfig] = useState<any>(null)
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -58,13 +52,11 @@ export default function Asistente() {
   const [probandoProveedor, setProbandoProveedor] = useState(false)
   const [modelosProveedor, setModelosProveedor] = useState<string[] | null>(null)
 
-  const [probandoEmbeddings, setProbandoEmbeddings] = useState(false)
-  const [embeddingsOk, setEmbeddingsOk] = useState<number | null>(null)
-
   const cargar = () => api.getAiConfig().then(r => { setConfig(r); setLoadError(false) })
     .catch(() => { showToast(traducir("Error al cargar la configuración del asistente"), 'error'); setLoadError(true) })
 
   useEffect(() => {
+    api.listAiProviders().then(setProveedores).catch(() => {})
     cargar().finally(() => setLoading(false))
   }, [])
 
@@ -90,30 +82,37 @@ export default function Asistente() {
     }
   }
 
+  const proveedorDe = (id: string) => proveedores.find(p => p.id === id)
+
   const handleCambiarProveedor = (provider: string) => {
-    const agentic_enabled = config.agentic_enabled && PROVEEDORES_AGENTICO.includes(provider)
-    setConfig({ ...config, provider, agentic_enabled })
+    const p = proveedorDe(provider)
+    setConfig({
+      ...config, provider,
+      base_url: p?.url_editable ? (config.base_url || p.url_defecto) : '',
+      agentic_enabled: config.agentic_enabled && !!p?.agentico,
+    })
     setModelosProveedor(null) // la lista de modelos era del proveedor anterior
   }
 
   const handleProbarProveedor = async () => {
-    if (!config.api_key || config.api_key === '***') {
-      showToast(traducir("Escribí la API key antes de probar la conexión"), 'warning')
-      return
+    const p = proveedorDe(config.provider)
+    if (p?.requiere_clave && (!config.api_key || config.api_key === '***') ) {
+      if (config.api_key !== '***') { showToast(traducir("Escribe la API key antes de probar la conexión"), 'warning'); return }
     }
+    if (p?.url_editable && !config.base_url) { showToast(traducir("Escribe la URL del servicio antes de probar la conexión"), 'warning'); return }
     setProbandoProveedor(true)
     setModelosProveedor(null)
     try {
-      const r = await api.probarProveedorAi(config.provider, config.api_key)
+      const r = await api.probarProveedorAi(config.provider, config.api_key === '***' ? undefined : config.api_key, p?.url_editable ? config.base_url : undefined)
       const modelos: string[] = r.modelos || []
       setModelosProveedor(modelos)
       if (modelos.length > 0 && !modelos.includes(config.chat_model)) {
-        const sugerido = modelos.find(m => m === proveedorActual?.ejemploModelo) || modelos[0]
+        const sugerido = modelos.find(m => m === p?.modelo_ejemplo) || modelos[0]
         setConfig((c: any) => ({ ...c, chat_model: sugerido }))
       }
       showToast(
         modelos.length > 0
-          ? traducir(`Conexión exitosa: ${modelos.length} modelos disponibles`)
+          ? traducir("Conexión exitosa: {n} modelos disponibles", { n: modelos.length })
           : traducir("Conexión exitosa, pero el proveedor no devolvió modelos"),
         'success',
       )
@@ -124,24 +123,6 @@ export default function Asistente() {
     }
   }
 
-  const handleProbarEmbeddings = async () => {
-    if (!config.embedding_api_key || config.embedding_api_key === '***') {
-      showToast(traducir("Escribí la API key de Jina antes de probar"), 'warning')
-      return
-    }
-    setProbandoEmbeddings(true)
-    setEmbeddingsOk(null)
-    try {
-      const r = await api.probarEmbeddingsAi(config.embedding_api_key)
-      setEmbeddingsOk(r.dimensiones)
-      showToast(traducir("Conexión con Jina AI exitosa"), 'success')
-    } catch (e: any) {
-      showToast(`Error: ${e.message}`, 'error')
-    } finally {
-      setProbandoEmbeddings(false)
-    }
-  }
-
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -149,9 +130,8 @@ export default function Asistente() {
         enabled: config.enabled,
         provider: config.provider,
         api_key: config.api_key,
-        embedding_api_key: config.embedding_api_key,
+        base_url: config.base_url || null,
         chat_model: config.chat_model,
-        embedding_model: config.embedding_model,
         agentic_enabled: config.agentic_enabled,
       })
       showToast(traducir("Configuración guardada correctamente"), 'success')
@@ -168,8 +148,8 @@ export default function Asistente() {
     try {
       const r = await api.reindexarDocumentacion()
       showToast(
-        traducir(`Documentación indexada: ${r.fragmentos} fragmentos de ${r.archivos} archivos`) +
-          (r.saltados?.length ? ` (${r.saltados.length} con error, ver consola)` : ''),
+        traducir("Documentación indexada: {f} fragmentos de {a} archivos", { f: r.fragmentos, a: r.archivos }) +
+          (r.saltados?.length ? ` (${r.saltados.length} ${traducir("con error, ver consola")})` : ''),
         'success',
       )
       if (r.saltados?.length) console.warn('Fragmentos saltados al indexar:', r.saltados)
@@ -235,7 +215,8 @@ export default function Asistente() {
   if (loadError && !config) return <ErrorState onRetry={cargar} />
   if (!config) return <div className="p-8 text-center text-ink-3">{traducir("No se pudo cargar la configuración")}</div>
 
-  const proveedorActual = PROVEEDORES.find(p => p.value === config.provider)
+  const proveedorActual = proveedorDe(config.provider)
+  const agenticoPosible = !!proveedorActual?.agentico
 
   return (
     <div className="p-6 md:p-7">
@@ -262,42 +243,51 @@ export default function Asistente() {
           </label>
         </div>
 
-        {/* Paso 1: proveedor + su API key + probar conexión */}
         <div className="mb-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-3 mb-2">
-            {traducir("1. Proveedor que responde las preguntas")}
-          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="ai-provider" className="field-label block mb-1.5">{traducir("Proveedor")}</label>
+              <label htmlFor="ai-provider" className="field-label block mb-1.5">{traducir("Proveedor de IA")}</label>
               <select id="ai-provider" value={config.provider} onChange={e => handleCambiarProveedor(e.target.value)} className="input">
-                {PROVEEDORES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                {proveedores.map(p => <option key={p.id} value={p.id}>{traducir(p.nombre)}</option>)}
               </select>
+              {proveedorActual?.ayuda && <p className="field-help mt-1">{traducir(proveedorActual.ayuda)}</p>}
             </div>
-            <div>
-              <label htmlFor="ai-api-key" className="field-label block mb-1.5">{traducir("API key")} ({proveedorActual?.label})</label>
-              <input
-                id="ai-api-key"
-                type="password"
-                value={config.api_key}
-                onChange={e => { setConfig({ ...config, api_key: e.target.value }); setModelosProveedor(null) }}
-                placeholder={config.api_key === '***' ? traducir('Ya guardada — escribí una nueva para reemplazarla') : ''}
-                className="input font-mono text-sm"
-              />
-            </div>
+            {proveedorActual?.url_editable ? (
+              <div>
+                <label htmlFor="ai-base-url" className="field-label block mb-1.5">{traducir("URL del servicio")}</label>
+                <input id="ai-base-url" type="text" value={config.base_url || ''}
+                  onChange={e => { setConfig({ ...config, base_url: e.target.value }); setModelosProveedor(null) }}
+                  placeholder="https://mi-servidor/v1" className="input font-mono text-sm" />
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="ai-api-key-a" className="field-label block mb-1.5">{traducir("API key")}</label>
+                <input id="ai-api-key-a" type="password" value={config.api_key}
+                  onChange={e => { setConfig({ ...config, api_key: e.target.value }); setModelosProveedor(null) }}
+                  placeholder={config.api_key === '***' ? traducir('Ya guardada — escribe una nueva para reemplazarla') : ''}
+                  className="input font-mono text-sm" autoComplete="off" />
+              </div>
+            )}
+            {proveedorActual?.url_editable && (
+              <div className="md:col-span-2">
+                <label htmlFor="ai-api-key-b" className="field-label block mb-1.5">
+                  {traducir("API key")} {!proveedorActual.requiere_clave && <span className="font-normal text-ink-3">({traducir("opcional: solo si tu servicio la pide")})</span>}
+                </label>
+                <input id="ai-api-key-b" type="password" value={config.api_key}
+                  onChange={e => { setConfig({ ...config, api_key: e.target.value }); setModelosProveedor(null) }}
+                  placeholder={config.api_key === '***' ? traducir('Ya guardada — escribe una nueva para reemplazarla') : ''}
+                  className="input font-mono text-sm" autoComplete="off" />
+              </div>
+            )}
           </div>
 
           <div className="mt-3 flex items-center gap-3">
-            <button
-              onClick={handleProbarProveedor}
-              disabled={probandoProveedor || !config.api_key}
-              className="btn btn-ghost disabled:opacity-50"
-            >
+            <button onClick={handleProbarProveedor} disabled={probandoProveedor} className="btn btn-ghost disabled:opacity-50">
               {probandoProveedor ? traducir('Probando…') : traducir('Probar conexión')}
             </button>
             {modelosProveedor !== null && (
               <span className="text-xs text-ok font-medium">
-                ✓ {traducir(`Conectado — ${modelosProveedor.length} modelos disponibles`)}
+                ✓ {traducir("Conectado — {n} modelos disponibles", { n: modelosProveedor.length })}
               </span>
             )}
           </div>
@@ -305,12 +295,7 @@ export default function Asistente() {
           <div className="mt-3">
             <label htmlFor="ai-chat-model" className="field-label block mb-1.5">{traducir("Modelo")}</label>
             {modelosProveedor && modelosProveedor.length > 0 ? (
-              <select
-                id="ai-chat-model"
-                value={config.chat_model || ''}
-                onChange={e => setConfig({ ...config, chat_model: e.target.value })}
-                className="input font-mono text-sm"
-              >
+              <select id="ai-chat-model" value={config.chat_model || ''} onChange={e => setConfig({ ...config, chat_model: e.target.value })} className="input font-mono text-sm">
                 {!modelosProveedor.includes(config.chat_model) && config.chat_model && (
                   <option value={config.chat_model}>{config.chat_model} ({traducir("guardado")})</option>
                 )}
@@ -318,85 +303,44 @@ export default function Asistente() {
               </select>
             ) : (
               <>
-                <input
-                  id="ai-chat-model"
-                  type="text"
-                  value={config.chat_model || ''}
+                <input id="ai-chat-model" type="text" value={config.chat_model || ''}
                   onChange={e => setConfig({ ...config, chat_model: e.target.value })}
-                  placeholder={proveedorActual?.ejemploModelo}
-                  className="input font-mono text-sm"
-                />
+                  placeholder={proveedorActual?.modelo_ejemplo} className="input font-mono text-sm" />
                 <p className="text-xs text-ink-3 mt-1">
-                  {traducir("Probá la conexión arriba para elegir de la lista real de modelos disponibles con esta key.")}
+                  {traducir("Prueba la conexión arriba para elegir de la lista real de modelos disponibles.")}
                 </p>
               </>
             )}
           </div>
 
-          <label className={`flex items-start gap-2 mt-4 pt-4 border-t border-line-soft ${
-            PROVEEDORES_AGENTICO.includes(config.provider) ? 'cursor-pointer' : 'opacity-50'
-          }`}>
-            <input
-              type="checkbox"
-              checked={!!config.agentic_enabled}
-              disabled={!PROVEEDORES_AGENTICO.includes(config.provider)}
-              onChange={e => setConfig({ ...config, agentic_enabled: e.target.checked })}
-              className="w-4 h-4 mt-0.5 rounded"
-            />
+          <div className="note note-info mt-4">
+            <p className="note-text">
+              {traducir("Solo necesitas un proveedor. La búsqueda en la documentación es local (se indexa sola al arrancar y al actualizar) y no usa ningún otro servicio. Con Ollama en tu red, nada sale a Internet.")}
+            </p>
+          </div>
+
+          <label className={`flex items-start gap-2 mt-4 pt-4 border-t border-line-soft ${agenticoPosible ? 'cursor-pointer' : 'opacity-50'}`}>
+            <input type="checkbox" checked={!!config.agentic_enabled} disabled={!agenticoPosible}
+              onChange={e => setConfig({ ...config, agentic_enabled: e.target.checked })} className="w-4 h-4 mt-0.5 rounded" />
             <span className="text-sm text-ink-2">
               {traducir("Modo agéntico (fase 1): puede consultar ACLs, reglas, grupos y ajustes reales")}
               <span className="block text-xs text-ink-3 mt-0.5">
-                {PROVEEDORES_AGENTICO.includes(config.provider)
+                {agenticoPosible
                   ? traducir("También puede proponer cambios de configuración -nunca los aplica solo, siempre pide tu confirmación-. Estos datos salen hacia el proveedor de IA, no solo la documentación.")
-                  : traducir("No disponible con este proveedor todavía -probá con Gemini, Groq o NVIDIA NIM.")}
+                  : traducir("No disponible con este proveedor todavía.")}
               </span>
             </span>
           </label>
         </div>
 
-        {/* Paso 2: Jina AI, fijo, para la búsqueda en la documentación */}
-        <div className="mb-5 pt-4 border-t border-line-soft">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-3 mb-2">
-            {traducir("2. Búsqueda en la documentación (siempre Jina AI)")}
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-            <div>
-              <label htmlFor="ai-embedding-key" className="field-label block mb-1.5">{traducir("API key de Jina AI")}</label>
-              <input
-                id="ai-embedding-key"
-                type="password"
-                value={config.embedding_api_key || ''}
-                onChange={e => { setConfig({ ...config, embedding_api_key: e.target.value }); setEmbeddingsOk(null) }}
-                placeholder={config.embedding_api_key === '***' ? traducir('Ya guardada — escribí una nueva para reemplazarla') : ''}
-                className="input font-mono text-sm"
-              />
-              <p className="text-xs text-ink-3 mt-1">
-                {traducir("Se usa siempre para buscar en la documentación, sea cual sea el proveedor elegido arriba. Se genera gratis en jina.ai.")}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleProbarEmbeddings}
-                disabled={probandoEmbeddings || !config.embedding_api_key}
-                className="btn btn-ghost disabled:opacity-50"
-              >
-                {probandoEmbeddings ? traducir('Probando…') : traducir('Probar conexión')}
-              </button>
-              {embeddingsOk !== null && (
-                <span className="text-xs text-ok font-medium">✓ {traducir("Conectado")}</span>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Paso 3: guardar */}
         <div className="pt-4 border-t border-line-soft flex items-center gap-3 flex-wrap">
           <button onClick={handleSave} disabled={saving} className="btn btn-primary disabled:opacity-50">
-            {saving ? traducir('Guardando...') : traducir('3. Guardar Configuración')}
+            {saving ? traducir('Guardando...') : traducir('Guardar configuración')}
           </button>
-          <button onClick={handleReindexar} disabled={reindexando || !config.provider} className="btn btn-ghost disabled:opacity-50"
-            title={traducir("Vuelve a leer toda la documentación y recalcular la búsqueda — hace falta la API key de Jina guardada")}>
-            {reindexando ? traducir('Indexando… puede tardar unos minutos') : traducir('Reindexar documentación')}
+          <button onClick={handleReindexar} disabled={reindexando} className="btn btn-ghost disabled:opacity-50"
+            title={traducir("Vuelve a leer toda la documentación. Normalmente no hace falta: se indexa sola al arrancar y cuando cambia.")}>
+            {reindexando ? traducir('Indexando…') : traducir('Reindexar documentación')}
           </button>
           <span className="text-xs text-ink-3">
             {traducir("Fragmentos indexados")}: {config.fragmentos_indexados}
@@ -418,7 +362,7 @@ export default function Asistente() {
         {!config.enabled ? (
           <p className="text-sm text-ink-3">{traducir("Activá el asistente arriba para poder hacer preguntas.")}</p>
         ) : config.fragmentos_indexados === 0 ? (
-          <p className="text-sm text-ink-3">{traducir("Todavía no se indexó la documentación — pulsá \"Reindexar documentación\" arriba.")}</p>
+          <p className="text-sm text-ink-3">{traducir("La documentación se está indexando (tarda unos segundos tras arrancar). Si sigue así, pulsa «Reindexar documentación» arriba.")}</p>
         ) : (
           <>
             <div className="space-y-4 mb-4 max-h-[28rem] overflow-y-auto">

@@ -323,3 +323,40 @@ NUEVAS: dict[str, dict[str, str]] = {
         "Ya existe un usuario LDAP con ese nombre.": "Já existe um usuário LDAP com esse nome.",
     },
 }
+
+
+# --- Asistente de IA (routes/ai.py, services/ai_service.py)
+_IA = {
+    "en": {
+        "Indica la URL base del proveedor (por ejemplo https://mi-servidor/v1).": "Enter the provider's base URL (for example https://my-server/v1).",
+        "La URL base debe empezar por http:// o https:// y no puede llevar usuario ni contraseña.": "The base URL must start with http:// or https:// and cannot carry a user or password.",
+        "Elige el modelo con el que responderá el asistente (usa «Probar conexión» para ver los disponibles).": "Choose the model the assistant will answer with (use «Test connection» to see the available ones).",
+        "El modo agéntico no está disponible con este proveedor todavía.": "Agentic mode is not available with this provider yet.",
+        "Falta la API key a probar.": "The API key to test is missing.",
+        "Falta la URL base del proveedor (por ejemplo https://mi-servidor/v1).": "The provider's base URL is missing (for example https://my-server/v1).",
+        "El asistente de IA no está activado.": "The AI assistant is not enabled.",
+        "El modo agéntico todavía no está disponible con este proveedor. Prueba con Anthropic, OpenAI, Gemini, Groq, OpenRouter u otro compatible con OpenAI.":
+            "Agentic mode is not available with this provider yet. Try Anthropic, OpenAI, Gemini, Groq, OpenRouter or another OpenAI-compatible one.",
+        "Proveedor desconocido: {p}": "Unknown provider: {p}",
+        "Anthropic devolvió una respuesta vacía.": "Anthropic returned an empty response.",
+        "No se pudo conectar con Anthropic: {e}": "Could not connect to Anthropic: {e}",
+        "Anthropic rechazó la petición: {e}": "Anthropic rejected the request: {e}",
+    },
+    "pt": {
+        "Indica la URL base del proveedor (por ejemplo https://mi-servidor/v1).": "Informe a URL base do provedor (por exemplo https://meu-servidor/v1).",
+        "La URL base debe empezar por http:// o https:// y no puede llevar usuario ni contraseña.": "A URL base deve começar com http:// ou https:// e não pode conter usuário nem senha.",
+        "Elige el modelo con el que responderá el asistente (usa «Probar conexión» para ver los disponibles).": "Escolha o modelo com o qual o assistente responderá (use «Testar conexão» para ver os disponíveis).",
+        "El modo agéntico no está disponible con este proveedor todavía.": "O modo agêntico ainda não está disponível com este provedor.",
+        "Falta la API key a probar.": "Falta a API key a testar.",
+        "Falta la URL base del proveedor (por ejemplo https://mi-servidor/v1).": "Falta a URL base do provedor (por exemplo https://meu-servidor/v1).",
+        "El asistente de IA no está activado.": "O assistente de IA não está ativado.",
+        "El modo agéntico todavía no está disponible con este proveedor. Prueba con Anthropic, OpenAI, Gemini, Groq, OpenRouter u otro compatible con OpenAI.":
+            "O modo agêntico ainda não está disponível com este provedor. Tente Anthropic, OpenAI, Gemini, Groq, OpenRouter ou outro compatível com OpenAI.",
+        "Proveedor desconocido: {p}": "Provedor desconhecido: {p}",
+        "Anthropic devolvió una respuesta vacía.": "A Anthropic devolveu uma resposta vazia.",
+        "No se pudo conectar con Anthropic: {e}": "Não foi possível conectar à Anthropic: {e}",
+        "Anthropic rechazó la petición: {e}": "A Anthropic rejeitou a requisição: {e}",
+    },
+}
+for _i, _d in _IA.items():
+    NUEVAS[_i].update(_d)

@@ -4,16 +4,18 @@ usando la documentación del proyecto como única fuente. Apagado por defecto,
 igual que LDAP/Kerberos/Syslog.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.database import get_db
+from app.i18n import idioma_de_cabecera
 from app.models.admin import Admin
 from app.models.audit_log import AuditLog
 from app.models.ai_config import AiConfig
 from app.models.doc_chunk import DocChunk
+from app.services import ai_providers
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.ai_service import (
     AiServiceError,
@@ -25,7 +27,7 @@ from app.services.ai_service import (
 
 router = APIRouter()
 
-_PROVEEDORES_VALIDOS = ("gemini", "ollama_cloud", "nvidia_nim", "groq")
+_PROVEEDORES_VALIDOS = tuple(ai_providers.PROVEEDORES)
 
 
 class AiConfigIn(BaseModel):
@@ -36,6 +38,7 @@ class AiConfigIn(BaseModel):
     # separada de la del proveedor de chat -ver ai_service.py-.
     embedding_api_key: str | None = None
     chat_model: str | None = None
+    base_url: str | None = None
     embedding_model: str | None = None
     # Fase 1 del asistente agéntico: consulta el estado real del servidor y
     # puede proponer cambios -nunca aplicarlos solo-, ver ai_tools.py.
@@ -48,7 +51,8 @@ class PreguntaIn(BaseModel):
 
 class ProbarProveedorIn(BaseModel):
     provider: str
-    api_key: str
+    api_key: str | None = None
+    base_url: str | None = None
 
 
 class ProbarEmbeddingsIn(BaseModel):
@@ -63,6 +67,26 @@ def _obtener_o_crear(db: Session) -> AiConfig:
         db.commit()
         db.refresh(config)
     return config
+
+
+def _validar_url_base(provider: str, base_url: str | None) -> str | None:
+    """URL base de un proveedor con URL editable: http(s) y sin credenciales embebidas."""
+    info = ai_providers.obtener(provider)
+    if not info or not info["url_editable"]:
+        return None
+    url = (base_url or "").strip().rstrip("/")
+    if not url:
+        raise HTTPException(400, detail="Indica la URL base del proveedor (por ejemplo https://mi-servidor/v1).")
+    import re
+    if not re.match(r"^https?://[^\s/@]+(:\d+)?(/\S*)?$", url):
+        raise HTTPException(400, detail="La URL base debe empezar por http:// o https:// y no puede llevar usuario ni contraseña.")
+    return url
+
+
+@router.get("/proveedores")
+def proveedores(_: Admin = Depends(get_current_admin)):
+    """Catálogo de proveedores de IA que se pueden elegir (más uno personalizado compatible con OpenAI)."""
+    return ai_providers.catalogo_publico()
 
 
 @router.get("/config")
@@ -81,6 +105,7 @@ def get_config(
         "api_key": "***" if config.api_key else "",
         "embedding_api_key": "***" if config.embedding_api_key else "",
         "chat_model": config.chat_model or "",
+        "base_url": config.base_url or "",
         "embedding_model": config.embedding_model or "",
         "fragmentos_indexados": total_fragmentos,
         "agentic_enabled": config.agentic_enabled,
@@ -96,35 +121,30 @@ def update_config(
     if data.provider not in _PROVEEDORES_VALIDOS:
         raise HTTPException(400, detail=f"provider debe ser uno de: {', '.join(_PROVEEDORES_VALIDOS)}")
 
+    info = ai_providers.obtener(data.provider)
+    url_base = _validar_url_base(data.provider, data.base_url)
     config = _obtener_o_crear(db)
     api_key_cambio = bool(data.api_key and data.api_key != "***")
     embedding_key_cambio = bool(data.embedding_api_key and data.embedding_api_key != "***")
     config.enabled = data.enabled
     config.provider = data.provider
+    config.base_url = url_base
     if api_key_cambio:
         config.api_key = data.api_key
+    elif data.api_key == "":
+        config.api_key = None
     if embedding_key_cambio:
         config.embedding_api_key = data.embedding_api_key
     config.chat_model = data.chat_model
     config.embedding_model = data.embedding_model
     config.agentic_enabled = data.agentic_enabled
 
-    if config.enabled and not config.api_key:
+    if config.enabled and info["requiere_clave"] and not config.api_key:
         raise HTTPException(400, detail="Hace falta una API key para habilitar el asistente")
-    if config.enabled and not config.embedding_api_key:
-        raise HTTPException(
-            400,
-            detail="Hace falta la API key de Jina AI para poder buscar en la documentación.",
-        )
-    # Ollama Cloud no se confirmó contra su documentación oficial que soporte
-    # tool-calling (ver docs/project-log.md) -a diferencia de Gemini/Groq/
-    # NVIDIA NIM, que sí. Se rechaza acá, no solo en ai_service.py, para que
-    # el admin se entere al guardar y no recién al primer mensaje.
-    if config.agentic_enabled and config.provider == "ollama_cloud":
-        raise HTTPException(
-            400,
-            detail="El modo agéntico no está disponible con Ollama Cloud todavía. Probá con Gemini, Groq o NVIDIA NIM.",
-        )
+    if config.enabled and not config.chat_model:
+        raise HTTPException(400, detail="Elige el modelo con el que responderá el asistente (usa «Probar conexión» para ver los disponibles).")
+    if config.agentic_enabled and not info["agentico"]:
+        raise HTTPException(400, detail="El modo agéntico no está disponible con este proveedor todavía.")
 
     # Nunca las API keys, solo si cambiaron.
     db.add(AuditLog(
@@ -154,11 +174,13 @@ async def probar_proveedor(
     """
     if data.provider not in _PROVEEDORES_VALIDOS:
         raise HTTPException(400, detail=f"provider debe ser uno de: {', '.join(_PROVEEDORES_VALIDOS)}")
-    if not data.api_key or data.api_key == "***":
+    info = ai_providers.obtener(data.provider)
+    if info["requiere_clave"] and (not data.api_key or data.api_key == "***"):
         raise HTTPException(400, detail="Falta la API key a probar")
+    url_base = _validar_url_base(data.provider, data.base_url)
 
     try:
-        modelos = await run_in_threadpool(listar_modelos, data.provider, data.api_key)
+        modelos = await run_in_threadpool(listar_modelos, data.provider, None if data.api_key == "***" else data.api_key, url_base)
     except AiServiceError as e:
         raise HTTPException(400, detail=str(e))
     return {"status": "ok", "modelos": modelos}
@@ -201,6 +223,7 @@ async def reindexar(
 
 @router.post("/preguntar")
 async def responder_pregunta(
+    request: Request,
     data: PreguntaIn,
     db: Session = Depends(get_db),
     _: Admin = Depends(get_current_admin),
@@ -221,7 +244,8 @@ async def responder_pregunta(
         raise HTTPException(400, detail="El asistente de IA no está activado")
 
     try:
-        resultado = await run_in_threadpool(preguntar, db, config, data.pregunta.strip())
+        idioma = idioma_de_cabecera(request.headers.get("accept-language"))
+        resultado = await run_in_threadpool(preguntar, db, config, data.pregunta.strip(), idioma)
     except AiServiceError as e:
         raise HTTPException(400, detail=str(e))
     return resultado

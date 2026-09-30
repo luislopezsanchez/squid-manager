@@ -31,6 +31,8 @@ class AiConfig(Base):
     # busqueda semantica al indexar/consultar la documentacion) -son
     # necesidades distintas y no todos los proveedores usan el mismo modelo
     # para las dos cosas-.
+    # URL base (proveedor personalizado / Ollama en la red); vacía = la del catálogo.
+    base_url = Column(String(300), nullable=True)
     chat_model = Column(String(100), nullable=True)
     embedding_model = Column(String(100), nullable=True)
     # Fase 1 del asistente agéntico (ver docs/project-log.md): puede consultar

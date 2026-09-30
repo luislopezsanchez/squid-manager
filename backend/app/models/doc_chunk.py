@@ -31,6 +31,8 @@ class DocChunk(Base):
     # poder decir de dónde salió la respuesta y para poder borrar/reemplazar
     # los fragmentos de un archivo cuando se reindexa.
     source_file = Column(String(255), nullable=False, index=True)
+    # es | en | pt: idioma del fragmento (cada uno con su diccionario de texto completo).
+    idioma = Column(String(2), nullable=False, default="es", server_default="es", index=True)
     heading = Column(String(500), nullable=True)
     content = Column(Text, nullable=False)
     embedding = Column(Vector(EMBEDDING_DIM), nullable=True)

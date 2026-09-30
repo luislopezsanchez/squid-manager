@@ -26,6 +26,7 @@ Diseño deliberado, no accidental:
   mucho más general del que hace falta acá.
 """
 
+import contextvars
 import json
 import logging
 import re
@@ -39,6 +40,7 @@ from sqlalchemy.orm import Session
 
 from app.models.ai_config import AiConfig
 from app.models.doc_chunk import DocChunk, EMBEDDING_DIM
+from app.services import ai_providers
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,11 @@ logger = logging.getLogger(__name__)
 # `--workers`, ver el ExecStart de systemd) -no hace falta coordinación entre
 # procesos ni un lock a nivel de base de datos-.
 _REINDEXANDO = threading.Lock()
+
+# Idioma de la pregunta en curso (lo fija `preguntar`): las herramientas del modo agéntico
+# buscan en la documentación sin saber el idioma, así que se lee de aquí.
+_IDIOMA_ACTUAL: contextvars.ContextVar[str] = contextvars.ContextVar("ai_idioma", default="es")
+_DICCIONARIO = {"es": "spanish", "en": "english", "pt": "portuguese"}
 
 
 def _raiz_del_proyecto() -> Path | None:
@@ -91,6 +98,11 @@ _ARCHIVOS_A_INDEXAR = ["README.md"]  # + todo docs/*.md, agregado al listar
 # de eso sin avisar -mejor partirla acá que depender de que la API trunque
 # en silencio o rechace la petición-.
 _MAX_CHARS_POR_FRAGMENTO = 3000
+
+
+def _bearer(api_key: str | None) -> dict:
+    """Cabecera de autorización; vacía si el proveedor no pide clave (Ollama en la red, servicios propios)."""
+    return {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
 
 class AiServiceError(Exception):
@@ -167,7 +179,7 @@ def _jina_embed(texto: str, api_key: str, task: str) -> list[float]:
         "input": [texto],
     }
     try:
-        r = _post_con_reintentos(_JINA_EMBED_URL, {"Authorization": f"Bearer {api_key}"}, body, timeout=30)
+        r = _post_con_reintentos(_JINA_EMBED_URL, _bearer(api_key), body, timeout=30)
     except httpx.HTTPStatusError as e:
         raise AiServiceError(f"Jina AI rechazó la petición de embedding: {e.response.text[:300]}")
     except httpx.HTTPError as e:
@@ -268,7 +280,7 @@ def _ollama_cloud_generar(system: str, prompt: str, api_key: str, model: str, in
     try:
         r = _post_con_reintentos(
             "https://ollama.com/api/chat",
-            {"Authorization": f"Bearer {api_key}"},
+            _bearer(api_key),
             body,
             timeout=60,
             reintentos=reintentos,
@@ -283,6 +295,67 @@ def _ollama_cloud_generar(system: str, prompt: str, api_key: str, model: str, in
     if not contenido:
         raise AiServiceError("Ollama Cloud devolvió una respuesta vacía.")
     return contenido
+
+
+_ANTHROPIC_VERSION = "2023-06-01"
+_ANTHROPIC_MAX_TOKENS = 2048
+
+
+def _anthropic_headers(api_key: str) -> dict:
+    return {"x-api-key": api_key, "anthropic-version": _ANTHROPIC_VERSION}
+
+
+def _anthropic_generar(system: str, prompt: str, api_key: str, model: str, interactivo: bool = False) -> str:
+    body = {"model": model, "max_tokens": _ANTHROPIC_MAX_TOKENS, "system": system,
+            "messages": [{"role": "user", "content": prompt}]}
+    reintentos = _REINTENTOS_INTERACTIVO if interactivo else _REINTENTOS
+    espera = _ESPERA_ENTRE_REINTENTOS_INTERACTIVO if interactivo else _ESPERA_ENTRE_REINTENTOS
+    try:
+        r = _post_con_reintentos(f"{ai_providers.PROVEEDORES['anthropic']['url']}/messages",
+                                 _anthropic_headers(api_key), body, timeout=60, reintentos=reintentos, espera=espera)
+    except httpx.HTTPStatusError as e:
+        raise _error_proveedor("Anthropic", e)
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con Anthropic: {e}")
+    texto = "".join(b.get("text", "") for b in (r.json().get("content") or []) if b.get("type") == "text").strip()
+    if not texto:
+        raise AiServiceError("Anthropic devolvió una respuesta vacía.")
+    return texto
+
+
+def _anthropic_generar_con_herramientas(messages: list[dict], tools: list[dict], api_key: str, model: str, system: str) -> dict:
+    body = {
+        "model": model, "max_tokens": _ANTHROPIC_MAX_TOKENS, "system": system, "messages": messages,
+        "tools": [{"name": t["name"], "description": t["description"], "input_schema": t["parameters"]} for t in tools],
+    }
+    try:
+        r = _post_con_reintentos(f"{ai_providers.PROVEEDORES['anthropic']['url']}/messages", _anthropic_headers(api_key), body,
+                                 timeout=60, reintentos=_REINTENTOS_INTERACTIVO, espera=_ESPERA_ENTRE_REINTENTOS_INTERACTIVO)
+    except httpx.HTTPStatusError as e:
+        raise _error_proveedor("Anthropic", e)
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con Anthropic: {e}")
+    bloques = r.json().get("content") or []
+    usos = [b for b in bloques if b.get("type") == "tool_use"]
+    if usos:
+        return {"tipo": "tool_calls",
+                "llamadas": [{"id": b.get("id"), "nombre": b.get("name"), "argumentos": b.get("input") or {}} for b in usos],
+                "mensaje_bruto": {"role": "assistant", "content": bloques}}
+    texto = "".join(b.get("text", "") for b in bloques if b.get("type") == "text").strip()
+    if not texto:
+        raise AiServiceError("Anthropic devolvió una respuesta vacía.")
+    return {"tipo": "texto", "contenido": texto}
+
+
+def _listar_modelos_anthropic(api_key: str) -> list[str]:
+    try:
+        r = httpx.get(f"{ai_providers.PROVEEDORES['anthropic']['url']}/models?limit=100", headers=_anthropic_headers(api_key), timeout=20)
+        r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise AiServiceError(f"Anthropic rechazó la petición: {e.response.text[:300]}")
+    except httpx.HTTPError as e:
+        raise AiServiceError(f"No se pudo conectar con Anthropic: {e}")
+    return sorted(m["id"] for m in (r.json().get("data") or []) if m.get("id"))
 
 
 # Proveedores que exponen el formato estándar de OpenAI
@@ -313,7 +386,7 @@ def _openai_compatible_generar(
     try:
         r = _post_con_reintentos(
             f"{base_url}/chat/completions",
-            {"Authorization": f"Bearer {api_key}"},
+            _bearer(api_key),
             body,
             timeout=60,
             reintentos=reintentos,
@@ -392,7 +465,7 @@ def _openai_compatible_generar_con_herramientas(
     try:
         r = _post_con_reintentos(
             f"{base_url}/chat/completions",
-            {"Authorization": f"Bearer {api_key}"},
+            _bearer(api_key),
             body, timeout=60,
             reintentos=_REINTENTOS_INTERACTIVO, espera=_ESPERA_ENTRE_REINTENTOS_INTERACTIVO,
         )
@@ -445,7 +518,7 @@ def _listar_modelos_gemini(api_key: str) -> list[str]:
 
 def _listar_modelos_openai_compatible(base_url: str, api_key: str, nombre: str) -> list[str]:
     try:
-        r = httpx.get(f"{base_url}/models", headers={"Authorization": f"Bearer {api_key}"}, timeout=20)
+        r = httpx.get(f"{base_url}/models", headers=_bearer(api_key), timeout=20)
         r.raise_for_status()
     except httpx.HTTPStatusError as e:
         raise AiServiceError(f"{nombre} rechazó la petición: {e.response.text[:300]}")
@@ -462,21 +535,31 @@ def _listar_modelos_openai_compatible(base_url: str, api_key: str, nombre: str) 
 _OLLAMA_CLOUD_BASE_URL = "https://ollama.com/v1"
 
 
-def listar_modelos(provider: str, api_key: str) -> list[str]:
-    """Modelos de chat disponibles para la key dada, según el proveedor.
+def _datos_proveedor(provider: str, base_url: str | None) -> tuple[dict, str]:
+    """(entrada del catálogo, URL efectiva). Falla con un mensaje claro si el proveedor no existe
+    o si uno personalizado no trae su URL."""
+    info = ai_providers.obtener(provider)
+    if info is None:
+        raise AiServiceError(f"Proveedor desconocido: {provider!r}")
+    url = ai_providers.url_efectiva(provider, base_url)
+    if info["tipo"] == "openai" and not url:
+        raise AiServiceError("Falta la URL base del proveedor (por ejemplo https://mi-servidor/v1).")
+    return info, url
 
-    Es lo que respalda el botón "Probar conexión": si esto no falla, la key
-    funciona, y de paso deja elegir el modelo de una lista real en vez de
-    escribirlo a mano y confiar en que el nombre exista.
-    """
-    if provider == "gemini":
+
+def listar_modelos(provider: str, api_key: str | None, base_url: str | None = None) -> list[str]:
+    """Modelos de chat disponibles para esa clave/URL: respalda «Probar conexión»
+    (si no falla, la conexión funciona) y deja elegir el modelo de una lista real."""
+    info, url = _datos_proveedor(provider, base_url)
+    if info["requiere_clave"] and not api_key:
+        raise AiServiceError("Falta la API key a probar.")
+    if info["tipo"] == "gemini":
         return _listar_modelos_gemini(api_key)
-    if provider == "ollama_cloud":
-        return _listar_modelos_openai_compatible(_OLLAMA_CLOUD_BASE_URL, api_key, "Ollama Cloud")
-    if provider in _PROVEEDORES_OPENAI_COMPATIBLE:
-        base_url, nombre = _PROVEEDORES_OPENAI_COMPATIBLE[provider]
-        return _listar_modelos_openai_compatible(base_url, api_key, nombre)
-    raise AiServiceError(f"Proveedor desconocido: {provider!r}")
+    if info["tipo"] == "anthropic":
+        return _listar_modelos_anthropic(api_key)
+    if info["tipo"] == "ollama":
+        return _listar_modelos_openai_compatible(_OLLAMA_CLOUD_BASE_URL, api_key, info["nombre"])
+    return _listar_modelos_openai_compatible(url, api_key, info["nombre"])
 
 
 def generar_respuesta(system: str, prompt: str, config: AiConfig, interactivo: bool = False) -> str:
@@ -484,20 +567,15 @@ def generar_respuesta(system: str, prompt: str, config: AiConfig, interactivo: b
 
     `interactivo=True` es el camino de una pregunta del Asistente en vivo -el
     admin está esperando en pantalla, así que reintenta menos y más rápido
-    (ver nota junto a `_REINTENTOS_INTERACTIVO`)-. Queda en False por defecto
-    para cualquier otro uso futuro de este generador que no tenga a nadie
-    esperando en pantalla.
-    """
-    if config.provider == "gemini":
+    (ver nota junto a `_REINTENTOS_INTERACTIVO`)-."""
+    info, url = _datos_proveedor(config.provider, getattr(config, "base_url", None))
+    if info["tipo"] == "gemini":
         return _gemini_generar(system, prompt, config.api_key, config.chat_model, interactivo=interactivo)
-    if config.provider == "ollama_cloud":
+    if info["tipo"] == "anthropic":
+        return _anthropic_generar(system, prompt, config.api_key, config.chat_model, interactivo=interactivo)
+    if info["tipo"] == "ollama":
         return _ollama_cloud_generar(system, prompt, config.api_key, config.chat_model, interactivo=interactivo)
-    if config.provider in _PROVEEDORES_OPENAI_COMPATIBLE:
-        base_url, nombre = _PROVEEDORES_OPENAI_COMPATIBLE[config.provider]
-        return _openai_compatible_generar(
-            system, prompt, config.api_key, config.chat_model, base_url, nombre, interactivo=interactivo,
-        )
-    raise AiServiceError(f"Proveedor desconocido: {config.provider!r}")
+    return _openai_compatible_generar(system, prompt, config.api_key, config.chat_model, url, info["nombre"], interactivo=interactivo)
 
 
 def _key_embeddings(config: AiConfig) -> str | None:
@@ -560,18 +638,61 @@ def _partir_en_fragmentos(texto: str, archivo: str) -> list[tuple[str | None, st
     return fragmentos
 
 
-def _archivos_a_indexar() -> list[str]:
-    """Rutas relativas al repo: README.md + todo docs/*.md (no las
-    traducciones .en.md/.pt.md: ver nota al principio del archivo)."""
+# Bitácoras de desarrollo: no son documentación de uso (y sus secciones enormes contienen
+# casi todas las palabras posibles, ensuciando los resultados).
+# Súbela cuando cambie QUÉ o CÓMO se indexa, para que el índice se reconstruya solo al actualizar.
+_VERSION_INDICE = 2
+_NO_INDEXAR = {"project-log.md"}
+_SUFIJO_IDIOMA = {"es": None, "en": ".en.md", "pt": ".pt.md"}
+
+
+def _archivos_a_indexar(idioma: str = "es") -> list[str]:
+    """Rutas relativas al repo de los .md de un idioma: README + docs/*.md (en `es`, los que no
+    llevan sufijo de idioma; en `en`/`pt`, los .en.md / .pt.md)."""
     raiz = _raiz_del_proyecto()
-    archivos = list(_ARCHIVOS_A_INDEXAR)
+    sufijo = _SUFIJO_IDIOMA[idioma]
+    readme = "README.md" if sufijo is None else f"README{sufijo}"
+    archivos = [readme] if (raiz / readme).is_file() else []
     docs_dir = raiz / "docs"
     if docs_dir.is_dir():
         for p in sorted(docs_dir.glob("*.md")):
-            if re.search(r"\.(en|pt)\.md$", p.name):
+            if p.name in _NO_INDEXAR:
                 continue
-            archivos.append(f"docs/{p.name}")
+            es_traduccion = bool(re.search(r"\.(en|pt)\.md$", p.name))
+            if sufijo is None and not es_traduccion:
+                archivos.append(f"docs/{p.name}")
+            elif sufijo is not None and p.name.endswith(sufijo):
+                archivos.append(f"docs/{p.name}")
     return archivos
+
+
+def _docs_del_panel() -> dict[str, dict[str, str]]:
+    """Artículos de la Documentación del propio panel (frontend/src/content/docs*.ts):
+    {titulo: {es, en, pt}}. Es la documentación más completa y actual de cada pantalla y viene en
+    los tres idiomas. Se lee el texto de los archivos fuente del repo, sin ejecutar nada."""
+    raiz = _raiz_del_proyecto()
+    contenido_dir = raiz / "frontend" / "src" / "content"
+    pagina = raiz / "frontend" / "src" / "pages" / "Documentacion.tsx"
+    if not contenido_dir.is_dir():
+        return {}
+    titulos: dict[str, str] = {}
+    if pagina.is_file():
+        for m in re.finditer(r"titulo:\s*(?:traducir\('([^']+)'\)|'([^']+)')[^\n]*contenido:\s*(DOC_\w+)", pagina.read_text(encoding="utf-8")):
+            titulos[m.group(3)] = m.group(1) or m.group(2)
+    salida: dict[str, dict[str, str]] = {}
+    for ts in sorted(contenido_dir.glob("docs*.ts")):
+        texto = ts.read_text(encoding="utf-8")
+        nombre = re.search(r"export const (DOC_\w+)", texto)
+        if not nombre:
+            continue
+        idiomas = {}
+        for idi in ("es", "en", "pt"):
+            m = re.search(rf"\b{idi}:\s*`(.*?)`(?:\.trim\(\))?\s*,?\s*(?:\n\s*(?:en|pt):|\n\}})", texto, re.DOTALL)
+            if m:
+                idiomas[idi] = m.group(1).replace("\\`", "`").replace("\\${", "${").replace("\\\\", "\\")
+        if idiomas:
+            salida[titulos.get(nombre.group(1), ts.stem.removeprefix("docs"))] = idiomas
+    return salida
 
 
 def reindexar_documentacion(db: Session, config: AiConfig) -> dict:
@@ -593,11 +714,10 @@ def reindexar_documentacion(db: Session, config: AiConfig) -> dict:
     procesados en vez de perderlos todos -y volver a pulsar "Reindexar" solo
     tiene que rehacer lo que falta, no todo de nuevo-.
     """
-    key_embeddings = _key_embeddings(config)
-    if not key_embeddings:
-        raise AiServiceError(
-            "Falta configurar la API key de Jina AI para poder buscar en la documentación."
-        )
+    # Sin clave de embeddings (lo normal ahora) se indexa solo para texto completo:
+    # instantáneo, local y sin segundo proveedor. Con una clave de Jina ya guardada
+    # (instalaciones anteriores) se siguen calculando los vectores.
+    key_embeddings = _key_embeddings(config) if config is not None else None
 
     if not _REINDEXANDO.acquire(blocking=False):
         raise AiServiceError(
@@ -607,98 +727,206 @@ def reindexar_documentacion(db: Session, config: AiConfig) -> dict:
 
     try:
         raiz = _raiz_del_proyecto()
-        archivos = _archivos_a_indexar()
+        panel = _docs_del_panel()
 
-        # Se borra y confirma aparte, antes de empezar: así, si la
-        # reindexación se corta enseguida (antes de terminar ni un solo
-        # archivo), esa eliminación por sí sola también se revierte -el
-        # índice viejo queda intacto en vez de vaciarse sin nada nuevo que
-        # lo reemplace-.
+        # Se borra y confirma aparte, antes de empezar: así, si la reindexación se corta enseguida,
+        # esa eliminación por sí sola también se revierte -el índice viejo queda intacto-.
         db.query(DocChunk).delete()
         db.commit()
 
         total = 0
+        archivos_total = 0
         saltados: list[str] = []
-        for rel in archivos:
-            ruta = raiz / rel
-            if not ruta.is_file():
-                continue
-            try:
-                texto = ruta.read_text(encoding="utf-8")
-            except OSError as e:
-                saltados.append(f"{rel}: {e}")
-                continue
 
-            for titulo, contenido in _partir_en_fragmentos(texto, rel):
+        def _guardar(idioma: str, fuente: str, titulo: str | None, contenido: str):
+            nonlocal total
+            embedding = None
+            if key_embeddings and idioma == "es":
                 try:
                     embedding = _jina_embed(contenido, key_embeddings, "retrieval.passage")
                 except AiServiceError as e:
-                    saltados.append(f"{rel} ({titulo or 'sin título'}): {e}")
+                    saltados.append(f"{fuente} ({titulo or 'sin título'}): {e}")
+                    return
+            chunk = DocChunk(source_file=fuente, idioma=idioma, heading=titulo, content=contenido, embedding=embedding)
+            db.add(chunk)
+            db.flush()  # necesario para poder calcular el tsvector por id
+            # El título pesa más que el cuerpo (A > B): una sección cuyo encabezado coincide con la
+            # pregunta es casi siempre la respuesta. Cada idioma usa su propio diccionario.
+            db.execute(
+                text(f"UPDATE doc_chunks SET tsv = setweight(to_tsvector('{_DICCIONARIO[idioma]}', coalesce(:titulo, '')), 'A') "
+                     f"|| setweight(to_tsvector('{_DICCIONARIO[idioma]}', :contenido), 'B') WHERE id = :id"),
+                {"titulo": titulo or "", "contenido": contenido, "id": chunk.id},
+            )
+            total += 1
+
+        for idioma in ("es", "en", "pt"):
+            for rel in _archivos_a_indexar(idioma):
+                ruta = raiz / rel
+                if not ruta.is_file():
                     continue
+                try:
+                    texto = ruta.read_text(encoding="utf-8")
+                except OSError as e:
+                    saltados.append(f"{rel}: {e}")
+                    continue
+                archivos_total += 1
+                for titulo, contenido in _partir_en_fragmentos(texto, rel):
+                    _guardar(idioma, rel, titulo, contenido)
+                db.commit()  # por archivo: una reindexación interrumpida no pierde lo ya hecho
 
-                chunk = DocChunk(source_file=rel, heading=titulo, content=contenido, embedding=embedding)
-                db.add(chunk)
-                db.flush()  # necesario para poder calcular el tsvector por id, mas abajo
-                db.execute(
-                    text("UPDATE doc_chunks SET tsv = to_tsvector('spanish', :contenido) WHERE id = :id"),
-                    {"contenido": contenido, "id": chunk.id},
-                )
-                total += 1
-
-            # Confirmado al cerrar cada archivo, no al final de todos: ver la
-            # nota de diseño de esta función.
+            # Documentación del panel, artículo por artículo, en ese idioma.
+            for articulo, textos in panel.items():
+                if idioma not in textos:
+                    continue
+                archivos_total += 1
+                fuente = f"Documentación del panel › {articulo}"
+                for titulo, contenido in _partir_en_fragmentos(textos[idioma], fuente):
+                    _guardar(idioma, fuente, titulo, contenido)
             db.commit()
 
         db.commit()
-        logger.info("Documentación reindexada: %d fragmentos de %d archivos", total, len(archivos))
-        return {"fragmentos": total, "archivos": len(archivos), "saltados": saltados}
+        logger.info("Documentación reindexada: %d fragmentos de %d archivos", total, archivos_total)
+        return {"fragmentos": total, "archivos": archivos_total, "saltados": saltados}
     finally:
         _REINDEXANDO.release()
 
 
 # --- Búsqueda híbrida y respuesta ---------------------------------------------
 
+_PALABRAS_VACIAS = {
+    "como", "cómo", "que", "qué", "cual", "cuál", "cuales", "cuáles", "para", "por", "con", "sin", "una", "uno", "unos", "unas",
+    "los", "las", "del", "que", "mas", "más", "muy", "esta", "este", "esto", "esa", "ese", "eso", "hay", "puedo", "puede",
+    "hacer", "quiero", "necesito", "donde", "dónde", "cuando", "cuándo", "sobre", "desde", "hasta", "son", "ser", "esta", "estoy",
+    "tiene", "tengo", "panel", "squidmanager", "squid", "favor", "gracias", "hola",
+}
+
+
+_VACIAS_EN = {"how", "what", "which", "where", "when", "can", "the", "and", "for", "with", "that", "this", "does", "are", "you", "your", "our", "from", "into", "have", "has", "not", "all", "any", "want", "need", "please", "panel", "squid", "squidmanager", "to", "do", "is", "it", "my", "of", "in", "on", "an", "a"}
+_VACIAS_PT = {"como", "qual", "quais", "onde", "quando", "para", "por", "com", "sem", "uma", "uns", "umas", "dos", "das", "nos", "nas", "que", "mais", "muito", "esta", "este", "isso", "esse", "tem", "posso", "pode", "fazer", "quero", "preciso", "sobre", "desde", "até", "são", "ser", "estou", "favor", "obrigado", "olá", "panel", "painel", "squid", "squidmanager"}
+
+
+def _consulta_or(pregunta: str, idioma: str = "es") -> str | None:
+    """Palabras significativas de la pregunta unidas con OR para to_tsquery. Con AND (websearch)
+    una pregunta en lenguaje natural casi nunca encuentra nada; con OR y ranking, sí."""
+    palabras = []
+    for w in re.findall(r"[a-záéíóúüñ0-9_]{3,}", pregunta.lower()):
+        vacias = _PALABRAS_VACIAS if idioma == "es" else (_VACIAS_EN if idioma == "en" else _VACIAS_PT)
+        if w not in vacias and w not in palabras:
+            palabras.append(w)
+    return " | ".join(palabras[:12]) or None
+
+
 def _buscar_fragmentos(db: Session, config: AiConfig, pregunta: str, top_n: int = 5) -> list[DocChunk]:
-    """Combina búsqueda semántica (embedding) y literal (texto completo de
+    """Fragmentos de la documentación más relacionados con la pregunta.
 
-    Postgres) — la primera encuentra fragmentos relacionados por significado
-    aunque no compartan palabras con la pregunta; la segunda encuentra
-    coincidencias exactas (nombres de ajustes, comandos) que un embedding
-    puede no priorizar. Se juntan los resultados de las dos, sin repetir.
+    Por texto completo de PostgreSQL (palabras de la pregunta unidas con OR, título con más
+    peso, ranking por cobertura): local, instantáneo y sin segundo proveedor. Si hay una clave de
+    embeddings guardada (instalaciones anteriores con Jina AI) se suma la búsqueda por significado.
     """
-    key_embeddings = _key_embeddings(config)
-    if not key_embeddings:
-        raise AiServiceError(
-            "Falta configurar la API key de Jina AI para poder buscar en la documentación."
-        )
-    embedding_pregunta = _jina_embed(pregunta, key_embeddings, "retrieval.query")
+    por_significado: list[DocChunk] = []
+    key_embeddings = _key_embeddings(config) if config is not None else None
+    if key_embeddings:
+        try:
+            embedding_pregunta = _jina_embed(pregunta, key_embeddings, "retrieval.query")
+            por_significado = (
+                db.query(DocChunk)
+                .filter(DocChunk.embedding.isnot(None), DocChunk.idioma == "es")
+                .order_by(DocChunk.embedding.cosine_distance(embedding_pregunta))
+                .limit(top_n)
+                .all()
+            )
+        except AiServiceError as e:
+            logger.warning("Búsqueda semántica no disponible, se usa solo texto completo: %s", e)
 
-    por_significado = (
-        db.query(DocChunk)
-        .order_by(DocChunk.embedding.cosine_distance(embedding_pregunta))
-        .limit(top_n)
-        .all()
-    )
+    idioma = _IDIOMA_ACTUAL.get()
 
-    por_texto = db.execute(
-        text(
-            "SELECT id FROM doc_chunks "
-            "WHERE tsv @@ websearch_to_tsquery('spanish', :q) "
-            "ORDER BY ts_rank(tsv, websearch_to_tsquery('spanish', :q)) DESC "
-            "LIMIT :n"
-        ),
-        {"q": pregunta, "n": top_n},
-    ).fetchall()
-    ids_texto = [row[0] for row in por_texto]
-    por_texto_objs = db.query(DocChunk).filter(DocChunk.id.in_(ids_texto)).all() if ids_texto else []
+    def _por_texto(idi: str, limite: int) -> list[DocChunk]:
+        consulta = _consulta_or(pregunta, idi)
+        if not consulta:
+            return []
+        filas = db.execute(
+            text(
+                f"SELECT id FROM doc_chunks WHERE idioma = :idi AND tsv @@ to_tsquery('{_DICCIONARIO[idi]}', :q) "
+                f"ORDER BY ts_rank_cd(tsv, to_tsquery('{_DICCIONARIO[idi]}', :q), 1) DESC, id LIMIT :n"
+            ),
+            {"q": consulta, "n": limite, "idi": idi},
+        ).fetchall()
+        ids = [r[0] for r in filas]
+        por_id = {c.id: c for c in db.query(DocChunk).filter(DocChunk.id.in_(ids)).all()} if ids else {}
+        return [por_id[i] for i in ids if i in por_id]   # conserva el orden del ranking
+
+    por_texto = _por_texto(idioma, top_n)
+    if idioma != "es" and len(por_texto) < 3:
+        # Parte de la documentación (la técnica) solo existe en español: el modelo la usa y
+        # responde en el idioma de la pregunta.
+        por_texto += _por_texto("es", top_n - len(por_texto))
 
     vistos: set[int] = set()
     combinados: list[DocChunk] = []
-    for chunk in por_significado + por_texto_objs:
+    for chunk in por_texto + por_significado:
         if chunk.id not in vistos:
             vistos.add(chunk.id)
             combinados.append(chunk)
     return combinados[:top_n]
+
+
+def _firma_documentacion() -> str:
+    """Huella de todo lo indexable (ruta, tamaño, fecha): cambia cuando cambia la documentación."""
+    import hashlib
+
+    raiz = _raiz_del_proyecto()
+    h = hashlib.sha256()
+    h.update(f"indice-v{_VERSION_INDICE}".encode())
+    rutas = {r for idi in ("es", "en", "pt") for r in _archivos_a_indexar(idi)}
+    carpeta = raiz / "frontend" / "src" / "content"
+    if carpeta.is_dir():
+        rutas |= {str(p.relative_to(raiz)) for p in carpeta.glob("docs*.ts")}
+    for rel in sorted(rutas):
+        p = raiz / rel
+        if p.is_file():
+            st = p.stat()
+            h.update(f"{rel}:{st.st_size}:{int(st.st_mtime)}".encode())
+    return h.hexdigest()
+
+
+def indexar_si_hace_falta() -> dict | None:
+    """Mantiene el índice de la documentación al día SIN intervención del admin: si no hay
+    fragmentos, o los archivos cambiaron desde la última indexación (por ejemplo tras una
+    actualización), se vuelve a indexar. Es un proceso local de un par de segundos. Con una clave
+    de embeddings guardada no se toca: reindexarla vaciaría los vectores ya calculados."""
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        config = db.query(AiConfig).first()
+        if config is not None and config.embedding_api_key:
+            return None
+        firma = _firma_documentacion()
+        guardada = db.execute(text("SELECT v FROM ru_state WHERE k = 'ai:docs_sig'")).scalar()
+        if guardada == firma and db.query(DocChunk).count() > 0:
+            return None
+        resultado = reindexar_documentacion(db, config)
+        db.execute(
+            text("INSERT INTO ru_state (k, v) VALUES ('ai:docs_sig', :v) ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v"),
+            {"v": firma},
+        )
+        db.commit()
+        return resultado
+    finally:
+        db.close()
+
+
+def start_doc_indexer() -> None:
+    """Indexa la documentación en segundo plano al arrancar (no bloquea el arranque)."""
+    def _run():
+        try:
+            r = indexar_si_hace_falta()
+            if r:
+                logger.info("Documentación del asistente indexada: %s fragmentos", r["fragmentos"])
+        except Exception as e:
+            logger.warning("No se pudo indexar la documentación del asistente: %s", e)
+
+    threading.Thread(target=_run, name="ai-doc-indexer", daemon=True).start()
 
 
 _SYSTEM_PROMPT = (
@@ -709,7 +937,9 @@ _SYSTEM_PROMPT = (
     "documentación del proyecto — no inventes pasos, comandos, ni nombres de "
     "botones o ajustes que no aparezcan ahí. No tenés acceso a la "
     "configuración real de este servidor ni podés ejecutar ninguna acción: "
-    "solo podés explicar cómo se usa el panel según su documentación."
+    "solo podés explicar cómo se usa el panel según su documentación. "
+    "Respondé siempre en el MISMO idioma en que está escrita la pregunta (español, inglés o portugués), "
+    "aunque los fragmentos estén en otro idioma."
 )
 
 # Saludos y frases sueltas sin pregunta real: sin esto, cada "hola" gasta una
@@ -751,7 +981,8 @@ _SYSTEM_PROMPT_AGENTICO = (
     "Respondé ÚNICAMENTE preguntas relacionadas con SquidManager, Squid y "
     "cómo administrar este panel. Si te preguntan algo sin relación con "
     "eso, decí con amabilidad que solo podés ayudar con SquidManager y no "
-    "respondas esa otra pregunta."
+    "respondas esa otra pregunta. Respondé siempre en el mismo idioma en que está escrita la pregunta "
+    "(español, inglés o portugués)."
 )
 
 
@@ -760,12 +991,14 @@ def preguntar_agentico(db: Session, config: AiConfig, pregunta: str) -> dict:
     servidor y proponer cambios -nunca aplicarlos-, ver ai_tools.py."""
     from app.services.ai_tools import TOOL_DEFS, ejecutar_herramienta
 
-    es_gemini = config.provider == "gemini"
-    if not es_gemini and config.provider not in _PROVEEDORES_OPENAI_COMPATIBLE:
+    info, url = _datos_proveedor(config.provider, getattr(config, "base_url", None))
+    if not info["agentico"]:
         raise AiServiceError(
             "El modo agéntico todavía no está disponible con este proveedor. "
-            "Probá con Gemini, Groq o NVIDIA NIM."
+            "Prueba con Anthropic, OpenAI, Gemini, Groq, OpenRouter u otro compatible con OpenAI."
         )
+    es_gemini = info["tipo"] == "gemini"
+    es_anthropic = info["tipo"] == "anthropic"
 
     herramientas_usadas: list[str] = []
     propuesta: dict | None = None
@@ -808,8 +1041,25 @@ def preguntar_agentico(db: Session, config: AiConfig, pregunta: str) -> dict:
                 for ll in resultado["llamadas"]
             ]
             contents.append({"role": "function", "parts": partes})
+    elif es_anthropic:
+        messages = [{"role": "user", "content": pregunta}]
+        for _ in range(_MAX_ITERACIONES_AGENTE):
+            resultado = _anthropic_generar_con_herramientas(
+                messages, TOOL_DEFS, config.api_key, config.chat_model, _SYSTEM_PROMPT_AGENTICO,
+            )
+            if resultado["tipo"] == "texto":
+                return {
+                    "respuesta": resultado["contenido"], "fuentes": [],
+                    "propuesta": propuesta, "herramientas_usadas": herramientas_usadas,
+                }
+            messages.append(resultado["mensaje_bruto"])
+            messages.append({"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": ll["id"],
+                 "content": json.dumps(_registrar_resultado(ll["nombre"], ll["argumentos"]), ensure_ascii=False)}
+                for ll in resultado["llamadas"]
+            ]})
     else:
-        base_url, nombre_prov = _PROVEEDORES_OPENAI_COMPATIBLE[config.provider]
+        base_url, nombre_prov = url, info["nombre"]
         messages = [
             {"role": "system", "content": _SYSTEM_PROMPT_AGENTICO},
             {"role": "user", "content": pregunta},
@@ -850,8 +1100,10 @@ def preguntar_agentico(db: Session, config: AiConfig, pregunta: str) -> dict:
     )
 
 
-def preguntar(db: Session, config: AiConfig, pregunta: str) -> dict:
-    if not config.enabled or not config.api_key:
+def preguntar(db: Session, config: AiConfig, pregunta: str, idioma: str = "es") -> dict:
+    _IDIOMA_ACTUAL.set(idioma if idioma in _DICCIONARIO else "es")
+    info = ai_providers.obtener(config.provider) or {}
+    if not config.enabled or (info.get("requiere_clave", True) and not config.api_key):
         raise AiServiceError("El asistente de IA no está activado.")
     if not config.chat_model:
         raise AiServiceError("Falta configurar el modelo de respuesta en Ajustes del asistente.")

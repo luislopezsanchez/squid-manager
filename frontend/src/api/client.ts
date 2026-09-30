@@ -231,10 +231,9 @@ export const api = {
   reindexarDocumentacion: () => request<any>('/ai/reindexar', { method: 'POST' }),
   preguntarAsistente: (pregunta: string) =>
     request<any>('/ai/preguntar', { method: 'POST', body: JSON.stringify({ pregunta }) }),
-  probarProveedorAi: (provider: string, api_key: string) =>
-    request<any>('/ai/probar-proveedor', { method: 'POST', body: JSON.stringify({ provider, api_key }) }),
-  probarEmbeddingsAi: (api_key: string) =>
-    request<any>('/ai/probar-embeddings', { method: 'POST', body: JSON.stringify({ api_key }) }),
+  listAiProviders: () => request<any[]>('/ai/proveedores'),
+  probarProveedorAi: (provider: string, api_key?: string, base_url?: string) =>
+    request<any>('/ai/probar-proveedor', { method: 'POST', body: JSON.stringify({ provider, api_key, base_url }) }),
 
   // Actualizaciones (solo instalación nativa): comprueba, aprueba/programa
   // y cancela una actualización contra el repositorio de GitHub del

@@ -7,6 +7,32 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Mejorado (Asistente de IA — Fase 9 del plan de mejora)
+
+- **Un solo proveedor, a elegir de una lista** (`GET /api/ai/proveedores`):
+  Anthropic (Claude), OpenAI, Gemini, Groq, OpenRouter, DeepSeek, Mistral, NVIDIA
+  NIM, Ollama Cloud, **Ollama en tu red** y **Personalizado (compatible con
+  OpenAI, con URL y clave propias)**: vLLM, LM Studio, LiteLLM, Azure… Anthropic
+  se habla por su API nativa (mensajes y herramientas). La clave es opcional para
+  Ollama en la red y los servicios propios que no la piden (no se manda
+  cabecera de autorización). «Probar conexión» lista los modelos reales del
+  proveedor elegido. La URL de un proveedor propio se valida (http/https, sin
+  usuario ni contraseña embebidos). Migración 0044 (`ai_config.base_url`).
+- **Se acabó el segundo servicio (Jina AI)**: la búsqueda en la documentación es
+  local, por texto completo de PostgreSQL (palabras de la pregunta unidas con OR,
+  título con más peso, ranking por cobertura): instantánea y sin enviar la
+  documentación a ningún tercero. Una instalación que ya tenía una clave de Jina
+  sigue pudiendo usarla. El modo agéntico funciona con todos los proveedores
+  salvo Ollama Cloud.
+- **La documentación se indexa sola**: al arrancar y cada vez que cambia (tras
+  actualizar), sin pulsar «Reindexar» ni necesitar ninguna clave. Ahora incluye la
+  **Documentación del propio panel** (los 29 artículos de cada pantalla) y las
+  versiones en inglés y portugués, y se busca en el idioma del panel (migración
+  0045, `doc_chunks.idioma`, con el diccionario de texto completo de cada idioma);
+  si en ese idioma hay pocos resultados se completa con el español y el modelo
+  responde en el idioma de la pregunta. Se excluye la bitácora de desarrollo
+  (`project-log.md`), cuyas secciones enormes ensuciaban los resultados.
+
 ### Añadido / Mejorado (backup, restauración y migración — Fase 8 del plan de mejora)
 
 - **Backup formato 2 (`.smbackup`)**: pensado para que lo exportado, importado en
