@@ -51,7 +51,7 @@ despliega una instancia de SquidManager por nodo (ver
 
 | | |
 |---|---|
-| **Última versión** | v0.24.9 ([CHANGELOG.md](CHANGELOG.md)) |
+| **Última versión** | v0.25.0 ([CHANGELOG.md](CHANGELOG.md)) |
 | **Probado con éxito en** | Ubuntu 24.04 LTS (Docker y nativo) y Ubuntu 22.04 / Debian 12 (nativo) |
 | **No soportado todavía** | Ubuntu 26.04 (Python 3.14 sin binarios de `psycopg`/`pydantic-core` aún) |
 | **Docker** | Docker 20.10+, Docker Compose v2+ y `git` (para clonar el repo — no viene preinstalado en toda imagen "mínima" de Ubuntu) |

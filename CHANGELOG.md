@@ -5,7 +5,7 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [Sin publicar]
+## [0.25.0] - Sin publicar (rama pruebas)
 
 ### Mejorado (segunda revisión del usuario)
 
