@@ -7,6 +7,7 @@ import RequiereAplicar from '../components/RequiereAplicar'
 import Modal from '../components/Modal'
 import { IconSpinner } from '../components/Icons'
 import { normalizarNombreAcl } from '../utils/aclNames'
+import { confirmar } from '../components/ConfirmDialog'
 
 interface Group {
   id: number
@@ -246,7 +247,7 @@ export default function Groups() {
   }
 
   const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`¿Eliminar el grupo "${name}"?`)) return
+    if (!(await confirmar(`¿Eliminar el grupo "${name}"?`))) return
     try {
       await api.deleteGroup(id)
       notificarCambioPendiente()

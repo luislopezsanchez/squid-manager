@@ -9,6 +9,7 @@ import Modal from '../components/Modal'
 import Pagination from '../components/Pagination'
 import { usePaginacion } from '../hooks/usePaginacion'
 import { normalizarNombreAcl } from '../utils/aclNames'
+import { confirmar } from '../components/ConfirmDialog'
 
 interface Acl {
   id: number
@@ -81,7 +82,14 @@ function AclFormModal({ form, setForm, editingId, onClose, onSubmit, error }: {
           <label htmlFor="acl-value" className="field-label block mb-1.5">{traducir("Valor")}</label>
           <input id="acl-value" type="text" value={form.value} onChange={e => setForm({ ...form, value: e.target.value })}
             placeholder={selectedType?.example || ''} className="input font-mono text-sm" required />
-          {selectedType && <p className="text-xs text-ink-3 mt-1">Ejemplo: {selectedType.example}</p>}
+          {selectedType && (
+            <p className="text-xs text-ink-3 mt-1">
+              {traducir("Ejemplo:")} <span className="font-mono">{selectedType.example}</span>
+              {' · '}
+              <a href="/documentacion?articulo=acls" target="_blank" rel="noopener noreferrer"
+                 className="text-brand-600 hover:underline">{traducir("¿Cómo se escribe el valor? Ver documentación de ACLs")}</a>
+            </p>
+          )}
         </div>
         <div className="mt-4">
           <label htmlFor="acl-description" className="field-label block mb-1.5">{traducir("Descripción (opcional)")}</label>
@@ -126,7 +134,7 @@ function BulkUploadModal({ bulkAclName, setBulkAclName, bulkType, setBulkType, b
         <div className="grid grid-cols-1 gap-4">
           <div>
             <label htmlFor="acl-bulk-name" className="field-label block mb-1.5">{traducir("Nombre de la ACL")}</label>
-            <input id="acl-bulk-name" type="text" value={bulkAclName} onChange={e => setBulkAclName(e.target.value)}
+            <input id="acl-bulk-name" type="text" value={bulkAclName} onChange={e => setBulkAclName(normalizarNombreAcl(e.target.value))}
               placeholder={traducir("ej: blocklist_publicidad")} className="input" required autoFocus />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -270,7 +278,7 @@ export default function ACLs() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(traducir("¿Eliminar esta ACL?"))) return
+    if (!(await confirmar(traducir("¿Eliminar esta ACL?")))) return
     try {
       await api.deleteAcl(id)
       notificarCambioPendiente()

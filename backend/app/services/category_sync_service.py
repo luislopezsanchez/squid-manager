@@ -188,17 +188,41 @@ _PRIMERA_ESPERA = 5 * 60
 _INTERVALO_SYNC = 24 * 60 * 60
 
 
+def sync_ronda(db) -> dict:
+    """Sincroniza todas las categorías con `sync_url` y, si eso dejó cambios
+    sin aplicar que ANTES no había, los aplica solos.
+
+    Motivo: la sincronización diaria marcaba «pendiente» el botón de Aplicar
+    cambios sin que el admin hubiera tocado nada, y no quedaba claro si era
+    un cambio propio olvidado o un efecto de la sincronización. Ahora, si el
+    panel estaba limpio, la sincronización se aplica sola y el botón sigue
+    limpio. Si ya había cambios pendientes del admin, NO se aplican (serían
+    cambios suyos, aún sin revisar, aplicados a sus espaldas): quedan como
+    estaban, junto con lo sincronizado.
+    """
+    from app.models.acl import Acl
+    from app.services.config_state import is_dirty
+    from app.services.squid_service import apply_squid_config
+
+    estaba_pendiente = is_dirty()
+    categorias = db.query(Acl).filter(Acl.sync_url.isnot(None)).all()
+    resultados = [sync_one(db, acl) for acl in categorias]
+
+    aplicado = None
+    if not estaba_pendiente and is_dirty():
+        aplicado = apply_squid_config(db)
+        if aplicado.get("status") == "error":
+            logger.error("La sincronización de categorías no se pudo aplicar: %s", aplicado.get("message"))
+    return {"categorias": len(resultados), "aplicado": aplicado}
+
+
 def _sync_loop():
     time.sleep(_PRIMERA_ESPERA)
     while True:
         try:
             db = SessionLocal()
             try:
-                from app.models.acl import Acl
-
-                categorias = db.query(Acl).filter(Acl.sync_url.isnot(None)).all()
-                for acl in categorias:
-                    sync_one(db, acl)
+                sync_ronda(db)
             finally:
                 db.close()
         except Exception as e:

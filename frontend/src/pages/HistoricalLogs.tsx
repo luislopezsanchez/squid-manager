@@ -1,9 +1,11 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useCallback, type MouseEvent } from 'react'
-import { IconChevronLeft, IconChevronRight, IconDownload, IconArchive, IconTrash } from '../components/Icons'
+import { IconChevronLeft, IconChevronRight, IconDownload, IconArchive, IconTrash, IconSpinner } from '../components/Icons'
 import { api, getToken, canWrite } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
+import { confirmar } from '../components/ConfirmDialog'
+import { useDescarga } from '../utils/descarga'
 
 interface MesIndice {
   year: number
@@ -111,12 +113,12 @@ export default function HistoricalLogs() {
     setFUser(''); setFStatus(''); setFDomain(''); setFDenied(false)
   }
 
-  const handleDeleteMes = (e: MouseEvent, m: MesIndice) => {
+  const handleDeleteMes = async (e: MouseEvent, m: MesIndice) => {
     // stopPropagation: la tarjeta entera es un <button> que selecciona el
     // mes -sin esto, tocar "eliminar" también lo seleccionaba primero.
     e.stopPropagation()
     const nombre = `${NOMBRES_MES[m.month]} ${m.year}`
-    if (!confirm(traducir("¿Eliminar el log histórico de {mes}? Esto borra ese mes por completo -el .gz consolidado y su resumen- y no se puede deshacer.", { mes: nombre }))) return
+    if (!(await confirmar(traducir("¿Eliminar el log histórico de {mes}? Esto borra ese mes por completo -el .gz consolidado y su resumen- y no se puede deshacer.", { mes: nombre })))) return
 
     const clave = `${m.year}-${m.month}`
     setBorrando(clave)
@@ -130,26 +132,20 @@ export default function HistoricalLogs() {
       .finally(() => setBorrando(null))
   }
 
+  const { descargando, descargar, etiqueta: etiquetaDescarga } = useDescarga(showToast)
+
   const handleExport = () => {
     if (!seleccion) return
-    const token = getToken()
     const url = api.exportHistoricalLogs(seleccion.year, seleccion.month, {
       format: exportFormat,
       user: fUser || undefined, status: fStatus ? Number(fStatus) : undefined,
       domain: fDomain || undefined, denied: fDenied,
     })
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.blob())
-      .then(blob => {
-        const u = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = u
-        a.download = `squid-logs-${seleccion.year}${String(seleccion.month).padStart(2, '0')}.${exportFormat}`
-        a.click()
-        URL.revokeObjectURL(u)
-        showToast(`Mes exportado (${exportFormat.toUpperCase()})`, 'success')
-      })
-      .catch(() => showToast(traducir("Error exportando el mes"), 'error'))
+    descargar(
+      url,
+      `squid-logs-${seleccion.year}${String(seleccion.month).padStart(2, '0')}.${exportFormat}`,
+      `Mes exportado (${exportFormat.toUpperCase()})`,
+    )
   }
 
   const mesActivo = seleccion ? meses.find(m => m.year === seleccion.year && m.month === seleccion.month) : null
@@ -273,8 +269,9 @@ export default function HistoricalLogs() {
                   <option value="csv">CSV</option>
                   <option value="ndjson">NDJSON</option>
                 </select>
-                <button onClick={handleExport} className="btn btn-primary btn-sm shrink-0" title={traducir("Exporta el mes completo, no solo la página visible")}>
-                  <IconDownload className="w-4 h-4" />
+                <button onClick={handleExport} disabled={descargando} className="btn btn-primary btn-sm shrink-0" title={traducir("Exporta el mes completo, no solo la página visible")}>
+                  {descargando ? <IconSpinner className="w-4 h-4 animate-spin" /> : <IconDownload className="w-4 h-4" />}
+                  {descargando && <span className="text-xs">{etiquetaDescarga}</span>}
                 </button>
               </div>
             </div>

@@ -7,6 +7,32 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Mejorado (interfaz — Fase 3 del plan de mejora)
+
+- **Confirmaciones con el diseño de la plataforma** en lugar del `confirm()`
+  del navegador (`components/ConfirmDialog.tsx`, `await confirmar(...)`):
+  eliminar ACL, regla, grupo, usuario, categoría, delay pool, administrador,
+  nodo, log histórico, cortar conexiones y sincronizar un nodo. Rojo si la
+  acción es destructiva (se deduce del texto), foco en «Cancelar», Escape
+  cancela, en los tres idiomas.
+- **Descargas con feedback real** (`utils/descarga.ts`): Registros e Histórico
+  muestran «Preparando la descarga…», el avance en bytes y un error legible;
+  antes el botón parecía muerto y una respuesta de error (404/500) se guardaba
+  como si fuera el archivo.
+- **Auditoría exportable** (`GET /api/audit/export`): CSV (con BOM para Excel)
+  o NDJSON, con los filtros de la pantalla más rango de fechas, en streaming.
+- **La sincronización diaria de categorías ya no deja «Aplicar cambios»
+  pendiente**: si el panel estaba limpio la aplica sola; si el admin tenía
+  cambios propios sin aplicar, no los toca.
+- «Acciones» de las tablas se alinea de verdad a la derecha (la regla
+  `.table-panel thead th` le ganaba por especificidad a `text-right`).
+- ACLs: enlace a la documentación junto al ejemplo del campo «Valor» (la
+  Documentación abre un artículo con `?articulo=<slug>`), y el nombre de una
+  ACL cargada desde archivo se normaliza al escribir, como ya hacía el resto.
+- Reglas de acceso: las 4 reglas predefinidas se explican una por una, en
+  lenguaje llano, en un bloque plegable.
+- Dashboard: «Top usuarios» muestra 6.
+
 ### Mejorado (rendimiento, plan de mejora — Fases 1 y 2)
 
 - **Agregados por hora del `access.log` (`rollup_service.py`, migración 0040).**

@@ -207,6 +207,8 @@ h1, h2, h3, h4 {
     background: var(--brand-50);
     border-bottom: 1px solid var(--line);
   }
+  .table-panel thead th.text-right { text-align: right; }
+  .table-panel thead th.text-center { text-align: center; }
   .table-panel tbody td {
     @apply px-5 py-3;
     color: var(--ink-2);

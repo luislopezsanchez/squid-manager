@@ -6,6 +6,7 @@ import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
 import Modal from '../components/Modal'
 import { normalizarNombreAcl } from '../utils/aclNames'
+import { confirmar } from '../components/ConfirmDialog'
 
 interface DelayPool {
   id: number
@@ -358,7 +359,7 @@ export default function DelayPools() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(traducir("¿Eliminar este delay pool?"))) return
+    if (!(await confirmar(traducir("¿Eliminar este delay pool?")))) return
     try {
       await api.deleteDelayPool(id)
       notificarCambioPendiente()

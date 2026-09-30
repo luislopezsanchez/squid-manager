@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast'
 import { formatRate, formatNumber, formatBytes } from '../utils/format'
 import { IconRefresh, IconEdit, IconTrash, IconGlobe, IconUpload, IconClose, IconBan, IconLink, IconInfo, IconAlert } from '../components/Icons'
 import { LoadingState, ErrorState } from '../components/AsyncState'
+import { confirmar } from '../components/ConfirmDialog'
 
 // "squidmanager" (otra instancia con login) o "squid_basico" (Squid puro,
 // sin panel -se lee su Cache Manager directo). Ver MonitoredNode.tipo.
@@ -940,7 +941,7 @@ export default function PanelCentral() {
   }
 
   const handleDelete = async (node: Node) => {
-    if (!confirm(traducir('¿Eliminar el nodo "{n}"?', { n: node.name }))) return
+    if (!(await confirmar(traducir('¿Eliminar el nodo "{n}"?', { n: node.name })))) return
     try {
       await api.deleteCentralNode(node.id)
       showToast(traducir("Nodo eliminado"))
@@ -976,10 +977,10 @@ export default function PanelCentral() {
   }
 
   const handleSync = async (node: Node) => {
-    if (!confirm(traducir(
+    if (!(await confirmar(traducir(
       'Esto SOBRESCRIBE la configuración de "{n}" con la de este servidor (ACLs, reglas, usuarios, grupos, cuotas...). ¿Continuar?',
       { n: node.name },
-    ))) return
+    )))) return
     setSyncingId(node.id)
     try {
       const resultado = await api.syncCentralNode(node.id)

@@ -1,9 +1,11 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useCallback } from 'react'
-import { IconChevronLeft, IconChevronRight, IconDownload } from '../components/Icons'
+import { IconChevronLeft, IconChevronRight, IconDownload, IconSpinner } from '../components/Icons'
 import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState } from '../components/AsyncState'
+import { confirmar } from '../components/ConfirmDialog'
+import { useDescarga } from '../utils/descarga'
 
 interface LogEntry {
   timestamp: number
@@ -68,7 +70,7 @@ export default function LogsViewer() {
 
   const handleDisconnect = async (ip: string) => {
     if (disconnecting) return
-    if (!confirm(traducir("¿Terminar las conexiones abiertas de {ip}? Esto no le bloquea la navegación futura, solo corta lo que ya está en curso.", { ip }))) return
+    if (!(await confirmar(traducir("¿Terminar las conexiones abiertas de {ip}? Esto no le bloquea la navegación futura, solo corta lo que ya está en curso.", { ip })))) return
     setDisconnecting(ip)
     try {
       const result = await api.disconnectClient(ip)
@@ -115,25 +117,19 @@ export default function LogsViewer() {
   // hecha para el log nativo de Squid, como AWStats o SARG).
   const EXPORT_EXT: Record<typeof exportFormat, string> = { csv: 'csv', ndjson: 'ndjson', raw: 'log' }
 
+  const { descargando, descargar, etiqueta: etiquetaDescarga } = useDescarga(showToast)
+
   const handleExport = () => {
-    const token = getToken()
     const url = api.exportLogs({
       format: exportFormat,
       user: fUser || undefined, status: fStatus ? Number(fStatus) : undefined,
       domain: fDomain || undefined, denied: fDenied,
     })
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.blob())
-      .then(blob => {
-        const u = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = u
-        a.download = `squid-logs-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.${EXPORT_EXT[exportFormat]}`
-        a.click()
-        URL.revokeObjectURL(u)
-        showToast(`Logs exportados (${exportFormat.toUpperCase()})`, 'success')
-      })
-      .catch(() => showToast(traducir("Error exportando logs"), 'error'))
+    descargar(
+      url,
+      `squid-logs-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.${EXPORT_EXT[exportFormat]}`,
+      `Logs exportados (${exportFormat.toUpperCase()})`,
+    )
   }
 
   const handleResetFilters = () => {
@@ -175,10 +171,11 @@ export default function LogsViewer() {
               <option value="ndjson">{traducir("NDJSON (SIEM / ELK / Splunk)")}</option>
               <option value="raw">{traducir("Log nativo de Squid (.log)")}</option>
             </select>
-            <button onClick={handleExport}
-              className="px-4 py-2 text-white text-sm font-medium inline-flex items-center gap-1.5 h-full"
+            <button onClick={handleExport} disabled={descargando}
+              className="px-4 py-2 text-white text-sm font-medium inline-flex items-center gap-1.5 h-full disabled:opacity-70"
               style={{ backgroundColor: '#0B497C' }}>
-              <IconDownload className="w-4 h-4" />{traducir("Exportar")}</button>
+              {descargando ? <IconSpinner className="w-4 h-4 animate-spin" /> : <IconDownload className="w-4 h-4" />}
+              {descargando ? etiquetaDescarga : traducir("Exportar")}</button>
           </div>
         </div>
       </div>

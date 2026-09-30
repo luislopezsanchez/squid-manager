@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
+import { confirmar } from '../components/ConfirmDialog'
 
 interface AdminUser {
   id: number
@@ -68,7 +69,7 @@ export default function Admins() {
   }
 
   const handleDelete = async (admin: AdminUser) => {
-    if (!confirm(`¿Eliminar el administrador "${admin.username}"?`)) return
+    if (!(await confirmar(`¿Eliminar el administrador "${admin.username}"?`))) return
     try {
       await api.deleteAdmin(admin.id)
       showToast(traducir("Administrador eliminado"), 'success')

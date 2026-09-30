@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { traducir, idiomaActual } from '../i18n'
 import {
   IconFile, IconEye, IconActivity, IconShield, IconGlobe, IconTool, IconInfo,
@@ -99,7 +100,11 @@ const GRUPOS: Grupo[] = [
 ]
 
 export default function Documentacion() {
-  const [seleccion, setSeleccion] = useState<Articulo | null>(null)
+  const [params] = useSearchParams()
+  const slugInicial = params.get('articulo')
+  const [seleccion, setSeleccion] = useState<Articulo | null>(
+    () => GRUPOS.flatMap(g => g.articulos).find(a => a.slug === slugInicial) ?? null,
+  )
 
   return (
     <div className="p-6 md:p-8">

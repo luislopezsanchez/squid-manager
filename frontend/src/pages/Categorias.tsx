@@ -9,6 +9,7 @@ import { usePaginacion } from '../hooks/usePaginacion'
 import { IconRefresh, IconUpload, IconEdit, IconTrash } from '../components/Icons'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import { normalizarNombreAcl } from '../utils/aclNames'
+import { confirmar } from '../components/ConfirmDialog'
 
 interface Categoria {
   id: number
@@ -293,7 +294,7 @@ export default function Categorias() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(traducir("¿Eliminar esta categoría?"))) return
+    if (!(await confirmar(traducir("¿Eliminar esta categoría?")))) return
     try {
       await api.deleteAcl(id)
       notificarCambioPendiente()

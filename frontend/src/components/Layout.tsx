@@ -1,6 +1,7 @@
 import { traducir, cambiarIdioma, idiomaActual, IDIOMAS, type Idioma } from '../i18n'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
+import { ConfirmHost } from './ConfirmDialog'
 import { clearToken, api, canWrite, isSuperadmin, getRole } from '../api/client'
 import {
   IconDashboard, IconUsers, IconTag, IconRules, IconGauge, IconLink, IconGroups,
@@ -569,6 +570,7 @@ export default function Layout() {
           </div>
         )}
         <Outlet />
+        <ConfirmHost />
       </main>
 
       {/* ---------- Aviso emergente ---------- */}

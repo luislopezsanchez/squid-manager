@@ -333,7 +333,7 @@ export default function Dashboard() {
     // de tiempo que confunda -cada métrica usa la ventana que le conviene.
     Promise.all([
       api.getDashboard(),
-      api.getTopUsers(10, '24h', 'bytes'),
+      api.getTopUsers(6, '24h', 'bytes'),
       api.getTopDomains(10, false, '24h', domainSort),
       api.getTopDomains(10, true, '24h'),
       api.getIpsCompartidas(4, '24h'),

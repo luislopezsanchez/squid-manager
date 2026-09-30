@@ -11,6 +11,7 @@ import { normalizarUsername } from '../utils/usernames'
 import Pagination from '../components/Pagination'
 import { usePaginacion } from '../hooks/usePaginacion'
 import { TAMANO_UNITS, VELOCIDAD_UNITS, PERIODO_LABELS, detectarUnidad } from '../utils/quotaUnits'
+import { confirmar } from '../components/ConfirmDialog'
 
 interface LocalUser {
   source: 'local'
@@ -706,7 +707,7 @@ export default function ProxyUsers() {
 
   const handleDelete = async (u: LocalUser) => {
     if (isPending(u)) return
-    if (!confirm(traducir("¿Eliminar este usuario?"))) return
+    if (!(await confirmar(traducir("¿Eliminar este usuario?")))) return
     setRowPending(u, true)
     showToast(traducir("Eliminando… puede tardar unos segundos (reinicia Squid)"), 'info')
     try {

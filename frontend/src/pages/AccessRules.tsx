@@ -1,11 +1,12 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
-import { IconUsers, IconGripVertical, IconChevronUp, IconChevronDown } from '../components/Icons'
+import { IconUsers, IconGripVertical, IconChevronUp, IconChevronDown, IconShield } from '../components/Icons'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
 import Modal from '../components/Modal'
+import { confirmar } from '../components/ConfirmDialog'
 
 interface AccessRule {
   id: number
@@ -174,7 +175,7 @@ export default function AccessRules() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(traducir("¿Eliminar esta regla?"))) return
+    if (!(await confirmar(traducir("¿Eliminar esta regla?")))) return
     try {
       await api.deleteAccessRule(id)
       notificarCambioPendiente()
@@ -270,15 +271,27 @@ export default function AccessRules() {
         <ErrorState onRetry={loadRules} />
       ) : (
         <div className="space-y-3">
-          <div className="bg-line-soft rounded-xl p-4 border border-line">
-            <h3 className="text-sm font-medium text-ink-3 mb-2">{traducir("Reglas predefinidas (siempre activas):")}</h3>
-            <div className="space-y-1 text-sm font-mono text-ink-3">
-              <div>{traducir("http_access deny !Safe_ports")}</div>
-              <div>{traducir("http_access deny CONNECT !SSL_ports")}</div>
-              <div>{traducir("http_access allow localhost manager")}</div>
-              <div>{traducir("http_access deny manager")}</div>
+          <details className="bg-line-soft rounded-xl border border-line group">
+            <summary className="cursor-pointer select-none p-4 flex items-center gap-2 text-sm font-medium text-ink-2">
+              <IconShield className="w-4 h-4 text-ink-3" />
+              {traducir("Protecciones básicas de Squid (siempre activas)")}
+              <span className="ml-auto text-xs font-normal text-ink-3 group-open:hidden">{traducir("Ver qué hacen")}</span>
+            </summary>
+            <div className="px-4 pb-4 text-[13px] text-ink-3 space-y-3">
+              <p>{traducir("Squid las evalúa siempre primero, antes de tus reglas. Protegen al proxy de usos peligrosos y no se pueden quitar ni reordenar; tus reglas actúan sobre lo que estas dejan pasar.")}</p>
+              {[
+                ['http_access deny !Safe_ports', "Bloquea las peticiones a puertos que no son de navegación web normal. Solo deja pasar 80, 443, 21, 70, 210, 280, 488, 591 y 1025-65535. Evita que el proxy se use para llegar a servicios internos por puertos de sistema (22 SSH, 25 correo, 3306 base de datos...)."],
+                ['http_access deny CONNECT !SSL_ports', "Los túneles HTTPS (método CONNECT) solo se permiten hacia el puerto 443. Sin esto, cualquiera con acceso al proxy podría abrir un túnel hacia cualquier puerto, por ejemplo un SSH externo."],
+                ['http_access allow localhost manager', "Las estadísticas internas de Squid (el «Cache Manager», que usa este panel para mostrar el estado del caché) solo se pueden consultar desde el propio servidor."],
+                ['http_access deny manager', "Cualquier otro equipo que intente leer esas estadísticas internas es rechazado."],
+              ].map(([regla, explicacion]) => (
+                <div key={regla}>
+                  <div className="font-mono text-ink-2">{regla}</div>
+                  <div>{traducir(explicacion)}</div>
+                </div>
+              ))}
             </div>
-          </div>
+          </details>
 
           {rules.length > 0 && (
             <input

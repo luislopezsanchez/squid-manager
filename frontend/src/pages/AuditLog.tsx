@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
-import { IconChevronLeft, IconChevronRight } from '../components/Icons'
+import { IconChevronLeft, IconChevronRight, IconDownload, IconSpinner } from '../components/Icons'
+import { useDescarga } from '../utils/descarga'
 
 interface AuditEntry {
   id: number
@@ -56,6 +57,18 @@ export default function AuditLog() {
   const [offset, setOffset] = useState(0)
   const limit = 50
   const { showToast, ToastContainer } = useToast()
+  const { descargando, descargar, etiqueta: etiquetaDescarga } = useDescarga(showToast)
+  const [exportFormat, setExportFormat] = useState<'csv' | 'ndjson'>('csv')
+  const [desde, setDesde] = useState('')
+  const [hasta, setHasta] = useState('')
+
+  const handleExport = () => {
+    const url = api.exportAuditUrl({
+      format: exportFormat, entity: filterEntity || undefined, action: filterAction || undefined,
+      desde: desde || undefined, hasta: hasta || undefined,
+    })
+    descargar(url, `auditoria-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.${exportFormat}`, traducir('Auditoría exportada'))
+  }
 
   const loadAudit = () => {
     let url = `/audit/?limit=${limit}&offset=${offset}`
@@ -147,6 +160,24 @@ export default function AuditLog() {
           <option value="import">{traducir("Importar")}</option>
           <option value="restore">{traducir("Restaurar")}</option>
         </select>
+        <div className="flex items-center gap-2 ml-auto flex-wrap">
+          <label className="text-xs text-ink-3">{traducir("Desde")}
+            <input type="date" value={desde} onChange={e => setDesde(e.target.value)} className="input text-sm ml-1.5 w-auto" />
+          </label>
+          <label className="text-xs text-ink-3">{traducir("Hasta")}
+            <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} className="input text-sm ml-1.5 w-auto" />
+          </label>
+          <select value={exportFormat} onChange={e => setExportFormat(e.target.value as 'csv' | 'ndjson')}
+            className="px-3 py-2 border border-line rounded-lg bg-white text-sm" aria-label={traducir("Formato de exportación")}>
+            <option value="csv">CSV</option>
+            <option value="ndjson">NDJSON</option>
+          </select>
+          <button onClick={handleExport} disabled={descargando} className="btn btn-primary"
+            title={traducir("Descarga el registro con los filtros y fechas elegidos, no solo la página visible")}>
+            {descargando ? <IconSpinner className="w-4 h-4 animate-spin" /> : <IconDownload className="w-4 h-4" />}
+            {descargando ? etiquetaDescarga : traducir("Exportar")}
+          </button>
+        </div>
       </div>
 
       {/* Tabla */}

@@ -338,6 +338,15 @@ export const api = {
   // Audit
   listAudit: (limit = 100, offset = 0) => request<any>(`/audit/?limit=${limit}&offset=${offset}`),
   auditStats: () => request<any>('/audit/stats'),
+  exportAuditUrl: (params: { format?: 'csv' | 'ndjson'; entity?: string; action?: string; desde?: string; hasta?: string } = {}) => {
+    const qs = new URLSearchParams()
+    qs.append('format', params.format ?? 'csv')
+    if (params.entity) qs.append('entity', params.entity)
+    if (params.action) qs.append('action', params.action)
+    if (params.desde) qs.append('desde', params.desde)
+    if (params.hasta) qs.append('hasta', params.hasta)
+    return `${API_BASE}/audit/export?${qs.toString()}`
+  },
 
   // Métricas.
   //
