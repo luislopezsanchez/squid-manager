@@ -36,6 +36,8 @@ import secrets
 import time
 from dataclasses import dataclass, field
 
+from app.services import squid_import_extras as extras
+
 from app.services.squid_names import (
     NAME_PATTERN,
     RESERVED_NAMES,
@@ -44,6 +46,7 @@ from app.services.squid_names import (
     validate_value,
     validate_acl_names,
     known_acl_names,
+    validar_lista_dominios,
 )
 
 # --- Tipos de ACL: qué se importa solo, qué necesita el camino ya soportado -
@@ -248,8 +251,11 @@ class ItemAcl:
     name: str
     type: str
     value: str
-    estado: str  # "importar" | "ya_existe" | "no_soportado" | "invalida"
+    estado: str  # "importar" | "ya_existe" | "no_soportado" | "invalida" | "alias"
     motivo: str = ""
+    # Lista grande de dominios leída de un archivo: se carga como ACL de archivo.
+    lista: list[str] | None = None
+    origen: str = ""  # archivo(s) del que salió el valor
 
 
 @dataclass
@@ -285,6 +291,19 @@ class ItemParentProxy:
 
 
 @dataclass
+class ItemUsuario:
+    username: str
+    estado: str  # "importar" | "ya_existe" | "sin_credencial"
+    motivo: str = ""
+    htpasswd_hash: str | None = None
+    hash_formato: str = ""
+    digest_ha1: str | None = None
+    digest_realm: str | None = None
+    habilitado: bool = True
+    archivos: list = field(default_factory=list)
+
+
+@dataclass
 class Hallazgo:
     directiva: str
     archivo: str
@@ -299,6 +318,16 @@ class ResultadoAnalisis:
     settings: list[ItemSetting] = field(default_factory=list)
     delay_pools: list[ItemDelayPool] = field(default_factory=list)
     parent_proxy: ItemParentProxy | None = None
+    usuarios: list[ItemUsuario] = field(default_factory=list)
+    extra_safe_ports: list[str] = field(default_factory=list)
+    extra_ssl_ports: list[str] = field(default_factory=list)
+    never_direct: bool = False
+    direct_domains: list[str] = field(default_factory=list)
+    esquema_auth: str | None = None
+    realm_auth: str | None = None
+    archivos_usuarios: list[str] = field(default_factory=list)
+    archivos_lista: list[str] = field(default_factory=list)
+    notas: list[str] = field(default_factory=list)
     no_soportadas: list[Hallazgo] = field(default_factory=list)
     desconocidas: list[Hallazgo] = field(default_factory=list)
     includes_faltantes: list[str] = field(default_factory=list)
@@ -306,7 +335,12 @@ class ResultadoAnalisis:
     def resumen(self) -> dict:
         return {
             "acls_a_importar": sum(1 for a in self.acls if a.estado == "importar"),
-            "acls_ignoradas": sum(1 for a in self.acls if a.estado != "importar"),
+            "acls_ignoradas": sum(1 for a in self.acls if a.estado not in ("importar", "alias")),
+            "acls_alias": sum(1 for a in self.acls if a.estado == "alias"),
+            "usuarios_a_importar": sum(1 for u in self.usuarios if u.estado == "importar"),
+            "usuarios_sin_credencial": sum(1 for u in self.usuarios if u.estado == "sin_credencial"),
+            "usuarios_ya_existen": sum(1 for u in self.usuarios if u.estado == "ya_existe"),
+            "puertos_extra": len(self.extra_safe_ports) + len(self.extra_ssl_ports),
             "reglas_a_importar": sum(1 for r in self.reglas if r.estado == "importar"),
             "reglas_ignoradas": sum(1 for r in self.reglas if r.estado != "importar"),
             "settings_a_importar": len(self.settings),
@@ -332,6 +366,8 @@ def analizar(
     principal: str,
     acl_names_existentes: set[str],
     acl_names_conocidos: set[str],
+    usuarios_existentes: set[str] | None = None,
+    ldap_habilitado: bool = False,
 ) -> ResultadoAnalisis:
     """Analiza (sin escribir nada) uno o más archivos subidos.
 
@@ -348,6 +384,11 @@ def analizar(
     acls_de_este_import: dict[str, ItemAcl] = {}
     delay_class: dict[int, int] = {}
     delay_params: dict[int, str] = {}
+    # Archivos que acompañan al squid.conf (listas de ACL, usuarios...), por nombre.
+    companeros = {extras.basename(n): t for n, t in archivos.items() if n != principal}
+    aliases: dict[str, str] = {}          # ACL del origen -> ACL integrada equivalente
+    usados_como_lista: set[str] = set()
+    always_direct: list[tuple[str, str]] = []
 
     for d in directivas:
         if d.nombre == "acl":
@@ -359,8 +400,29 @@ def analizar(
                 continue
             name, acl_type, value = m.group(1), m.group(2), m.group(3).strip()
 
+            if name in ("SSL_ports", "Safe_ports") and acl_type == "port":
+                # La base del panel ya define estos dos nombres, pero quien migra suele
+                # haberles sumado puertos propios (rsync, webmin...): sin ellos, el
+                # tráfico que antes pasaba empieza a rechazarse.
+                base = extras.BASE_SSL_PORTS if name == "SSL_ports" else extras.BASE_SAFE_PORTS
+                destino = resultado.extra_ssl_ports if name == "SSL_ports" else resultado.extra_safe_ports
+                for pto in extras.puertos_extra(value, base):
+                    if pto not in destino:
+                        destino.append(pto)
+                continue
+
             if name in INTERNAL_ACLS or name.startswith("sni_"):
                 continue  # ya la define la plantilla; no es un hallazgo, es lo esperado
+
+            if acl_type == "proxy_auth" and value.strip().upper() == "REQUIRED":
+                # «cualquier usuario autenticado» es la ACL integrada `authenticated`:
+                # las reglas que la usaban se reescriben para apuntar a ella.
+                aliases[name] = "authenticated"
+                item = ItemAcl(name, acl_type, value, "alias",
+                               "equivale a «authenticated» (cualquier usuario autenticado), que el panel ya trae: las reglas que la usaban se importan apuntando a esa")
+                acls_de_este_import[name] = item
+                resultado.acls.append(item)
+                continue
 
             if name in acls_de_este_import:
                 # Squid acumula valores de ACLs repetidas con el mismo nombre.
@@ -392,7 +454,23 @@ def analizar(
             elif name in acl_names_existentes:
                 item = ItemAcl(name, acl_type, value, "ya_existe", "ya hay una ACL con ese nombre en SquidManager")
             else:
-                item = ItemAcl(name, acl_type, value, "importar")
+                rv = extras.resolver_valor_acl(acl_type, value, companeros)
+                usados_como_lista.update(rv.archivos)
+                origen = ", ".join(rv.archivos)
+                for a_ in rv.archivos:
+                    if a_ not in resultado.archivos_lista:
+                        resultado.archivos_lista.append(a_)
+                if rv.problema:
+                    item = ItemAcl(name, acl_type, value, "no_soportado", rv.problema, origen=origen)
+                elif rv.lista is not None:
+                    validos, rechazados = validar_lista_dominios(rv.lista)
+                    motivo = f"lista de {len(validos)} dominios leída de «{origen}»; se carga como ACL de archivo"
+                    if rechazados:
+                        motivo += f" ({len(rechazados)} líneas no válidas se omiten)"
+                    item = ItemAcl(name, acl_type, f"({len(validos)} dominios)", "importar", motivo, lista=validos, origen=origen)
+                else:
+                    motivo = f"{rv.entradas} entradas leídas de «{origen}»" if origen else ""
+                    item = ItemAcl(name, acl_type, rv.valor, "importar", motivo, origen=origen)
 
             acls_de_este_import[name] = item
             resultado.acls.append(item)
@@ -406,6 +484,11 @@ def analizar(
                 ))
                 continue
             action, acl_names = m.group(1).lower(), m.group(2).strip()
+            if aliases:
+                acl_names = " ".join(
+                    ("!" if t.startswith("!") else "") + aliases.get(t.lstrip("!"), t.lstrip("!"))
+                    for t in acl_names.split()
+                )
 
             if acl_names in REGLAS_BASE_REDUNDANTES:
                 continue  # ya la genera la plantilla; no hace falta duplicarla
@@ -464,6 +547,22 @@ def analizar(
             resultado.parent_proxy = ItemParentProxy(host, http_port, username, password, estado, motivo)
             continue
 
+        if d.nombre == "never_direct":
+            if re.match(r"^allow\s+all$", d.resto, re.IGNORECASE):
+                resultado.never_direct = True
+            else:
+                resultado.no_soportadas.append(Hallazgo(
+                    "never_direct", d.archivo, d.linea,
+                    "solo se importa «never_direct allow all» (todo por el proxy padre); una condición por ACL no tiene equivalente",
+                ))
+            continue
+
+        if d.nombre == "always_direct":
+            m = RULE_ACTION_RE.match(d.resto)
+            if m:
+                always_direct.append((m.group(1).lower(), m.group(2).strip()))
+            continue
+
         if d.nombre in DIRECTIVA_A_SETTING:
             resultado.settings.append(ItemSetting(DIRECTIVA_A_SETTING[d.nombre], d.resto.strip()))
             continue
@@ -476,6 +575,19 @@ def analizar(
             if mapeo:
                 resultado.settings.append(ItemSetting(mapeo[0], mapeo[1]))
                 continue
+            m_realm = re.match(r"^digest\s+realm\s+(.+)$", d.resto)
+            if m_realm:
+                resultado.realm_auth = m_realm.group(1).strip()
+                continue
+            m_prog = re.match(r"^(basic|digest)\s+program\b", d.resto)
+            if m_prog:
+                # El esquema que declara el squid.conf (el primero, si hay varios).
+                resultado.esquema_auth = resultado.esquema_auth or m_prog.group(1)
+                continue
+            m_ch = re.match(r"^digest\s+children\s+(\d+)", d.resto)
+            if m_ch:
+                resultado.settings.append(ItemSetting("auth_children", m_ch.group(1)))
+                continue
             resultado.no_soportadas.append(Hallazgo(
                 d.nombre, d.archivo, d.linea, DIRECTIVAS_NO_SOPORTADAS["auth_param"],
             ))
@@ -487,12 +599,119 @@ def analizar(
             ))
             continue
 
-        resultado.desconocidas.append(Hallazgo(d.nombre, d.archivo, d.linea, "directiva no reconocida"))
+        if d.nombre in extras.DIRECTIVAS_SQUID_CONOCIDAS:
+            resultado.no_soportadas.append(Hallazgo(
+                d.nombre, d.archivo, d.linea,
+                MOTIVOS_ESPECIFICOS.get(d.nombre, "es una directiva de Squid sin equivalente en el panel: no se conserva; "
+                                                   "si la necesitas, revisa si el valor por defecto de Squid te sirve"),
+            ))
+            continue
+
+        resultado.desconocidas.append(Hallazgo(d.nombre, d.archivo, d.linea, "no es una directiva de Squid que este importador conozca"))
 
     for pool_num, pool_class in delay_class.items():
         resultado.delay_pools.append(ItemDelayPool(pool_class, delay_params.get(pool_num, "")))
 
+    _resolver_salida_directa(resultado, always_direct, acls_de_este_import, companeros)
+    _resolver_usuarios(resultado, companeros, usados_como_lista, usuarios_existentes or set(), ldap_habilitado)
+    _ajustes_derivados(resultado)
     return resultado
+
+
+def _resolver_salida_directa(resultado, always_direct, acls_de_este_import, companeros) -> None:
+    """`always_direct allow <ACL de dominios>` -> «Dominios que van directo» del
+    proxy padre. Lo que no se puede expresar así (por IP, por protocolo, con
+    deny) se informa."""
+    for accion, nombres in always_direct:
+        if accion != "allow":
+            resultado.no_soportadas.append(Hallazgo(
+                "always_direct", "", 0,
+                f"«always_direct deny {nombres}» no tiene equivalente: el proxy padre solo admite una lista de dominios que van directo"))
+            continue
+        for nombre in nombres.split():
+            item = acls_de_este_import.get(nombre.lstrip("!"))
+            if nombre.startswith("!") or item is None or item.type not in extras.TIPOS_DOMINIO:
+                tipo = f" ({item.type})" if item else ""
+                resultado.no_soportadas.append(Hallazgo(
+                    "always_direct", "", 0,
+                    f"«always_direct allow {nombre}»{tipo}: solo se convierten las ACL de dominios de destino; esta condición no se conserva "
+                    "(añade a mano las redes internas a «Dominios que van directo» del proxy padre si hace falta)"))
+                continue
+            dominios = item.lista if item.lista is not None else item.value.split()
+            for dom in dominios:
+                if dom not in resultado.direct_domains:
+                    resultado.direct_domains.append(dom)
+
+
+def _resolver_usuarios(resultado, companeros, usados_como_lista, existentes, ldap_habilitado) -> None:
+    creds, archivos_usr, realms = extras.leer_usuarios(companeros, usados_como_lista)
+    if not creds:
+        return
+    resultado.archivos_usuarios = archivos_usr
+    realm = extras.elegir_realm(resultado.realm_auth, realms)
+    descartadas = extras.fijar_realm(creds, realm)
+
+    con_ha1 = sum(1 for c in creds.values() if c.digest_ha1)
+    con_hash = sum(1 for c in creds.values() if c.htpasswd_hash)
+    esquema = resultado.esquema_auth or ("digest" if con_ha1 > con_hash else "basic")
+    if esquema == "digest" and ldap_habilitado:
+        resultado.notas.append("Este SquidManager tiene LDAP activo y Digest solo autentica usuarios locales: se mantiene el esquema actual "
+                               "y los usuarios se importan con su hash de Basic si lo tienen.")
+        esquema = "basic"
+    resultado.esquema_auth = esquema
+    resultado.realm_auth = realm if esquema == "digest" else resultado.realm_auth
+    if descartadas:
+        resultado.notas.append(f"{descartadas} línea(s) de usuarios de otro realm de Digest se descartaron: la clave lleva el realm dentro y solo sirve con «{realm}».")
+
+    for nombre in sorted(creds):
+        c = creds[nombre]
+        if nombre in existentes:
+            resultado.usuarios.append(ItemUsuario(nombre, "ya_existe", "ya hay un usuario con ese nombre", archivos=c.archivos))
+            continue
+        tiene = bool(c.digest_ha1) if esquema == "digest" else bool(c.htpasswd_hash)
+        base = dict(htpasswd_hash=c.htpasswd_hash, hash_formato=c.hash_formato, digest_ha1=c.digest_ha1,
+                    digest_realm=c.digest_realm, archivos=c.archivos)
+        if tiene:
+            resultado.usuarios.append(ItemUsuario(nombre, "importar", **base))
+        else:
+            falta = "clave de Digest" if esquema == "digest" else "hash de Basic"
+            resultado.usuarios.append(ItemUsuario(
+                nombre, "sin_credencial",
+                f"solo tiene {'contraseña de Basic' if esquema == 'digest' else 'clave de Digest'} y el esquema elegido ({esquema}) necesita su {falta}: "
+                "se importa DESHABILITADO; restablece su contraseña para activarlo",
+                habilitado=False, **base))
+
+
+def _ajustes_derivados(resultado) -> None:
+    """Ajustes que se deducen de lo leído (esquema, realm, puertos): se listan
+    junto al resto para que el admin los vea antes de aplicar."""
+    if resultado.esquema_auth and resultado.usuarios:
+        resultado.settings.append(ItemSetting("proxy_auth_scheme", resultado.esquema_auth))
+        if resultado.esquema_auth == "digest" and resultado.realm_auth:
+            resultado.settings = [x for x in resultado.settings if x.key != "auth_realm"]
+            resultado.settings.append(ItemSetting("auth_realm", resultado.realm_auth))
+    if resultado.extra_safe_ports:
+        resultado.settings.append(ItemSetting("extra_safe_ports", " ".join(resultado.extra_safe_ports)))
+    if resultado.extra_ssl_ports:
+        resultado.settings.append(ItemSetting("extra_ssl_ports", " ".join(resultado.extra_ssl_ports)))
+
+
+# Motivos concretos para directivas conocidas que el panel no replica.
+MOTIVOS_ESPECIFICOS = {
+    "http_reply_access": "las reglas sobre la respuesta (http_reply_access) no existen en el panel; si solo era «allow all», ya es el comportamiento por defecto",
+    "icp_access": "ICP/HTCP (cachés hermanas) no se usa en el panel; no se conserva",
+    "cache_swap_low": "umbral de limpieza de la caché: Squid usa su valor por defecto (90)",
+    "cache_swap_high": "umbral de limpieza de la caché: Squid usa su valor por defecto (95)",
+    "logfile_rotate": "la rotación de logs la hace logrotate del sistema, no Squid",
+    "half_closed_clients": "opción interna de conexiones: Squid usa su valor por defecto",
+    "mail_from": "correo de los avisos de Squid: el panel envía sus avisos por Notificaciones/SMTP",
+    "ftp_passive": "FTP a través del proxy no se gestiona desde el panel",
+    "error_directory": "las páginas de error propias no se importan: el panel muestra las suyas en el idioma elegido",
+    "delay_access": "se reconstruye a partir de delay_pools/delay_class/delay_parameters; revisa el «Aplica a» de cada regla en Ancho de banda",
+    "cache_peer_access": "el acceso por ACL a cada proxy padre no tiene equivalente; el panel usa un solo padre para todo el tráfico (salvo los dominios directos)",
+    "read_timeout": "tiempo de espera de lectura: Squid usa su valor por defecto",
+    "connect_timeout": "tiempo de espera de conexión: Squid usa su valor por defecto",
+}
 
 
 # --- Cache en memoria del análisis, para no volver a subir los archivos ----
@@ -540,16 +759,24 @@ def aplicar(db, resultado: ResultadoAnalisis) -> dict:
     from app.models.delay_pool import DelayPool
     from app.models.parent_proxy import ParentProxy
 
-    detalle = {"acls": 0, "reglas": 0, "settings": 0, "delay_pools": 0, "parent_proxy": False, "avisos": []}
+    detalle = {"acls": 0, "reglas": 0, "settings": 0, "delay_pools": 0, "parent_proxy": False, "usuarios": 0, "avisos": []}
 
     for item in resultado.acls:
         if item.estado != "importar":
             continue
         nombre = validate_name(item.name, "ACL")
         tipo = validate_acl_type(item.type)
-        valor = validate_value(item.value)
-        db.add(Acl(name=nombre, type=tipo, value=valor,
-                    description="Importado de squid.conf", enabled=True))
+        if item.lista is not None:
+            from app.services.squid_service import aplicar_lista_dominios
+            aplicar_lista_dominios(
+                db, nombre, tipo, item.lista, "reemplazar",
+                description="Importado de squid.conf", is_category=False,
+                admin_id=None, admin_username="Importación de squid.conf",
+            )
+        else:
+            valor = validate_value(item.value)
+            db.add(Acl(name=nombre, type=tipo, value=valor,
+                        description="Importado de squid.conf", enabled=True))
         detalle["acls"] += 1
 
     db.flush()
@@ -566,6 +793,11 @@ def aplicar(db, resultado: ResultadoAnalisis) -> dict:
         detalle["reglas"] += 1
 
     for item in resultado.settings:
+        if item.key in ("extra_safe_ports", "extra_ssl_ports"):
+            if not all(extras._PUERTO_RE.match(t) for t in item.value.split()):
+                raise ValueError(f"Puertos no válidos en «{item.key}»: {item.value}")
+        if item.key == "proxy_auth_scheme" and item.value not in ("basic", "digest", "none"):
+            continue
         valor = validate_value(item.value, field=f"valor de «{item.key}»") if item.value else item.value
         existente = db.query(SquidSetting).filter(SquidSetting.key == item.key).first()
         if existente:
@@ -594,6 +826,9 @@ def aplicar(db, resultado: ResultadoAnalisis) -> dict:
         config.username = validate_value(p.username, field="usuario del proxy padre") if p.username else None
         config.password = p.password
         config.auth_method = "fixed"
+        config.never_direct = bool(resultado.never_direct)
+        if resultado.direct_domains:
+            config.direct_domains = "\n".join(validate_value(x, field="dominio directo") for x in resultado.direct_domains)
         # Se importa DESACTIVADO a propósito: activar un proxy padre sin
         # probarlo primero puede cortar toda la salida a Internet. El admin
         # lo prueba (Proxy padre > Probar) y lo activa a mano.
@@ -604,6 +839,8 @@ def aplicar(db, resultado: ResultadoAnalisis) -> dict:
             "antes de activarlo: activarlo sin probar puede cortar toda la "
             "navegación."
         )
+
+    detalle["usuarios"] = _aplicar_usuarios(db, resultado, detalle)
 
     if resultado.no_soportadas:
         detalle["avisos"].append(
@@ -622,3 +859,48 @@ def aplicar(db, resultado: ResultadoAnalisis) -> dict:
         )
 
     return detalle
+
+
+def _aplicar_usuarios(db, resultado, detalle) -> int:
+    """Crea los usuarios leídos de los archivos htpasswd/htdigest con las
+    credenciales que traían, para que sigan entrando con su contraseña de
+    siempre. Nadie recibe una contraseña nueva ni se guarda ninguna en claro."""
+    from app.models.proxy_user import ProxyUser
+    from app.services.auth_service import get_password_hash
+    from app.services.squid_service import realm_actual, write_digest_file, write_passwd_file
+    import re as _re
+
+    pendientes = [u for u in resultado.usuarios if u.estado in ("importar", "sin_credencial")]
+    if not pendientes:
+        return 0
+    db.flush()
+    realm = realm_actual(db)
+    n = 0
+    for u in pendientes:
+        if not _re.match(r"^[A-Za-z0-9._-]{1,64}$", u.username):
+            detalle["avisos"].append(f"El usuario «{u.username}» tiene caracteres no admitidos y no se importó.")
+            continue
+        if db.query(ProxyUser).filter(ProxyUser.username == u.username).first():
+            continue
+        usa_ha1 = bool(u.digest_ha1 and u.digest_realm)
+        db.add(ProxyUser(
+            username=u.username,
+            # La contraseña real no se conoce (solo su hash): el hash interno del panel
+            # es aleatorio y no sirve para entrar; la autenticación del proxy usa los
+            # hashes importados.
+            password_hash=get_password_hash(secrets.token_urlsafe(24)),
+            htpasswd_hash=f"{u.username}:{u.htpasswd_hash}" if u.htpasswd_hash else None,
+            digest_ha1=u.digest_ha1 if usa_ha1 else None,
+            digest_ha1_realm=u.digest_realm if usa_ha1 else None,
+            enabled=u.habilitado,
+        ))
+        n += 1
+    db.flush()
+    write_passwd_file(db)
+    write_digest_file(db, realm)
+    sin_cred = sum(1 for u in pendientes if u.estado == "sin_credencial")
+    if sin_cred:
+        detalle["avisos"].append(
+            f"{sin_cred} usuario(s) se importaron DESHABILITADOS por no tener credencial para el esquema {resultado.esquema_auth}: "
+            "restablece su contraseña en Usuarios para activarlos.")
+    return n

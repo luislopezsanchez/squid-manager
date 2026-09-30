@@ -416,6 +416,53 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
 }
 
 
+import re as _re
+
+from app.i18n_migracion import NUEVAS as _NUEVAS
+
+for _idioma, _tr in _NUEVAS.items():
+    TRADUCCIONES.setdefault(_idioma, {}).update(_tr)
+
+_PLANTILLAS_CACHE: dict[str, list] = {}
+
+
+def _plantillas(idioma: str) -> list:
+    """Claves con partes variables ({nombre}) convertidas en expresiones regulares,
+    para reconocer un mensaje ya formateado y reinsertar esas partes en su traducción."""
+    if idioma not in _PLANTILLAS_CACHE:
+        lista = []
+        for clave, destino in TRADUCCIONES.get(idioma, {}).items():
+            nombres = _re.findall(r"\{(\w+)\}", clave)
+            if not nombres:
+                continue
+            patron = _re.escape(clave)
+            for n in nombres:
+                patron = patron.replace(_re.escape("{" + n + "}"), "(.*?)", 1)
+            lista.append((_re.compile(patron, _re.DOTALL), destino, nombres))
+        # Las plantillas más largas (más específicas) primero.
+        lista.sort(key=lambda t: -len(t[0].pattern))
+        _PLANTILLAS_CACHE[idioma] = lista
+    return _PLANTILLAS_CACHE[idioma]
+
+
+def traducir_dinamico(texto: str, idioma: str) -> str:
+    """Como `traducir`, pero también reconoce mensajes con partes variables
+    (nombres de archivo, cantidades...) que el código arma con f-strings."""
+    if idioma == IDIOMA_POR_DEFECTO or not isinstance(texto, str):
+        return texto
+    exacto = TRADUCCIONES.get(idioma, {}).get(texto)
+    if exacto is not None:
+        return exacto
+    for patron, destino, nombres in _plantillas(idioma):
+        m = patron.fullmatch(texto)
+        if m:
+            try:
+                return destino.format(**dict(zip(nombres, m.groups())))
+            except (KeyError, IndexError):
+                return texto
+    return texto
+
+
 def idioma_de_cabecera(accept_language: str | None) -> str:
     """Idioma pedido por el cliente, o espanol si no pide ninguno conocido.
 

@@ -115,6 +115,13 @@ def update_setting(
         if not valido:
             raise HTTPException(400, detail=mensaje)
 
+    # Puertos extra de Safe_ports / SSL_ports (p. ej. migrados de otro Squid):
+    # lista de puertos o rangos separados por espacio.
+    if data.key in ("extra_safe_ports", "extra_ssl_ports"):
+        for t in data.value.split():
+            if not re.fullmatch(r"\d{1,5}(-\d{1,5})?", t) or not all(1 <= int(x) <= 65535 for x in t.split("-")):
+                raise HTTPException(400, detail=f"«{t}» no es un puerto o rango válido (ej: 873 o 8000-8100).")
+
     # true/false explícito: sin esto un typo ("flase", "verdadero") pasaba la
     # sanitización genérica y el generador lo interpretaba como "true" (activa
     # la interceptación de HTTPS) por defecto silenciosamente — justo lo

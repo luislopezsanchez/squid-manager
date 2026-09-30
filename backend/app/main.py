@@ -18,7 +18,7 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.i18n import idioma_de_cabecera, traducir
+from app.i18n import idioma_de_cabecera, traducir, traducir_dinamico
 from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
 from app.routes import modules as modules_routes
@@ -408,7 +408,7 @@ async def traducir_errores(request: Request, exc: StarletteHTTPException):
         idioma = idioma_de_cabecera(request.headers.get("accept-language"))
         exc = StarletteHTTPException(
             status_code=exc.status_code,
-            detail=traducir(exc.detail, idioma),
+            detail=traducir_dinamico(exc.detail, idioma),
             headers=getattr(exc, "headers", None),
         )
     return await http_exception_handler(request, exc)

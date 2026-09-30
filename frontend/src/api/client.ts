@@ -449,16 +449,25 @@ export const api = {
     formData.append('file', file)
     return request<any>('/backup/restore', { method: 'POST', body: formData })
   },
-  downloadSquidConf: () => `${API_BASE}/backup/squid-conf`,
-  analyzeSquidConf: (files: File[], principal: string) => {
+  exportBackupV2Url: () => `${API_BASE}/backup/export-v2`,
+  restoreBackupV2: (file: File, contrasena: string, modo: 'combinar' | 'reemplazar', simular: boolean, aplicar: boolean) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (contrasena) formData.append('contrasena', contrasena)
+    formData.append('modo', modo)
+    formData.append('simular', String(simular))
+    formData.append('aplicar', String(aplicar))
+    return request<any>('/backup/restore-v2', { method: 'POST', body: formData })
+  },
+  analyzeSquidConf: (files: File[]) => {
     const formData = new FormData()
     for (const f of files) formData.append('files', f)
-    formData.append('principal', principal)
     return request<any>('/backup/analyze-squid-conf', { method: 'POST', body: formData })
   },
-  applySquidImport: (token: string) => {
+  applySquidImport: (token: string, importarUsuarios = true) => {
     const formData = new FormData()
     formData.append('token', token)
+    formData.append('importar_usuarios', String(importarUsuarios))
     return request<any>('/backup/apply-squid-import', { method: 'POST', body: formData })
   },
 

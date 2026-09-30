@@ -1,3 +1,4 @@
+import re
 """Generador de configuración de Squid usando Jinja2.
 
 Este servicio toma los datos de la BD y genera el archivo squid.conf completo.
@@ -74,6 +75,15 @@ def _motivo_de_regla(rule, names: list[str]) -> str:
     texto = texto.replace("\n", " ").replace("\r", " ").replace('"', "'")
     texto = _ascii_seguro(texto)
     return texto[:200]
+
+
+_PUERTO = re.compile(r"^\d{1,5}(-\d{1,5})?$")
+
+
+def _puertos(valor) -> list[str]:
+    """Puertos/rangos extra de Safe_ports o SSL_ports, ya filtrados: lo que no
+    es un puerto válido se descarta en vez de llegar al squid.conf."""
+    return [t for t in (valor or "").split() if _PUERTO.match(t) and all(1 <= int(x) <= 65535 for x in t.split("-"))]
 
 
 def generate_squid_config(db: Session, kerberos=None) -> str:
@@ -384,6 +394,8 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
         cache_mgr_email=cache_mgr_email,
         settings=settings,
         delay_pools=delay_descargas,
+        extra_safe_ports=_puertos(settings.get("extra_safe_ports")),
+        extra_ssl_ports=_puertos(settings.get("extra_ssl_ports")),
         ldap=ldap,
         groups=groups,
         hay_grupos_ldap=hay_grupos_ldap,

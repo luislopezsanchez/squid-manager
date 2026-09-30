@@ -7,6 +7,59 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Añadido / Mejorado (backup, restauración y migración — Fase 8 del plan de mejora)
+
+- **Backup formato 2 (`.smbackup`)**: pensado para que lo exportado, importado en
+  OTRO SquidManager, lo deje idéntico. El formato anterior (JSON) perdía sin
+  avisar los hashes de contraseña de los usuarios, el contenido de las listas
+  de dominios, el proxy padre, Kerberos, syslog, SMTP, notificaciones, cuotas de
+  grupo y los límites de ancho de banda nuevos. Ahora el export es **dirigido por
+  tabla** (cada entidad declara sus columnas secretas y de estado; una columna
+  nueva entra sola en el backup), empaquetado en un ZIP con `manifest.json`
+  (versión, conteos y sha256 de cada parte: un archivo dañado se detecta),
+  `config.json`, las listas grandes de dominios (`acl_lists/*.gz`) y, solo si se
+  elige una contraseña de protección, `secrets.enc` (hashes de usuarios, claves de
+  LDAP/SMTP/Telegram/IA y keytab) cifrado con Fernet y una clave derivada con
+  scrypt. Sin contraseña no viaja ningún secreto. No viajan a propósito los
+  administradores del panel, la auditoría, el consumo de cuotas ni el `instance_id`
+  del Panel central.
+- **Restaurar con vista previa y todo-o-nada** (`POST /api/backup/restore-v2`):
+  «Revisar qué cambiaría» ejecuta el mismo camino que la restauración real dentro
+  de una transacción y la deshace, así el informe (crear / actualizar / eliminar
+  por tipo) es exactamente lo que pasaría. Dos modos: *dejar idéntico al backup*
+  (elimina lo que no esté en él) y *combinar*. Validado de extremo a extremo:
+  un backup con contraseña restaurado en una base vacía y exportado de nuevo dio
+  un `config.json` idéntico y los mismos 174 hashes de usuarios y el mismo
+  secreto de LDAP. Se siguen pudiendo restaurar los `.json` antiguos (con aviso).
+- **Se quita la descarga de `squid.conf`**: solo se exportan backups de
+  SquidManager.
+- **Importar un Squid que no usa SquidManager, mucho más completo** (probado con la
+  carpeta real de un Squid con 58 usuarios htpasswd, 22 htdigest y 7 listas de
+  ACL): se sube el `squid.conf` con sus archivos (sueltos o en un `.zip` /
+  `.tar.gz`) y las rutas del servidor de origen (`/etc/squid/lista`) se
+  resuelven por nombre de archivo. Antes una ACL `src "/etc/squid/ip_moviles"` se
+  importaba con la ruta como valor (rota). Ahora:
+  - Las **listas de ACL en archivo** se leen (sin comentarios ni líneas vacías,
+    conservando opciones como `-i`); las grandes de dominios pasan a ACL de archivo.
+  - **Los usuarios conservan su contraseña**: se leen los htpasswd (bcrypt, Apache
+    MD5 `$apr1$`, SHA-1, crypt DES/MD5/SHA) y los htdigest (HA1 del realm activo).
+    El helper de autenticación (`squid/auth_helper.py`) ahora verifica esos
+    formatos además de bcrypt. El esquema (Basic/Digest) y el realm se deducen del
+    `squid.conf`; los usuarios sin credencial para ese esquema se importan
+    DESHABILITADOS y se dice cuáles.
+  - `acl x proxy_auth REQUIRED` se reconoce como la ACL integrada `authenticated`
+    y las reglas que la usaban se reescriben (antes se perdían).
+  - Los **puertos propios** añadidos a `Safe_ports` / `SSL_ports` (rsync, webmin…)
+    se conservan en los ajustes `extra_safe_ports` / `extra_ssl_ports`.
+  - `never_direct allow all` y `always_direct allow <dominios>` pasan al proxy
+    padre (todo por el padre; dominios que van directo).
+  - Las directivas se clasifican en tres cajones: importada, **conocida de Squid
+    pero sin equivalente** (con el motivo) y desconocida de verdad; antes 19 de 19
+    directivas de un squid.conf real salían como «no reconocidas».
+  - El informe es traducible (es/en/pt) también en los mensajes con partes
+    variables (`traducir_dinamico`).
+- Dependencia nueva: ninguna (Recharts y openpyxl llegaron en fases anteriores).
+
 ### Añadido (módulos opcionales — Fase 7 del plan de mejora)
 
 - **Sistema → Módulos** (`GET/PUT /api/modules`, migración 0043): interruptores

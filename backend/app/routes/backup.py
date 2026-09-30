@@ -4,8 +4,9 @@ import json
 import logging
 from io import StringIO
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import StreamingResponse, PlainTextResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
+from fastapi.responses import StreamingResponse, PlainTextResponse, Response
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, defer
 
 from app.database import get_db
@@ -28,6 +29,7 @@ from app.services.squid_names import (
     validate_name, validate_acl_type, validate_value, validate_acl_names,
     known_acl_names,
 )
+from app.i18n import idioma_de_cabecera, traducir_dinamico
 from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ BACKUP_VERSION = "0.6.0"
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 
 
-async def _read_upload(file: UploadFile) -> bytes:
+async def _read_upload(file: UploadFile, limite: int = MAX_UPLOAD_BYTES) -> bytes:
     """Lee el fichero subido aplicando un límite de tamaño."""
     chunks = []
     total = 0
@@ -48,10 +50,10 @@ async def _read_upload(file: UploadFile) -> bytes:
         if not chunk:
             break
         total += len(chunk)
-        if total > MAX_UPLOAD_BYTES:
+        if total > limite:
             raise HTTPException(
                 413,
-                detail=f"El archivo supera el límite de {MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
+                detail=f"El archivo supera el límite de {limite // (1024 * 1024)} MB",
             )
         chunks.append(chunk)
     return b"".join(chunks)
@@ -466,27 +468,111 @@ async def restore_backup(
 
 
 # ============================================
-# DESCARGAR squid.conf generado
+# BACKUP FORMATO 2 (.smbackup): exportar / restaurar idéntico
 # ============================================
+from app.services import backup_v2_service as b2
 
-@router.get("/squid-conf")
-def download_squid_conf(
+
+class ExportRequest(BaseModel):
+    contrasena: str | None = Field(None, max_length=200,
+                                   description="Si se indica, el backup incluye los secretos (hashes de contraseñas de usuarios, "
+                                               "claves de LDAP/SMTP/Telegram/IA) cifrados con esta contraseña.")
+    incluir_listas: bool = True
+
+
+@router.post("/export-v2")
+def export_backup_v2(
+    data: ExportRequest,
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    admin: Admin = Depends(require_writer),
 ):
-    """Descargar el squid.conf generado por SquidManager.
+    """Crea un backup `.smbackup` completo de la configuración. Con `contrasena`
+    incluye también las credenciales (cifradas); sin ella, ningún secreto."""
+    from app.config import settings as app_settings
 
-    Este archivo es un squid.conf estándar válido. Puede usarse en un Squid
-    tradicional, pero hay que ajustar rutas, helpers y certificados manualmente.
-    """
-    config_text = generate_squid_config(db)
-    filename = f"squid.conf-{utcnow().strftime('%Y%m%d-%H%M%S')}"
+    if data.contrasena is not None and len(data.contrasena) < 8:
+        raise HTTPException(400, detail="La contraseña del backup debe tener al menos 8 caracteres.")
+    contenido = b2.exportar(db, admin.username, app_settings.APP_VERSION,
+                            passphrase=data.contrasena or None, incluir_listas=data.incluir_listas)
+    db.add(AuditLog(admin_id=admin.id, admin_username=admin.username, action="export", entity="backup",
+                    new_value=f"backup v2 ({'con' if data.contrasena else 'sin'} secretos, {len(contenido) // 1024} KB)"))
+    db.commit()
+    nombre = f"squidmanager-{utcnow().strftime('%Y%m%d-%H%M%S')}.smbackup"
+    return Response(contenido, media_type="application/octet-stream",
+                    headers={"Content-Disposition": f"attachment; filename={nombre}"})
 
-    return PlainTextResponse(
-        config_text,
-        media_type="text/plain",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+
+@router.post("/restore-v2")
+async def restore_backup_v2(
+    request: Request,
+    file: UploadFile = File(...),
+    contrasena: str | None = Form(None),
+    modo: str = Form("combinar"),
+    simular: bool = Form(True),
+    aplicar: bool = Form(False),
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(require_writer),
+):
+    """Restaura un `.smbackup`. `simular=true` (por defecto) valida todo y devuelve
+    el informe de lo que pasaría SIN tocar nada; con `simular=false` lo aplica,
+    todo o nada. `modo`: «combinar» (agrega y actualiza) o «reemplazar» (deja el
+    servidor igual al backup, eliminando lo que no esté en él)."""
+    # Un .smbackup con listas de dominios grandes pesa decenas de MB (nginx admite hasta 250).
+    datos = await _read_upload(file, limite=250 * 1024 * 1024)
+    try:
+        paquete = b2.leer_paquete(datos, contrasena or None)
+        resumen = b2.inspeccionar(paquete)
+        if paquete.requiere_passphrase and simular:
+            # Se puede revisar el contenido sin la contraseña, pero se avisa de lo que falta.
+            resumen["aviso_contrasena"] = "Este backup incluye credenciales cifradas: pide la contraseña para restaurarlas."
+        informe = b2.restaurar(db, paquete, modo=modo, simular=simular)
+    except b2.BackupError as e:
+        raise HTTPException(400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Restauración de backup v2 fallida")
+        raise HTTPException(400, detail=f"No se pudo restaurar el backup: {e}")
+
+    salida = {"status": "ok", "backup": resumen, **informe.como_dict()}
+    if not simular:
+        _despues_de_restaurar(db, admin, aplicar, salida)
+    idioma = idioma_de_cabecera(request.headers.get("accept-language"))
+    salida["avisos"] = [traducir_dinamico(a, idioma) for a in salida.get("avisos", [])]
+    if resumen.get("aviso_contrasena"):
+        resumen["aviso_contrasena"] = traducir_dinamico(resumen["aviso_contrasena"], idioma)
+    return salida
+
+
+def _despues_de_restaurar(db: Session, admin: Admin, aplicar: bool, salida: dict) -> None:
+    """Deja los archivos auxiliares coherentes con la base recién restaurada y, si se
+    pidió, aplica la configuración a Squid."""
+    from app.models.ldap_config import LdapConfig
+    from app.services.squid_service import (
+        apply_squid_config, purge_credentials, realm_actual, write_digest_file, write_ldap_aux_files, write_passwd_file,
     )
+
+    try:
+        write_passwd_file(db)
+        write_digest_file(db, realm_actual(db))
+        ldap = db.query(LdapConfig).first()
+        if ldap:
+            write_ldap_aux_files(ldap, [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()])  # noqa: E712
+    except Exception as e:
+        salida.setdefault("avisos", []).append(f"No se pudieron escribir algunos archivos auxiliares: {e}")
+    db.add(AuditLog(admin_id=admin.id, admin_username=admin.username, action="restore", entity="backup",
+                    new_value=f"backup v2 restaurado ({salida.get('modo')})"))
+    db.commit()
+    mark_dirty()
+    if aplicar:
+        resultado = apply_squid_config(db)
+        salida["aplicado"] = {"status": resultado.get("status"), "message": resultado.get("message")}
+    salida.setdefault("avisos", []).append(
+        "La configuración restaurada" + (" ya se aplicó a Squid." if aplicar else " está pendiente: pulsa «Aplicar cambios» para activarla."))
+    try:
+        purge_credentials()
+    except Exception:
+        pass
 
 
 # ============================================
@@ -504,70 +590,167 @@ def download_squid_conf(
 # aplicación explícita sobre lo ya revisado -ver squid_import_service.py-.
 from app.services import squid_import_service as import_svc
 
-MAX_IMPORT_FILES = 20
+MAX_IMPORT_FILES = 60
+MAX_ARCHIVO_COMPRIMIDO_MIEMBROS = 400
+MAX_TEXTO_POR_ARCHIVO = 6 * 1024 * 1024
+MAX_TEXTO_TOTAL = 40 * 1024 * 1024
+
+
+def _expandir_subidas(subidas: list[tuple[str, bytes]]) -> dict[str, str]:
+    """Convierte lo subido en {nombre: texto}. Acepta los archivos sueltos y
+    también un .zip / .tar / .tar.gz / .tgz con todo el directorio del Squid de
+    origen (lo habitual al migrar: se comprime /etc/squid y se sube). Solo se
+    leen archivos de texto; carpetas, enlaces y binarios se ignoran, con
+    límites de cantidad y tamaño."""
+    import io
+    import tarfile
+    import zipfile
+
+    contenidos: dict[str, tuple[str, int]] = {}  # basename -> (texto, profundidad de ruta)
+    total = 0
+
+    def _agregar(ruta: str, datos: bytes):
+        nonlocal total
+        if not datos or len(datos) > MAX_TEXTO_POR_ARCHIVO or b"\x00" in datos[:4096]:
+            return
+        total += len(datos)
+        if total > MAX_TEXTO_TOTAL:
+            raise HTTPException(413, detail="Lo subido supera el tamaño máximo para analizar.")
+        ruta = ruta.replace("\\", "/")
+        nombre = ruta.split("/")[-1]
+        if not nombre:
+            return
+        profundidad = ruta.count("/")
+        previo = contenidos.get(nombre)
+        if previo is None or profundidad < previo[1]:
+            contenidos[nombre] = (datos.decode("utf-8", errors="replace"), profundidad)
+
+    for nombre, datos in subidas:
+        bajo = nombre.lower()
+        try:
+            if bajo.endswith(".zip"):
+                with zipfile.ZipFile(io.BytesIO(datos)) as z:
+                    miembros = [i for i in z.infolist() if not i.is_dir()]
+                    if len(miembros) > MAX_ARCHIVO_COMPRIMIDO_MIEMBROS:
+                        raise HTTPException(400, detail="El .zip tiene demasiados archivos.")
+                    for i in miembros:
+                        if i.file_size <= MAX_TEXTO_POR_ARCHIVO:
+                            _agregar(i.filename, z.read(i))
+            elif bajo.endswith((".tar", ".tar.gz", ".tgz")):
+                with tarfile.open(fileobj=io.BytesIO(datos), mode="r:*") as t:
+                    miembros = [m for m in t.getmembers() if m.isfile()]
+                    if len(miembros) > MAX_ARCHIVO_COMPRIMIDO_MIEMBROS:
+                        raise HTTPException(400, detail="El archivo comprimido tiene demasiados archivos.")
+                    for m in miembros:
+                        if m.size <= MAX_TEXTO_POR_ARCHIVO:
+                            f = t.extractfile(m)
+                            if f:
+                                _agregar(m.name, f.read())
+            elif bajo.endswith((".rar", ".7z")):
+                raise HTTPException(400, detail="Los .rar y .7z no se pueden leer aquí: descomprímelo y sube los archivos (o un .zip / .tar.gz).")
+            else:
+                _agregar(nombre, datos)
+        except (zipfile.BadZipFile, tarfile.TarError) as e:
+            raise HTTPException(400, detail=f"No se pudo leer «{nombre}»: {e}")
+    return {n: t for n, (t, _) in contenidos.items()}
 
 
 @router.post("/analyze-squid-conf")
 async def analyze_squid_conf(
+    request: Request,
     files: list[UploadFile] = File(...),
-    principal: str = Form(...),
+    principal: str | None = Form(None),
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_writer),
 ):
-    """Analiza uno o más archivos de un squid.conf tradicional SIN escribir
-    nada en la base de datos. `principal` es el nombre del archivo que hace
-    de punto de entrada (el squid.conf en sí); el resto solo se usan si
-    algún `include` los referencia por nombre de archivo.
+    """Analiza un Squid tradicional SIN escribir nada en la base de datos.
+
+    Se suben el squid.conf y, si los hay, los archivos que lo acompañan
+    (listas de ACL, usuarios htpasswd/htdigest) -sueltos o dentro de un .zip /
+    .tar.gz-. Las rutas del servidor de origen (`/etc/squid/lista`) se
+    resuelven por el NOMBRE del archivo. `principal` es el squid.conf; si no
+    se indica se busca el archivo llamado squid.conf.
 
     Devuelve un informe detallado (qué se importaría, qué no y por qué) más
     un token de corta duración para confirmar con /apply-squid-import sin
     tener que volver a subir los archivos.
     """
     if len(files) > MAX_IMPORT_FILES:
-        raise HTTPException(400, detail=f"Como mucho {MAX_IMPORT_FILES} archivos por vez.")
+        raise HTTPException(400, detail=f"Como mucho {MAX_IMPORT_FILES} archivos por vez (o sube un .zip / .tar.gz).")
 
-    contenidos: dict[str, str] = {}
-    for f in files:
-        data = await _read_upload(f)
-        contenidos[f.filename or "squid.conf"] = data.decode("utf-8", errors="replace")
+    subidas = [(f.filename or "squid.conf", await _read_upload(f)) for f in files]
+    contenidos = _expandir_subidas(subidas)
 
-    if principal not in contenidos:
-        raise HTTPException(400, detail=f"El archivo principal '{principal}' no está entre los subidos.")
+    if principal and principal not in contenidos:
+        principal = next((n for n in contenidos if n.split("/")[-1] == principal.split("/")[-1]), None)
+    if not principal:
+        principal = next((n for n in contenidos if n == "squid.conf"), None) or next(
+            (n for n in contenidos if n.endswith(".conf") and "squid" in n), None)
+    if not principal:
+        raise HTTPException(400, detail="No se encontró el squid.conf entre lo subido. Incluye el archivo squid.conf.")
 
+    from app.models.ldap_config import LdapConfig
     existentes = {a[0] for a in db.query(Acl.name).all()}
     conocidos = import_svc.known_acl_names(db)
+    usuarios_existentes = {u[0] for u in db.query(ProxyUser.username).all()}
+    ldap = db.query(LdapConfig).first()
 
-    resultado = import_svc.analizar(contenidos, principal, existentes, conocidos)
+    resultado = import_svc.analizar(
+        contenidos, principal, existentes, conocidos,
+        usuarios_existentes=usuarios_existentes, ldap_habilitado=bool(ldap and ldap.enabled),
+    )
     token = import_svc.guardar_analisis(resultado)
 
+    idioma = idioma_de_cabecera(request.headers.get("accept-language"))
+
+    def _t(texto):
+        return traducir_dinamico(texto, idioma) if texto else texto
+
     def _acl_dict(a):
-        return {"name": a.name, "type": a.type, "value": a.value, "estado": a.estado, "motivo": a.motivo}
+        return {"name": a.name, "type": a.type, "value": a.value, "estado": a.estado, "motivo": _t(a.motivo),
+                "origen": a.origen, "entradas": len(a.lista) if a.lista is not None else None}
 
     def _regla_dict(r):
-        return {"action": r.action, "acl_names": r.acl_names, "estado": r.estado, "motivo": r.motivo}
+        return {"action": r.action, "acl_names": r.acl_names, "estado": r.estado, "motivo": _t(r.motivo)}
 
     return {
         "status": "ok",
         "token": token,
+        "principal": principal,
+        "archivos_leidos": sorted(contenidos),
         "resumen": resultado.resumen(),
         "acls": [_acl_dict(a) for a in resultado.acls],
         "reglas": [_regla_dict(r) for r in resultado.reglas],
         "settings": [{"key": s.key, "value": s.value} for s in resultado.settings],
+        "usuarios": [
+            {"username": u.username, "estado": u.estado, "motivo": _t(u.motivo), "formato": u.hash_formato,
+             "digest": bool(u.digest_ha1), "habilitado": u.habilitado}
+            for u in resultado.usuarios
+        ],
+        "esquema_auth": resultado.esquema_auth,
+        "realm_auth": resultado.realm_auth,
+        "archivos_usuarios": resultado.archivos_usuarios,
+        "archivos_lista": resultado.archivos_lista,
+        "extra_safe_ports": resultado.extra_safe_ports,
+        "extra_ssl_ports": resultado.extra_ssl_ports,
+        "never_direct": resultado.never_direct,
+        "direct_domains": resultado.direct_domains,
+        "notas": [_t(n) for n in resultado.notas],
         "delay_pools": [{"pool_class": d.pool_class, "parameters": d.parameters} for d in resultado.delay_pools],
         "parent_proxy": (
             {
                 "host": resultado.parent_proxy.host, "port": resultado.parent_proxy.port,
                 "username": resultado.parent_proxy.username, "estado": resultado.parent_proxy.estado,
-                "motivo": resultado.parent_proxy.motivo,
+                "motivo": _t(resultado.parent_proxy.motivo),
             }
             if resultado.parent_proxy else None
         ),
         "no_soportadas": [
-            {"directiva": h.directiva, "archivo": h.archivo, "linea": h.linea, "motivo": h.motivo}
+            {"directiva": h.directiva, "archivo": h.archivo, "linea": h.linea, "motivo": _t(h.motivo)}
             for h in resultado.no_soportadas
         ],
         "desconocidas": [
-            {"directiva": h.directiva, "archivo": h.archivo, "linea": h.linea, "motivo": h.motivo}
+            {"directiva": h.directiva, "archivo": h.archivo, "linea": h.linea, "motivo": _t(h.motivo)}
             for h in resultado.desconocidas
         ],
         "includes_faltantes": resultado.includes_faltantes,
@@ -576,7 +759,9 @@ async def analyze_squid_conf(
 
 @router.post("/apply-squid-import")
 def apply_squid_import(
+    request: Request,
     token: str = Form(...),
+    importar_usuarios: bool = Form(True),
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_writer),
 ):
@@ -592,15 +777,21 @@ def apply_squid_import(
             detail="El análisis expiró o ya se aplicó. Vuelve a subir el archivo y analízalo de nuevo.",
         )
 
+    if not importar_usuarios:
+        resultado.usuarios = []
+
     detalle = import_svc.aplicar(db, resultado)
 
     db.add(AuditLog(
         admin_id=admin.id, admin_username=admin.username,
         action="import", entity="squid_conf",
-        new_value=f"{detalle['acls']} ACLs, {detalle['reglas']} reglas, {detalle['settings']} settings",
+        new_value=(f"{detalle['acls']} ACLs, {detalle['reglas']} reglas, {detalle['settings']} ajustes, "
+                   f"{detalle['usuarios']} usuarios"),
     ))
     db.commit()
     mark_dirty()
 
     detalle["avisos"].append("Revisa la configuración importada y pulsa «Aplicar cambios» para activarla.")
+    idioma = idioma_de_cabecera(request.headers.get("accept-language"))
+    detalle["avisos"] = [traducir_dinamico(a, idioma) for a in detalle["avisos"]]
     return {"status": "ok", "message": "Importación aplicada", "details": detalle}

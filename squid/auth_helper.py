@@ -17,7 +17,8 @@ Ninguna excepción debe escapar del bucle principal: si el proceso muere, Squid
 marca el helper como caído y deja de autenticar a todo el mundo.
 
 Archivos de configuración (escritos por el backend en el volumen compartido):
-  - /etc/squid/squid_passwd       : htpasswd local (bcrypt)
+  - /etc/squid/squid_passwd       : htpasswd local (bcrypt; al migrar desde otro Squid
+                                    también apr1, SHA y crypt -ver verify_password_hash)
   - /etc/squid/ldap_allowlist     : usuarios LDAP autorizados (allow-list estricto)
   - /etc/squid/ldap_helper.conf   : config de conexión LDAP (key=value)
 """
@@ -64,13 +65,91 @@ def log_error(message):
         pass
 
 
-def check_local(username, password):
-    """Verifica usuario/contraseña contra el htpasswd local (bcrypt)."""
-    try:
-        import bcrypt
-    except ImportError:
-        log_error("el módulo bcrypt no está instalado")
+_ITOA64 = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+
+def _apr1_md5(password: bytes, salt: bytes) -> str:
+    """Hash MD5 de Apache ($apr1$), el que generan `htpasswd -m` y muchos
+    Squid instalados a mano. Implementación de referencia del algoritmo."""
+    import hashlib
+
+    ctx = password + b"$apr1$" + salt
+    final = hashlib.md5(password + salt + password).digest()
+    for pl in range(len(password), 0, -16):
+        ctx += final[:16] if pl > 16 else final[:pl]
+    i = len(password)
+    while i:
+        ctx += b"\x00" if i & 1 else password[:1]
+        i >>= 1
+    final = hashlib.md5(ctx).digest()
+    for i in range(1000):
+        c = password if i & 1 else final
+        if i % 3:
+            c += salt
+        if i % 7:
+            c += password
+        c += final if i & 1 else password
+        final = hashlib.md5(c).digest()
+
+    def to64(v, n):
+        out = ""
+        for _ in range(n):
+            out += _ITOA64[v & 0x3F]
+            v >>= 6
+        return out
+
+    out = ""
+    for a, b, c in ((0, 6, 12), (1, 7, 13), (2, 8, 14), (3, 9, 15), (4, 10, 5)):
+        out += to64((final[a] << 16) | (final[b] << 8) | final[c], 4)
+    out += to64(final[11], 2)
+    return out
+
+
+def verify_password_hash(password, stored):
+    """Compara una contraseña contra un hash de htpasswd de CUALQUIER formato
+    que use un Squid administrado a mano, para que quien migra desde uno no
+    tenga que cambiar la contraseña a todos sus usuarios:
+
+      - bcrypt   ($2y$ / $2b$ / $2a$): el que genera este panel.
+      - Apache MD5 ($apr1$): `htpasswd -m`.
+      - SHA-1 ({SHA}): `htpasswd -s`.
+      - crypt(3): DES de 13 caracteres, $1$, $5$, $6$.
+    """
+    import base64
+    import hashlib
+    import hmac
+
+    if not stored:
         return False
+    if stored.startswith(("$2y$", "$2b$", "$2a$")):
+        try:
+            import bcrypt
+            return bcrypt.checkpw(password.encode("utf-8"), stored.replace("$2y$", "$2b$", 1).encode("utf-8"))
+        except Exception:
+            return False
+    if stored.startswith("$apr1$"):
+        partes = stored.split("$")
+        if len(partes) < 4:
+            return False
+        calculado = "$apr1$" + partes[2] + "$" + _apr1_md5(password.encode("utf-8"), partes[2].encode("utf-8"))
+        return hmac.compare_digest(calculado, stored)
+    if stored.startswith("{SHA}"):
+        calculado = "{SHA}" + base64.b64encode(hashlib.sha1(password.encode("utf-8")).digest()).decode()
+        return hmac.compare_digest(calculado, stored)
+    if stored.startswith(("$1$", "$5$", "$6$")) or (len(stored) == 13 and stored[0] not in "$"):
+        try:
+            import crypt
+            return hmac.compare_digest(crypt.crypt(password, stored) or "", stored)
+        except Exception:
+            return False
+    return False
+
+
+def check_local(username, password):
+    """Verifica usuario/contraseña contra el htpasswd local (squid_passwd).
+
+    Acepta los formatos de hash de un htpasswd tradicional (ver
+    verify_password_hash), no solo bcrypt."""
     try:
         with open(HTPASSWD_FILE) as f:
             for line in f:
@@ -80,12 +159,7 @@ def check_local(username, password):
                 u, h = line.split(":", 1)
                 if u != username:
                     continue
-                # htpasswd genera $2y$; bcrypt de Python espera $2b$ (mismo algoritmo)
-                h_bcrypt = h.replace("$2y$", "$2b$", 1)
-                try:
-                    return bcrypt.checkpw(password.encode("utf-8"), h_bcrypt.encode("utf-8"))
-                except Exception:
-                    return False
+                return verify_password_hash(password, h)
     except FileNotFoundError:
         pass
     except Exception as e:

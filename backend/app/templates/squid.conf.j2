@@ -178,6 +178,9 @@ acl localnet src 192.168.0.0/16
 acl localnet src fc00::/7
 acl localnet src fe80::/10
 acl SSL_ports port 443
+{% for p in extra_ssl_ports %}
+acl SSL_ports port {{ p }}          # puerto propio (Configuración / importado)
+{% endfor %}
 acl Safe_ports port 80          # http
 acl Safe_ports port 443         # https
 acl Safe_ports port 21          # ftp
@@ -188,6 +191,9 @@ acl Safe_ports port 280         # http-mgmt
 acl Safe_ports port 488         # gss-http
 acl Safe_ports port 591         # filemaker
 acl Safe_ports port 777         # multiling http
+{% for p in extra_safe_ports %}
+acl Safe_ports port {{ p }}         # puerto propio (Configuración / importado)
+{% endfor %}
 acl CONNECT method CONNECT
 {% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 acl authenticated proxy_auth REQUIRED
