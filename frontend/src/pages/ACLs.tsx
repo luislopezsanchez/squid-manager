@@ -201,7 +201,11 @@ export default function ACLs() {
   // verlas explícitamente.
   const [verCategorias, setVerCategorias] = useState(false)
 
+  // Dónde se usa cada ACL (las que no aparecen no las usa ninguna regla).
+  const [usos, setUsos] = useState<Record<string, string[]>>({})
+
   const loadAcls = (incluirCategorias = verCategorias) => {
+    api.getAclUsage().then(setUsos).catch(() => {})
     api.listAcls({ isCategory: incluirCategorias ? undefined : false })
       .then(r => { setAcls(r); setLoadError(false) })
       .catch(() => { showToast(traducir("Error al cargar ACLs"), 'error'); setLoadError(true) })
@@ -383,6 +387,7 @@ export default function ACLs() {
                 <th className="text-left">{traducir("Tipo")}</th>
                 <th className="text-left">{traducir("Valor")}</th>
                 <th className="text-left">{traducir("Estado")}</th>
+                <th className="text-left">{traducir("Uso")}</th>
                 <th className="text-right">{traducir("Acciones")}</th>
               </tr>
             </thead>
@@ -405,8 +410,19 @@ export default function ACLs() {
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${acl.enabled ? 'pill-ok' : 'pill-danger'}`}>
-                      {acl.enabled ? 'Activa' : 'Inactiva'}
+                      {acl.enabled ? traducir('Activa') : traducir('Inactiva')}
                     </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    {usos[acl.name] ? (
+                      <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full pill-info cursor-help" title={usos[acl.name].join('\n')}>
+                        {traducir("En uso")} · {usos[acl.name].length}
+                      </span>
+                    ) : (
+                      <span className="inline-flex px-2 py-1 text-xs rounded-full pill-mute cursor-help" title={traducir("Ninguna regla de acceso ni de ancho de banda la usa todavía: no tiene efecto hasta que la uses en una regla.")}>
+                        {traducir("Sin uso")}
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-right space-x-2">
                     <button onClick={() => handleEdit(acl)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">
@@ -417,7 +433,7 @@ export default function ACLs() {
                 </tr>
               ))}
               {aclsPagina.length === 0 && (
-                <tr><td colSpan={5} className="px-6 py-12 text-center text-ink-3">
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-ink-3">
                   {acls.length === 0
                     ? traducir("No hay ACLs personalizadas. Las ACLs predefinidas (localnet, Safe_ports, etc.) ya están incluidas automáticamente.")
                     : traducir("Ninguna ACL coincide con la búsqueda.")}

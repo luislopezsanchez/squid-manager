@@ -142,6 +142,23 @@ def find_references(db, name: str) -> list[str]:
     return used_in
 
 
+def usos_de_todas(db) -> dict[str, list[str]]:
+    """{nombre de ACL: [dónde se usa]} de todas las ACLs en uso, en una sola pasada
+    (la pantalla de ACLs la usa para marcar cuáles están en uso)."""
+    from app.models.access_rule import AccessRule
+    from app.models.delay_pool import DelayPool
+
+    usos: dict[str, list[str]] = {}
+    for rule in db.query(AccessRule).all():
+        for n in {n.lstrip("!") for n in (rule.acl_names or "").split()}:
+            usos.setdefault(n, []).append(f"regla de acceso «{rule.action} {rule.acl_names}»")
+    for pool in db.query(DelayPool).all():
+        for n in set((pool.acl_names or "").split()) | {(pool.acl_name or "").strip()}:
+            if n:
+                usos.setdefault(n, []).append(f"regla de ancho de banda #{pool.id}")
+    return usos
+
+
 def ensure_not_referenced(db, name: str, action: str = "eliminar") -> None:
     """Aborta la operación si el nombre está en uso, diciendo dónde."""
     used_in = find_references(db, name)

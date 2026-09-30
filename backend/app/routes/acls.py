@@ -88,6 +88,17 @@ def list_acls(
     return [_to_response(a) for a in acls]
 
 
+@router.get("/usage")
+def acl_usage(
+    db: Session = Depends(get_db),
+    _: Admin = Depends(get_current_admin),
+):
+    """Dónde se usa cada ACL que está en uso: {nombre: [descripción de cada uso]}.
+    Las que no aparecen no las usa ninguna regla de acceso ni de ancho de banda."""
+    from app.services.squid_names import usos_de_todas
+    return usos_de_todas(db)
+
+
 @router.get("/unused", response_model=list[str])
 def list_unused_acls(
     db: Session = Depends(get_db),

@@ -170,3 +170,23 @@ def test_toast_container_es_estable():
     src = (pathlib.Path(__file__).parents[2] / "frontend/src/components/Toast.tsx")
     if src.exists():
         assert "useRef(() =>" in src.read_text(), "ToastContainer no debe redefinirse en cada render"
+
+
+def test_usos_de_todas_las_acls():
+    from types import SimpleNamespace as N
+    from app.services.squid_names import usos_de_todas
+    from app.models.access_rule import AccessRule
+    from app.models.delay_pool import DelayPool
+
+    class Q:
+        def __init__(self, filas): self.filas = filas
+        def all(self): return self.filas
+
+    class DB:
+        def query(self, m):
+            if m is AccessRule:
+                return Q([N(action="deny", acl_names="!a b")])
+            return Q([N(id=3, acl_names="b c", acl_name="c")])
+    u = usos_de_todas(DB())
+    assert set(u) == {"a", "b", "c"}
+    assert len(u["b"]) == 2 and "ancho de banda #3" in u["c"][0]

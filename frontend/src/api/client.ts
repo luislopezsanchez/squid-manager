@@ -174,6 +174,7 @@ export const api = {
     const suffix = qs.toString() ? `?${qs}` : ''
     return request<any[]>(`/acls/${suffix}`)
   },
+  getAclUsage: () => request<Record<string, string[]>>('/acls/usage'),
   createAcl: (data: any) => request<any>('/acls/', { method: 'POST', body: JSON.stringify(data) }),
   updateAcl: (id: number, data: any) => request<any>(`/acls/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAcl: (id: number) => request<void>(`/acls/${id}`, { method: 'DELETE' }),
