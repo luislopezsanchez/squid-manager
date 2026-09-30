@@ -49,6 +49,8 @@ export default function LogsViewer() {
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [stats, setStats] = useState<LogStats | null>(null)
   const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [truncated, setTruncated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [offset, setOffset] = useState(0)
   const [autoRefresh, setAutoRefresh] = useState(true)
@@ -89,6 +91,8 @@ export default function LogsViewer() {
     }).then(data => {
       setEntries(data.entries)
       setTotal(data.total)
+      setHasMore(!!data.has_more)
+      setTruncated(!!data.truncated)
     }).catch(e => showToast(e.message, 'error')).finally(() => setLoading(false))
   }, [offset, fUser, fStatus, fDomain, fDenied])
 
@@ -96,13 +100,15 @@ export default function LogsViewer() {
     api.getLogStats().then(setStats).catch(() => {})
   }, [])
 
-  useEffect(() => { loadLogs(); loadStats() }, [loadLogs, loadStats])
+  useEffect(() => { loadLogs() }, [loadLogs])
+  // Las opciones de los filtros no cambian cada 5 s: se piden una sola vez.
+  useEffect(() => { loadStats() }, [loadStats])
 
   useEffect(() => {
     if (!autoRefresh) return
-    const id = setInterval(() => { loadLogs(); loadStats() }, 5000)
+    const id = setInterval(() => { loadLogs() }, 5000)
     return () => clearInterval(id)
-  }, [autoRefresh, loadLogs, loadStats])
+  }, [autoRefresh, loadLogs])
 
   // Extensión y nombre por formato: cada uno apunta a una audiencia distinta
   // (hoja de cálculo, ingesta en un SIEM/ELK/Splunk, o una herramienta ya
@@ -224,12 +230,12 @@ export default function LogsViewer() {
       {stats && (
         <div className="flex gap-4 mb-6 text-sm">
           <div className="bg-white rounded-lg border border-line-soft px-4 py-2">
-            <span className="text-ink-3">{traducir("Últimas líneas analizadas:")}</span>
+            <span className="text-ink-3">{traducir("Peticiones en las últimas 24 h:")} </span>
             <span className="font-bold text-ink">{stats.total_entries}</span>
           </div>
           <div className="bg-white rounded-lg border border-line-soft px-4 py-2">
             <span className="text-ink-3">{traducir("Coinciden con el filtro:")}</span>
-            <span className="font-bold text-ink">{total}</span>
+            <span className="font-bold text-ink">{total}{hasMore ? '+' : ''}</span>
           </div>
         </div>
       )}
@@ -283,11 +289,11 @@ export default function LogsViewer() {
 
       {/* Paginación */}
       <div className="flex items-center justify-between mt-4 text-sm">
-        <span className="text-ink-3">Mostrando {offset + 1}–{Math.min(offset + limit, total)} de {total}</span>
+        <span className="text-ink-3">{total === 0 ? traducir("Sin resultados") : `${offset + 1}–${offset + entries.length}`}{hasMore ? ` ${traducir("(hay más)")}` : ''}{truncated && !hasMore ? ` · ${traducir("búsqueda acotada: afiná el filtro para ver más")}` : ''}</span>
         <div className="flex gap-2">
           <button onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}
             className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5"><IconChevronLeft className="w-3.5 h-3.5" />{traducir("Anterior")}</button>
-          <button onClick={() => setOffset(offset + limit)} disabled={offset + limit >= total}
+          <button onClick={() => setOffset(offset + limit)} disabled={!hasMore}
             className="px-3 py-1.5 border border-line rounded-lg disabled:opacity-40 hover:bg-brand-50 inline-flex items-center gap-1.5">Siguiente<IconChevronRight className="w-3.5 h-3.5" /></button>
         </div>
       </div>

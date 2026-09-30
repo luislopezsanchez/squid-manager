@@ -283,9 +283,9 @@ def list_ldap_groups(
     from ldap3 import Server, Connection, SUBTREE
 
     try:
-        server = Server(config.server_url, connect_timeout=10)
+        server = Server(config.server_url, connect_timeout=4)
         conn = Connection(server, user=config.bind_dn, password=config.bind_password,
-                          auto_bind=True, receive_timeout=15)
+                          auto_bind=True, receive_timeout=8)
     except Exception as e:
         raise HTTPException(400, detail=f"Error conectando a LDAP: {e}")
 

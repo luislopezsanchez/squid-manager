@@ -20,7 +20,10 @@ ACCESS_LOG_PATH = "/var/log/squid/access.log"
 
 # Tope de líneas que se examinan en una petición. Con filtros activos evita
 # recorrer un fichero de 500 MB buscando algo que quizá no está.
-MAX_SCAN_LINES = 50_000
+MAX_SCAN_LINES = 300_000
+# Presupuesto de tiempo de una lectura: pasado esto se devuelve lo encontrado
+# y se avisa `truncated`, en vez de dejar al admin mirando un spinner.
+_SCAN_BUDGET_S = 3.0
 _CHUNK = 256 * 1024
 
 # El visor de logs del panel pide get_logs()+get_log_stats() cada 5s (con los
@@ -248,27 +251,43 @@ def get_logs(
 def _get_logs_sin_cache(
     limit: int, offset: int, user, status, domain, ip, denied_only, max_scan,
 ) -> dict:
+    """Se detiene en cuanto tiene la página pedida MÁS una coincidencia
+    (prueba de que hay página siguiente): sin filtros son ~limit líneas
+    leídas, no 50.000 como antes. Con un filtro raro puede recorrer más, con
+    tope de líneas (`max_scan`) y de tiempo (`_SCAN_BUDGET_S`)."""
     page = []
     matched = 0
     scanned = 0
+    hasta = offset + limit
+    has_more = False
+    truncated = False
+    t0 = time.time()
 
     for line in iter_lines_reverse(ACCESS_LOG_PATH, max_scan):
         scanned += 1
         entry = parse_line(line)
-        if not entry or not _matches(entry, user, status, domain, ip, denied_only):
-            continue
-        matched += 1
-        if matched > offset and len(page) < limit:
-            page.append(entry)
+        if entry and _matches(entry, user, status, domain, ip, denied_only):
+            matched += 1
+            if matched > offset and len(page) < limit:
+                page.append(entry)
+            if matched > hasta:
+                has_more = True
+                break
+        if scanned % 2000 == 0 and time.time() - t0 > _SCAN_BUDGET_S:
+            truncated = True
+            break
+    else:
+        truncated = scanned >= max_scan
 
     return {
-        # `total` es el número de coincidencias dentro de lo examinado, no de
-        # todo el histórico: el fichero no se recorre entero a propósito.
+        # `total` son las coincidencias contadas hasta cortar, no el total
+        # del histórico: junto con `has_more` alcanza para paginar.
         "total": matched,
         "limit": limit,
         "offset": offset,
         "scanned_lines": scanned,
-        "truncated": scanned >= max_scan,
+        "has_more": has_more,
+        "truncated": truncated,
         "entries": page,
     }
 
@@ -278,7 +297,16 @@ def get_log_stats(max_scan: int = MAX_SCAN_LINES) -> dict:
 
     Cacheado unos segundos, mismo motivo que `get_logs` (ver `_CACHE_TTL`).
     """
-    return _cached(("get_log_stats", max_scan), lambda: _get_log_stats_sin_cache(max_scan))
+    def _calcular():
+        try:
+            from app.services import rollup_service
+            if rollup_service.disponible(86400):
+                return rollup_service.opciones_de_filtro(24)
+        except Exception as e:
+            logger.warning("Opciones de filtro desde rollups fallaron, se lee el log: %s", e)
+        return _get_log_stats_sin_cache(min(max_scan, 50_000))
+
+    return _cached(("get_log_stats", max_scan), _calcular)
 
 
 def _get_log_stats_sin_cache(max_scan: int) -> dict:

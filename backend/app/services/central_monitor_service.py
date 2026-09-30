@@ -15,6 +15,7 @@ demore la vista más que unos segundos.
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
@@ -217,11 +218,48 @@ def consultar_nodo_basico(node) -> dict:
     }
 
 
+# Un nodo que falló hace poco no se vuelve a intentar durante este rato: con
+# nodos caídos, cada consulta esperaba los timeouts completos (4-6 s por
+# nodo) y el panel entero parecía colgado. El error cacheado es el mismo que
+# se mostraría; al pasar el TTL se vuelve a probar de verdad.
+_TTL_FALLO = 30.0
+_fallos_recientes: dict[tuple, tuple[float, dict]] = {}
+_MAX_HILOS = 16
+
+
+def _clave_fallo(node, profundidad) -> tuple:
+    return (node.id, node.url, profundidad)
+
+
+def _consultar_todos_en_paralelo(fn, nodes: list, profundidad=None) -> list[dict]:
+    """Consulta los nodos habilitados a la vez (no uno tras otro) y en el
+    mismo orden en que vinieron. El tiempo total pasa de la SUMA de los
+    timeouts de los nodos caídos al del más lento."""
+    habilitados = [n for n in nodes if n.enabled]
+    if not habilitados:
+        return []
+
+    def _uno(n):
+        clave = _clave_fallo(n, profundidad)
+        previo = _fallos_recientes.get(clave)
+        if previo and time.monotonic() < previo[0]:
+            return previo[1]
+        resultado = fn(n) if profundidad is None else fn(n, profundidad)
+        if isinstance(resultado, dict) and resultado.get("status") == "error":
+            _fallos_recientes[clave] = (time.monotonic() + _TTL_FALLO, resultado)
+        else:
+            _fallos_recientes.pop(clave, None)
+        return resultado
+
+    if len(habilitados) == 1:
+        return [_uno(habilitados[0])]
+    with ThreadPoolExecutor(max_workers=min(len(habilitados), _MAX_HILOS)) as ex:
+        return list(ex.map(_uno, habilitados))
+
+
 def consultar_todos(nodes: list) -> list[dict]:
-    """Uno por uno, en orden -no hace falta paralelizar para unas pocas
-    sucursales, y mantiene el mismo estilo sincrono que el resto del
-    proyecto usa para llamadas salientes."""
-    return [consultar_nodo(n) for n in nodes if n.enabled]
+    """A la vez, en el mismo orden de entrada, solo los habilitados."""
+    return _consultar_todos_en_paralelo(consultar_nodo, nodes)
 
 
 def _chequear_monitoreo_habilitado(base: str, token: str) -> bool | None:
@@ -399,9 +437,8 @@ def consultar_arbol(node, profundidad_restante: int = PROFUNDIDAD_DEFECTO) -> di
 
 
 def consultar_arbol_de_todos(nodes: list, profundidad_restante: int = PROFUNDIDAD_DEFECTO) -> list[dict]:
-    """Mismo criterio que consultar_todos(): en orden, uno por uno, solo los
-    habilitados."""
-    return [consultar_arbol(n, profundidad_restante) for n in nodes if n.enabled]
+    """Mismo criterio que consultar_todos(): a la vez, solo los habilitados."""
+    return _consultar_todos_en_paralelo(consultar_arbol, nodes, profundidad_restante)
 
 
 def sincronizar_configuracion(node, backup: dict) -> dict:

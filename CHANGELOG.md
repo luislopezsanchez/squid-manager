@@ -7,6 +7,41 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Mejorado (rendimiento, plan de mejora — Fases 1 y 2)
+
+- **Agregados por hora del `access.log` (`rollup_service.py`, migración 0040).**
+  Actividad de red, Latencia/errores, Tendencias y el PDF releían y
+  parseaban el `access.log` y los rotados (algunos `.gz`) enteros en cada
+  petición para ventanas de 24h/7d/30d: 0,6 a 3,4 s por consulta con solo
+  3,2 millones de líneas, y cada página hace 5-8 consultas. Un hilo de fondo
+  lee ahora solo las líneas nuevas cada 30 s y las suma en tablas `ru_*` por
+  hora (con backfill inicial de los rotados, manejo de rotación por inode y
+  retención de 120 días, `ROLLUP_RETENTION_DAYS`); las consultas son
+  `SELECT ... GROUP BY`: ~7 ms, independiente del tamaño del log (medido:
+  3,2 M de líneas ingeridas en 21 s). De paso corrige un fallo silencioso:
+  el camino anterior cortaba a 400.000 líneas y devolvía un top de 7 días
+  incompleto sin avisar. Resolución = la hora; los percentiles p50/p95 de
+  latencia salen de un histograma de cubos fijos. Ventanas de 1h y «últimas
+  1000 peticiones» siguen leyendo el log (rápidas y con precisión de minuto).
+- **Registros (visor en vivo) ya no escanea 50.000 líneas por consulta.**
+  `get_logs` corta apenas tiene la página pedida más una coincidencia (sin
+  filtros lee ~50 líneas), con tope de líneas y de tiempo (3 s) y un aviso
+  «búsqueda acotada». La paginación usa `has_more` en vez de un total falso.
+  Las opciones de los filtros salen de los agregados y se piden una vez, no
+  cada 5 s.
+- **Añadir/quitar un miembro de grupo responde al instante** (antes varios
+  segundos, el doble al quitar). El cambio se confirma en la base de datos y
+  la aplicación a Squid corre en segundo plano (serializada, si falla queda
+  «pendiente»). Además la ruta de quitar era `async` y reiniciaba Squid en
+  línea, congelando el panel entero para todos los admins mientras duraba.
+- **Panel Central consulta los nodos en paralelo** con caché de 30 s de los
+  fallos: con 5 nodos caídos `/central/dashboard` tardaba 16 s (suma de
+  timeouts); ahora, lo que tarde el más lento, y un nodo recién caído no
+  vuelve a esperar sus timeouts en cada refresco.
+- **LDAP: listar grupos falla rápido** (timeouts 4 s/8 s en vez de 10 s/15 s)
+  cuando el directorio no responde; la página de Grupos lo pedía en cada
+  visita.
+
 ### Corregido
 
 - **Un simple hipo del daemon Docker durante `reconfigure` podía disparar

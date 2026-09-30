@@ -627,6 +627,19 @@ def _read_rango(desde: float, hasta: float, max_lines: int = 400_000) -> list[di
     return entries
 
 
+def _con_rollup(fn, seconds, desde, hasta, *args):
+    """Intenta responder desde los agregados por hora (rollup_service) para
+    ventanas de más de 1h o rangos libres. None = usar el camino de siempre
+    (leer el log): ventana corta, agregados aún sin construir, o error."""
+    from app.services import rollup_service
+    try:
+        if rollup_service.disponible(seconds, desde, hasta):
+            return fn(*args, seconds, desde, hasta)
+    except Exception as e:
+        logger.warning("Rollup no disponible para %s, se lee el log: %s", getattr(fn, "__name__", fn), e)
+    return None
+
+
 def _entradas(seconds: int | None = None, desde: float | None = None, hasta: float | None = None) -> list[dict]:
     """Punto único de lectura para los reportes: ventana relativa
     (_read_window) o rango absoluto (_read_rango) cuando se pasan ambos
@@ -832,6 +845,10 @@ def get_top_users(
     `seconds` para cuando el admin elige "Personalizado" en vez de una
     ventana relativa -ver _entradas().
     """
+    from app.services import rollup_service
+    r = _con_rollup(rollup_service.top_users, seconds, desde, hasta, limit, sort_by)
+    if r is not None:
+        return r
     entries = _entradas(seconds, desde, hasta)
     user_bytes = defaultdict(int)
     user_requests = defaultdict(int)
@@ -857,6 +874,10 @@ def get_totales_actividad(
     mostrado no era el total de verdad. Reportado en vivo por el usuario,
     2026-09-12.
     """
+    from app.services import rollup_service
+    r = _con_rollup(rollup_service.totales_actividad, seconds, desde, hasta)
+    if r is not None:
+        return r
     entries = _entradas(seconds, desde, hasta)
 
     usuarios_bytes = usuarios_requests = 0
@@ -912,10 +933,16 @@ def get_top_blocked_users(
     usuario para que la diferencia con "top sitios bloqueados" no se lea
     como un fallo de esta tarjeta.
     """
-    denegadas = [e for e in _entradas(seconds, desde, hasta) if e["denied"]]
-    con_usuario = [e for e in denegadas if e["user"]]
-    conteo = Counter(e["user"] for e in con_usuario)
-    top = conteo.most_common(limit)
+    from app.services import rollup_service
+    ru = _con_rollup(rollup_service.top_blocked_users, seconds, desde, hasta, limit)
+    if ru is not None:
+        top, anonimos = ru
+    else:
+        denegadas = [e for e in _entradas(seconds, desde, hasta) if e["denied"]]
+        con_usuario = [e for e in denegadas if e["user"]]
+        conteo = Counter(e["user"] for e in con_usuario)
+        top = conteo.most_common(limit)
+        anonimos = len(denegadas) - len(con_usuario)
 
     account_status: dict[str, str] = {}
     if db is not None and top:
@@ -945,7 +972,7 @@ def get_top_blocked_users(
             }
             for u, c in top
         ],
-        "anonymous_blocked": len(denegadas) - len(con_usuario),
+        "anonymous_blocked": anonimos,
     }
 
 
@@ -964,6 +991,10 @@ def get_top_domains(
     que de verdad importa en ese caso: cuánto tráfico generó. Mismo criterio
     que ya tiene get_top_users con su `sort_by`.
     """
+    from app.services import rollup_service
+    r = _con_rollup(rollup_service.top_domains, seconds, desde, hasta, limit, denied_only, sort_by)
+    if r is not None:
+        return r
     entries = _entradas(seconds, desde, hasta)
     if denied_only:
         entries = [e for e in entries if e["denied"]]
@@ -994,6 +1025,10 @@ def get_ips_compartidas(
     sin usuario (ruido de fondo del navegador): eso es la norma, no una
     señal de nada.
     """
+    from app.services import rollup_service
+    r = _con_rollup(rollup_service.ips_compartidas, seconds, desde, hasta, limit)
+    if r is not None:
+        return r
     entries = _entradas(seconds, desde, hasta)
     usuarios_por_ip: dict[str, set[str]] = defaultdict(set)
     requests_por_ip: dict[str, int] = defaultdict(int)
@@ -1018,6 +1053,10 @@ def get_latencia(limit: int = 10, seconds: int | None = None) -> dict:
     _resumen_latencia) como de la latencia por dominio: ahí `elapsed_ms`
     mide cuánto duró la conexión abierta, no cuánto tardó en responder.
     """
+    from app.services import rollup_service
+    r = _con_rollup(rollup_service.latencia, seconds, None, None, limit)
+    if r is not None:
+        return r
     entries = _read_window(seconds)
     resumen = _resumen_latencia(entries)
 
@@ -1053,6 +1092,10 @@ def get_http_errors(limit: int = 10, seconds: int | None = None) -> dict:
     hubo ese bug: se cuenta sobre `errores` completo, no sobre el top
     recortado.
     """
+    from app.services import rollup_service
+    r = _con_rollup(rollup_service.errores_http, seconds, None, None, limit)
+    if r is not None:
+        return r
     entries = _read_window(seconds)
     errores = [e for e in entries if e["status"] >= 400 and e["status"] not in _CODIGOS_POLITICA]
 
@@ -1136,6 +1179,25 @@ def get_detalle(
     ]
 
 
+def _repartir_serie(serie: list[dict], buckets: int) -> list[dict]:
+    """Reparte una serie por hora en `buckets` partes iguales del rango real
+    (mismo criterio que get_tendencia_trafico con datos crudos)."""
+    if not serie:
+        return []
+    ts_min = serie[0]["timestamp"]
+    ts_max = serie[-1]["timestamp"] + 3600
+    ancho = max(ts_max - ts_min, 1) / buckets
+    grupos = [{"bytes": 0, "requests": 0} for _ in range(buckets)]
+    for x in serie:
+        i = min(int((x["timestamp"] - ts_min) / ancho), buckets - 1)
+        grupos[i]["bytes"] += x["bytes"]
+        grupos[i]["requests"] += x["requests"]
+    return [
+        {"timestamp": ts_min + ancho * (i + 0.5), "bytes": g["bytes"], "requests": g["requests"]}
+        for i, g in enumerate(grupos)
+    ]
+
+
 def get_tendencia_trafico(user: str | None = None, domain: str | None = None, seconds: int | None = None, buckets: int = 20) -> dict:
     """Evolución en el tiempo (bytes y peticiones) de un usuario o dominio
     puntual, para el gráfico de Tendencias.
@@ -1148,6 +1210,11 @@ def get_tendencia_trafico(user: str | None = None, domain: str | None = None, se
     duracion fija, puede ser 20 minutos o 3 dias segun cuanto trafico haya-,
     sin tener que adivinar el tamaño de balde "correcto" para cada caso.
     """
+    from app.services import rollup_service
+    if user or domain:
+        serie = _con_rollup(rollup_service.serie_entidad, seconds, None, None, user, domain)
+        if serie is not None:
+            return {"points": _repartir_serie(serie, buckets), "user": user, "domain": domain}
     entries = _read_window(seconds)
     if user:
         entries = [e for e in entries if e["user"] == user]
@@ -1198,6 +1265,10 @@ def get_volumen_por_periodo(seconds: int | None = None) -> dict:
     Se devuelve también la granularidad usada, para que el frontend sepa
     cómo formatear las etiquetas del eje X y del tooltip (hora vs fecha).
     """
+    from app.services import rollup_service
+    r = _con_rollup(rollup_service.volumen_por_periodo, seconds, None, None)
+    if r is not None:
+        return r
     entries = _read_window(seconds)
     if not entries:
         return {"granularidad": "dia", "puntos": []}

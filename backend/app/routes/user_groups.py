@@ -13,12 +13,13 @@ Los dos se usan igual desde afuera: en las reglas de acceso (http_access)
 se referencia el nombre del grupo como si fuera una ACL cualquiera.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.concurrency import run_in_threadpool
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.models.admin import Admin
 from app.models.audit_log import AuditLog
 from app.models.ldap_config import LdapConfig
@@ -28,6 +29,8 @@ from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_state import mark_dirty
 from app.services.squid_service import apply_squid_config, purge_credentials
 from app.services.squid_names import validate_name, ensure_not_referenced
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -111,22 +114,30 @@ def _validar_origen_ldap(db: Session, source: str, ldap_group_name: str | None) 
         )
 
 
-async def _apply_after_member_change(db: Session) -> dict:
-    """Aplica la config de Squid tras añadir/quitar un miembro de grupo.
+def _aplicar_tras_cambio_de_miembro(purgar_credenciales: bool = False) -> None:
+    """Aplica la config de Squid en segundo plano, DESPUÉS de haber respondido.
 
-    Los cambios de miembros se aplican de inmediato para que la política surta
-    efecto sin pulsar «Aplicar Cambios». Si la configuración resultante no es
-    válida, se marca «pendiente» y se informa del error en lugar de dejarlo
-    pasar en silencio.
-
-    Se delega al threadpool: apply_squid_config es sincrono y bloqueante, y
-    llamarlo directo desde una ruta async congelaria el event loop -y con el,
-    todo el panel- para todos los admins mientras dura el apply.
+    Antes la petición esperaba el apply completo (varios segundos) y, al
+    quitar un miembro, además un reinicio de Squid para purgar credenciales:
+    el admin miraba un botón "Añadir" colgado, y encima, al ser esa ruta
+    `async` y llamar al reinicio directo, todo el panel se congelaba para
+    todos los admins mientras duraba. El cambio ya está confirmado en la
+    base de datos cuando se responde; si el apply falla, queda marcado
+    «pendiente» (mark_dirty) igual que antes. El apply está serializado con
+    su propio lock, así que varios cambios seguidos no se pisan.
     """
-    result = await run_in_threadpool(apply_squid_config, db)
-    if result["status"] == "error":
+    db = SessionLocal()
+    try:
+        result = apply_squid_config(db)
+        if result["status"] == "error":
+            mark_dirty()
+        if purgar_credenciales:
+            purge_credentials()
+    except Exception:
+        logger.exception("Falló la aplicación en segundo plano tras un cambio de miembros de grupo")
         mark_dirty()
-    return result
+    finally:
+        db.close()
 
 
 @router.get("/", response_model=list[GroupResponse])
@@ -284,9 +295,10 @@ def delete_group(
 
 
 @router.post("/{group_id}/members", response_model=GroupResponse)
-async def add_member(
+def add_member(
     group_id: int,
     data: MemberAdd,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
 ):
@@ -319,15 +331,17 @@ async def add_member(
         new_value=f"{group.name}: +{username}",
     ))
     db.commit()
-    await _apply_after_member_change(db)
+    mark_dirty()
+    background.add_task(_aplicar_tras_cambio_de_miembro)
 
     return _to_response(group, _members(db, group_id))
 
 
 @router.delete("/{group_id}/members/{username}", response_model=GroupResponse)
-async def remove_member(
+def remove_member(
     group_id: int,
     username: str,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
 ):
@@ -345,9 +359,9 @@ async def remove_member(
         old_value=f"{group.name}: -{username}",
     ))
     db.commit()
-    await _apply_after_member_change(db)
+    mark_dirty()
     # Salir de un grupo puede quitar permisos: sin purgar, las credenciales ya
     # validadas siguen sirviendo con la política anterior.
-    purge_credentials()
+    background.add_task(_aplicar_tras_cambio_de_miembro, True)
 
     return _to_response(group, _members(db, group_id))
