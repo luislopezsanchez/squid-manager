@@ -208,7 +208,9 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
     # afectaban a ninguna decisión de tráfico. Es la misma idea que ya
     # aplicaba domain_acls_used más abajo para la variante SNI, extendida a
     # la declaración base.
-    referenced_acl_names: set[str] = {p.acl_name.strip() for p in delay_pools if p.acl_name}
+    from app.services.bandwidth_service import acls_de_pool, directivas
+    referenced_acl_names: set[str] = {a for p in delay_pools for a in acls_de_pool(p)}
+    delay_descargas = directivas(delay_pools)
 
     # Nombres de ACL que hace falta declarar en deny_info para que un deny
     # de esa regla muestre la página de bloqueo personalizada -Squid la
@@ -381,7 +383,7 @@ def generate_squid_config(db: Session, kerberos=None) -> str:
         motivos_reglas=motivos_reglas,
         cache_mgr_email=cache_mgr_email,
         settings=settings,
-        delay_pools=delay_pools,
+        delay_pools=delay_descargas,
         ldap=ldap,
         groups=groups,
         hay_grupos_ldap=hay_grupos_ldap,

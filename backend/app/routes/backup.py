@@ -122,7 +122,9 @@ def build_backup_dict(db: Session, exported_by: str) -> dict:
         ],
         "delay_pools": [
             {"pool_class": dp.pool_class, "parameters": dp.parameters,
-             "acl_name": dp.acl_name, "description": dp.description, "enabled": dp.enabled}
+             "acl_name": dp.acl_name, "description": dp.description, "enabled": dp.enabled,
+             "targets": dp.targets, "acl_names": dp.acl_names, "download_bps": dp.download_bps,
+             "shared": bool(dp.shared)}
             # Los que gestiona solo quota_service.py (quota_id) se excluyen:
             # apuntan a una cuota por id, que al restaurar nace con un id
             # distinto -y si la cuota se vuelve a agotar, el propio hilo de
@@ -404,6 +406,9 @@ async def restore_backup(
             dp["parameters"] = validate_value(dp["parameters"], field="parámetros del delay pool")
             if dp.get("acl_name"):
                 dp["acl_name"] = validate_value(dp["acl_name"], field="ACL del delay pool")
+            dp = {k: v for k, v in dp.items() if k in {
+                "pool_class", "parameters", "acl_name", "description", "enabled",
+                "targets", "acl_names", "download_bps", "shared"}}
             db.add(DelayPool(**dp))
         results["delay_pools"] = len(backup["delay_pools"])
 

@@ -135,8 +135,9 @@ def find_references(db, name: str) -> list[str]:
             used_in.append(f"regla de acceso «{rule.action} {rule.acl_names}»")
 
     for pool in db.query(DelayPool).all():
-        if (pool.acl_name or "").strip() == name:
-            used_in.append(f"delay pool #{pool.id} (clase {pool.pool_class})")
+        usadas = set((pool.acl_names or "").split()) | {(pool.acl_name or "").strip()}
+        if name in usadas:
+            used_in.append(f"regla de ancho de banda #{pool.id}")
 
     return used_in
 

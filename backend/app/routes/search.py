@@ -102,6 +102,7 @@ def buscar_referencias(
             or_(
                 DelayPool.description.ilike(patron),
                 DelayPool.acl_name.ilike(patron),
+                DelayPool.acl_names.ilike(patron),
             )
         )
         .limit(50)

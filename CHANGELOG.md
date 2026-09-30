@@ -7,6 +7,34 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Añadido / Mejorado (ancho de banda — Fase 5 del plan de mejora)
+
+- **Reglas de ancho de banda con varios objetivos y selector visual.** «Aplica a»
+  deja de ser una lista desplegable larga: cinco iconos (ACLs y categorías,
+  Tipo de tráfico, Usuarios, Grupos, Todo el tráfico), cada uno con su buscador
+  y casillas, con contador de lo elegido y etiquetas quitables. Una regla puede
+  combinar objetos de varios tipos (migración 0042: `targets`, `acl_names`,
+  `download_bps`, `shared`). Varios objetivos generan un
+  `delay_access N allow <acl>` por objetivo (se combinan con O). Las reglas
+  antiguas y los pools que crea `quota_service` siguen funcionando igual y se
+  pueden abrir con el editor nuevo cuando su forma lo permite.
+- **Tipos de tráfico sin regex**: Vídeo, Audio y música, Descargas grandes y
+  Documentos (por extensión, con o sin `?query` al final de la URL).
+- **Velocidad en KB/s, MB/s o Mbit/s**, y elección explícita de cómo se reparte:
+  compartido entre todo lo elegido (clase 1) o límite por equipo (clase 2).
+- Se quita el recuadro negro «Formato Squid generado»: no aportaba nada al admin.
+- Las ACLs que crea el mecanismo (`bw_usr_*`, `bw_tipo_*`) no se ofrecen como
+  «ACL», y no se pueden borrar mientras una regla las use.
+- **Límite de subida y reserva de ancho de banda: no se pueden con Squid**
+  (documentado en `bandwidth_service.py` y en el panel). Se probó en vivo con
+  Squid 6.14: `client_delay_pools` no reduce la subida (un POST de 3 MB va a
+  2,9 MB/s con o sin regla), frena la respuesta hacia el cliente por IP, y su
+  `client_delay_access` se evalúa antes de autenticar, así que no distingue
+  usuarios. Squid tampoco garantiza ancho a nadie. Ambas cosas se resuelven con
+  `tc` en el sistema operativo, fuera de este producto. Medido: una regla por
+  usuario (`proxy_auth`) limitada a 300 KB/s descargó a 305 KB/s; una con dos
+  objetivos a 250 KB/s, a 250 KB/s.
+
 ### Añadido / Mejorado (usuarios, grupos y cuotas — Fase 4 del plan de mejora)
 
 - **Tabla de Usuarios**: cada columna ordena al hacer clic (otro clic invierte;

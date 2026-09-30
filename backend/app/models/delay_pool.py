@@ -1,7 +1,7 @@
 """Modelo DelayPool: control de ancho de banda (delay pools de Squid)."""
 
 from app.utils import utcnow
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, BigInteger
 from app.database import Base
 
 
@@ -17,6 +17,17 @@ class DelayPool(Base):
     acl_name = Column(String(100), nullable=True)
     description = Column(String(255), nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
+    # --- Regla «v2» (ver services/bandwidth_service.py). NULL en las reglas
+    # antiguas y en los pools que gestiona quota_service, que siguen usando
+    # pool_class/parameters/acl_name tal cual. ---
+    # JSON [{"kind","value","acl"}]: a qué aplica la regla (varios objetos).
+    targets = Column(Text, nullable=True)
+    # ACLs resueltas de `targets`, separadas por espacio (para saber dónde se usa una ACL).
+    acl_names = Column(Text, nullable=True)
+    # Bytes por segundo de descarga.
+    download_bps = Column(BigInteger, nullable=True)
+    # True: el límite se reparte entre todo lo que cae en la regla. False: cada equipo tiene el suyo.
+    shared = Column(Boolean, default=True, nullable=False)
     # No NULL solo en el pool que quota_service.py crea solo cuando un
     # usuario agota su cuota con la acción "limitar velocidad" -identifica
     # ese pool como propio para poder borrarlo al reiniciar el periodo, sin

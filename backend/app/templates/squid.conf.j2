@@ -373,15 +373,19 @@ cache_dir {{ settings.get('cache_dir', 'ufs /var/spool/squid 100 16 256') }}
 maximum_object_size {{ settings.get('maximum_object_size', '4 MB') }}
 
 {% if delay_pools and delay_pools|length > 0 %}
-# --- Delay Pools (control de ancho de banda) ---
+# --- Delay Pools (limite de DESCARGA: lo que Squid entrega al cliente) ---
 delay_pools {{ delay_pools|length }}
 {% for pool in delay_pools %}
-delay_class {{ loop.index }} {{ pool.pool_class }}
-delay_parameters {{ loop.index }} {{ pool.parameters }}
-delay_access {{ loop.index }} allow {{ pool.acl_name if pool.acl_name else 'all' }}
-delay_access {{ loop.index }} deny all
+{% set n = loop.index %}
+delay_class {{ n }} {{ pool.clase }}
+delay_parameters {{ n }} {{ pool.parametros }}
+{% for acl in pool.acls %}
+delay_access {{ n }} allow {{ acl }}
+{% endfor %}
+delay_access {{ n }} deny all
 {% endfor %}
 {% endif %}
+
 
 # --- Logging ---
 # El prefijo stdio: es el módulo de escritura; sin él Squid avisa en cada arranque.

@@ -54,6 +54,11 @@ class FakeDelayPool:
         self.parameters = parameters
         self.acl_name = acl_name
         self.enabled = enabled
+        # Campos de las reglas nuevas de ancho de banda (None = regla antigua).
+        self.targets = None
+        self.acl_names = None
+        self.download_bps = None
+        self.shared = True
 
 
 class FakeLdap:
@@ -531,3 +536,51 @@ def test_motivo_de_regla_pierde_los_acentos():
     )
     config = generate_squid_config(db)
     assert "acl motivo_regla_0 external squidmanager_static_message_helper Politica de horario: manana no, tarde si" in config
+
+
+# --- Reglas de ancho de banda nuevas: varios objetivos, bajada y subida -----
+
+def _pool_v2(acl_names, download=None, shared=True):
+    p = FakeDelayPool(1, "", acl_name=acl_names.split()[0])
+    p.targets = "[]"
+    p.acl_names = acl_names
+    p.download_bps = download
+    p.shared = shared
+    return p
+
+
+def test_regla_con_varios_objetivos_genera_un_allow_por_objetivo():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("redes", "dstdomain", ".facebook.com"), FakeAcl("video", "dstdomain", ".youtube.com")],
+        delay_pools=[_pool_v2("redes video", download=65536)],
+    )
+    config = generate_squid_config(db)
+    assert "delay_class 1 1" in config
+    assert "delay_parameters 1 65536/65536" in config
+    # Un allow por objetivo (se combinan con O), no una sola línea con las dos (Y).
+    assert "delay_access 1 allow redes\n" in config
+    assert "delay_access 1 allow video\n" in config
+    assert "delay_access 1 deny all" in config
+
+
+def test_limite_por_equipo_usa_clase_2_con_agregado_sin_limite():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("redes", "dstdomain", ".facebook.com")],
+        delay_pools=[_pool_v2("redes", download=32768, shared=False)],
+    )
+    config = generate_squid_config(db)
+    assert "delay_class 1 2" in config
+    assert "delay_parameters 1 1073741824/1073741824 32768/32768" in config
+
+
+def test_acl_de_una_regla_nueva_se_declara():
+    db = FakeDB(
+        settings=[FakeSetting("http_port", "3128", "network")],
+        acls=[FakeAcl("redes", "dstdomain", ".facebook.com"), FakeAcl("otra", "dstdomain", ".x.com")],
+        delay_pools=[_pool_v2("redes", download=1000)],
+    )
+    config = generate_squid_config(db)
+    assert "acl redes dstdomain" in config
+    assert "acl otra " not in config
