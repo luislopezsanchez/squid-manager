@@ -21,6 +21,7 @@ from app.config import settings
 from app.i18n import idioma_de_cabecera, traducir
 from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
+from app.routes import modules as modules_routes
 from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy, kerberos, ai, update, cache_manager, contact, smtp, quotas, group_quotas, network, central, search
 from app.middleware import rate_limit_middleware
 
@@ -424,6 +425,7 @@ app.include_router(access_rules.router, prefix="/api/access-rules", tags=["Regla
 app.include_router(squid_config.router, prefix="/api/squid", tags=["Configuración Squid"])
 app.include_router(ldap.router, prefix="/api/ldap", tags=["LDAP"])
 app.include_router(delay_pools.router, prefix="/api/delay-pools", tags=["Delay Pools"])
+app.include_router(modules_routes.router, prefix="/api/modules", tags=["Módulos"])
 app.include_router(audit.router, prefix="/api/audit", tags=["Auditoría"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["Métricas"])
 

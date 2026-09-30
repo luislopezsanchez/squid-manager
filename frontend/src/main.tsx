@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import { LoadingState } from './components/AsyncState'
 import Layout from './components/Layout'
 import { getToken, isSuperadmin } from './api/client'
+import ModuloRequerido from './components/ModuloRequerido'
 
 // Carga perezosa por ruta: antes las ~30 páginas del panel viajaban todas en
 // el mismo archivo .js inicial (823 KB) sin importar cuál se fuera a mirar
@@ -49,6 +50,7 @@ const RendimientoErrores = lazy(() => import('./pages/RendimientoErrores'))
 const Tendencias = lazy(() => import('./pages/Tendencias'))
 const Panorama = lazy(() => import('./pages/Panorama'))
 const PanelCentral = lazy(() => import('./pages/PanelCentral'))
+const Modulos = lazy(() => import('./pages/Modulos'))
 
 function App() {
   const token = getToken()
@@ -85,7 +87,7 @@ function App() {
             <Route path="cuotas" element={<Cuotas />} />
             <Route path="ldap" element={<LdapConfig />} />
             <Route path="kerberos" element={<Kerberos />} />
-            <Route path="asistente" element={<Asistente />} />
+            <Route path="asistente" element={<ModuloRequerido modulo="asistente" nombre="Asistente AI"><Asistente /></ModuloRequerido>} />
             <Route path="documentacion" element={<Documentacion />} />
             <Route path="contacto" element={<Contacto />} />
             <Route path="settings" element={<Settings />} />
@@ -102,12 +104,13 @@ function App() {
             <Route path="buscar" element={<BuscarReferencias />} />
             <Route path="admins" element={isSuperadmin() ? <Admins /> : <Navigate to="/" />} />
             <Route path="actualizaciones" element={<Actualizaciones />} />
-            <Route path="reportes/cache" element={<CacheStats />} />
-            <Route path="reportes/actividad" element={<ActividadRed />} />
-            <Route path="reportes/rendimiento" element={<RendimientoErrores />} />
-            <Route path="reportes/tendencias" element={<Tendencias />} />
-            <Route path="reportes/panorama" element={<Panorama />} />
-            <Route path="panel-central" element={<PanelCentral />} />
+            <Route path="reportes/cache" element={<ModuloRequerido modulo="analisis" nombre="Análisis"><CacheStats /></ModuloRequerido>} />
+            <Route path="reportes/actividad" element={<ModuloRequerido modulo="analisis" nombre="Análisis"><ActividadRed /></ModuloRequerido>} />
+            <Route path="reportes/rendimiento" element={<ModuloRequerido modulo="analisis" nombre="Análisis"><RendimientoErrores /></ModuloRequerido>} />
+            <Route path="reportes/tendencias" element={<ModuloRequerido modulo="analisis" nombre="Análisis"><Tendencias /></ModuloRequerido>} />
+            <Route path="reportes/panorama" element={<ModuloRequerido modulo="analisis" nombre="Análisis"><Panorama /></ModuloRequerido>} />
+            <Route path="panel-central" element={<ModuloRequerido modulo="panel_central" nombre="Panel central"><PanelCentral /></ModuloRequerido>} />
+            <Route path="modulos" element={<Modulos />} />
           </Route>
         </Routes>
       </Suspense>

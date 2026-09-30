@@ -2,6 +2,7 @@ import { traducir, cambiarIdioma, idiomaActual, IDIOMAS, type Idioma } from '../
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import { ConfirmHost } from './ConfirmDialog'
+import { useModulos } from '../utils/modules'
 import { clearToken, api, canWrite, isSuperadmin, getRole } from '../api/client'
 import {
   IconDashboard, IconUsers, IconTag, IconRules, IconGauge, IconLink, IconGroups,
@@ -54,6 +55,7 @@ function leerAbierto(): string | null {
 export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { modulos } = useModulos()
   const [grupoManual, setGrupoManual] = useState<string | null>(leerAbierto)
   const [applying, setApplying] = useState(false)
   const [applyProgress, setApplyProgress] = useState<{ paso: string; pct: number } | null>(null)
@@ -226,14 +228,6 @@ export default function Layout() {
       ],
     },
     {
-      id: 'central',
-      titulo: traducir("Monitoreo centralizado"),
-      Icon: IconRefresh,
-      items: [
-        { to: '/panel-central', label: traducir("Panel central"), Icon: IconGlobe },
-      ],
-    },
-    {
       id: 'politicas',
       titulo: traducir("Gestión"),
       Icon: IconShield,
@@ -268,6 +262,7 @@ export default function Layout() {
         { to: '/certificate', label: traducir("Certificado"), Icon: IconLock },
         { to: '/settings', label: traducir("Configuración"), Icon: IconSettings },
         { to: '/smtp', label: traducir("SMTP"), Icon: IconMail },
+        { to: '/modulos', label: traducir("Módulos"), Icon: IconTool },
         { to: '/backup', label: traducir("Backup y migración"), Icon: IconBackup },
         ...(isSuperadmin() ? [{ to: '/admins', label: traducir("Administradores"), Icon: IconShield }] : []),
       ],
@@ -277,12 +272,12 @@ export default function Layout() {
       titulo: traducir("Ayuda"),
       Icon: IconInfo,
       items: [
-        { to: '/asistente', label: traducir("Asistente AI"), Icon: IconAssistant },
+        ...(modulos.asistente ? [{ to: '/asistente', label: traducir("Asistente AI"), Icon: IconAssistant }] : []),
         { to: '/documentacion', label: traducir("Documentación"), Icon: IconFile },
         { to: '/contacto', label: traducir("Contacto"), Icon: IconMail },
       ],
     },
-  ].filter(g => g.items.length > 0)
+  ].filter(g => g.items.length > 0 && (g.id !== 'reportes' || modulos.analisis))
 
   const grupoActivoId = grupos.find(g => g.items.some(it => it.to === '/'
     ? location.pathname === '/'
@@ -378,6 +373,18 @@ export default function Layout() {
         <nav className="relative flex-1 px-3 pb-3">
           {/* Dashboard: fijo, fuera de los grupos colapsables -es lo primero
               que se espera ver al entrar, tiene que estar a un clic. */}
+          {/* Panel central: opción suelta sobre el Dashboard, solo si el módulo
+              está activado en Sistema → Módulos (apagado por defecto). */}
+          {modulos.panel_central && (
+            <NavLink to="/panel-central" className={(p) => `${navClass(p)} mb-1`}>
+              {({ isActive }) => (
+                <>
+                  <IconGlobe className={`w-[21px] h-[21px] flex-none ${isActive ? 'text-brand-300' : 'opacity-85'}`} />
+                  {traducir("Panel central")}
+                </>
+              )}
+            </NavLink>
+          )}
           <NavLink to={dashboard.to} end className={(p) => `${navClass(p)} mb-2`}>
             {({ isActive }) => (
               <>

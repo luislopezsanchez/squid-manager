@@ -7,6 +7,15 @@ memoria se resetea a mano en cada test que lo necesita -son módulo-level,
 no fixtures, así que un test no puede heredar el estado que dejó otro."""
 
 from app.services import node_alert_service as nas
+from app.services import modules_service
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _panel_central_encendido(monkeypatch):
+    """Estas pruebas cubren el monitoreo con el módulo Panel central ya
+    activado; el apagado se prueba aparte (test_tick_no_hace_nada_con_el_modulo_apagado)."""
+    monkeypatch.setattr(modules_service, "is_enabled", lambda db, clave: True)
 from app.models.central_config import CentralMonitorConfig
 from app.models.monitored_node import MonitoredNode
 
@@ -277,3 +286,19 @@ def test_get_alertas_nodos_recientes_ordena_de_la_mas_nueva_a_la_mas_vieja(monke
     recientes = nas.get_alertas_nodos_recientes()
 
     assert [r["node_name"] for r in recientes] == ["nueva", "vieja"]
+
+
+def test_tick_no_hace_nada_con_el_modulo_panel_central_apagado(monkeypatch):
+    """Con el módulo apagado en Sistema → Módulos no se consulta ningún nodo,
+    aunque el monitoreo esté habilitado y haya nodos guardados."""
+    monkeypatch.setattr(modules_service, "is_enabled", lambda db, clave: clave != "panel_central")
+
+    class _Q:
+        def first(self): return CentralMonitorConfig(enabled=True)
+        def filter(self, *a, **k): raise AssertionError("no debería consultar nodos con el módulo apagado")
+    class _S:
+        def query(self, modelo): return _Q()
+        def close(self): pass
+    monkeypatch.setattr(nas, "SessionLocal", lambda: _S())
+    monkeypatch.setattr(nas, "consultar_nodo", lambda n: (_ for _ in ()).throw(AssertionError("no debería consultar")))
+    nas._tick()

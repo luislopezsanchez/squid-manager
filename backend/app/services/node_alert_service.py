@@ -90,6 +90,9 @@ def _tick() -> None:
         config = db.query(CentralMonitorConfig).first()
         if not config or not config.enabled:
             return  # feature apagada -nada que chequear ni que avisar.
+        from app.services import modules_service
+        if not modules_service.is_enabled(db, "panel_central"):
+            return  # módulo Panel central apagado en Sistema → Módulos.
 
         nodes = db.query(MonitoredNode).filter(MonitoredNode.enabled.is_(True)).all()
         ids_vigentes = {n.id for n in nodes}

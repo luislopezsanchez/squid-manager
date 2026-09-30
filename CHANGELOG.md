@@ -7,6 +7,23 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Añadido (módulos opcionales — Fase 7 del plan de mejora)
+
+- **Sistema → Módulos** (`GET/PUT /api/modules`, migración 0043): interruptores
+  para activar solo lo que se necesita. Análisis y Asistente de IA vienen
+  activos; **Panel central viene apagado** (es para quien administra varios
+  proxies). Solo el superadmin cambia módulos (queda en Auditoría). Un módulo
+  apagado desaparece del menú y sus rutas muestran «Módulo desactivado» con el
+  camino para activarlo; no borra datos ni detiene la recolección (los agregados
+  de actividad siguen calculándose, para que al encenderlo no falte historia).
+- **Panel central** deja de ser un grupo del menú: cuando el módulo está activo,
+  aparece como una opción suelta sobre Dashboard. Con el módulo apagado, este
+  servidor deja de consultar y de avisar de sus nodos (`node_alert_service`), pero
+  puede seguir siendo monitorizado por otro: ese rol (`/api/central/dashboard`)
+  no depende del interruptor.
+- Instalaciones que ya usaban el Panel central (nodos guardados o monitoreo
+  activo) lo conservan encendido tras actualizar: la migración lo detecta.
+
 ### Mejorado (análisis con gráficos — Fase 6 del plan de mejora)
 
 - **Panorama rediseñado** (`GET /api/panel/panorama?ventana=24h|7d|30d`, sale de

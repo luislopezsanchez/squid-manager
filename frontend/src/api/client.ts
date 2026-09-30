@@ -309,6 +309,8 @@ export const api = {
   createDelayPool: (data: any) => request<any>('/delay-pools/', { method: 'POST', body: JSON.stringify(data) }),
   updateDelayPool: (id: number, data: any) => request<any>(`/delay-pools/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteDelayPool: (id: number) => request<void>(`/delay-pools/${id}`, { method: 'DELETE' }),
+  listModules: () => request<any[]>('/modules/'),
+  setModule: (key: string, enabled: boolean) => request<any>(`/modules/${key}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
   getDelayPoolPresets: () => request<any[]>('/delay-pools/presets'),
 
   // Monitoreo centralizado: nodos remotos de SquidManager que este panel
