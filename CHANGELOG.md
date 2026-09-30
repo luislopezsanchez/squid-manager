@@ -7,6 +7,23 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Sin publicar]
 
+### Mejorado (segunda revisión del usuario)
+
+- **Avisos por correo con formato**: todas las notificaciones (cambios, alertas de
+  seguridad, cuota agotada, sitios bloqueados, nodos, prueba) salen ahora como correo
+  HTML con el mismo estilo que el reporte diario: franja de color según la gravedad,
+  lo ocurrido en lenguaje natural, qué significa, qué conviene hacer y la fecha y
+  hora en la zona horaria de la instalación; en el idioma del panel. El texto plano
+  se sigue enviando para los clientes que no muestran HTML.
+- **PDF de Actividad de red** con un equilibrio mejor: portada con indicadores,
+  «Lo más destacado» en frases, y por sección una explicación de qué se mide, la
+  tabla junto a su gráfica y una línea de lectura; con número de página.
+
+### Corregido
+
+- **Avisos emergentes que reaparecían** al escribir en un formulario (p. ej. SMTP):
+  el contenedor de avisos se volvía a montar en cada render y repetía los últimos.
+
 ### Mejorado (revisión del usuario, tras probar las fases 0-10)
 
 - **Actividad de red**: «IPs compartidas» y «Cuota excedida» muestran desde cuándo

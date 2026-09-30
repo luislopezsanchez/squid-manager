@@ -23,7 +23,7 @@ EVENT_CONFIG_MAP = {
 }
 
 
-def _snapshot_config(notif_config, smtp_config) -> SimpleNamespace:
+def _snapshot_config(notif_config, smtp_config, idioma: str = "es") -> SimpleNamespace:
     """Crea una copia plana combinando Notificaciones (cuándo/a quién) y
     SmtpConfig (el servidor en sí), para usarla fuera de la sesión de BD.
     """
@@ -39,6 +39,7 @@ def _snapshot_config(notif_config, smtp_config) -> SimpleNamespace:
         telegram_enabled=notif_config.telegram_enabled,
         telegram_bot_token=notif_config.telegram_bot_token,
         telegram_chat_id=notif_config.telegram_chat_id,
+        idioma=idioma,
     )
 
 
@@ -62,7 +63,14 @@ def _snapshot_si_habilitado(db, event_type: str) -> SimpleNamespace | None:
         return None
 
     smtp_config = db.query(SmtpConfig).first()
-    return _snapshot_config(config, smtp_config)
+    # Idioma en que se redactan los correos: el del panel cuando se guardaron las notificaciones.
+    try:
+        from sqlalchemy import text
+        fila = db.execute(text("SELECT v FROM app_settings WHERE k='report_lang'")).fetchone()
+        idioma = fila[0] if fila and fila[0] in ("es", "en", "pt") else "es"
+    except Exception:
+        idioma = "es"
+    return _snapshot_config(config, smtp_config, idioma)
 
 
 def queue_notification(background_tasks, db, event_type: str, subject: str, message: str):
@@ -74,7 +82,7 @@ def queue_notification(background_tasks, db, event_type: str, subject: str, mess
     """
     snapshot = _snapshot_si_habilitado(db, event_type)
     if snapshot:
-        background_tasks.add_task(notify, snapshot, subject, message)
+        background_tasks.add_task(notify, snapshot, subject, message, event_type)
 
 
 def notify_now(db, event_type: str, subject: str, message: str) -> None:
@@ -86,7 +94,7 @@ def notify_now(db, event_type: str, subject: str, message: str) -> None:
     """
     snapshot = _snapshot_si_habilitado(db, event_type)
     if snapshot:
-        notify(snapshot, subject, message)
+        notify(snapshot, subject, message, event_type)
 
 
 def _enviar_smtp(config, destinatarios: list[str], subject: str, body: str, reply_to: str | None = None,
@@ -147,14 +155,14 @@ def _enviar_smtp(config, destinatarios: list[str], subject: str, body: str, repl
         return False, f"Error de conexión: {e}"
 
 
-def send_email(config, subject: str, body: str) -> tuple[bool, str]:
+def send_email(config, subject: str, body: str, html_body: str | None = None) -> tuple[bool, str]:
     """Envía un email a los destinatarios configurados en Notificaciones."""
     if not config.email_enabled:
         return False, "Notificaciones por email deshabilitadas"
     if not config.email_recipients:
         return False, "Falta el destinatario (email_recipients)"
     recipients = [r.strip() for r in config.email_recipients.split(",") if r.strip()]
-    return _enviar_smtp(config, recipients, subject, body)
+    return _enviar_smtp(config, recipients, subject, body, html_body=html_body)
 
 
 # Destino fijo de los mensajes de Contacto (Ayuda > Contacto): no es
@@ -202,12 +210,18 @@ def send_telegram(config, message: str) -> tuple[bool, str]:
         return False, f"Error enviando Telegram: {e}"
 
 
-def notify(config, subject: str, message: str) -> dict:
+def notify(config, subject: str, message: str, event: str | None = None) -> dict:
     """Envía notificación por email y/o Telegram según configuración."""
     results = {"email": False, "telegram": False}
 
     if config.email_enabled:
-        ok, _ = send_email(config, subject, message)
+        from app.services.email_templates import construir_correo
+        try:
+            cuerpo_html, texto = construir_correo(event, subject, message, getattr(config, "idioma", "es"))
+        except Exception as e:  # una plantilla rota no debe perder el aviso: sale en texto plano
+            logger.warning("No se pudo construir el correo con formato: %s", e)
+            cuerpo_html, texto = None, message
+        ok, _ = send_email(config, subject, texto, html_body=cuerpo_html)
         results["email"] = ok
 
     if config.telegram_enabled:
@@ -220,11 +234,13 @@ def notify(config, subject: str, message: str) -> dict:
 
 def test_email(config) -> dict:
     """Prueba el envío de email."""
-    ok, message = send_email(
-        config,
-        "SquidManager - Prueba de notificación",
-        "Este es un correo de prueba de SquidManager.\n\nSi recibes esto, la configuración SMTP es correcta.",
+    from app.services.email_templates import construir_correo
+    cuerpo_html, texto = construir_correo(
+        "test", "SquidManager: prueba de notificación",
+        "Este es un correo de prueba de SquidManager. Si lo recibes, la configuración del correo es correcta.",
+        getattr(config, "idioma", "es"),
     )
+    ok, message = send_email(config, "SquidManager - Prueba de notificación", texto, html_body=cuerpo_html)
     return {"ok": ok, "message": message}
 
 

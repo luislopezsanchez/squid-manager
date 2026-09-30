@@ -143,3 +143,30 @@ def test_extrae_con_bsdtar_y_rechaza_basura():
     with pytest.raises(HTTPException) as e:
         _extraer_con_bsdtar("mal.rar", b"basura")
     assert e.value.status_code == 400
+
+
+# --- correos de alerta con formato ------------------------------------------
+
+@pytest.mark.parametrize("evento", ["apply", "user_change", "acl_change", "rule_change", "security_alert",
+                                    "node_down", "quota_reached", "blocked_access", "test", None])
+@pytest.mark.parametrize("idioma", ["es", "en", "pt"])
+def test_todo_aviso_sale_con_formato(evento, idioma):
+    from app.services.email_templates import construir_correo
+    html, texto = construir_correo(evento, "SquidManager: algo pasó", "El usuario <ana> hizo algo.", idioma)
+    assert "<table" in html and "algo pasó".capitalize() in html or "Algo pasó" in html
+    assert "&lt;ana&gt;" in html and "<ana>" not in html   # se escapa
+    assert "<ana>" in texto                                # el texto plano no se escapa
+
+
+def test_el_aviso_usa_el_idioma_pedido():
+    from app.services.email_templates import construir_correo
+    en, _ = construir_correo("quota_reached", "x", "y", "en")
+    pt, _ = construir_correo("quota_reached", "x", "y", "pt")
+    assert "What it means" in en and "O que significa" in pt
+
+
+def test_toast_container_es_estable():
+    import pathlib
+    src = (pathlib.Path(__file__).parents[2] / "frontend/src/components/Toast.tsx")
+    if src.exists():
+        assert "useRef(() =>" in src.read_text(), "ToastContainer no debe redefinirse en cada render"
