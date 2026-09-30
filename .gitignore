@@ -77,3 +77,7 @@ backend/.network_state.json
 # Estado local de Claude Code (locks de tareas programadas, etc.): es
 # runtime de esta sesión/máquina, no código ni configuración del proyecto.
 .claude/
+
+# Estado operativo de los trackers de cuota y syslog (offsets de lectura del access.log).
+backend/.quota_offset_state*
+backend/.syslog_offset_state*
