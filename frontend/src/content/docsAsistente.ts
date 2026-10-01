@@ -5,91 +5,88 @@ export const DOC_ASISTENTE: Record<'es' | 'en' | 'pt', string> = {
   es: `
 ## Para qué sirve
 
-Un buscador con lenguaje natural sobre la documentación del proyecto (\`README.md\` y \`docs/*.md\`, en español) -no un agente que actúa sobre el proxy real. Responde preguntas de uso citando de qué archivo y sección salió la respuesta. Apagado por defecto, igual que LDAP/Kerberos/Syslog.
+Un asistente al que se le pregunta en lenguaje natural cómo usar el panel («¿cómo bloqueo un sitio solo en horario de oficina?», «¿qué es un delay pool?») y responde **citando de qué archivo y sección de la documentación sale la respuesta**. Opcionalmente, en **modo agéntico**, también consulta la configuración real de este servidor para diagnosticar y propone ACLs que tú confirmas. Apagado por defecto, igual que LDAP/Kerberos/Syslog.
 
-## Dos API keys, de dos servicios distintos
+## Proveedor de IA: tú eliges
 
-1. Un **proveedor de chat** (Gemini, Ollama Cloud, NVIDIA NIM o Groq) para generar la respuesta.
-2. **Jina AI**, siempre, para la búsqueda semántica (embeddings) -sin importar qué proveedor de chat elijas. Las dos se pueden probar desde el panel antes de guardar, y ninguna se vuelve a mostrar una vez guardada.
+Se elige **uno** de una lista: Anthropic (Claude), OpenAI, Gemini, Groq, OpenRouter, DeepSeek, Mistral, NVIDIA NIM, Ollama Cloud, **Ollama en tu red** (los datos no salen de tu red) o **Personalizado** (cualquier servicio compatible con OpenAI: vLLM, LM Studio, LiteLLM, Azure…, con su URL y su clave). La clave es opcional en Ollama en tu red y en los servicios propios que no la piden. «Probar conexión» lista los modelos reales del proveedor elegido, y la clave no se vuelve a mostrar una vez guardada.
+
+## La búsqueda en la documentación es local
+
+No hace falta ningún segundo servicio ni clave: la búsqueda se hace dentro de tu propio servidor (texto completo de PostgreSQL), en el idioma del panel (español, inglés o portugués) y sin enviar la documentación a nadie. La documentación se **indexa sola** al arrancar y cada vez que cambia (por ejemplo, tras actualizar), e incluye la ayuda de cada pantalla del panel. El botón «Reindexar documentación» queda para forzarlo a mano.
 
 ## Qué ve, y qué no
 
-Solo lee \`README.md\` y \`docs/*.md\` en español -nunca la base de datos, el \`squid.conf\` real ni credenciales. El contenido de la documentación y cada pregunta que se hace viajan a esos dos servicios externos.
+Por defecto solo lee la documentación del proyecto -nunca la base de datos, el \`squid.conf\` real, usuarios ni credenciales. Lo que viaja al proveedor de IA es la pregunta, los fragmentos de documentación relevantes y, en modo agéntico, los datos que el asistente consulta (ver abajo).
 
-## Reindexar
+## Modo agéntico
 
-La documentación **no se reindexa sola**: hay que pulsar "Reindexar documentación" después de activar el asistente por primera vez, o de cualquier cambio en la documentación (incluida una actualización de SquidManager). Es una reindexación completa, no incremental -borra todo y vuelve a generarlo desde cero.
-
-## Modo agéntico (fase 1)
-
-Además de responder con la documentación, puede consultar ACLs, reglas, grupos y ajustes reales de este servidor para diagnosticar, y proponer cambios de configuración -nunca los aplica solo, siempre pide confirmación. No disponible con Ollama Cloud todavía -hace falta Gemini, Groq o NVIDIA NIM.
+Con el modo agéntico activado, el asistente puede consultar **ACLs, reglas de acceso, grupos, ajustes de Squid y el estado de «Aplicar cambios»** de este servidor para diagnosticar contra tu configuración real (por ejemplo, «¿por qué no puede entrar el grupo X a este sitio?»). Lo que consulta es estructural -nombres, tipos y cantidades-: nunca el contenido de las listas de archivo, ni usuarios, ni líneas de registro. Puede **proponer crear una ACL**, pero **nunca la crea ni la aplica solo**: aparece como propuesta y la creas tú con el mismo botón de siempre. No disponible con Ollama Cloud.
 
 ## Quién puede preguntar
 
-Cualquier administrador, **incluida una cuenta de solo lectura**: es una consulta sobre documentación pública, no una acción sobre el proxy.
+Cualquier administrador, **incluida una cuenta de solo lectura**: es una consulta, no una acción sobre el proxy.
 
 ## Requisito: pgvector
 
-La búsqueda semántica guarda los embeddings en una columna vectorial de Postgres. Se instala sola tanto en Docker como en instalación nativa, incluso al actualizar una instalación existente.
+La base de datos usa la extensión pgvector. Se instala sola tanto en Docker como en instalación nativa, incluso al actualizar una instalación existente.
 `.trim(),
   en: `
 ## What this is for
 
-A natural-language search engine over the project's documentation (\`README.md\` and \`docs/*.md\`, in Spanish) -not an agent that acts on the real proxy. It answers usage questions citing which file and section the answer came from. Off by default, same as LDAP/Kerberos/Syslog.
+An assistant you ask in natural language how to use the panel ("how do I block a site only during office hours?", "what is a delay pool?"), and it answers **citing which file and section of the documentation the answer comes from**. Optionally, in **agentic mode**, it also reads this server's real configuration to diagnose issues and proposes ACLs that you confirm. Off by default, like LDAP/Kerberos/Syslog.
 
-## Two API keys, from two different services
+## AI provider: your choice
 
-1. A **chat provider** (Gemini, Ollama Cloud, NVIDIA NIM or Groq) to generate the answer.
-2. **Jina AI**, always, for the semantic search (embeddings) -no matter which chat provider you pick. Both can be tested from the panel before saving, and neither is shown again once saved.
+You pick **one** from a list: Anthropic (Claude), OpenAI, Gemini, Groq, OpenRouter, DeepSeek, Mistral, NVIDIA NIM, Ollama Cloud, **Ollama on your network** (data never leaves your network) or **Custom** (any OpenAI-compatible service: vLLM, LM Studio, LiteLLM, Azure…, with its own URL and key). The key is optional for Ollama on your network and for self-hosted services that don't ask for one. "Test connection" lists the provider's real models, and the key is never shown again once saved.
+
+## The documentation search is local
+
+No second service or key is needed: the search runs inside your own server (PostgreSQL full-text search), in the panel's language (Spanish, English or Portuguese), and the documentation is not sent to anyone. The documentation **indexes itself** at startup and whenever it changes (for example, after an update), and it includes the help for every screen of the panel. The "Reindex documentation" button is there to force it by hand.
 
 ## What it can see, and what it can't
 
-It only reads \`README.md\` and \`docs/*.md\` in Spanish -never the database, the real \`squid.conf\`, or credentials. The documentation content and every question asked travel to those two external services.
+By default it only reads the project's documentation -never the database, the real \`squid.conf\`, users or credentials. What travels to the AI provider is the question, the relevant documentation fragments and, in agentic mode, the data the assistant queries (see below).
 
-## Reindexing
+## Agentic mode
 
-The documentation **doesn't reindex itself**: press "Reindex documentation" after enabling the assistant for the first time, or after any change to the documentation (including a SquidManager update). It's a full reindex, not incremental -it erases everything and rebuilds from scratch.
-
-## Agentic mode (phase 1)
-
-Besides answering from the documentation, it can check real ACLs, rules, groups and settings on this server to diagnose issues, and propose configuration changes -it never applies them on its own, it always asks for confirmation. Not available with Ollama Cloud yet -use Gemini, Groq or NVIDIA NIM.
+With agentic mode on, the assistant can read this server's **ACLs, access rules, groups, Squid settings and the "Apply changes" state** to diagnose against your real configuration (for example, "why can't group X reach this site?"). What it reads is structural -names, types and counts-: never the contents of file-based lists, users or log lines. It can **propose creating an ACL**, but **it never creates or applies anything on its own**: it shows up as a proposal and you create it with the usual button. Not available with Ollama Cloud.
 
 ## Who can ask
 
-Any administrator, **including a read-only account**: it's a query over public documentation, not an action on the proxy.
+Any administrator, **including a read-only account**: it's a query, not an action on the proxy.
 
 ## Requirement: pgvector
 
-Semantic search stores the embeddings in a Postgres vector column. It installs itself both in Docker and in a native install, even when updating an existing installation.
+The database uses the pgvector extension. It installs itself both in Docker and in a native install, even when updating an existing installation.
 `.trim(),
   pt: `
 ## Para que serve
 
-Um buscador com linguagem natural sobre a documentação do projeto (\`README.md\` e \`docs/*.md\`, em espanhol) -não um agente que age sobre o proxy real. Responde perguntas de uso citando de qual arquivo e seção veio a resposta. Desativado por padrão, assim como LDAP/Kerberos/Syslog.
+Um assistente ao qual você pergunta em linguagem natural como usar o painel («como bloqueio um site só no horário comercial?», «o que é um delay pool?») e que responde **citando de qual arquivo e seção da documentação sai a resposta**. Opcionalmente, no **modo agêntico**, também consulta a configuração real deste servidor para diagnosticar e propõe ACLs que você confirma. Desligado por padrão, como LDAP/Kerberos/Syslog.
 
-## Duas chaves de API, de dois serviços diferentes
+## Provedor de IA: você escolhe
 
-1. Um **provedor de chat** (Gemini, Ollama Cloud, NVIDIA NIM ou Groq) para gerar a resposta.
-2. **Jina AI**, sempre, para a busca semântica (embeddings) -não importa qual provedor de chat você escolher. As duas podem ser testadas no painel antes de salvar, e nenhuma é mostrada de novo depois de salva.
+Escolhe-se **um** de uma lista: Anthropic (Claude), OpenAI, Gemini, Groq, OpenRouter, DeepSeek, Mistral, NVIDIA NIM, Ollama Cloud, **Ollama na sua rede** (os dados não saem da sua rede) ou **Personalizado** (qualquer serviço compatível com OpenAI: vLLM, LM Studio, LiteLLM, Azure…, com sua URL e chave). A chave é opcional no Ollama na sua rede e nos serviços próprios que não a pedem. «Testar conexão» lista os modelos reais do provedor escolhido, e a chave não é mostrada novamente depois de salva.
 
-## O que ele vê, e o que não vê
+## A busca na documentação é local
 
-Só lê \`README.md\` e \`docs/*.md\` em espanhol -nunca o banco de dados, o \`squid.conf\` real nem credenciais. O conteúdo da documentação e cada pergunta feita viajam para esses dois serviços externos.
+Não é preciso nenhum segundo serviço nem chave: a busca é feita dentro do seu próprio servidor (texto completo do PostgreSQL), no idioma do painel (espanhol, inglês ou português) e sem enviar a documentação a ninguém. A documentação é **indexada sozinha** ao iniciar e sempre que muda (por exemplo, após atualizar), e inclui a ajuda de cada tela do painel. O botão «Reindexar documentação» fica para forçar à mão.
 
-## Reindexar
+## O que vê, e o que não vê
 
-A documentação **não se reindexa sozinha**: é preciso clicar em "Reindexar documentação" depois de ativar o assistente pela primeira vez, ou depois de qualquer mudança na documentação (inclusive uma atualização do SquidManager). É uma reindexação completa, não incremental -apaga tudo e reconstrói do zero.
+Por padrão só lê a documentação do projeto -nunca o banco de dados, o \`squid.conf\` real, usuários nem credenciais. O que viaja ao provedor de IA é a pergunta, os trechos de documentação relevantes e, no modo agêntico, os dados que o assistente consulta (veja abaixo).
 
-## Modo agêntico (fase 1)
+## Modo agêntico
 
-Além de responder com base na documentação, pode consultar ACLs, regras, grupos e ajustes reais deste servidor para diagnosticar, e propor mudanças de configuração -nunca as aplica sozinho, sempre pede confirmação. Ainda não disponível com o Ollama Cloud -use Gemini, Groq ou NVIDIA NIM.
+Com o modo agêntico ativado, o assistente pode consultar **ACLs, regras de acesso, grupos, ajustes do Squid e o estado de «Aplicar alterações»** deste servidor para diagnosticar com base na sua configuração real (por exemplo, «por que o grupo X não consegue acessar este site?»). O que consulta é estrutural -nomes, tipos e quantidades-: nunca o conteúdo das listas de arquivo, nem usuários, nem linhas de registro. Pode **propor criar uma ACL**, mas **nunca a cria nem a aplica sozinho**: aparece como proposta e você a cria com o mesmo botão de sempre. Não disponível com Ollama Cloud.
 
 ## Quem pode perguntar
 
-Qualquer administrador, **incluindo uma conta somente leitura**: é uma consulta sobre documentação pública, não uma ação sobre o proxy.
+Qualquer administrador, **inclusive uma conta somente leitura**: é uma consulta, não uma ação sobre o proxy.
 
 ## Requisito: pgvector
 
-A busca semântica guarda os embeddings numa coluna vetorial do Postgres. Ele se instala sozinho tanto no Docker quanto numa instalação nativa, mesmo ao atualizar uma instalação existente.
+O banco de dados usa a extensão pgvector. Ela se instala sozinha tanto no Docker quanto na instalação nativa, inclusive ao atualizar uma instalação existente.
 `.trim(),
 }

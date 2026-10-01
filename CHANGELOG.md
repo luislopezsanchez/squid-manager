@@ -5,7 +5,17 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [1.0.1] - Sin publicar (rama pruebas)
+## [1.0.2] - 2026-10-01
+
+### Mejorado
+
+- **Presentación del proyecto**: los README (es/en/pt) y la descripción del repositorio destacan lo que distingue a
+  SquidManager (asistente de IA con modo agéntico, buscador de referencias, panel central, análisis, importación de un
+  Squid existente conservando contraseñas, backup con vista previa…). El artículo de ayuda del **Asistente** estaba
+  desactualizado (hablaba de dos claves y de reindexar a mano): ahora describe los proveedores a elegir, la búsqueda local
+  y la indexación automática.
+
+## [1.0.1] - 2026-10-01
 
 ### Corregido
 

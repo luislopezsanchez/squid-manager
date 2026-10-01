@@ -35,6 +35,23 @@
 
 ---
 
+## ✨ Qué lo distingue
+
+Además de lo esperable en un panel de Squid (ACLs, reglas, usuarios locales/LDAP/Kerberos, SSL Bump, delay pools):
+
+- **🤖 Asistente de IA** que responde en lenguaje natural cómo usar el panel, citando la documentación (la búsqueda es local, en tu servidor). En **modo agéntico** consulta tu configuración real (ACLs, reglas, grupos, ajustes) para diagnosticar y **propone ACLs que tú confirmas: nunca aplica nada solo**. Elige el proveedor: Claude, OpenAI, Gemini, Groq, OpenRouter, DeepSeek, Mistral, NVIDIA NIM, **Ollama en tu propia red** o cualquiera compatible con OpenAI.
+- **🔎 Buscador de referencias**: un cuadro que cruza ACLs, reglas, grupos (con sus miembros) y delay pools para responder «¿por qué está bloqueado este sitio?» o «¿puedo borrar esta ACL sin romper nada?».
+- **🌐 Panel central**: monitoriza varios SquidManager (y Squid «básicos», sin panel) en un árbol de varios niveles; un nodo caído no rompe la vista de los demás, y puedes enviarle tu configuración.
+- **📊 Análisis**: panorama, tendencias, actividad de red (equipos desde los que entran varias cuentas, cuotas agotadas), latencia y errores, con informes en PDF. Las consultas de 24 h, 7 y 30 días tardan milisegundos gracias a los agregados por hora.
+- **📥 Importar un Squid que ya tienes** (`squid.conf`, htpasswd/htdigest, listas de ACL) **conservando las contraseñas**, y backup/restauración con vista previa de lo que cambiaría y restauración «todo o nada».
+- **⏱️ Cuotas y ancho de banda**: cuotas por usuario o grupo con periodos de calendario, y reglas de ancho de banda por usuario, grupo, ACL o tipo de tráfico.
+- **🔔 Avisos y reporte diario** por correo (HTML, en el idioma del panel) y Telegram.
+- **🧩 Módulos opcionales**: activa solo lo que necesitas.
+- **🔒 Seguridad revisada**: pasó una auditoría externa y sus hallazgos están corregidos (`docs/audits/`).
+- **🌍 Interfaz en español, inglés y portugués**; instalación con Docker (imágenes ya construidas o compilando), nativa sin Docker, y detrás de un proxy corporativo.
+
+---
+
 ## 📖 Qué es
 
 **SquidManager** es una plataforma de gestión de Squid Proxy que permite

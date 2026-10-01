@@ -12,8 +12,8 @@ Diseño deliberado, no accidental:
   Con el modo agéntico activado, sí consulta ACLs/reglas/grupos/ajustes
   reales (nunca credenciales, nunca usuarios, nunca contenido de logs) para
   poder diagnosticar contra el estado real -ver ai_tools.py-.
-- Los embeddings son siempre de Jina AI (`jina-embeddings-v3`, con
-  `dimensions=768` para calzar con la columna de la tabla): se investigó
+- (Histórico: los embeddings eran de Jina AI y hoy la búsqueda es local, por texto completo de PostgreSQL; Jina
+  solo se usa si una instalación antigua ya tenía una clave guardada.) Se investigó
   Gemini, NVIDIA NIM, Cohere y Voyage AI antes de elegir -Gemini tiene
   límites de cuota muy ajustados (se vieron 503 "high demand" en vivo,
   varias veces seguidas), NVIDIA NIM y Voyage AI no pueden emitir vectores

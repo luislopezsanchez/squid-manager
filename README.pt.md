@@ -38,6 +38,23 @@
 
 ---
 
+## ✨ O que o diferencia
+
+Além do esperado em um painel de Squid (ACLs, regras, usuários locais/LDAP/Kerberos, SSL Bump, delay pools):
+
+- **🤖 Assistente de IA** que responde em linguagem natural como usar o painel, citando a documentação (a busca é local, no seu servidor). No **modo agêntico** consulta a sua configuração real (ACLs, regras, grupos, ajustes) para diagnosticar e **propõe ACLs que você confirma: nunca aplica nada sozinho**. Você escolhe o provedor: Claude, OpenAI, Gemini, Groq, OpenRouter, DeepSeek, Mistral, NVIDIA NIM, **Ollama na sua própria rede** ou qualquer um compatível com OpenAI.
+- **🔎 Busca de referências**: uma caixa que cruza ACLs, regras, grupos (com seus membros) e delay pools para responder «por que este site está bloqueado?» ou «posso apagar esta ACL sem quebrar nada?».
+- **🌐 Painel central**: monitora vários SquidManager (e Squids «básicos», sem painel) numa árvore de vários níveis; um nó fora do ar não quebra a visão dos demais, e você pode enviar a sua configuração a ele.
+- **📊 Análise**: panorama, tendências, atividade de rede (equipamentos usados por várias contas, cotas esgotadas), latência e erros, com relatórios em PDF. As consultas de 24 h, 7 e 30 dias levam milissegundos graças aos agregados por hora.
+- **📥 Importar o Squid que você já tem** (`squid.conf`, htpasswd/htdigest, listas de ACL) **mantendo as senhas**, e backup/restauração com pré-visualização do que mudaria e restauração «tudo ou nada».
+- **⏱️ Cotas e largura de banda**: cotas por usuário ou grupo com períodos de calendário, e regras de largura de banda por usuário, grupo, ACL ou tipo de tráfego.
+- **🔔 Avisos e relatório diário** por e-mail (HTML, no idioma do painel) e Telegram.
+- **🧩 Módulos opcionais**: ative só o que precisa.
+- **🔒 Segurança revisada**: passou por uma auditoria externa e os achados estão corrigidos (`docs/audits/`).
+- **🌍 Interface em espanhol, inglês e português**; instalação com Docker (imagens prontas ou compilando), nativa sem Docker, e atrás de um proxy corporativo.
+
+---
+
 ## 📋 Índice
 
 - [Descrição](#-descrição)
