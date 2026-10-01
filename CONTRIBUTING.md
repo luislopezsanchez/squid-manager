@@ -175,7 +175,19 @@ Abre un [Issue](https://github.com/luislopezsanchez/squid-manager/issues) con la
 
 ## 📄 Licencia
 
-El proyecto se distribuye bajo una licencia Freeware (ver [LICENSE](LICENSE)): uso personal o interno permitido, sin permiso para modificar, redistribuir ni comercializar el software. Al contribuir, aceptas que tu aporte se incorpore al proyecto bajo esos mismos términos.
+El proyecto es software libre bajo la [GNU AGPL-3.0 o posterior](LICENSE) con los términos adicionales de ese
+fichero. **Al contribuir, tu aporte se publica bajo esa misma licencia.**
+
+### Certificado de origen (DCO)
+
+Cada commit debe llevar la línea `Signed-off-by: Tu Nombre <tu@correo>`, que añade `git commit -s`. Con ella
+declaras lo que dice el [Developer Certificate of Origin](https://developercertificate.org/): que el código es
+tuyo, o que tienes derecho a aportarlo bajo la licencia del proyecto. No pedimos cesión de derechos: sigues
+siendo titular de tu contribución. Si tu aporte lo has generado con ayuda de una herramienta de IA, indícalo en
+la descripción del *pull request* y revisa que no reproduzca código con otra licencia.
+
+Antes de contribuir: [SECURITY.md](SECURITY.md) para vulnerabilidades (no uses un issue público) y
+[TRADEMARK.md](TRADEMARK.md) si vas a usar el nombre o el logo.
 
 ---
 

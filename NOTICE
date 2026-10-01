@@ -1,0 +1,22 @@
+SquidManager
+Copyright (C) 2026 Luis López Sánchez
+
+Licencia: GNU Affero General Public License v3.0 o posterior, con los términos adicionales del fichero
+LICENSE (sección 7). Código fuente: https://github.com/luislopezsanchez/squid-manager
+
+Cómo se hizo este proyecto
+--------------------------
+El código, la documentación y las imágenes de este proyecto se han creado con asistencia de herramientas de
+inteligencia artificial generativa, bajo la dirección, la revisión y las correcciones continuas de su autor,
+Luis López Sánchez, que decidió qué se construía, cómo debía comportarse y qué se publicaba.
+
+* Logo: lo generó una herramienta de IA a partir de las indicaciones del autor sobre lo que debía
+  representar (un calamar/pulpo con circuitos, alusivo a Squid). Se vectorizó después a SVG. Se incluye en el
+  repositorio para identificar el proyecto; no se concede licencia sobre él para identificar versiones
+  modificadas (ver TRADEMARK.md). Dado que su origen es generativo, el autor no garantiza que esté protegido
+  por derechos de autor en todas las jurisdicciones.
+* Componentes de terceros: ver THIRD_PARTY_NOTICES.md. Cada uno conserva su licencia y a sus autores.
+
+SquidManager no está afiliado, patrocinado ni respaldado por el proyecto Squid (Squid Software Foundation) ni
+por ninguna de las organizaciones cuyo software se menciona. «Squid» se nombra solo para indicar con qué
+software trabaja.

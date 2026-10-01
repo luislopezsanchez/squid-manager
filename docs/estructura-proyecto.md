@@ -5,7 +5,11 @@ squid-manager/
 ├── docker-compose.yml          # Orquestación de contenedores
 ├── .env.example                # Template de configuración
 ├── README.md                   # Resumen y enlaces a toda la documentación
-├── LICENSE                     # Freeware (uso permitido, sin modificar/redistribuir/comercializar)
+├── LICENSE                     # AGPL-3.0-or-later + términos adicionales (autoría y marca)
+├── NOTICE                      # Autoría, cómo se hizo el proyecto, no afiliación con Squid
+├── TRADEMARK.md                # Uso del nombre y del logo
+├── THIRD_PARTY_NOTICES.md      # Componentes de terceros y sus licencias
+├── SECURITY.md                 # Cómo informar de una vulnerabilidad
 ├── CHANGELOG.md                # Historial de versiones
 ├── CONTRIBUTING.md             # Guía para contribuidores
 │

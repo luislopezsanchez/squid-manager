@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     # a través de nginx, así que por defecto no se permite ninguno externo.
     CORS_ORIGINS: str = ""
 
+    # Destino de los mensajes del formulario de Contacto (Ayuda > Contacto). Por defecto, el autor del
+    # proyecto. Cada instalación puede cambiarlo (por ejemplo, al correo de su propio equipo de soporte)
+    # o dejarlo VACÍO para no enviar nada por correo: el mensaje siempre queda guardado en esta
+    # instalación. Solo se envía si hay un SMTP configurado en Notificaciones, y sale por ese SMTP.
+    CONTACT_EMAIL: str = "networkingenier@gmail.com"
+
     # Coste de bcrypt para las contraseñas de los usuarios del proxy.
     # htpasswd usa 5 por defecto, muy por debajo de lo recomendado.
     BCRYPT_COST: int = 12
@@ -77,7 +83,7 @@ class Settings(BaseSettings):
     # nada la sincronizaba con las otras dos versiones que declara el
     # proyecto (aquí y en frontend/package.json). Al subir la versión, las
     # tres deben moverse juntas y etiquetarse en git — ver docs/actualizacion.md.
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "1.0.1"
     DEBUG: bool = False
 
     @property

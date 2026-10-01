@@ -141,6 +141,8 @@ services:
       TRUSTED_PROXY_HOSTS: ${TRUSTED_PROXY_HOSTS:-frontend}
       BCRYPT_COST: ${BCRYPT_COST:-12}
       ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
+      # Destino del formulario de Contacto. Sin «:» a propósito: definida pero vacía = no enviar por correo.
+      CONTACT_EMAIL: ${CONTACT_EMAIL-networkingenier@gmail.com}
       # Directorio del proyecto, para que el backend pueda invocar
       # `docker compose up -d squid` al cambiar el puerto y mantener el .env
       # sincronizado con la base de datos.

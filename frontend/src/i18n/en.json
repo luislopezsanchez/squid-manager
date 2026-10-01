@@ -1656,10 +1656,6 @@
   "Copiar": "Copy",
   "Despliegue": "Deployment",
   "Nativo (sin Docker)": "Native (no Docker)",
-  "Todos los derechos reservados.": "All rights reserved.",
-  "Se distribuye como freeware, con estas condiciones:": "It is distributed as freeware, under these terms:",
-  "Puedes usarlo gratis, para fines personales o internos.": "You may use it free of charge, for personal or internal purposes.",
-  "No se permite modificarlo, redistribuirlo, comercializarlo ni hacer ingeniería inversa.": "Modifying, redistributing, selling or reverse engineering it is not allowed.",
   "Se ofrece «tal cual», sin garantía; el autor no responde por daños derivados de su uso.": "It is offered \"as is\", without warranty; the author is not liable for damages arising from its use.",
   "Software de terceros incluido": "Included third-party software",
   "Cada componente conserva su propia licencia y a sus autores:": "Each component keeps its own license and its authors:",
@@ -1784,5 +1780,15 @@
   "Sin uso": "Unused",
   "Uso": "Usage",
   "Ninguna regla de acceso ni de ancho de banda la usa todavía: no tiene efecto hasta que la uses en una regla.": "No access or bandwidth rule uses it yet: it has no effect until you use it in a rule.",
-  "Nunca": "Never"
+  "Nunca": "Never",
+  "Software libre, bajo la licencia GNU AGPL-3.0 o posterior:": "Free software, under the GNU AGPL-3.0-or-later license:",
+  "Puedes usarlo gratis, en tu empresa o con tus clientes, y modificarlo.": "You may use it for free, in your company or with your clients, and modify it.",
+  "Si lo modificas y lo ofreces como servicio o lo distribuyes, publica tus cambios con la misma licencia y conserva este crédito.": "If you modify it and offer it as a service or distribute it, publish your changes under the same license and keep this credit.",
+  "El nombre y el logo «SquidManager» están reservados: una versión modificada debe llamarse de otra forma.": "The name and logo «SquidManager» are reserved: a modified version must be named differently.",
+  "Código fuente": "Source code",
+  "Licencia completa": "Full license",
+  "Lista completa de licencias": "Full list of licenses",
+  "Destino de los mensajes:": "Messages are sent to:",
+  "Siempre se guardan también en este servidor, y salen por el SMTP configurado en Notificaciones.": "They are also always saved on this server, and go out through the SMTP configured in Notifications.",
+  "El envío por correo está desactivado en esta instalación: los mensajes solo se guardan en este servidor.": "Email delivery is turned off in this installation: messages are only saved on this server."
 }

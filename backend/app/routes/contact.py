@@ -107,5 +107,7 @@ def informacion_de_la_instalacion(_: Admin = Depends(get_current_admin)):
         "squid_version": _INFO_CACHE["squid"],
         "sistema": _INFO_CACHE["so"],
         "python": platform.python_version(),
+        # A dónde se envía el formulario (vacío = solo se guarda aquí): se muestra para que sea transparente.
+        "contacto_destino": (settings.CONTACT_EMAIL or "").strip(),
         "panel_activo_desde_horas": round((time.time() - _INICIO) / 3600, 1),
     }

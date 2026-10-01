@@ -165,21 +165,24 @@ def send_email(config, subject: str, body: str, html_body: str | None = None) ->
     return _enviar_smtp(config, recipients, subject, body, html_body=html_body)
 
 
-# Destino fijo de los mensajes de Contacto (Ayuda > Contacto): no es
-# configurable por el admin de la instalación -es soporte del producto, no
-# una alerta interna de esa red-. Reusa el SMTP que el admin ya haya
-# configurado en Notificaciones como relay de salida; si no hay SMTP
-# configurado, el mensaje igual queda guardado en `contact_messages` (ver
-# ContactMessage), solo no se puede enviar por correo.
-DESTINO_SOPORTE = "networkingenier@gmail.com"
+# Destino de los mensajes de Contacto (Ayuda > Contacto): lo fija quien instala, con CONTACT_EMAIL en el
+# .env (por defecto, el autor del proyecto; vacío = no enviar por correo). Reusa el SMTP que el admin ya
+# haya configurado en Notificaciones como relay de salida; si no hay SMTP o no hay destino, el mensaje
+# igual queda guardado en `contact_messages` (ver ContactMessage), solo no se envía por correo.
+def destino_contacto() -> str:
+    from app.config import settings
+    return (settings.CONTACT_EMAIL or "").strip()
 
 
 def send_contact_message(config, subject: str, body: str, reply_to: str | None = None) -> tuple[bool, str]:
     """Envía un mensaje de Contacto al soporte del producto, vía el SMTP que
     el admin ya tenga configurado en Notificaciones (si lo tiene)."""
+    destino = destino_contacto()
+    if not destino:
+        return False, "El envío por correo del formulario de Contacto está desactivado en esta instalación"
     if not config or not config.smtp_host:
         return False, "No hay un servidor SMTP configurado en Notificaciones"
-    return _enviar_smtp(config, [DESTINO_SOPORTE], subject, body, reply_to=reply_to)
+    return _enviar_smtp(config, [destino], subject, body, reply_to=reply_to)
 
 
 def send_telegram(config, message: str) -> tuple[bool, str]:

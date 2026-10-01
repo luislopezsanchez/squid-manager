@@ -1656,10 +1656,6 @@
   "Copiar": "Copiar",
   "Despliegue": "Implantação",
   "Nativo (sin Docker)": "Nativo (sem Docker)",
-  "Todos los derechos reservados.": "Todos os direitos reservados.",
-  "Se distribuye como freeware, con estas condiciones:": "É distribuído como freeware, com estas condições:",
-  "Puedes usarlo gratis, para fines personales o internos.": "Você pode usá-lo gratuitamente, para fins pessoais ou internos.",
-  "No se permite modificarlo, redistribuirlo, comercializarlo ni hacer ingeniería inversa.": "Não é permitido modificá-lo, redistribuí-lo, comercializá-lo nem fazer engenharia reversa.",
   "Se ofrece «tal cual», sin garantía; el autor no responde por daños derivados de su uso.": "É oferecido «como está», sem garantia; o autor não se responsabiliza por danos decorrentes do seu uso.",
   "Software de terceros incluido": "Software de terceiros incluído",
   "Cada componente conserva su propia licencia y a sus autores:": "Cada componente mantém sua própria licença e seus autores:",
@@ -1784,5 +1780,15 @@
   "Sin uso": "Sem uso",
   "Uso": "Uso",
   "Ninguna regla de acceso ni de ancho de banda la usa todavía: no tiene efecto hasta que la uses en una regla.": "Nenhuma regra de acesso ou de largura de banda a usa ainda: não tem efeito até você usá-la em uma regra.",
-  "Nunca": "Nunca"
+  "Nunca": "Nunca",
+  "Software libre, bajo la licencia GNU AGPL-3.0 o posterior:": "Software livre, sob a licença GNU AGPL-3.0 ou posterior:",
+  "Puedes usarlo gratis, en tu empresa o con tus clientes, y modificarlo.": "Você pode usá-lo de graça, na sua empresa ou com seus clientes, e modificá-lo.",
+  "Si lo modificas y lo ofreces como servicio o lo distribuyes, publica tus cambios con la misma licencia y conserva este crédito.": "Se você o modificar e oferecer como serviço ou distribuir, publique suas alterações sob a mesma licença e mantenha este crédito.",
+  "El nombre y el logo «SquidManager» están reservados: una versión modificada debe llamarse de otra forma.": "O nome e o logotipo «SquidManager» são reservados: uma versão modificada deve ter outro nome.",
+  "Código fuente": "Código-fonte",
+  "Licencia completa": "Licença completa",
+  "Lista completa de licencias": "Lista completa de licenças",
+  "Destino de los mensajes:": "Destino das mensagens:",
+  "Siempre se guardan también en este servidor, y salen por el SMTP configurado en Notificaciones.": "Também são sempre guardadas neste servidor e saem pelo SMTP configurado em Notificações.",
+  "El envío por correo está desactivado en esta instalación: los mensajes solo se guardan en este servidor.": "O envio por e-mail está desativado nesta instalação: as mensagens só são guardadas neste servidor."
 }

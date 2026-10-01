@@ -5,6 +5,24 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.1] - Sin publicar (rama pruebas)
+
+### Cambiado
+
+- **Licencia: de freeware a software libre (GNU AGPL-3.0 o posterior)**, con términos adicionales (sección 7) que
+  exigen conservar la autoría «© Luis López Sánchez» y el crédito del panel, y reservan el nombre y el logo
+  «SquidManager». Nuevos ficheros: `LICENSE` (AGPL completa + términos adicionales), `NOTICE` (autoría, origen del
+  logo y del código, no afiliación con Squid), `TRADEMARK.md` (política de uso del nombre y el logo),
+  `THIRD_PARTY_NOTICES.md` (todas las dependencias y sus licencias), `SECURITY.md`, `docs/privacidad.md` (qué sale de la
+  instalación) y un certificado de origen (DCO) en `CONTRIBUTING.md`. README (es/en/pt), insignia y pantalla
+  Contacto actualizados (licencia, enlace al código fuente, lista de terceros ampliada).
+- **Las fuentes (Figtree y JetBrains Mono) se sirven desde el propio panel** (`/fonts`, licencia OFL) en vez de
+  pedirlas a Google Fonts: abrir el panel ya no envía la IP del administrador a un tercero y la interfaz se ve igual en
+  redes sin salida a Internet. La política de seguridad de nginx deja de permitir `fonts.googleapis.com` y `fonts.gstatic.com`.
+- **El destino del formulario de Contacto es configurable** (`CONTACT_EMAIL` en el `.env`; por defecto, el autor; vacío =
+  no enviar por correo). La pantalla Contacto muestra a dónde se envía. Se conserva al actualizar (también vacío).
+- `SquidManagerPro` → `SquidManager` en la página de error de Squid (metadato) y en el comentario del logrotate.
+
 ## [1.0.0] - 2026-10-01
 
 Primera versión estable. Reúne todo el trabajo de la serie 0.25: instalación nativa sin Docker, actualización desde el

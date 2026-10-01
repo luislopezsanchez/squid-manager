@@ -8,14 +8,19 @@ import { IconMail, IconInfo, IconFile, IconAssistant, IconCheck, IconShield } fr
 
 interface Info {
   app_version: string; deploy_mode: string; squid_version: string; sistema: string; python: string; panel_activo_desde_horas: number
+  contacto_destino?: string
 }
 
 // Componentes de terceros que hacen posible el producto, cada uno con su propia licencia: se
 // nombran para que quede claro de quién es cada cosa.
 const TERCEROS: [string, string][] = [
-  ['Squid', 'GPL v2+'], ['FastAPI / Starlette', 'MIT'], ['React', 'MIT'], ['PostgreSQL', 'PostgreSQL License'],
-  ['SQLAlchemy', 'MIT'], ['Recharts', 'MIT'], ['Tailwind CSS', 'MIT'], ['HaGeZi DNS blocklists', 'GPL v3'],
+  ['Squid', 'GPL v2+'], ['PostgreSQL / pgvector', 'PostgreSQL License'], ['nginx', 'BSD-2-Clause'],
+  ['FastAPI / Starlette', 'MIT'], ['SQLAlchemy', 'MIT'], ['Pydantic', 'MIT'], ['PyJWT', 'MIT'],
+  ['psycopg', 'LGPL v3'], ['ldap3', 'LGPL v3'], ['ReportLab', 'BSD'], ['openpyxl', 'MIT'],
+  ['React', 'MIT'], ['Recharts', 'MIT'], ['Tailwind CSS', 'MIT'],
+  ['Figtree', 'SIL OFL 1.1'], ['JetBrains Mono', 'SIL OFL 1.1'], ['HaGeZi DNS blocklists', 'GPL v3'],
 ]
+const URL_REPO = 'https://github.com/luislopezsanchez/squid-manager'
 
 function textoInfo(i: Info): string {
   return [
@@ -114,6 +119,14 @@ export default function Contacto() {
             </span>
           </label>
 
+          {info && (
+            <p className="text-[12px] text-ink-3">
+              {info.contacto_destino
+                ? <>{traducir("Destino de los mensajes:")} <strong className="text-ink-2">{info.contacto_destino}</strong>. {traducir("Siempre se guardan también en este servidor, y salen por el SMTP configurado en Notificaciones.")}</>
+                : traducir("El envío por correo está desactivado en esta instalación: los mensajes solo se guardan en este servidor.")}
+            </p>
+          )}
+
           <button onClick={enviar} disabled={enviando} className="btn btn-primary disabled:opacity-50 px-6 py-3">
             {enviando ? traducir('Enviando…') : traducir('Enviar mensaje')}
           </button>
@@ -153,19 +166,25 @@ export default function Contacto() {
                 <p className="text-[12px] text-ink-3">{traducir("Proyecto 100% cubano.")}</p>
               </div>
             </div>
-            <p className="text-[13px] text-ink-2"><strong>© 2026 Luis López Sánchez.</strong> {traducir("Todos los derechos reservados.")}</p>
-            <p className="text-[12.5px] text-ink-3 mt-2">{traducir("Se distribuye como freeware, con estas condiciones:")}</p>
+            <p className="text-[13px] text-ink-2"><strong>© 2026 Luis López Sánchez.</strong></p>
+            <p className="text-[12.5px] text-ink-3 mt-2">{traducir("Software libre, bajo la licencia GNU AGPL-3.0 o posterior:")}</p>
             <ul className="text-[12.5px] mt-1.5 space-y-1">
-              <li className="flex gap-2 text-ink-2"><IconCheck className="w-3.5 h-3.5 mt-0.5 flex-none text-ok" />{traducir("Puedes usarlo gratis, para fines personales o internos.")}</li>
-              <li className="flex gap-2 text-ink-2"><IconShield className="w-3.5 h-3.5 mt-0.5 flex-none text-danger" />{traducir("No se permite modificarlo, redistribuirlo, comercializarlo ni hacer ingeniería inversa.")}</li>
+              <li className="flex gap-2 text-ink-2"><IconCheck className="w-3.5 h-3.5 mt-0.5 flex-none text-ok" />{traducir("Puedes usarlo gratis, en tu empresa o con tus clientes, y modificarlo.")}</li>
+              <li className="flex gap-2 text-ink-2"><IconCheck className="w-3.5 h-3.5 mt-0.5 flex-none text-ok" />{traducir("Si lo modificas y lo ofreces como servicio o lo distribuyes, publica tus cambios con la misma licencia y conserva este crédito.")}</li>
+              <li className="flex gap-2 text-ink-2"><IconShield className="w-3.5 h-3.5 mt-0.5 flex-none text-danger" />{traducir("El nombre y el logo «SquidManager» están reservados: una versión modificada debe llamarse de otra forma.")}</li>
               <li className="flex gap-2 text-ink-3">{traducir("Se ofrece «tal cual», sin garantía; el autor no responde por daños derivados de su uso.")}</li>
             </ul>
+            <p className="text-[12.5px] mt-2 flex flex-wrap gap-x-4 gap-y-1">
+              <a href={URL_REPO} target="_blank" rel="noopener noreferrer" className="text-brand-700 hover:underline">{traducir("Código fuente")}</a>
+              <a href={`${URL_REPO}/blob/main/LICENSE`} target="_blank" rel="noopener noreferrer" className="text-brand-700 hover:underline">{traducir("Licencia completa")}</a>
+            </p>
             <details className="mt-3 text-[12px]">
               <summary className="cursor-pointer text-ink-3">{traducir("Software de terceros incluido")}</summary>
               <p className="text-ink-3 mt-1.5">{traducir("Cada componente conserva su propia licencia y a sus autores:")}</p>
               <ul className="mt-1 grid grid-cols-2 gap-x-3 text-ink-2">
                 {TERCEROS.map(([n, l]) => <li key={n}>{n} <span className="text-ink-3">· {l}</span></li>)}
               </ul>
+              <p className="mt-1.5"><a href={`${URL_REPO}/blob/main/THIRD_PARTY_NOTICES.md`} target="_blank" rel="noopener noreferrer" className="text-brand-700 hover:underline">{traducir("Lista completa de licencias")}</a></p>
             </details>
           </section>
         </div>

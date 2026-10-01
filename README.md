@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img alt="License" src="https://img.shields.io/badge/license-Freeware-orange.svg">
+  <img alt="License" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg">
   <img alt="Squid" src="https://img.shields.io/badge/Squid-6.12%20%7C%206.14-green">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.136-teal">
   <img alt="React" src="https://img.shields.io/badge/React-18-blue">
@@ -170,7 +170,17 @@ propio proceso de actualización: [docs/actualizacion.md](docs/actualizacion.md)
 
 ## 📝 Licencia
 
-Freeware — uso personal o interno permitido; **no se permite modificar, redistribuir ni comercializar** el software. Ver [LICENSE](LICENSE) para el texto completo.
+SquidManager es **software libre**: [GNU AGPL-3.0 o posterior](LICENSE), con unos términos adicionales
+sobre el reconocimiento de autoría (sección 7). En resumen:
+
+- Puedes usarlo gratis, en tu empresa o con tus clientes, y modificarlo.
+- Si lo modificas y lo ofreces como servicio o lo distribuyes, tienes que publicar tus cambios bajo la misma licencia.
+- Debes conservar el aviso de autoría «© Luis López Sánchez» y el crédito que muestra el panel.
+- El nombre «SquidManager» y su logo se reservan: una versión modificada debe llamarse de otra forma ([TRADEMARK.md](TRADEMARK.md)).
+- Componentes de terceros y sus licencias: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Cómo se hizo el proyecto: [NOTICE](NOTICE).
+- Qué sale de tu instalación (nada, salvo lo que tú actives): [docs/privacidad.md](docs/privacidad.md). Seguridad: [SECURITY.md](SECURITY.md).
+
+SquidManager no está afiliado al proyecto Squid.
 
 ## 🤝 Contribuir
 

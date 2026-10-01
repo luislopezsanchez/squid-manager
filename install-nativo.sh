@@ -800,6 +800,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES="${ACCESS_TOKEN_EXPIRE_MINUTES:-480}"
 BCRYPT_COST="${BCRYPT_COST:-12}"
 TRUSTED_PROXY_HOSTS="${TRUSTED_PROXY_HOSTS:-localhost}"
 DEBUG="${DEBUG:-false}"
+# CONTACT_EMAIL se conserva tal cual estaba en el .env previo, incluso VACIO (vacio = no enviar el formulario
+# de Contacto por correo), por eso no pasa por el bucle de arriba, que ignora los valores vacios.
+if [ -z "${CONTACT_EMAIL+x}" ]; then
+    if [ -f "$_ENV_PREVIO" ] && grep -q "^CONTACT_EMAIL=" "$_ENV_PREVIO"; then
+        CONTACT_EMAIL="$(grep -m1 "^CONTACT_EMAIL=" "$_ENV_PREVIO" | cut -d= -f2-)"
+    else
+        CONTACT_EMAIL="networkingenier@gmail.com"
+    fi
+fi
 
 cat > "$INSTALL_DIR/.env" <<EOF
 # Generado por install-nativo.sh el $(date -Iseconds)
@@ -814,6 +823,7 @@ BCRYPT_COST=${BCRYPT_COST}
 CORS_ORIGINS=${CORS_ORIGINS:-}
 TRUSTED_PROXY_HOSTS=${TRUSTED_PROXY_HOSTS}
 DEBUG=${DEBUG}
+CONTACT_EMAIL=${CONTACT_EMAIL}
 SQUID_CONFIG_PATH=/etc/squid/squid.conf
 WEB_PORT=${WEB_PORT}
 # PROXY_PORT no se escribe a proposito: en modo nativo el puerto vive solo
@@ -928,7 +938,7 @@ server {
     # mismo panel quedaba con distinta postura de seguridad segun como se
     # instalara (auditoria 2026-09-14, hallazgo 11-002). Ver ahi el porque de
     # cada directiva ('unsafe-inline' en style-src, Google Fonts, sin HSTS).
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
 
     gzip on;
     gzip_vary on;
@@ -982,7 +992,7 @@ server {
         add_header X-Frame-Options "DENY" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "same-origin" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
         add_header Cache-Control "public, max-age=31536000, immutable" always;
         try_files \$uri =404;
     }
@@ -993,7 +1003,7 @@ server {
         add_header X-Frame-Options "DENY" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "same-origin" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
         add_header Cache-Control "no-cache, must-revalidate" always;
         try_files \$uri =404;
     }
@@ -1004,7 +1014,7 @@ server {
         add_header X-Frame-Options "DENY" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "same-origin" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
         add_header Cache-Control "no-cache, must-revalidate" always;
         try_files \$uri \$uri/ /index.html;
     }
