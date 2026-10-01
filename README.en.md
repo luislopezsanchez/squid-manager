@@ -3,6 +3,11 @@
 **[Español](README.md) · English · [Português](README.pt.md)**
 
 <p align="center">
+  <img src="docs/img/dashboard.png" alt="SquidManager dashboard with live traffic, connections, cache hits and top users and sites" width="900"><br>
+  <sub>The SquidManager dashboard: live traffic, connections, cache hits and the top users and sites.</sub>
+</p>
+
+<p align="center">
   <strong>Web management panel for Squid Proxy, with FastAPI, React and SSL Bump</strong><br>
   Deploys <strong>with Docker</strong> or <strong>without Docker</strong>
 </p>
@@ -32,11 +37,6 @@
 > see [docs/idiomas.md](docs/idiomas.md).
 
 ---
-
-<p align="center">
-  <img src="docs/img/dashboard.png" alt="SquidManager dashboard with live traffic, connections, cache hits and top users and sites" width="900"><br>
-  <sub>The SquidManager dashboard: live traffic, connections, cache hits and the top users and sites.</sub>
-</p>
 
 ## 📋 Table of contents
 

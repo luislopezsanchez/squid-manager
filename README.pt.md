@@ -3,6 +3,11 @@
 **[Español](README.md) · [English](README.en.md) · Português**
 
 <p align="center">
+  <img src="docs/img/dashboard.png" alt="Dashboard do SquidManager com tráfego ao vivo, conexões, cache e principais usuários e sites" width="900"><br>
+  <sub>O Dashboard do SquidManager: tráfego ao vivo, conexões, acertos de cache e principais usuários e sites.</sub>
+</p>
+
+<p align="center">
   <strong>Painel web de gerenciamento para Squid Proxy, com FastAPI, React e SSL Bump</strong><br>
   Implanta-se <strong>com Docker</strong> ou <strong>sem Docker</strong>
 </p>
@@ -32,11 +37,6 @@
 > [docs/idiomas.md](docs/idiomas.md).
 
 ---
-
-<p align="center">
-  <img src="docs/img/dashboard.png" alt="Dashboard do SquidManager com tráfego ao vivo, conexões, cache e principais usuários e sites" width="900"><br>
-  <sub>O Dashboard do SquidManager: tráfego ao vivo, conexões, acertos de cache e principais usuários e sites.</sub>
-</p>
 
 ## 📋 Índice
 
