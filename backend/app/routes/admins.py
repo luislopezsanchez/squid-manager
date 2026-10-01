@@ -25,6 +25,9 @@ class AdminCreate(BaseModel):
     password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=128)
     email: str | None = None
     role: str = "admin"  # superadmin, admin, viewer
+    # Quien crea la cuenta conoce la contraseña, así que por defecto se pide cambiarla al entrar. Se desmarca
+    # para una cuenta que usa otro servicio y no puede cambiarla por sí mismo (p. ej. un nodo del Panel central).
+    require_password_change: bool = True
 
 
 class AdminUpdate(BaseModel):
@@ -98,8 +101,7 @@ def create_admin(
         role=data.role,
         is_active=True,
         password_changed_at=utcnow(),
-        # Quien crea la cuenta conoce la contraseña: se pide cambiarla al entrar.
-        must_change_password=True,
+        must_change_password=data.require_password_change,
     )
     db.add(admin)
     db.flush()

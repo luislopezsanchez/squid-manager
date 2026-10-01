@@ -58,6 +58,22 @@ def _error(node, mensaje: str) -> dict:
     return {"id": node.id, "name": node.name, "tipo": _tipo_de(node), "url": node.url, "status": "error", "message": mensaje}
 
 
+def _respuesta_no_ok(node, resp, accion: str) -> str:
+    """Mensaje para una respuesta que no es 200. Un 403 con «Debes cambiar tu contraseña» no es un fallo del nodo: la
+    cuenta que se guardó para monitorizarlo tiene el cambio de contraseña pendiente y su API no deja hacer nada más."""
+    if resp.status_code == 403:
+        try:
+            detalle = str(resp.json().get("detail", ""))
+        except Exception:
+            detalle = ""
+        if "cambiar tu contraseña" in detalle:
+            return (f"La cuenta «{node.username}» de ese nodo tiene la contraseña pendiente de cambiar y su API no "
+                    "responde hasta entonces. Entra en el panel del nodo con esa cuenta y cámbiala, y actualiza aquí la "
+                    "contraseña del nodo; o crea la cuenta en el nodo sin marcar «Pedir que cambie la contraseña en su "
+                    "primer acceso».")
+    return f"El nodo respondió {resp.status_code} {accion}"
+
+
 def _login(node, base: str) -> tuple[str | None, dict | None]:
     """(token, None) si el login funcionó (o ya había uno en cache vigente),
     o (None, error) si no -mismo resultado de error que devuelve el resto
@@ -113,7 +129,7 @@ def _pedir_dashboard_plano(node, base: str, token: str) -> dict:
         return _error(node, f"No se pudo leer el dashboard: {e}")
 
     if resp.status_code != 200:
-        return _error(node, f"El nodo respondió {resp.status_code} al pedir el dashboard")
+        return _error(node, _respuesta_no_ok(node, resp, "al pedir el dashboard"))
 
     try:
         data = resp.json()
@@ -408,7 +424,7 @@ def consultar_arbol(node, profundidad_restante: int = PROFUNDIDAD_DEFECTO) -> di
         return _fallback_plano()
 
     if resp.status_code != 200:
-        error = _error(node, f"El nodo respondió {resp.status_code} al pedir el dashboard")
+        error = _error(node, _respuesta_no_ok(node, resp, "al pedir el dashboard"))
         error["children"] = []
         return error
 
@@ -611,7 +627,7 @@ def consultar_detalle_relay(node, resto: list[int]) -> dict:
             "no puede reenviar el pedido de detalle a sus propios nodos.",
         )
     if resp.status_code != 200:
-        return _detalle_error(node, f"El nodo respondió {resp.status_code} al reenviar el pedido de detalle")
+        return _detalle_error(node, _respuesta_no_ok(node, resp, "al reenviar el pedido de detalle"))
 
     try:
         return resp.json()

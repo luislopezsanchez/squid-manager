@@ -10,6 +10,7 @@ Ver el tráfico, usuarios activos, CPU y memoria de **este servidor y de otras i
 ## Dos tipos de nodo
 
 - **SquidManager**: otra instancia de este mismo panel. Se agrega con la URL de su panel, un usuario y una contraseña -el login normal de ese panel remoto, no un mecanismo de token nuevo. **Recomendado: una cuenta con rol "Solo lectura" dedicada a esto**, nunca la de un admin humano.
+  **Crea esa cuenta sin marcar «Pedir que cambie la contraseña en su primer acceso»** (Administradores → Nuevo Admin). Si el cambio queda pendiente, el nodo responde 403 y el panel central lo muestra como error hasta que alguien entre en ese panel con la cuenta y cambie la contraseña (y la actualices aquí).
 - **Squid básico**: un Squid sin SquidManager delante, sin cuenta que crear -se lee directamente su Cache Manager (\`squid-internal-mgr\`). Da menos datos (versión y clientes conectados, no tráfico en tiempo real ni usuarios activos), pero sirve para vigilar un proxy que todavía no tiene el panel instalado.
 
 ## Habilitar y "Monitorizar mis propios nodos"
@@ -45,6 +46,7 @@ See the traffic, active users, CPU and memory of **this server and other SquidMa
 ## Two kinds of node
 
 - **SquidManager**: another instance of this same panel. Added with its panel's URL, a username and a password -the normal login of that remote panel, not a new token mechanism. **Recommended: a "Read-only" role account dedicated to this**, never a human admin's own account.
+  **Create that account without ticking "Ask them to change the password on first login"** (Administrators → New Admin). If the change is left pending, the node answers 403 and the central panel shows it as an error until someone logs into that panel with the account and changes the password (and you update it here).
 - **Basic Squid**: a Squid with no SquidManager in front of it, no account to create -its Cache Manager (\`squid-internal-mgr\`) is read directly. Gives less data (version and connected clients, not real-time traffic or active users), but is enough to keep an eye on a proxy that doesn't have the panel installed yet.
 
 ## "Enable" and "Monitor my own nodes"
@@ -80,6 +82,7 @@ Ver o tráfego, usuários ativos, CPU e memória **deste servidor e de outras in
 ## Dois tipos de nó
 
 - **SquidManager**: outra instância deste mesmo painel. Adicionado com a URL do seu painel, um usuário e uma senha -o login normal daquele painel remoto, não um mecanismo de token novo. **Recomendado: uma conta com papel "Somente leitura" dedicada a isso**, nunca a de um admin humano.
+  **Crie essa conta sem marcar «Pedir que troque a senha no primeiro acesso»** (Administradores → Novo Admin). Se a troca ficar pendente, o nó responde 403 e o painel central o mostra como erro até que alguém entre nesse painel com a conta e troque a senha (e você a atualize aqui).
 - **Squid básico**: um Squid sem SquidManager na frente, sem conta para criar -lê-se diretamente o seu Cache Manager (\`squid-internal-mgr\`). Dá menos dados (versão e clientes conectados, não tráfego em tempo real nem usuários ativos), mas serve para vigiar um proxy que ainda não tem o painel instalado.
 
 ## "Habilitar" e "Monitorar meus próprios nós"

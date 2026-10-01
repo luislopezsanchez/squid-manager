@@ -1790,5 +1790,7 @@
   "Lista completa de licencias": "Lista completa de licenças",
   "Destino de los mensajes:": "Destino das mensagens:",
   "Siempre se guardan también en este servidor, y salen por el SMTP configurado en Notificaciones.": "Também são sempre guardadas neste servidor e saem pelo SMTP configurado em Notificações.",
-  "El envío por correo está desactivado en esta instalación: los mensajes solo se guardan en este servidor.": "O envio por e-mail está desativado nesta instalação: as mensagens só são guardadas neste servidor."
+  "El envío por correo está desactivado en esta instalación: los mensajes solo se guardan en este servidor.": "O envio por e-mail está desativado nesta instalação: as mensagens só são guardadas neste servidor.",
+  "Pedir que cambie la contraseña en su primer acceso": "Pedir que troque a senha no primeiro acesso",
+  "Desmárcalo para una cuenta que usa otro servicio, como la de un nodo del Panel central: ese servicio no puede cambiarla por sí mismo.": "Desmarque para uma conta usada por outro serviço, como a de um nó do Painel central: esse serviço não consegue trocá-la sozinho."
 }

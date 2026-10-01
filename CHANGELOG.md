@@ -9,6 +9,12 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ### Corregido
 
+- **Panel central: un nodo respondía «403 al pedir el dashboard» si la cuenta guardada para monitorizarlo tenía la contraseña
+  pendiente de cambiar.** Desde que la API exige cambiar la contraseña inicial (revisión de seguridad), una cuenta creada por un
+  superadministrador (siempre «pendiente de cambio») no podía usarse para el monitoreo: el nodo contestaba 403 a todo salvo al cambio
+  de contraseña. Ahora (1) el panel central explica la causa y qué hacer en vez del 403 genérico; (2) al crear un administrador hay una
+  casilla «Pedir que cambie la contraseña en su primer acceso» (marcada por defecto; se desmarca para una cuenta de servicio como la de
+  un nodo, que no puede cambiarla por sí misma) y la API admite `require_password_change`; (3) la ayuda del Panel central lo indica.
 - **`install.sh` (y el paso manual de Docker) podía instalar una versión vieja.** Ejecutaba `docker compose up -d`, que **reutiliza
   las imágenes locales que ya existan con el mismo nombre** (`squid-manager-backend`, `-frontend`, `-squid`) en vez de construirlas:
   quien ya había instalado antes y volvía a instalar (o instalaba de nuevo tras quitar los contenedores, que no borra las imágenes)

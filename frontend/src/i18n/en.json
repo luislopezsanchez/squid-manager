@@ -1790,5 +1790,7 @@
   "Lista completa de licencias": "Full list of licenses",
   "Destino de los mensajes:": "Messages are sent to:",
   "Siempre se guardan también en este servidor, y salen por el SMTP configurado en Notificaciones.": "They are also always saved on this server, and go out through the SMTP configured in Notifications.",
-  "El envío por correo está desactivado en esta instalación: los mensajes solo se guardan en este servidor.": "Email delivery is turned off in this installation: messages are only saved on this server."
+  "El envío por correo está desactivado en esta instalación: los mensajes solo se guardan en este servidor.": "Email delivery is turned off in this installation: messages are only saved on this server.",
+  "Pedir que cambie la contraseña en su primer acceso": "Ask them to change the password on first login",
+  "Desmárcalo para una cuenta que usa otro servicio, como la de un nodo del Panel central: ese servicio no puede cambiarla por sí mismo.": "Uncheck it for an account used by another service, such as a Central panel node: that service cannot change it by itself."
 }

@@ -22,7 +22,7 @@ export default function Admins() {
   const [loadError, setLoadError] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<AdminUser | null>(null)
-  const [formData, setFormData] = useState({ username: '', password: '', email: '', role: 'admin' })
+  const [formData, setFormData] = useState({ username: '', password: '', email: '', role: 'admin', requireChange: true })
   const { showToast, ToastContainer } = useToast()
 
   const load = () => {
@@ -35,13 +35,13 @@ export default function Admins() {
 
   const handleCreate = () => {
     setEditing(null)
-    setFormData({ username: '', password: '', email: '', role: 'admin' })
+    setFormData({ username: '', password: '', email: '', role: 'admin', requireChange: true })
     setShowModal(true)
   }
 
   const handleEdit = (admin: AdminUser) => {
     setEditing(admin)
-    setFormData({ username: admin.username, password: '', email: admin.email || '', role: admin.role })
+    setFormData({ username: admin.username, password: '', email: admin.email || '', role: admin.role, requireChange: true })
     setShowModal(true)
   }
 
@@ -59,6 +59,7 @@ export default function Admins() {
           password: formData.password,
           email: formData.email || null,
           role: formData.role,
+          require_password_change: formData.requireChange,
         })
         showToast(traducir("Administrador creado"), 'success')
       }
@@ -171,6 +172,14 @@ export default function Admins() {
                   <input id="admin-password" type="password" value={formData.password}
                     onChange={e => setFormData({ ...formData, password: e.target.value })}
                     className="input" />
+                  <label className="flex items-start gap-2 mt-2 text-sm text-ink-2 cursor-pointer">
+                    <input type="checkbox" className="mt-1" checked={formData.requireChange}
+                      onChange={e => setFormData({ ...formData, requireChange: e.target.checked })} />
+                    <span>
+                      {traducir("Pedir que cambie la contraseña en su primer acceso")}
+                      <span className="block text-[12px] text-ink-3">{traducir("Desmárcalo para una cuenta que usa otro servicio, como la de un nodo del Panel central: ese servicio no puede cambiarla por sí mismo.")}</span>
+                    </span>
+                  </label>
                 </div>
               )}
               <div>
