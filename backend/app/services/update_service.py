@@ -106,6 +106,19 @@ def _raiz_proyecto() -> Path:
     return BACKEND_DIR.parent
 
 
+MENSAJE_IMAGENES = (
+    "Esta instalación usa imágenes de Docker ya construidas (install-imagenes.sh) y no tiene copia del "
+    "código, así que no se actualiza desde aquí. Actualiza con: cd /opt/squid-manager && "
+    "docker compose pull && docker compose up -d"
+)
+
+
+def instalacion_por_imagenes() -> bool:
+    """Docker sin copia del repositorio (`.git`) en el proyecto montado: la instalación se hizo con
+    install-imagenes.sh y se actualiza descargando imágenes nuevas, no con git."""
+    return (not _es_nativo()) and not (_raiz_proyecto() / ".git").exists()
+
+
 def _ruta_estado() -> Path:
     # Docker: en la raíz del proyecto (el entrypoint le da a ese directorio dueño al usuario del
     # backend, así que puede crear y renombrar archivos ahí); backend/ pertenece a root.
@@ -266,6 +279,13 @@ def comprobar_actualizacion() -> dict:
     """
 
     estado = leer_estado()
+    if instalacion_por_imagenes():
+        estado["check"] = {
+            "last_checked_at": _iso(utcnow()), "local_commit": None, "remote_commit": None,
+            "update_available": False, "commits": [], "last_check_error": MENSAJE_IMAGENES,
+        }
+        _escribir_estado(estado)
+        return estado
     local = _commit_actual()
     rama = _rama_actual()
 

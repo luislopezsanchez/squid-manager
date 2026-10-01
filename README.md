@@ -117,6 +117,9 @@ Al terminar (3-5 min nativo, 15-30 min Docker por la compilación de Squid),
 cada instalador imprime la URL del panel, el usuario y la contraseña inicial.
 Primeros pasos después de instalar: [docs/primeros-pasos.md](docs/primeros-pasos.md).
 
+**Instalación rápida con Docker (imágenes ya construidas, unos minutos en vez de 15-30):**
+[docs/docker-imagenes.md](docs/docker-imagenes.md).
+
 ¿Tu servidor sale a internet por un proxy corporativo? Ver
 [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md) antes de instalar.
 Sirve para las dos instalaciones: con Docker (`install-tras-proxy.sh`) y nativa

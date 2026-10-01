@@ -220,6 +220,10 @@ Os dois guias completos, passo a passo, estão em
 
 ### Modo A — com Docker
 
+> **O jeito mais rápido de testar:** imagens já construídas, poucos minutos em vez de 15-30 —
+> [docs/docker-imagenes.md](docs/docker-imagenes.md) (espanhol):
+> `curl -fsSL https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install-imagenes.sh -o install-imagenes.sh && sudo bash install-imagenes.sh`
+
 Há dois caminhos. Fazem a mesma coisa; a diferença é quem preenche a
 configuração.
 

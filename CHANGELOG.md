@@ -21,6 +21,13 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
   redes sin salida a Internet. La política de seguridad de nginx deja de permitir `fonts.googleapis.com` y `fonts.gstatic.com`.
 - **El destino del formulario de Contacto es configurable** (`CONTACT_EMAIL` en el `.env`; por defecto, el autor; vacío =
   no enviar por correo). La pantalla Contacto muestra a dónde se envía. Se conserva al actualizar (también vacío).
+- **Imágenes de Docker publicadas en ghcr.io** (`squid-manager-backend`, `-squid`, `-frontend`) y un instalador rápido,
+  `install-imagenes.sh`: descarga las imágenes en vez de compilar (unos minutos en vez de 15-30). El flujo
+  `.github/workflows/publicar-imagenes.yml` construye las imágenes, **prueba la instalación completa** y solo entonces
+  publica `latest` y la etiqueta de versión. `docker-compose.images.yml` se genera de `docker-compose.yml`
+  (`.github/scripts/generar_compose_imagenes.py`; un test comprueba que está al día). La pantalla Actualizaciones de una
+  instalación hecha con imágenes (sin copia del código) explica que se actualiza con `docker compose pull` en vez de
+  mostrar un aviso engañoso. Ver `docs/docker-imagenes.md`.
 - `SquidManagerPro` → `SquidManager` en la página de error de Squid (metadato) y en el comentario del logrotate.
 
 ## [1.0.0] - 2026-10-01

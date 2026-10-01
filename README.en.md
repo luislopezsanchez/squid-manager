@@ -218,6 +218,10 @@ The two full step-by-step guides are
 
 ### Mode A — with Docker
 
+> **Fastest way to try it:** pre-built images, a few minutes instead of 15-30 —
+> [docs/docker-imagenes.md](docs/docker-imagenes.md) (Spanish):
+> `curl -fsSL https://raw.githubusercontent.com/luislopezsanchez/squid-manager/main/install-imagenes.sh -o install-imagenes.sh && sudo bash install-imagenes.sh`
+
 There are two paths. They do the same thing; the difference is who fills in the
 configuration.
 
