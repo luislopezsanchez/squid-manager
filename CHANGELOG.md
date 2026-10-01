@@ -18,7 +18,7 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
      proyecto como seguro.
   3. La actualización desde el panel usaba la rama «main» por defecto aunque la instalación siguiera
      otra (p. ej. pruebas), devolviendo el código atrás sobre una base de datos ya migrada. Ahora
-      y los  siguen la rama activa del checkout.
+      `docker-autoupdate-check.sh` y los `upgrade-*.sh` siguen la rama activa del checkout.
   4. Las instalaciones hechas con versiones anteriores no traían ni el temporizador ni `git`: la primera
      actualización a esta versión hay que hacerla **una vez a mano** (`sudo bash upgrade-docker.sh`);
      a partir de ahí se actualizan solas desde el panel.

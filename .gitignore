@@ -84,3 +84,6 @@ backend/.syslog_offset_state*
 
 # Simuladores de trafico de pruebas (solo para las MV de desarrollo; nunca al repositorio)
 tools/trafico_sim*
+
+# Estado de actualizaciones desde el panel en Docker (raiz del proyecto)
+/.update_state.json*
