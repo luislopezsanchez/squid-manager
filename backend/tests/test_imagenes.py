@@ -116,3 +116,12 @@ def test_comprobar_en_instalacion_por_imagenes_explica_como_actualizar(monkeypat
     assert r["check"]["update_available"] is False
     assert "docker compose pull" in r["check"]["last_check_error"]
     assert guardado["check"]["last_check_error"] == us.MENSAJE_IMAGENES
+
+
+def test_squid_se_compila_sin_optimizar_para_la_cpu_del_build():
+    """Sin esto, la imagen construida en una CPU muere con 'Illegal instruction' en otra (configure activa -march=native)."""
+    t = _leer("squid/Dockerfile")
+    assert "--disable-arch-native" in t
+    # el flag va dentro del ./configure, no en un comentario
+    sin_comentarios = "\n".join(linea for linea in t.splitlines() if not linea.lstrip().startswith("#"))
+    assert "--disable-arch-native" in sin_comentarios

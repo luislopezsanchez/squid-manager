@@ -7,6 +7,15 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [1.0.1] - Sin publicar (rama pruebas)
 
+### Corregido
+
+- **La imagen de Squid podía morir con «Illegal instruction» al ejecutarse en un servidor distinto de donde se construyó.**
+  El `configure` de Squid activa por defecto `-march=native` (optimiza para la CPU exacta del equipo que compila), así que
+  una imagen construida en una máquina y usada en otra, o en una VM que anuncia mal su CPU, hacía fallar
+  `security_file_certgen` y Squid no arrancaba. Lo detectó la prueba automática de las imágenes publicadas. Ahora se
+  compila con `--disable-arch-native` (diferencia de rendimiento despreciable). Quien actualice una instalación Docker
+  reconstruirá la imagen de Squid una vez (15-30 min).
+
 ### Cambiado
 
 - **Licencia: de freeware a software libre (GNU AGPL-3.0 o posterior)**, con términos adicionales (sección 7) que

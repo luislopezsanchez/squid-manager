@@ -36,6 +36,9 @@ RUN pip3 install --no-cache-dir --break-system-packages bcrypt==4.2.1 ldap3==2.9
 # MITM en la red de build puede sustituir el tarball por uno con código propio,
 # que terminaría compilado dentro del binario del proxy.
 ENV SQUID_SHA256=20d6c79214f75b5f889952ed79e1ab8b8c3f909b079671d77bb558a6f0b28625
+# --disable-arch-native: configure activa por defecto -march=native y el binario quedaba optimizado para la CPU
+# EXACTA donde se compila; al ejecutarse en otra (imagen construida en un servidor y usada en otro, o una VM que
+# anuncia mal su CPU, como avisa el propio configure) moria con "Illegal instruction" (security_file_certgen).
 RUN wget -q "https://www.squid-cache.org/Versions/v6/squid-6.12.tar.gz" -O /tmp/squid.tar.gz \
     && echo "${SQUID_SHA256}  /tmp/squid.tar.gz" | sha256sum -c - \
     && ls -la /tmp/squid.tar.gz \
@@ -62,6 +65,7 @@ RUN wget -q "https://www.squid-cache.org/Versions/v6/squid-6.12.tar.gz" -O /tmp/
         --enable-linux-netfilter \
         --with-filedescriptors=65536 \
         --with-large-files \
+        --disable-arch-native \
     && make -j1 \
     && make install \
     && cp /tmp/squid-6.12/src/mime.conf /etc/squid/mime.conf 2>/dev/null || true \
