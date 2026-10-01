@@ -81,7 +81,7 @@ def test_reindexa_la_base_despues_del_cambio_de_imagen_de_postgres():
     Al cambiar de imagen Postgres NO avisa, pero el orden de comparacion de
     texto cambia y los indices btree de texto -entre ellos el UNIQUE de
     proxy_users.username- quedan logicamente corruptos (confirmado con
-    amcheck en vivo, 172.30.36.42, 2026-09-10). REINDEX los reconstruye, y
+    amcheck en vivo, una VM de pruebas, 2026-09-10). REINDEX los reconstruye, y
     tiene que correr DESPUES de levantar los contenedores y ANTES de dar el
     upgrade por bueno."""
     contenido = _script()
@@ -163,7 +163,7 @@ def test_se_desliga_de_la_terminal_para_sobrevivir_a_un_corte_de_ssh():
     """El build de Squid tarda 10+ min. Corrido como `ssh host "bash
     upgrade-docker.sh"`, un corte de SSH manda SIGHUP y el script muere a
     mitad: git ya actualizado, contenedores sin recrear -visto en produccion
-    (Contabo) y reproducido en una VM (172.30.36.42, "Remote side
+    (Contabo) y reproducido en una VM (una VM de pruebas, "Remote side
     unexpectedly closed network connection")-. El script se re-lanza con
     setsid, salida a un log, y la primera invocacion sale enseguida. El
     re-lanzamiento va ANTES del backup y del git reset (no tiene sentido

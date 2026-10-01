@@ -7,6 +7,12 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.25.0] - Sin publicar (rama pruebas)
 
+### Seguridad (segunda ronda de la auditoría externa)
+
+- Restaurar un backup v2 valida ahora las configuraciones de LDAP, proxy padre, Kerberos y Syslog (sin saltos de línea; realm/FQDN y espacios con las mismas reglas que sus pantallas); el restore heredado usa una lista cerrada de campos.
+- El login tarda lo mismo con un usuario inexistente (no permite enumerar cuentas); la caducidad de un usuario del proxy se puede quitar; Contacto valida el email de respuesta y limita el envío; `install-tras-proxy.sh` lee `proxy.conf` como datos; los scripts de autoactualización ya no interpolan el log en Python; `pytest` pasa a `requirements-dev.txt`; sudoers del borrado histórico solo admite año y mes.
+- Referencias a direcciones internas de las máquinas de prueba retiradas de comentarios y changelog. Estado completo en `docs/audits/2026-09-30-auditoria-externa.md`.
+
 ### Corregido (actualizar desde el panel en instalaciones Docker)
 
 - **Las instalaciones Docker no podían actualizarse desde la web**. Tres causas, todas corregidas:
@@ -601,7 +607,7 @@ sigue siendo la salida en ese caso.
   `squid -k reconfigure`. Al rearrancar, el backend veía el marcador de
   «configuración generada» en el fichero y concluía que no había nada que
   hacer —pero Squid seguía con la provisional en memoria (solo `localhost`,
-  `403` sin credenciales)—. Verificado en vivo actualizando 172.30.36.42 a
+  `403` sin credenciales)—. Verificado en vivo actualizando una VM de pruebas a
   0.24.6: los contenedores quedaban sanos y en 0.24.6, pero el proxy seguía en
   `403`. Ahora, cuando el `squid.conf` en disco ya es el definitivo, el
   arranque **fuerza igualmente un `reconfigure`** (idempotente y barato) para
@@ -621,7 +627,7 @@ sigue siendo la salida en ese caso.
   en el arranque provisional —solo `localhost`, responde `403` sin
   credenciales en vez del `407` esperado— sin ningún error claro; en el log
   del backend solo quedaba un `INFO`. Detectado probando una instalación desde
-  cero en `main` (172.30.36.42, 2026-09-10). Ahora:
+  cero en `main` (una VM de pruebas, 2026-09-10). Ahora:
   - `project_dir()` degrada a «no disponible» (con un `WARNING` explicativo) en
     vez de lanzar. El `squid -k reconfigure` por el SDK de Docker no necesita
     esa ruta, así que la configuración **sí se aplica** y el proxy pasa a
@@ -695,7 +701,7 @@ sigue siendo la salida en ese caso.
     contenedores `squidmgr-*` corriendo, o si no hay `systemctl` —apuntando a
     `upgrade-docker.sh`—.
 
-  Verificado en vivo (172.30.36.42): los cuatro casos abortan con un mensaje
+  Verificado en vivo (una VM de pruebas): los cuatro casos abortan con un mensaje
   claro y **sin haber creado ningún backup ni tocado el checkout**.
 
 ## [0.24.3] - 2026-09-10
@@ -742,7 +748,7 @@ sigue siendo la salida en ese caso.
 ## [0.24.1] - 2026-09-10
 
 Correcciones al camino de actualización, encontradas probando en vivo el upgrade
-de una instalación 0.21.0 real a `main` (172.30.36.42), en Docker y en nativo.
+de una instalación 0.21.0 real a `main` (una VM de pruebas), en Docker y en nativo.
 
 ### Corregido
 
@@ -979,7 +985,7 @@ ver la conversación de esa fecha para el detalle completo de cada hallazgo).
   --omit=dev` → 0 vulnerabilidades). El proyecto solo usa la API declarativa clásica
   (`BrowserRouter`/`Routes`/`Route`/`Navigate`/`NavLink`/`useNavigate`/`Outlet`), que v7 mantiene
   compatible — build sin cambios de código, y verificado en vivo en un despliegue real (nativo,
-  172.30.36.91): login, el flujo obligatorio de cambio de contraseña, navegación entre páginas con
+  una VM de pruebas): login, el flujo obligatorio de cambio de contraseña, navegación entre páginas con
   rutas anidadas, recarga directa de una URL profunda, la ruta protegida por rol (solo
   superadministrador) y logout, todo funcionando igual que antes.
 
@@ -1020,7 +1026,7 @@ ver la conversación de esa fecha para el detalle completo de cada hallazgo).
   ningún aviso en los registros. Invertido el criterio: ahora se reconoce la definitiva por su propio
   marcador y se trata cualquier otra cosa —provisional, de fábrica, vacía— como pendiente de generar.
   Encontrado y verificado en vivo (3 corridas limpias seguidas) probando una instalación Docker desde
-  cero en una ruta no estándar, 172.30.36.92, 2026-09-08.
+  cero en una ruta no estándar, una VM de pruebas, 2026-09-08.
 
 ---
 
@@ -1153,7 +1159,7 @@ ver la conversación de esa fecha para el detalle completo de cada hallazgo).
 
 ## [0.16.0] - 2026-09-06
 
-Hallazgos de una instalación de prueba real en 172.30.36.33, con acceso al
+Hallazgos de una instalación de prueba real en una VM de pruebas, con acceso al
 servidor por SSH: cada uno se confirmó en vivo antes de corregirlo, no solo
 sobre el código.
 

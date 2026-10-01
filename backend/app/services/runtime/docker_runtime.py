@@ -75,7 +75,7 @@ def project_dir() -> Path | None:
     # proyecto dentro de /root, que es 700-, esto lanzaba PermissionError y
     # tumbaba el `apply_squid_config` entero: el proxy se quedaba en el
     # arranque provisional (solo localhost) sin ningun error claro.
-    # Confirmado en vivo (172.30.36.42, 2026-09-10). Se degrada a "no
+    # Confirmado en vivo (una VM de pruebas, 2026-09-10). Se degrada a "no
     # disponible": el reconfigure de Squid por el SDK no necesita esta ruta,
     # solo la sincronizacion del .env al cambiar el puerto -que ya avisa
     # aparte de que no pudo-. install.sh, por su lado, rechaza desde 0.24.6

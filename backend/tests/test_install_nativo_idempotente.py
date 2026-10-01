@@ -95,7 +95,7 @@ def test_arranque_final_reinicia_de_verdad_no_solo_enable_now():
     activo -es un no-op-, así que en una actualización el código quedaba
     escrito en disco pero el proceso viejo seguía corriendo, sirviendo la
     versión y las migraciones de ANTES sin ningún error visible. Bug real,
-    confirmado en vivo probando upgrade-nativo.sh en 172.30.36.63
+    confirmado en vivo probando upgrade-nativo.sh en una VM de pruebas
     (2026-09-08): `restart` fuerza el reinicio siempre y también sirve para
     arrancar el servicio la primera vez, así que no hace falta distinguir
     instalación nueva de actualización aquí."""

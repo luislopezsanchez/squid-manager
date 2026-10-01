@@ -258,7 +258,7 @@ async def restore_backup(
         if existing:
             existing.value = s["value"]
         else:
-            db.add(SquidSetting(**s))
+            db.add(SquidSetting(key=s["key"], value=s["value"]))
         results["settings"] += 1
 
     for a in backup.get("acls", []):
@@ -416,6 +416,18 @@ async def restore_backup(
 
     ldap_data = backup.get("ldap_config")
     if ldap_data:
+        # Lista cerrada de campos (nada de **ldap_data) y mismas barreras que PUT /ldap: los
+        # valores acaban en ldap_helper.conf, donde un salto de línea inyectaría otra opción.
+        campos_ldap = ("server_url", "bind_dn", "search_base", "user_filter", "enabled")
+        try:
+            ldap_data = {
+                k: (validate_value(ldap_data[k], field=f"«{k}» de LDAP") if isinstance(ldap_data.get(k), str) else ldap_data.get(k))
+                for k in campos_ldap if k in ldap_data
+            }
+        except KeyError:
+            raise HTTPException(400, detail="La configuración LDAP del backup está incompleta.")
+        if not all(k in ldap_data for k in campos_ldap):
+            raise HTTPException(400, detail="La configuración LDAP del backup está incompleta.")
         existing = db.query(LdapConfig).first()
         if existing:
             existing.server_url = ldap_data["server_url"]

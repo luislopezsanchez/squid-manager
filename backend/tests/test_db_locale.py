@@ -6,7 +6,7 @@ inicializaba `en_US.utf8` SIN registrar version de collation. Al pasar a
 version previa que comparar- pero el orden de comparacion de texto cambia:
 los indices btree de columnas de texto (entre ellos el UNIQUE de
 proxy_users.username) quedan ordenados con el criterio viejo y son
-logicamente corruptos. Confirmado con amcheck en vivo (172.30.36.42,
+logicamente corruptos. Confirmado con amcheck en vivo (una VM de pruebas,
 2026-09-10): "item order invariant violated".
 
 `--locale=C.UTF-8` da orden por byte (como `--lc-collate=C` que ya usa

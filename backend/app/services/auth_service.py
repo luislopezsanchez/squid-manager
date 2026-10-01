@@ -40,9 +40,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
+# Hash válido y sin contraseña conocida; solo sirve para igualar tiempos en authenticate_admin.
+_HASH_FALSO = bcrypt.hashpw(b"sin-usuario", bcrypt.gensalt(rounds=settings.BCRYPT_COST)).decode()
+
+
 def authenticate_admin(db: Session, username: str, password: str) -> Admin | None:
     admin = db.query(Admin).filter(Admin.username == username).first()
     if not admin or not admin.is_active:
+        # Mismo coste de bcrypt que con un usuario real: sin esto, el tiempo de respuesta
+        # delata qué nombres de usuario existen.
+        verify_password(password, _HASH_FALSO)
         return None
     if not verify_password(password, admin.password_hash):
         return None

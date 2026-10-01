@@ -11,7 +11,7 @@ archivos de disco -el propio script incluido- ya cambiaron por debajo: la
 corrección de git-checkout, pgvector y el reinicio de servicios, todas
 agregadas en versiones más nuevas, nunca llegan a ejecutarse. Bug real,
 encontrado y aislado probando el upgrade main -> pruebas en vivo
-(172.30.36.63, 2026-09-08).
+(una VM de pruebas, 2026-09-08).
 
 upgrade-nativo.sh evita el problema por diseño: nunca se modifica a sí
 mismo. Trae el código nuevo sobre INSTALL_DIR y luego invoca -como proceso
@@ -97,7 +97,7 @@ def test_purga_el_pycache_antes_de_reinstalar():
     el .gitignore a propósito, para no llevarse .env ni node_modules/-
     nunca lo toca. Un .pyc viejo ahí puede quedar sirviendo al proceso
     reiniciado con código de antes del upgrade. Encontrado probando
-    upgrades repetidos sobre el mismo checkout en 172.30.36.63."""
+    upgrades repetidos sobre el mismo checkout en una VM de pruebas."""
     contenido = _script()
     assert '-name "__pycache__"' in contenido
     assert "-exec rm -rf" in contenido

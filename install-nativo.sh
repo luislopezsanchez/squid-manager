@@ -61,7 +61,7 @@ if [ -f "$_ENV_PREVIO" ]; then
             # de antes de que existiera esa variable -o sea, cualquier
             # instalacion existente hoy-. Bug real y grave, encontrado
             # corriendo el upgrade de verdad sobre una instalacion con datos
-            # reales (172.30.36.63, 2026-09-09): el script moria justo
+            # reales (una VM de pruebas, 2026-09-09): el script moria justo
             # despues del backup, sin imprimir un solo error.
             _VALOR="$(grep -m1 "^${_VAR}=" "$_ENV_PREVIO" 2>/dev/null | cut -d= -f2-)" || true
             [ -n "$_VALOR" ] && export "$_VAR=$_VALOR" || true
@@ -152,7 +152,7 @@ PAQUETES=(
     # (squidmgr necesita "sudo -n" para las 4 acciones con privilegio -ver
     # runtime/native_runtime.py-). Las imagenes de Ubuntu Server lo traen de
     # fabrica, pero un Debian minimo/netinstall NO -bug real, encontrado
-    # instalando en un Debian 12 limpio (172.30.36.88, 2026-09-09): el script
+    # instalando en un Debian 12 limpio (una VM de pruebas, 2026-09-09): el script
     # fallaba en "sudo: command not found" en el primer uso, mucho antes de
     # llegar a la parte que de verdad necesita privilegios-.
     sudo
@@ -200,7 +200,7 @@ if [ "${ID:-}" = "debian" ] && [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
     # hoy) y, con la prioridad por defecto, apt prefiere ESE en cualquier
     # instalacion futura de "postgresql" a secas -exactamente lo que hace
     # este mismo script en cada re-corrida (paso 2, PAQUETES)-. Bug real,
-    # reproducido en 172.30.36.88: una segunda corrida de este script tras
+    # reproducido en una VM de pruebas: una segunda corrida de este script tras
     # la primera (con el repo PGDG ya agregado) instalo postgresql-18 al
     # lado del 15 que ya tenia los datos, y el cluster 15 quedo sin
     # servicio.
@@ -211,7 +211,7 @@ if [ "${ID:-}" = "debian" ] && [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
     # instalacion de postgresql-15-pgvector: su propia dependencia
     # "postgresql-15" queda marcada como no instalable porque el resolver
     # de apt no puede reconciliar el pineo bajo con el paquete ya instalado
-    # -reproducido tambien en 172.30.36.88, "E: Unable to correct problems,
+    # -reproducido tambien en una VM de pruebas, "E: Unable to correct problems,
     # you have held broken packages"-. Bloquear solo "postgresql" a secas
     # evita el salto de version mayor sin tocar nada mas: postgresql-15,
     # postgresql-client-15 y postgresql-15-pgvector siguen resolviendo
@@ -691,7 +691,7 @@ ${APP_USER} ALL=(root) NOPASSWD: /usr/local/lib/squidmanager/autoupdate-check.sh
 # Borrado de un mes historico de logs (ver el script: valida year/month antes
 # de tocar nada, y confirma que la ruta resuelta sigue dentro de
 # archive/historical antes del rm -rf).
-${APP_USER} ALL=(root) NOPASSWD: /usr/local/lib/squidmanager/delete_historical_month.sh *
+${APP_USER} ALL=(root) NOPASSWD: /usr/local/lib/squidmanager/delete_historical_month.sh [0-9][0-9][0-9][0-9] [0-9][0-9]
 EOF
 chmod 440 /etc/sudoers.d/squidmanager
 visudo -cf /etc/sudoers.d/squidmanager >/dev/null || fail "El fichero de sudoers generado no es valido."
@@ -919,7 +919,7 @@ server {
         # reindexar la documentacion del Asistente de IA (llamada real a
         # Jina por fragmento, ~200 con el corpus actual, con su limite de
         # velocidad de 100/min mas reintentos ante un 429/503; visto en vivo,
-        # 172.30.36.33) y aplicar una ACL de archivo de millones de dominios
+        # una VM de pruebas) y aplicar una ACL de archivo de millones de dominios
         # (squid -k parse/reconfigure tarda en cargarla, ver
         # runtime/native_runtime.py). Con un timeout corto, nginx cortaba la
         # conexion a mitad de camino sin ningun error visible -la peticion
@@ -982,7 +982,7 @@ systemctl daemon-reload
 # todavia), pero en un upgrade es el bug real: el codigo se actualiza pero
 # el proceso viejo sigue en pie, sirviendo la version y las migraciones de
 # ANTES, sin ningun error que lo delate -confirmado en vivo en
-# 172.30.36.63, 2026-09-08, con upgrade-nativo.sh-. "restart" fuerza el
+# una VM de pruebas, 2026-09-08, con upgrade-nativo.sh-. "restart" fuerza el
 # reinicio siempre, y en un servicio que todavia no existe equivale a
 # arrancarlo, asi que sirve igual para instalacion nueva y upgrade.
 systemctl enable squid >/dev/null 2>&1 || true

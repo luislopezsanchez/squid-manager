@@ -82,7 +82,7 @@ def test_project_dir_devuelve_none_si_el_compose_no_es_accesible(monkeypatch):
     privilegios del contenedor (uid 999) no puede atravesar la ruta y
     `Path.is_file()` lanza PermissionError -no se lo traga como sí hace con
     ENOENT-. Antes eso tumbaba `apply_squid_config` entero y el proxy se
-    quedaba en el arranque provisional sin un error claro (172.30.36.42,
+    quedaba en el arranque provisional sin un error claro (una VM de pruebas,
     2026-09-10). Ahora se degrada a "no disponible": el reconfigure por el
     SDK no necesita esta ruta.
     """

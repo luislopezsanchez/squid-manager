@@ -2,7 +2,7 @@
 (cache_manager_service.py).
 
 Las fixtures son texto REAL, capturado en vivo contra un Squid corriendo
-(172.30.36.33, 2026-09-10; client_list contra 172.30.36.52, 2026-09-19) -no
+(una VM de pruebas, 2026-09-10; client_list contra una VM de pruebas, 2026-09-19) -no
 inventado a mano-, para que el parser se pruebe contra el formato de
 verdad que Squid produce.
 """

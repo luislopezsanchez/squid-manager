@@ -14,7 +14,7 @@
 # vivo, porque esta seccion de install-nativo.sh cambio entre una y otra-,
 # bash sigue ejecutando en memoria el codigo VIEJO durante el resto de la
 # corrida mientras los archivos de disco -el propio script incluido- ya
-# cambiaron por debajo. Consecuencia real, observada en 172.30.36.63
+# cambiaron por debajo. Consecuencia real, observada en una VM de pruebas
 # (2026-09-08): el aviso de "actualizado" nunca aparecio (se vio el de
 # instalacion nueva), pgvector no se instalo, y el servicio nunca se
 # reinicio de verdad -"systemctl enable --now" no hace nada si el servicio
@@ -242,7 +242,7 @@ fi
 # .gitignore a proposito, para no llevarse .env ni node_modules/) nunca lo
 # toca. Un .pyc viejo ahi puede quedar sirviendo al proceso reiniciado con
 # codigo de ANTES del upgrade -visto en pruebas repetidas sobre el mismo
-# checkout en 172.30.36.63-. Encontrar la causa exacta de cuando pasa no
+# checkout en una VM de pruebas-. Encontrar la causa exacta de cuando pasa no
 # vale lo que cuesta: borrarlo es gratis y siempre correcto, porque Python
 # lo regenera solo en el primer import.
 find "$INSTALL_DIR/backend" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true

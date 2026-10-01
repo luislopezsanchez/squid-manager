@@ -74,8 +74,17 @@ fi
 # Valores por defecto para lo que el usuario puede dejar sin escribir.
 PROXY_HOST=""; PROXY_PORT=""; PROXY_USER=""; PROXY_PASS=""
 PROXY_SCHEME="http"; PROXY_NO_PROXY_EXTRA=""; PROXY_CA_CERT=""
-# shellcheck disable=SC1090
-source "$CONF"
+# proxy.conf se lee como DATOS (CLAVE=valor, con comillas opcionales), no se ejecuta: un
+# fichero de configuracion no debe poder correr comandos como root.
+while IFS= read -r _linea || [[ -n "$_linea" ]]; do
+    [[ "$_linea" =~ ^[[:space:]]*(export[[:space:]]+)?(PROXY_[A-Z_]+)=(.*)$ ]] || continue
+    _clave="${BASH_REMATCH[2]}"; _valor="${BASH_REMATCH[3]}"
+    if [[ "$_valor" =~ ^\"(.*)\"[[:space:]]*$ ]] || [[ "$_valor" =~ ^\'(.*)\'[[:space:]]*$ ]]; then _valor="${BASH_REMATCH[1]}"; fi
+    case "$_clave" in
+        PROXY_HOST|PROXY_PORT|PROXY_USER|PROXY_PASS|PROXY_SCHEME|PROXY_NO_PROXY_EXTRA|PROXY_CA_CERT)
+            printf -v "$_clave" '%s' "$_valor" ;;
+    esac
+done < "$CONF"
 
 [[ -n "$PROXY_HOST" ]] || fail "Falta PROXY_HOST en proxy.conf"
 [[ -n "$PROXY_PORT" ]] || fail "Falta PROXY_PORT en proxy.conf"

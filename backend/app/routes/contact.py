@@ -6,11 +6,15 @@ se guarda siempre en `contact_messages`; el envío por email es best-effort,
 usando el SMTP que el admin ya tenga configurado en Notificaciones.
 """
 
-from fastapi import APIRouter, Depends
+import re
+from datetime import timedelta
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from app.database import get_db
+from app.utils import utcnow
 from app.models.admin import Admin
 from app.models.contact_message import ContactMessage
 from app.models.smtp_config import SmtpConfig
@@ -31,6 +35,14 @@ class ContactoIn(BaseModel):
 @router.post("")
 def enviar_contacto(datos: ContactoIn, db: Session = Depends(get_db), admin: Admin = Depends(get_current_admin)):
     categoria = datos.categoria if datos.categoria in CATEGORIAS_VALIDAS else "otro"
+    if datos.email_respuesta and not re.fullmatch(r"[^\s@<>\",;]{1,64}@[^\s@<>\",;]{1,255}", datos.email_respuesta):
+        raise HTTPException(400, detail="El email de respuesta no es válido.")
+    # Tope sencillo contra el envío en bucle (cada mensaje dispara un correo): 5 cada 10 minutos por administrador.
+    desde = utcnow() - timedelta(minutes=10)
+    recientes = db.query(ContactMessage).filter(
+        ContactMessage.admin_username == admin.username, ContactMessage.created_at >= desde).count()
+    if recientes >= 5:
+        raise HTTPException(429, detail="Has enviado varios mensajes seguidos. Espera unos minutos antes de enviar otro.")
 
     config = db.query(SmtpConfig).first()
     asunto = f"[SquidManager] Contacto ({categoria}) de {admin.username}"

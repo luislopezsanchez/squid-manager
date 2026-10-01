@@ -222,3 +222,75 @@ def test_gunzip_acotado_rechaza_bombas_de_compresion():
             b._gunzip_acotado(gzip.compress(b"0" * 5000))
     finally:
         b.MAX_PARTE_BYTES = monkey
+
+
+# --- M-2 / M-3: restauraciones ---------------------------------------------------
+def test_restore_v2_valida_las_configuraciones_de_una_fila():
+    from app.services import backup_v2_service as b
+    with pytest.raises(b.BackupError):
+        b._validar_fila_unica("kerberos_config", {"realm": 'X"; calc #'}, None)
+    with pytest.raises(b.BackupError):
+        b._validar_fila_unica("ldap_config", {"search_base": "dc=x\nacl_extra"}, None)
+    with pytest.raises(b.BackupError):
+        b._validar_fila_unica("parent_proxy", {"host": "p.x.com", "username": "a b"}, None)
+    with pytest.raises(b.BackupError):
+        b._validar_fila_unica("parent_proxy", {"host": "p.x.com"}, {"password": "clave\nmas"})
+    b._validar_fila_unica("kerberos_config", {"realm": "EMPRESA.LOCAL", "proxy_fqdn": "proxy.empresa.local"}, None)
+    b._validar_fila_unica("parent_proxy", {"host": "p.x.com", "username": "u", "ca_cert": "-----BEGIN\nabc\n-----END"}, {"password": "p4ss"})
+    b._validar_fila_unica("ai_config", {"system_prompt": "linea 1\nlinea 2"}, None)
+
+
+def test_restore_heredado_no_hace_asignacion_masiva():
+    t = _leer("backend/app/routes/backup.py")
+    assert "db.add(SquidSetting(**s))" not in t
+    assert "LdapConfig(bind_password=\"\", **ldap_data)" in t  # los campos ya vienen filtrados a una lista cerrada
+    assert "campos_ldap" in t
+
+
+# --- Bajos ----------------------------------------------------------------------
+def test_sudoers_del_borrado_historico_solo_admite_anio_y_mes():
+    t = _leer("install-nativo.sh")
+    assert "delete_historical_month.sh [0-9][0-9][0-9][0-9] [0-9][0-9]" in t
+    assert "delete_historical_month.sh *" not in t
+
+
+def test_install_tras_proxy_no_ejecuta_proxy_conf(tmp_path):
+    t = _leer("install-tras-proxy.sh")
+    assert 'source "$CONF"' not in t
+    cargador = t[t.index("while IFS= read -r _linea"):t.index('done < "$CONF"') + len('done < "$CONF"')]
+    conf = tmp_path / "proxy.conf"
+    marca = tmp_path / "PWNED"
+    conf.write_text(f"PROXY_HOST=10.0.0.1\nPROXY_PORT=\"8080\"\nPROXY_PASS=a$(touch {marca})b\n")
+    r = subprocess.run(["bash", "-c", f'CONF="{conf}"; PROXY_HOST=; PROXY_PORT=; PROXY_PASS=; {cargador}; echo "$PROXY_HOST|$PROXY_PORT|$PROXY_PASS"'],
+                       capture_output=True, text=True)
+    assert r.stdout.strip().startswith("10.0.0.1|8080|a$(touch")
+    assert not marca.exists()
+
+
+@pytest.mark.parametrize("script", ["autoupdate-check.sh", "docker-autoupdate-check.sh"])
+def test_los_checkers_no_interpolan_texto_en_python(script):
+    t = _leer(script)
+    assert "'''$3'''" not in t
+    assert "SM_LOG=\"$3\"" in t
+
+
+def test_pytest_no_va_en_las_dependencias_de_produccion():
+    assert "pytest" not in _leer("backend/requirements.txt")
+    assert "pytest" in _leer("backend/requirements-dev.txt")
+
+
+def test_login_gasta_bcrypt_aunque_el_usuario_no_exista():
+    from app.services import auth_service
+    llamadas = []
+    original = auth_service.verify_password
+    auth_service.verify_password = lambda p, h: llamadas.append(h) or False
+    try:
+        class Q:
+            def filter(self, *a): return self
+            def first(self): return None
+        class DB:
+            def query(self, *a): return Q()
+        assert auth_service.authenticate_admin(DB(), "nadie", "x") is None
+    finally:
+        auth_service.verify_password = original
+    assert llamadas == [auth_service._HASH_FALSO]

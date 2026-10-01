@@ -1,0 +1,4 @@
+# Solo para desarrollo y CI: no se instala en producción (imagen Docker ni instalación nativa).
+-r requirements.txt
+pytest==9.0.3
+pyflakes

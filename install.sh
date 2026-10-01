@@ -270,7 +270,7 @@ ok "PROJECT_DIR apunta a $INSTALL_DIR"
 # que es 700- ese usuario no llega al fichero: el panel arranca, pero NO
 # puede aplicar la configuración a Squid y el proxy se queda en el arranque
 # provisional (solo localhost), sin un error que lo explique. Confirmado en
-# vivo (172.30.36.42, 2026-09-10). Se comprueba ANTES de levantar nada.
+# vivo (una VM de pruebas, 2026-09-10). Se comprueba ANTES de levantar nada.
 ruta_accesible_para_otros() {
     local d
     d="$(cd "$1" && pwd)"

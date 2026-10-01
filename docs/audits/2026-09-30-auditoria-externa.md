@@ -36,19 +36,24 @@ hallazgos eran correctos en lo esencial; se corrigió lo que se podía corregir 
   código ajeno; y no se verifican firmas de commits (exige que el autor firme sus commits). Cerrarlo del todo requiere separar
   el `.env` del árbol y firmar los commits: queda para una decisión de diseño.
 
+## Segunda ronda (decisiones del responsable)
+
+| Id | Decisión | Qué se hizo |
+|---|---|---|
+| **M-2** | Aplicar lo mínimo que tiene efecto | Al restaurar un backup v2, las configuraciones de una sola fila que acaban en ficheros de configuración (LDAP, proxy padre, Kerberos, Syslog) rechazan saltos de línea y caracteres de control; Kerberos aplica los mismos validadores de realm/FQDN que la ruta y el proxy padre rechaza espacios en host/usuario/contraseña. Los textos libres (prompts, mensajes) y los certificados PEM no se tocan. |
+| **M-3** | Aplicar | El restore heredado ya no hace `SquidSetting(**s)`; LDAP pasa por una lista cerrada de campos con `validate_value`. |
+| **M-14** | No aplica en parte | `htpasswd` no se invoca desde el backend (el hash se calcula en Python con bcrypt), así que la contraseña nunca va por argv. El HA1 de Digest se guarda siempre a propósito (permite activar Digest sin pedir las contraseñas de nuevo). |
+| **M-15** | Ya cubierto | `_escribir_estado` es atómica (temporal + rename); un `flock` adicional no cierra ninguna carrera real porque el único otro escritor es el temporizador, que también escribe atómicamente. |
+| Bajos | Aplicados | Login con coste de bcrypt igual si el usuario no existe; `install-tras-proxy.sh` lee `proxy.conf` como datos (no lo ejecuta); los scripts de autoactualización ya no interpolan el log en `python -c`; la caducidad de un usuario del proxy se puede quitar enviando `null`; el formulario de Contacto valida el email de respuesta y limita a 5 mensajes cada 10 min; `pytest` sale de `requirements.txt` (nuevo `requirements-dev.txt` para CI); sudoers del borrado histórico solo admite `AAAA MM`. |
+| **sudoers** | Analizado | `conntrack -D -s *` solo puede borrar entradas de seguimiento de conexiones (no ejecuta nada), y el script de borrado ya validaba año y mes; solo se apretó el patrón del segundo. `NoNewPrivileges=no` se mantiene: sudo lo necesita. |
+
 ## No corregido, con el motivo
 
-- **M-2 / M-3** (restore-v2 y restore heredado sin los validadores de cada ruta, asignación masiva): solo los usa un administrador
-  que ya puede cambiar toda la configuración; endurecerlo exige revisar cada entidad. Pendiente.
-- **M-4 / M-5** (TLS de LDAP y de SMTP sin verificar certificado): verificar por defecto rompería los servidores internos con
-  certificado propio, muy habituales en esta base de usuarios. Pendiente: opción «verificar certificado» por integración.
-- **M-6** (el helper de dominios deja pasar si falla su índice): decisión deliberada (no cortar toda la navegación por un fallo del
-  helper); ahora reintenta una vez y deja el error en el log.
-- **M-11, M-13, M-14, M-15** y el resto de los bajos (JWT sin revocación individual, `/health` público, Squid como root en el
-  contenedor, sudoers con comodines, `install-tras-proxy.sh` con `source`, TLS por defecto del panel): riesgo bajo o que exige un
-  rediseño; sin cambios.
-- **TLS por defecto del panel (A-7):** el panel sigue sirviéndose por HTTP; poner TLS por delante (reverse proxy) está documentado en
-  `docs/production.md`. Ofrecer un certificado automático queda como mejora.
+- **A-2 (resto):** ver arriba. Solo importa si el contenedor del backend ya está comprometido y la instalación es Docker; cerrarlo exige separar el `.env` del árbol y firmar los commits.
+- **M-4 / M-5** (TLS de LDAP y de SMTP sin verificar certificado): decisión del responsable, no aplicar. Verificar por defecto rompería los servidores internos con certificado propio.
+- **M-6** (el helper de dominios deja pasar si falla su índice): decisión deliberada; ahora reintenta una vez y deja el error en el log.
+- **M-11** (contraseña inicial en `.env`/logs): es la única forma de entregarla en una instalación sin terminal interactiva; el cambio es obligatorio en el primer acceso y la API lo exige.
+- **M-13** (`/etc/squid` con grupo escritor), **JWT sin revocación individual**, **`/health` público**, **Squid como root en el contenedor**, **TLS por defecto del panel** (decisión del responsable: lo resuelve el proxy inverso del usuario): sin cambios; riesgo bajo o exigen un rediseño.
 
 ## Correcciones al propio informe
 

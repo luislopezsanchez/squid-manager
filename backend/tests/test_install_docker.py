@@ -40,7 +40,7 @@ def test_rechaza_una_ruta_que_el_backend_no_puede_alcanzar_antes_de_levantar_nad
     directorio sin 'x' para "otros" (clonar en /root, que es 700), ese
     usuario no llega al fichero: el panel arranca pero NO aplica la config a
     Squid y el proxy se queda en el arranque provisional. Confirmado en vivo
-    (172.30.36.42, 2026-09-10). La comprobación tiene que estar ANTES del
+    (una VM de pruebas, 2026-09-10). La comprobación tiene que estar ANTES del
     `docker compose up`."""
     contenido = _script()
     assert "ruta_accesible_para_otros" in contenido

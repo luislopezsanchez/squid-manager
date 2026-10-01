@@ -66,7 +66,7 @@ print(val if val is not None else '')
 
 escribir_apply() {
     # $1=status $2=commit(o vacio) $3=log_tail(o vacio)
-    "$PY" -c "
+    SM_STATUS="$1" SM_COMMIT="$2" SM_LOG="$3" "$PY" -c "
 import json, os
 from datetime import datetime, timezone
 
@@ -75,7 +75,7 @@ with open('$ESTADO', encoding='utf-8') as f:
 
 ahora = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + 'Z'
 apply = datos.setdefault('apply', {})
-status = '$1'
+status = os.environ['SM_STATUS']
 if status == 'running':
     apply['status'] = 'running'
     apply['started_at'] = ahora
@@ -85,9 +85,9 @@ if status == 'running':
 else:
     apply['status'] = status
     apply['finished_at'] = ahora
-    if '$2':
-        apply['commit'] = '$2'
-    apply['log_tail'] = '''$3'''
+    if os.environ['SM_COMMIT']:
+        apply['commit'] = os.environ['SM_COMMIT']
+    apply['log_tail'] = os.environ['SM_LOG']
 
 tmp = '$ESTADO.tmp'
 with open(tmp, 'w', encoding='utf-8') as f:

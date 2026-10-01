@@ -264,9 +264,10 @@ def update_proxy_user(
         user.enabled = data.enabled
         if not data.enabled:
             revoke = True
-    if data.expires_at is not None:
-        user.expires_at = as_naive_utc(data.expires_at)
-        if user.expires_at <= utcnow():
+    if "expires_at" in data.model_fields_set:
+        # Enviar null quita la caducidad (antes no había forma de borrarla).
+        user.expires_at = as_naive_utc(data.expires_at) if data.expires_at is not None else None
+        if user.expires_at is not None and user.expires_at <= utcnow():
             revoke = True
 
     db.add(AuditLog(

@@ -390,6 +390,34 @@ def _validar_setting(clave: str, valor: str) -> str:
     return valor
 
 
+def _validar_fila_unica(nombre: str, fila: dict, secretos: dict | None) -> None:
+    """Mismas barreras que las rutas de cada configuración: lo que se restaura acaba en
+    squid.conf, en ldap_helper.conf o en el script de Kerberos, así que un backup manipulado
+    no puede colar saltos de línea ni caracteres que cambien el sentido de la directiva."""
+    from fastapi import HTTPException
+    from app.services.squid_names import validate_value
+
+    valores = dict(fila)
+    valores.update(secretos or {})
+    try:
+        # Solo las que acaban en una línea de un fichero de configuración; las de texto libre
+        # (mensajes, prompts) y los certificados PEM llevan saltos de línea legítimos.
+        if nombre in ("ldap_config", "parent_proxy", "kerberos_config", "syslog_config"):
+            for clave, v in valores.items():
+                if isinstance(v, str) and v and "cert" not in clave:
+                    validate_value(v, field=f"«{clave}» de «{nombre}»")
+        if nombre == "kerberos_config":
+            from app.routes.kerberos import _validar_realm_fqdn
+            _validar_realm_fqdn(valores.get("realm"), valores.get("proxy_fqdn"))
+        elif nombre == "parent_proxy":
+            for clave in ("host", "username", "password"):
+                v = valores.get(clave)
+                if isinstance(v, str) and re.search(r"\s", v.strip() if clave == "host" else v):
+                    raise HTTPException(400, detail=f"«{clave}» del proxy padre no puede llevar espacios.")
+    except HTTPException as e:
+        raise BackupError(f"Configuración «{nombre}»: {e.detail}")
+
+
 @dataclass
 class Informe:
     simulacion: bool
@@ -626,6 +654,7 @@ def restaurar(db, paquete: Paquete, modo: str = "combinar", simular: bool = True
             fila = cfg.get(nombre)
             if not fila:
                 continue
+            _validar_fila_unica(nombre, fila, (sec.get(nombre) or {}).get("_"))
             modelo = _modelo(ent)
             obj = db.query(modelo).first()
             if obj is None:

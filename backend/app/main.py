@@ -250,7 +250,7 @@ def _es_configuracion_provisional(ruta: Path) -> bool:
     Antes se reconocía la provisional por su propio marcador («Configuración
     inicial temporal», que escriben tanto el entrypoint de Docker como el
     instalador nativo). El problema real, encontrado probando un upgrade en
-    vivo (172.30.36.92, 2026-09-08): en Docker, el volumen compartido de
+    vivo (una VM de pruebas, 2026-09-08): en Docker, el volumen compartido de
     /etc/squid puede llegar vacío y Docker lo autopobla con el squid.conf de
     fábrica que trae la propia imagen de Squid -de compilarlo/instalarlo-,
     ANTES de que el entrypoint de Squid alcance a pisarlo con el
