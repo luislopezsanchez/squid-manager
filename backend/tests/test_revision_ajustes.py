@@ -200,3 +200,49 @@ def test_cambio_de_cache_dir_exige_reinicio():
     assert _lineas_cache_dir(con) != _lineas_cache_dir(sin)            # instalación nueva → hay que reiniciar
     assert _lineas_cache_dir(con) == _lineas_cache_dir(con.replace("ufs /var", "ufs   /var"))  # espacios no cuentan
     assert _lineas_cache_dir(con) != _lineas_cache_dir(con.replace("100", "200"))
+
+
+# --- redacción natural de los avisos y traducción de cada uno --------------------
+
+_MENSAJES = [
+    ("Se aplicaron cambios en Squid", "El administrador «admin» aplicó los cambios de configuración. Squid se reinició para aplicarlos."),
+    ("Se aplicaron cambios en Squid", "El administrador «admin» aplicó los cambios de configuración. Squid recargó la configuración sin cortar las conexiones activas."),
+    ("Squid iniciado", "El administrador «admin» inició el servicio Squid desde el panel."),
+    ("Se creó una regla de acceso", "El administrador «admin» creó la regla de acceso «deny redes»."),
+    ("Se reordenaron las reglas de acceso", "El administrador «admin» cambió el orden de 4 reglas de acceso."),
+    ("Se modificó una regla de acceso", "El administrador «admin» modificó la regla de acceso «deny redes»."),
+    ("Se eliminó una regla de acceso", "El administrador «admin» eliminó la regla de acceso «deny redes»."),
+    ("Se creó una ACL", "El administrador «admin» creó la ACL «redes» (tipo dstdomain)."),
+    ("Se modificó una ACL", "El administrador «admin» modificó la ACL «redes»."),
+    ("Se eliminó una ACL", "El administrador «admin» eliminó la ACL «redes»."),
+    ("Se cargó una ACL desde un archivo", "El administrador «admin» cargó 1500 dominios en la ACL «redes» (origen: archivo)."),
+    ("Se creó un usuario del proxy", "El administrador «admin» creó el usuario «ana»."),
+    ("Se modificó un usuario del proxy", "El administrador «admin» modificó al usuario «ana»."),
+    ("Se eliminó un usuario del proxy", "El administrador «admin» eliminó al usuario «ana»."),
+    ("Se habilitó un usuario del proxy", "El administrador «admin» habilitó al usuario «ana»: ya puede navegar."),
+    ("Se deshabilitó un usuario del proxy", "El administrador «admin» deshabilitó al usuario «ana»: ya no puede navegar."),
+    ("Importación masiva de usuarios", "El administrador «admin» importó usuarios desde un archivo: 5 nuevos y 2 actualizados."),
+    ("Acción sobre varios usuarios", "El administrador «admin» deshabilitó a 12 usuarios: a, b, c y 4 más."),
+    ("Acción sobre varios usuarios", "El administrador «admin» eliminó al usuario «ana»."),
+    ("Acción sobre varios usuarios", "El administrador «admin» generó nuevas credenciales para 3 usuarios: a, b, c."),
+    ("Se asignó una cuota de navegación", "El administrador «admin» asignó una cuota diaria de 500 MB a 6 usuarios: a, b, c."),
+    ("Se asignó una cuota de navegación", "El administrador «admin» asignó al usuario «ana» una cuota mensual de 5.0 GB."),
+]
+
+
+@pytest.mark.parametrize("asunto,mensaje", _MENSAJES)
+def test_cada_aviso_se_traduce_a_en_y_pt(asunto, mensaje):
+    from app.i18n import traducir_dinamico
+    for idioma in ("en", "pt"):
+        if not (idioma == "pt" and asunto == "Squid iniciado"):  # igual en portugués
+            assert traducir_dinamico(asunto, idioma) != asunto, (idioma, asunto)
+        t = traducir_dinamico(mensaje, idioma)
+        assert t != mensaje and "El administrador" not in t   # traducido de verdad
+        assert "«admin»" in t  # los datos variables se conservan
+
+
+def test_los_avisos_ya_no_dicen_admin_admin():
+    import pathlib
+    raiz = pathlib.Path(__file__).parents[1] / "app" / "routes"
+    for f in ("squid_config.py", "access_rules.py", "acls.py", "proxy_users.py"):
+        assert "El admin {current_admin.username}" not in (raiz / f).read_text(), f

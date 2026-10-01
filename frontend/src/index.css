@@ -236,6 +236,12 @@ h1, h2, h3, h4 {
     color: var(--ink-2);
     border-bottom: 1px solid var(--line-soft);
   }
+  /* En pantallas tamaño laptop (< 1536 px) las tablas con muchas columnas (Usuarios, Registros…)
+     no caben con el relleno generoso y la última columna (Acciones) quedaba cortada. */
+  @media (max-width: 1535px) {
+    .table-panel thead th,
+    .table-panel tbody td { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+  }
   .table-panel tbody tr:last-child td { border-bottom: 0; }
   .table-panel tbody tr { transition: background 0.12s; }
   .table-panel tbody tr:hover { background: var(--brand-50); }

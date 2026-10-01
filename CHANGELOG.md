@@ -7,6 +7,19 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.25.0] - Sin publicar (rama pruebas)
 
+### Mejorado (tercera revisión del usuario)
+
+- **Correos de aviso con redacción natural**: «El administrador «admin» aplicó los cambios de
+  configuración. Squid recargó la configuración sin cortar las conexiones activas.» (antes:
+  «El admin admin aplicó cambios (reconfigure).»). Todos los avisos de cambios (usuarios, ACLs,
+  reglas, aplicar) se reescribieron y se traducen al inglés y portugués, también en Telegram.
+- **Acciones sobre varios usuarios** (habilitar, deshabilitar, eliminar, generar credenciales) y
+  **asignación de cuotas** a uno o varios usuarios ahora avisan, una sola vez y con la lista.
+- **Tablas en pantallas tamaño laptop**: Usuarios, Registros y el resto de tablas ya no cortan la
+  última columna (relleno más compacto por debajo de 1536 px y desplazamiento horizontal si aun
+  así no cabe).
+- Los simuladores de tráfico de pruebas (`tools/trafico_sim*`) ya no se versionan.
+
 ### Mejorado (pruebas de instalación y actualización)
 
 - **ACLs**: nueva columna «Uso» (En uso · N / Sin uso) con, al pasar el ratón, dónde se

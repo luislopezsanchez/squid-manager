@@ -225,7 +225,9 @@ def notify(config, subject: str, message: str, event: str | None = None) -> dict
         results["email"] = ok
 
     if config.telegram_enabled:
-        full_message = f"<b>{subject}</b>\n\n{message}"
+        from app.i18n import traducir_dinamico
+        idioma = getattr(config, "idioma", "es")
+        full_message = f"<b>{traducir_dinamico(subject, idioma)}</b>\n\n{traducir_dinamico(message, idioma)}"
         ok, _ = send_telegram(config, full_message)
         results["telegram"] = ok
 

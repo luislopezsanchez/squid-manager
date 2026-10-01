@@ -146,8 +146,8 @@ def create_acl(
 
     if background_tasks:
         queue_notification(background_tasks, db, "acl_change",
-                           "ACL creada",
-                           f"El admin {current_admin.username} creó la ACL '{name}' ({acl_type}).")
+                           "Se creó una ACL",
+                           f"El administrador «{current_admin.username}» creó la ACL «{name}» (tipo {acl_type}).")
     return _to_response(acl)
 
 
@@ -243,8 +243,8 @@ def update_acl(
 
     if background_tasks:
         queue_notification(background_tasks, db, "acl_change",
-                           "ACL actualizada",
-                           f"El admin {current_admin.username} actualizó la ACL '{acl.name}'.")
+                           "Se modificó una ACL",
+                           f"El administrador «{current_admin.username}» modificó la ACL «{acl.name}».")
     return _to_response(acl)
 
 
@@ -282,8 +282,8 @@ def delete_acl(
 
     if background_tasks:
         queue_notification(background_tasks, db, "acl_change",
-                           "ACL eliminada",
-                           f"El admin {current_admin.username} eliminó la ACL '{name}'.")
+                           "Se eliminó una ACL",
+                           f"El administrador «{current_admin.username}» eliminó la ACL «{name}».")
 
 
 @router.post("/bulk-domains")
@@ -341,8 +341,8 @@ async def cargar_dominios_masivo(
 
     if background_tasks:
         queue_notification(background_tasks, db, "acl_change",
-                           "ACL cargada desde archivo",
-                           f"El admin {current_admin.username} cargó {info['combinados']} dominios en la ACL '{name}' ({info['source']}).")
+                           "Se cargó una ACL desde un archivo",
+                           f"El administrador «{current_admin.username}» cargó {info['combinados']} dominios en la ACL «{name}» (origen: {info['source']}).")
 
     return {
         "acl": _to_response(acl).model_dump(mode="json"),

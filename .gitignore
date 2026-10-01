@@ -81,3 +81,6 @@ backend/.network_state.json
 # Estado operativo de los trackers de cuota y syslog (offsets de lectura del access.log).
 backend/.quota_offset_state*
 backend/.syslog_offset_state*
+
+# Simuladores de trafico de pruebas (solo para las MV de desarrollo; nunca al repositorio)
+tools/trafico_sim*

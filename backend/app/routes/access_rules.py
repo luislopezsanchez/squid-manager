@@ -96,8 +96,8 @@ def create_access_rule(
 
     if background_tasks:
         queue_notification(background_tasks, db, "rule_change",
-                           "Regla de acceso creada",
-                           f"El admin {current_admin.username} creó la regla '{data.action} {acl_names}'.")
+                           "Se creó una regla de acceso",
+                           f"El administrador «{current_admin.username}» creó la regla de acceso «{data.action} {acl_names}».")
     return rule
 
 
@@ -152,8 +152,8 @@ def reorder_rules(
 
     if background_tasks:
         queue_notification(background_tasks, db, "rule_change",
-                           "Reglas de acceso reordenadas",
-                           f"El admin {current_admin.username} reordenó {len(data.rule_ids)} reglas de acceso.")
+                           "Se reordenaron las reglas de acceso",
+                           f"El administrador «{current_admin.username}» cambió el orden de {len(data.rule_ids)} reglas de acceso.")
     return db.query(AccessRule).order_by(AccessRule.order, AccessRule.id).all()
 
 
@@ -190,8 +190,8 @@ def update_access_rule(
 
     if background_tasks:
         queue_notification(background_tasks, db, "rule_change",
-                           "Regla de acceso actualizada",
-                           f"El admin {current_admin.username} actualizó la regla '{rule.action} {rule.acl_names}'.")
+                           "Se modificó una regla de acceso",
+                           f"El administrador «{current_admin.username}» modificó la regla de acceso «{rule.action} {rule.acl_names}».")
     return rule
 
 
@@ -219,5 +219,5 @@ def delete_access_rule(
 
     if background_tasks:
         queue_notification(background_tasks, db, "rule_change",
-                           "Regla de acceso eliminada",
-                           f"El admin {current_admin.username} eliminó la regla '{descripcion}'.")
+                           "Se eliminó una regla de acceso",
+                           f"El administrador «{current_admin.username}» eliminó la regla de acceso «{descripcion}».")

@@ -230,8 +230,8 @@ def create_proxy_user(
 
     if background_tasks:
         queue_notification(background_tasks, db, "user_change",
-                           "Usuario de proxy creado",
-                           f"El admin {current_admin.username} creó el usuario '{username}'.")
+                           "Se creó un usuario del proxy",
+                           f"El administrador «{current_admin.username}» creó el usuario «{username}».")
     return user
 
 
@@ -286,8 +286,8 @@ def update_proxy_user(
 
     if background_tasks:
         queue_notification(background_tasks, db, "user_change",
-                           "Usuario de proxy actualizado",
-                           f"El admin {current_admin.username} actualizó el usuario '{user.username}'.")
+                           "Se modificó un usuario del proxy",
+                           f"El administrador «{current_admin.username}» modificó al usuario «{user.username}».")
     return user
 
 
@@ -323,8 +323,8 @@ def delete_proxy_user(
 
     if background_tasks:
         queue_notification(background_tasks, db, "user_change",
-                           "Usuario de proxy eliminado",
-                           f"El admin {current_admin.username} eliminó el usuario '{username}'.")
+                           "Se eliminó un usuario del proxy",
+                           f"El administrador «{current_admin.username}» eliminó al usuario «{username}».")
 
 
 @router.patch("/{user_id}/toggle", response_model=ProxyUserResponse)
@@ -354,10 +354,12 @@ def toggle_proxy_user(
     user.active = user.id in {u.id for u in active_proxy_users(db)}
 
     if background_tasks:
-        estado = "habilitó" if user.enabled else "deshabilitó"
-        queue_notification(background_tasks, db, "user_change",
-                           "Usuario de proxy modificado",
-                           f"El admin {current_admin.username} {estado} el usuario '{user.username}'.")
+        if user.enabled:
+            queue_notification(background_tasks, db, "user_change", "Se habilitó un usuario del proxy",
+                               f"El administrador «{current_admin.username}» habilitó al usuario «{user.username}»: ya puede navegar.")
+        else:
+            queue_notification(background_tasks, db, "user_change", "Se deshabilitó un usuario del proxy",
+                               f"El administrador «{current_admin.username}» deshabilitó al usuario «{user.username}»: ya no puede navegar.")
     return user
 
 
@@ -462,6 +464,29 @@ class BulkAction(BaseModel):
     usernames: list[str] = Field(..., min_length=1, max_length=2000)
 
 
+_VERBOS_MASIVOS = {
+    "enable": "habilitó",
+    "disable": "deshabilitó",
+    "delete": "eliminó",
+    "reset_password": "generó nuevas credenciales para",
+}
+
+
+def _avisar_masivo(background_tasks, db, admin: str, accion: str, nombres: list[str]) -> None:
+    """Aviso (correo/Telegram) de una acción aplicada a varios usuarios a la vez."""
+    verbo = _VERBOS_MASIVOS.get(accion, "modificó")
+    n = len(nombres)
+    lista = ", ".join(nombres[:8]) + (f" y {n - 8} más" if n > 8 else "")
+    # «generó nuevas credenciales para …» lleva «para», el resto lleva «a»: la frase tiene que sonar bien.
+    a = "" if accion == "reset_password" else "a "
+    el = "el" if accion == "reset_password" else "al"
+    if n == 1:
+        msg = f"El administrador «{admin}» {verbo} {el} usuario «{lista}»."
+    else:
+        msg = f"El administrador «{admin}» {verbo} {a}{n} usuarios: {lista}."
+    queue_notification(background_tasks, db, "user_change", "Acción sobre varios usuarios", msg)
+
+
 @router.post("/bulk")
 def bulk_action(
     data: BulkAction,
@@ -556,6 +581,10 @@ def bulk_action(
         mark_dirty()
     if revocar:
         _revocar(background_tasks)
+
+    # Una operación sobre varios usuarios marcados se avisa UNA vez, con la lista.
+    if ok:
+        _avisar_masivo(background_tasks, db, current_admin.username, data.action, ok)
 
     return {"status": "ok", "action": data.action, "ok": ok, "omitidos": omitidos, "credenciales": credenciales}
 
@@ -700,7 +729,7 @@ def import_users(
 
     queue_notification(background_tasks, db, "user_change",
                        "Importación masiva de usuarios",
-                       f"El admin {current_admin.username} importó usuarios: {len(a_crear)} creados, {len(a_actualizar)} actualizados.")
+                       f"El administrador «{current_admin.username}» importó usuarios desde un archivo: {len(a_crear)} nuevos y {len(a_actualizar)} actualizados.")
     informe.update({
         "creados": len(a_crear), "actualizados": len(a_actualizar),
         "credenciales": [{"usuario": u, "password": p} for u, p in generadas.items()],

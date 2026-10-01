@@ -7,7 +7,7 @@ para un usuario local (proxy_users) o uno importado de LDAP (ldap_users)
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from app.models.ldap_user import LdapUser
 from app.models.navigation_quota import NavigationQuota
 from app.models.proxy_user import ProxyUser
 from app.services.auth_service import get_current_admin, require_writer
+from app.services.notification_service import queue_notification
 from app.services.quota_service import ACCIONES_VALIDAS, PERIODOS_VALIDOS, anotar_reinicio, revertir_accion
 from app.utils import utcnow
 
@@ -119,22 +120,42 @@ def list_quotas(
     return cuotas
 
 
+_PERIODOS_ES = {"daily": "diaria", "weekly": "semanal", "monthly": "mensual"}
+
+
+def _avisar_cuota(background_tasks, db, admin: str, data: QuotaSet, nombres: list[str]) -> None:
+    """Aviso de que se asignó una cuota (a uno o a varios usuarios marcados)."""
+    periodo = _PERIODOS_ES.get(data.quota_period, data.quota_period)
+    limite = data.quota_bytes / 1048576
+    limite_txt = f"{limite / 1024:.1f} GB" if limite >= 1024 else f"{limite:.0f} MB"
+    n = len(nombres)
+    lista = ", ".join(nombres[:8]) + (f" y {n - 8} más" if n > 8 else "")
+    if n == 1:
+        msg = f"El administrador «{admin}» asignó al usuario «{lista}» una cuota {periodo} de {limite_txt}."
+    else:
+        msg = f"El administrador «{admin}» asignó una cuota {periodo} de {limite_txt} a {n} usuarios: {lista}."
+    queue_notification(background_tasks, db, "user_change", "Se asignó una cuota de navegación", msg)
+
+
 @router.put("/{username}", response_model=QuotaResponse)
 def set_quota(
     username: str,
     data: QuotaSet,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
 ):
     """Crea o reemplaza la cuota de un usuario (local o LDAP)."""
     quota = _upsert(db, current_admin, username, data)
     anotar_reinicio(quota)
+    _avisar_cuota(background_tasks, db, current_admin.username, data, [username])
     return quota
 
 
 @router.post("/bulk", response_model=QuotaBulkResult)
 def set_quota_bulk(
     data: QuotaBulkSet,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
 ):
@@ -152,6 +173,8 @@ def set_quota_bulk(
             errores.append(f"{username}: {e.detail}")
     for q in aplicadas:
         anotar_reinicio(q)
+    if aplicadas:
+        _avisar_cuota(background_tasks, db, current_admin.username, data, [q.username for q in aplicadas])
     return {"aplicadas": aplicadas, "errores": errores}
 
 

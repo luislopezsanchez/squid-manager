@@ -214,6 +214,7 @@ async def apply_config(
         return result
 
     accion = "reinicio con SSL Bump" if result.get("needs_restart") else "reconfigure"
+    reinicio = bool(result.get("needs_restart")) or "reiniciado" in str(result.get("message", "")).lower()
     db.add(AuditLog(
         admin_id=current_admin.id, admin_username=current_admin.username,
         action="apply", entity="squid_config", new_value=accion,
@@ -221,9 +222,11 @@ async def apply_config(
     db.commit()
 
     if background_tasks:
-        queue_notification(background_tasks, db, "apply",
-                           "Cambios aplicados a Squid",
-                           f"El admin {current_admin.username} aplicó cambios ({accion}).")
+        if reinicio:
+            msg = f"El administrador «{current_admin.username}» aplicó los cambios de configuración. Squid se reinició para aplicarlos."
+        else:
+            msg = f"El administrador «{current_admin.username}» aplicó los cambios de configuración. Squid recargó la configuración sin cortar las conexiones activas."
+        queue_notification(background_tasks, db, "apply", "Se aplicaron cambios en Squid", msg)
 
     return result
 
@@ -304,7 +307,7 @@ async def start(
     if background_tasks:
         queue_notification(background_tasks, db, "apply",
                            "Squid iniciado",
-                           f"El admin {current_admin.username} inició Squid desde el dashboard.")
+                           f"El administrador «{current_admin.username}» inició el servicio Squid desde el panel.")
 
     return {"ok": True, "message": mensaje}
 

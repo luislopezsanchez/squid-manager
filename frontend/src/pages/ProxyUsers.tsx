@@ -998,7 +998,7 @@ export default function ProxyUsers() {
       ) : loadError ? (
         <ErrorState onRetry={loadUsers} />
       ) : (
-        <div className="card overflow-hidden">
+        <div className="card overflow-x-auto">
           <table className="table-panel">
             <thead>
               <tr>
