@@ -327,6 +327,9 @@ ok "Contenedores desplegados"
 info "Configurando el temporizador de actualizaciones..."
 install -o root -g root -m 755 "$INSTALL_DIR/docker-autoupdate-check.sh" \
     /usr/local/lib/squidmanager/docker-autoupdate-check.sh
+# Copia de upgrade-docker.sh propiedad de root: el temporizador ejecuta esa y no la del checkout.
+install -o root -g root -m 755 "$INSTALL_DIR/upgrade-docker.sh" \
+    /usr/local/lib/squidmanager/upgrade-docker.sh
 
 cat > /etc/systemd/system/squidmanager-docker-autoupdate.service <<EOF
 [Unit]

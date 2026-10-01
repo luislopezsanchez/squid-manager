@@ -5,7 +5,7 @@ Squid) y Contacto (soporte del producto) -antes vivía duplicado dentro de
 notification_config, ver migración 0022 y app/models/smtp_config.py.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -108,6 +108,12 @@ def test_smtp_endpoint(
     password = data.smtp_password
     if not password:
         guardado = db.query(SmtpConfig).first()
+        # La contraseña guardada solo se reutiliza contra el MISMO servidor, puerto y usuario: si no,
+        # el «probar» la enviaría a un servidor elegido por quien lo pide.
+        mismo = bool(guardado) and (data.smtp_host or "") == (guardado.smtp_host or "") \
+            and (data.smtp_user or "") == (guardado.smtp_user or "") and data.smtp_port == guardado.smtp_port
+        if guardado and guardado.smtp_password and not mismo:
+            raise HTTPException(400, detail="Para probar otro servidor, puerto o usuario escribe también su contraseña.")
         password = guardado.smtp_password if guardado else None
 
     class _TmpConfig:

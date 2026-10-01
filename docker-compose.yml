@@ -216,8 +216,11 @@ services:
     # mantener iguales a mano.
     ports:
       - "${PROXY_PORT:-3128}:3128"
+    # Red PROPIA, sin el backend, la base de datos ni el proxy del socket de Docker: un cliente del
+    # proxy que lograra que Squid pidiera una URL interna (SSRF) no alcanzaria a estos servicios.
+    # El backend no necesita red hacia Squid (usa `docker exec` y volumenes compartidos).
     networks:
-      - squidnet
+      - proxynet
     tty: true
     stdin_open: true
     healthcheck:
@@ -271,5 +274,7 @@ volumes:
 # Red interna
 # ============================================
 networks:
+  proxynet:
+    driver: bridge
   squidnet:
     driver: bridge

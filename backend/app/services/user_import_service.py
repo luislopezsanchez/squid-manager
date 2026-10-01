@@ -197,6 +197,8 @@ def parse_archivo(nombre: str, datos: bytes) -> tuple[list[dict], list[dict]]:
 # ---------------------------------------------------------------------------
 
 def _xlsx_bytes(encabezado: list[str], filas: list[list]) -> bytes:
+    from app.utils.csv_seguro import fila as _seguro
+    filas = [_seguro(f) for f in filas]
     from openpyxl import Workbook
     from openpyxl.styles import Font
 
@@ -216,6 +218,8 @@ def _xlsx_bytes(encabezado: list[str], filas: list[list]) -> bytes:
 
 
 def _csv_bytes(encabezado: list[str], filas: list[list]) -> bytes:
+    from app.utils.csv_seguro import fila as _seguro
+    filas = [_seguro(f) for f in filas]
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(encabezado)

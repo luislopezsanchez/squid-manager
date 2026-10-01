@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -60,6 +60,7 @@ def create_access_token(data: dict) -> str:
 
 
 def get_current_admin(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> Admin:
@@ -107,6 +108,14 @@ def get_current_admin(
                 detail="La sesión caducó porque se cambió la contraseña. Vuelve a entrar.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+
+    # Mientras la cuenta tenga la contraseña inicial pendiente de cambiar, la API solo deja cambiarla
+    # (antes solo lo exigía la pantalla: con el token se podía usar todo el API sin cambiarla).
+    if admin.must_change_password is True and not request.url.path.endswith(("/admins/change-password", "/auth/me")):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debes cambiar tu contraseña antes de continuar.",
+        )
 
     return admin
 

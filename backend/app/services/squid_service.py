@@ -6,6 +6,7 @@ en los dos casos: generar la configuracion, validarla antes de escribirla y
 mantener los ficheros de usuarios y de LDAP.
 """
 
+import re
 import logging
 import os
 import threading
@@ -533,6 +534,11 @@ def write_ldap_aux_files(ldap_config, allowed_usernames: list[str]) -> bool:
     """
     try:
         if ldap_config and getattr(ldap_config, "enabled", False):
+            # El fichero es `clave=valor` por líneas: un salto de línea en un valor inyectaría otra clave
+            # (p. ej. redirigir `server_url` a un servidor ajeno y recoger credenciales).
+            for campo in ("server_url", "bind_dn", "bind_password", "search_base", "user_filter"):
+                if re.search(r"[\r\n\x00]", str(getattr(ldap_config, campo, "") or "")):
+                    raise ValueError(f"El campo LDAP «{campo}» contiene saltos de línea")
             conf_lines = [
                 f"server_url={ldap_config.server_url or ''}",
                 f"bind_dn={ldap_config.bind_dn or ''}",
@@ -810,8 +816,8 @@ def _apply_squid_config(db) -> dict:
     # el primer «Aplicar cambios» recibe `cache_dir ufs ...`), el proceso se aborta con
     # «assertion failed: store_swapout.cc» y el proxy queda caído. Hace falta un reinicio.
     cache_cambio = bool(config_previa) and _lineas_cache_dir(config_previa) != _lineas_cache_dir(config_text)
-    with open(settings.SQUID_CONFIG_PATH, "w") as f:
-        f.write(config_text)
+    # Escritura atomica (temporal + rename): Squid, o un reload en medio, nunca ve un squid.conf a medias.
+    _write_atomic(Path(settings.SQUID_CONFIG_PATH), config_text, 0o640)
 
     # El .env se sincroniza en cada aplicación, no solo cuando cambia el
     # puerto: así una instalación antigua o una edición manual del fichero se
@@ -846,8 +852,6 @@ def _apply_squid_config(db) -> dict:
     write_passwd_file(db)
     write_digest_file(db, realm_actual(db))
 
-    mark_clean()
-
     warnings = msg if msg != "Configuración válida" else ""
 
     apply_progress.avanzar(apply_progress.PASO_RECARGANDO)
@@ -855,6 +859,8 @@ def _apply_squid_config(db) -> dict:
     # 5a. Cambió el puerto: hay que recrear el contenedor.
     if port_changed:
         ok, restart_msg = restart_squid()
+        if ok:
+            mark_clean()
         return {
             "status": "ok" if ok else "warning",
             "message": f"Puerto actualizado: {restart_msg}",
@@ -866,6 +872,8 @@ def _apply_squid_config(db) -> dict:
     # 5a-bis. Cambió el almacenamiento de caché en disco: reiniciar (ver arriba).
     if cache_cambio:
         ok, restart_msg = restart_squid()
+        if ok:
+            mark_clean()
         return {
             "status": "ok" if ok else "warning",
             "message": f"Squid reiniciado porque cambió la caché en disco: {restart_msg}",
@@ -886,6 +894,8 @@ def _apply_squid_config(db) -> dict:
     # de todo el mundo. Reconfigure es ahora el camino único para todo lo que
     # no sea un cambio de puerto.
     success, reload_msg = reload_squid()
+    if success:
+        mark_clean()  # solo si Squid aceptó la configuración: si no, el panel sigue diciendo «pendiente»
     return {
         "status": "ok" if success else "warning",
         "message": f"Squid reconfigurado: {reload_msg}",

@@ -20,6 +20,8 @@ from app.services.historical_log_service import (
     delete_month,
 )
 
+from app.utils.csv_seguro import fila as _seguro
+
 router = APIRouter()
 
 
@@ -141,11 +143,11 @@ async def export_logs(
     writer.writerow(["timestamp", "time", "client_ip", "action", "status", "bytes", "method", "url", "domain", "user", "content_type", "denied"])
 
     for e in entries:
-        writer.writerow([
+        writer.writerow(_seguro([
             e["timestamp"], e["time"], e["client_ip"], e["action"], e["status"],
             e["bytes"], e["method"], e["url"], e["domain"], e["user"],
             e["content_type"], "yes" if e["denied"] else "no",
-        ])
+        ]))
 
     output.seek(0)
 
@@ -277,11 +279,11 @@ def historical_export(
         for e in iter_historical_lines(year, month, filtros):
             row = io.StringIO()
             writer = csv.writer(row)
-            writer.writerow([
+            writer.writerow(_seguro([
                 e["timestamp"], e["time"], e["client_ip"], e["action"], e["status"],
                 e["bytes"], e["method"], e["url"], e["domain"], e["user"],
                 e["content_type"], "yes" if e["denied"] else "no",
-            ])
+            ]))
             yield row.getvalue()
 
     return StreamingResponse(

@@ -16,6 +16,13 @@ from app.services.squid_names import (
     ensure_not_referenced, find_references,
 )
 
+def _sin_comillas(valor: str) -> None:
+    """En una línea `acl` de Squid, un argumento entre comillas significa «lee los valores de este
+    archivo»: se rechazan para que una ACL no pueda hacer leer ficheros al servidor."""
+    if '"' in valor or "'" in valor:
+        raise HTTPException(400, detail="El valor de una ACL no puede llevar comillas.")
+
+
 router = APIRouter()
 
 # El umbral que decide 'inline' vs 'file' (200 dominios) y el tope combinado
@@ -124,6 +131,7 @@ def create_acl(
     name = validate_name(data.name, "ACL")
     acl_type = validate_acl_type(data.type)
     value = validate_value(data.value)
+    _sin_comillas(value)
 
     if data.is_category and acl_type not in TIPOS_CATEGORIZABLES:
         raise HTTPException(400, detail="Una categoría solo puede ser de tipo dominio (dstdomain o dstdom_regex).")
@@ -215,6 +223,7 @@ def update_acl(
         changes["type"] = validate_acl_type(changes["type"])
     if "value" in changes and changes["value"] is not None:
         changes["value"] = validate_value(changes["value"])
+        _sin_comillas(changes["value"])
 
     tipo_resultante = changes.get("type", acl.type)
     categoria_resultante = changes.get("is_category", acl.is_category)

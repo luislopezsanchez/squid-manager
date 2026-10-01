@@ -41,11 +41,21 @@ cd "$PROJECT_DIR"
 BRANCH="${BRANCH:-$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || true)}"
 BRANCH="${BRANCH:-main}"
 
-if [ -f "$PROJECT_DIR/.env" ]; then
-    set -a
-    . "$PROJECT_DIR/.env"
-    set +a
-fi
+# Carga el .env SIN ejecutarlo: antes se hacia `. .env`, y en Docker ese fichero lo escribe el backend, asi que
+# un backend comprometido podia meter ahi comandos que root ejecutaria al correr este script (cron, upgrade...).
+# Solo se aceptan lineas CLAVE=VALOR, y el valor se toma tal cual (sin expansion ni sustitucion).
+cargar_env_seguro() {
+    local f="$1" linea clave valor
+    [ -f "$f" ] || return 0
+    while IFS= read -r linea || [ -n "$linea" ]; do
+        [[ "$linea" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+        clave="${BASH_REMATCH[2]}"; valor="${BASH_REMATCH[3]}"
+        if [[ "$valor" =~ ^\"(.*)\"[[:space:]]*$ ]] || [[ "$valor" =~ ^\'(.*)\'[[:space:]]*$ ]]; then valor="${BASH_REMATCH[1]}"; fi
+        export "$clave=$valor"
+    done < "$f"
+}
+
+cargar_env_seguro "$PROJECT_DIR/.env"
 WEB_PORT="${WEB_PORT:-3000}"
 
 # Comprobacion de modo ANTES de tocar nada (backup, git reset): el path
@@ -124,9 +134,11 @@ git config --system --get-all safe.directory 2>/dev/null | grep -qxF "$PROJECT_D
 # formas), y sin este paso el script entero abortaria -mismo bug real
 # encontrado y corregido en install-nativo.sh-. `git clean -fd` respeta
 # .gitignore: no toca `.env`, `node_modules/` ni nada gitignored.
-git checkout --quiet -- . 2>/dev/null || true
-git clean -fdq
-git fetch --all --quiet
+# Los hooks y el fsmonitor del repo los puede definir quien escriba en el checkout; root no los ejecuta.
+g() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+g checkout --quiet -- . 2>/dev/null || true
+g clean -fdq
+g fetch --all --quiet
 
 # BRANCH puede venir de una exportacion vieja en la shell del admin -de un
 # intento anterior, de haber copiado un comando de otra instalacion, de un
@@ -147,8 +159,8 @@ if ! git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
     exit 1
 fi
 
-git checkout --quiet "$BRANCH"
-git reset --hard --quiet "origin/$BRANCH"
+g checkout --quiet "$BRANCH"
+g reset --hard --quiet "origin/$BRANCH"
 echo "Codigo actualizado a $(git log --oneline -1)"
 
 # El `git reset --hard` de arriba acaba de sobrescribir ESTE MISMO archivo en
@@ -183,6 +195,10 @@ echo "=== 3. Configurando el temporizador de actualizaciones ==="
 if [ "$(id -u)" = "0" ]; then
     install -o root -g root -m 755 "$PROJECT_DIR/docker-autoupdate-check.sh" \
         /usr/local/lib/squidmanager/docker-autoupdate-check.sh 2>/dev/null || true
+    # Copia de ESTE script propiedad de root: el temporizador (root) ejecuta esa copia y no la del checkout,
+    # que en Docker tiene un directorio del que es dueño el usuario del backend.
+    install -o root -g root -m 755 "$PROJECT_DIR/upgrade-docker.sh" \
+        /usr/local/lib/squidmanager/upgrade-docker.sh 2>/dev/null || true
 
     cat > /etc/systemd/system/squidmanager-docker-autoupdate.service <<EOF
 [Unit]

@@ -63,7 +63,8 @@ _COLUMNAS_EXPORT = ["id", "timestamp", "admin_username", "action", "entity", "en
 
 
 def _fila_export(e: AuditLog) -> dict:
-    return {
+    from app.utils.csv_seguro import celda
+    return {k: celda(v) for k, v in {
         "id": e.id,
         "timestamp": e.timestamp.isoformat() if e.timestamp else "",
         "admin_username": e.admin_username or "",
@@ -72,7 +73,7 @@ def _fila_export(e: AuditLog) -> dict:
         "entity_id": e.entity_id if e.entity_id is not None else "",
         "old_value": e.old_value or "",
         "new_value": e.new_value or "",
-    }
+    }.items()}
 
 
 @router.get("/export")

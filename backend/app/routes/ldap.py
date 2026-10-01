@@ -2,6 +2,7 @@
 
 import subprocess
 import logging
+import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -83,6 +84,10 @@ def update_ldap_config(
     current_admin: Admin = Depends(require_writer),
 ):
     """Actualiza la configuración LDAP."""
+    for campo, valor in (("URL del servidor", data.server_url), ("Bind DN", data.bind_dn), ("Base de búsqueda", data.search_base),
+                         ("Filtro de usuario", data.user_filter), ("Contraseña de enlace", data.bind_password)):
+        if valor and re.search(r"[\r\n\x00]", valor):
+            raise HTTPException(400, detail=f"El campo «{campo}» no puede contener saltos de línea.")
     # Mismo motivo que en squid_config.py al revés: Digest solo autentica
     # usuarios locales (el helper nunca ve la contraseña en claro, solo el
     # HA1 ya calculado, que no existe para nadie de LDAP). Habilitar LDAP con
@@ -177,8 +182,12 @@ def test_ldap_connection(
     bind_password = data.bind_password
     if bind_password == "***":
         saved = db.query(LdapConfig).first()
-        if saved:
+        # La contraseña guardada solo se reutiliza contra el MISMO servidor y cuenta: si no, quien pueda
+        # probar la conexión la enviaría a un servidor propio y la recogería.
+        if saved and (data.server_url or "") == (saved.server_url or "") and (data.bind_dn or "") == (saved.bind_dn or ""):
             bind_password = saved.bind_password
+        else:
+            raise HTTPException(400, detail="Para probar otro servidor o cuenta escribe también su contraseña de enlace.")
 
     # 1. Conectar al servidor
     try:

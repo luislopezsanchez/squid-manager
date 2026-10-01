@@ -741,8 +741,14 @@ ok "Temporizador de actualizaciones activo (cada minuto)"
 paso "8. Instalando el backend"
 
 cd "$INSTALL_DIR/backend"
-python3 -m venv .venv
-.venv/bin/pip install --quiet --upgrade pip
+# El venv pertenece a $APP_USER (el backend corre con ese usuario): si root ejecutara `pip` dentro de el,
+# cualquier .pth o sitecustomize.py que ese usuario hubiera dejado en site-packages se ejecutaria como
+# root en cada actualizacion (escalada de privilegios). Todo lo del venv se hace como $APP_USER.
+chown "$APP_USER":"$(id -gn "$APP_USER")" "$INSTALL_DIR/backend"
+[ -d .venv ] && chown -R "$APP_USER":"$(id -gn "$APP_USER")" .venv
+como_app() { runuser -u "$APP_USER" -- env HOME=/tmp PIP_CACHE_DIR=/tmp/pip-cache-squidmgr "$@"; }
+como_app python3 -m venv .venv
+como_app .venv/bin/pip install --quiet --upgrade pip
 # python-jose (y sus propias transitivas ecdsa/rsa) se reemplazo por PyJWT
 # -ver requirements.txt-, pero un venv que ya existia de antes de ese cambio
 # lo sigue teniendo instalado: "pip install -r requirements.txt" no
@@ -752,8 +758,8 @@ python3 -m venv .venv
 # real (pyasn1 0.6.4 vs lo que python-jose exige) pero no lo es -el import
 # nunca choca porque son paquetes con nombres distintos (jose vs jwt)-;
 # igual, mejor un venv limpio que una advertencia confusa en cada upgrade.
-.venv/bin/pip uninstall -y python-jose ecdsa rsa >/dev/null 2>&1 || true
-.venv/bin/pip install --quiet -r requirements.txt || fail "No se pudieron instalar las dependencias de Python."
+como_app .venv/bin/pip uninstall -y python-jose ecdsa rsa >/dev/null 2>&1 || true
+como_app .venv/bin/pip install --quiet -r requirements.txt || fail "No se pudieron instalar las dependencias de Python."
 ok "Entorno virtual listo"
 
 SECRET_KEY="${SECRET_KEY:-$(openssl rand -hex 32)}"
@@ -882,16 +888,25 @@ server {
     gzip_min_length 512;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;
 
-    # 250m: acompaña MAX_UPLOAD_BYTES de acls.py (carga masiva de dominios
-    # para una ACL de archivo -ver migración 0023). Por debajo de eso, nginx
-    # cortaba con 413 antes de que la petición llegara siquiera al backend.
-    client_max_body_size 250m;
+    # 2m por defecto (la API es JSON pequeño); las subidas de archivos tienen su propia location con 250m.
+    client_max_body_size 2m;  # el resto de la API es JSON pequeño: un cuerpo grande sin autenticar no se almacena
 
     # Sin esta regla, /health cae en el catch-all de la SPA y devuelve 200 con
     # el HTML del panel: un monitor externo veria verde con el backend muerto.
     location = /health {
         proxy_pass http://127.0.0.1:${API_PORT}/health;
         access_log off;
+    }
+
+    # Subidas de archivos: hasta 250m (acompaña MAX_UPLOAD_BYTES de acls.py y backup.py).
+    location ~ ^/api/(acls/bulk-domains|backup/|kerberos/keytab|proxy-users/import) {
+        client_max_body_size 250m;
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 600s;
     }
 
     location /api/ {
@@ -914,16 +929,34 @@ server {
     }
 
     location /assets/ {
+        # nginx NO hereda los add_header del server en una location que declara el suyo:
+        # se repiten aqui, o la SPA saldria sin CSP ni X-Frame-Options.
+        add_header X-Frame-Options "DENY" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "same-origin" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
         add_header Cache-Control "public, max-age=31536000, immutable" always;
         try_files \$uri =404;
     }
 
     location = /index.html {
+        # nginx NO hereda los add_header del server en una location que declara el suyo:
+        # se repiten aqui, o la SPA saldria sin CSP ni X-Frame-Options.
+        add_header X-Frame-Options "DENY" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "same-origin" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
         add_header Cache-Control "no-cache, must-revalidate" always;
         try_files \$uri =404;
     }
 
     location / {
+        # nginx NO hereda los add_header del server en una location que declara el suyo:
+        # se repiten aqui, o la SPA saldria sin CSP ni X-Frame-Options.
+        add_header X-Frame-Options "DENY" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "same-origin" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
         add_header Cache-Control "no-cache, must-revalidate" always;
         try_files \$uri \$uri/ /index.html;
     }

@@ -85,7 +85,16 @@ def _get_client_ip(request: Request) -> str:
     if peer in _trusted_proxy_ips():
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
-            return forwarded.split(",")[0].strip()
+            # Cada proxy AÑADE a la derecha la IP de quien le habló; lo que va a la izquierda lo escribe el
+            # cliente y se puede falsificar (un XFF distinto por petición esquivaba el límite de intentos).
+            # Se toma la primera entrada, de derecha a izquierda, que no sea uno de nuestros proxies.
+            confiables = _trusted_proxy_ips()
+            partes = [p.strip() for p in forwarded.split(",") if p.strip()]
+            for ip in reversed(partes):
+                if ip not in confiables:
+                    return ip
+            if partes:
+                return partes[0]
 
     return peer
 

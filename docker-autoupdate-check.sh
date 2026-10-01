@@ -174,10 +174,15 @@ escribir_apply "running" "" ""
 RAMA="$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || true)"
 [ -n "$RAMA" ] || RAMA="main"
 
+# Se ejecuta la copia propiedad de root (la instalan install.sh y upgrade-docker.sh); si aun no existe
+# (instalacion anterior a este cambio), la del checkout, como antes.
+SCRIPT_UPGRADE=/usr/local/lib/squidmanager/upgrade-docker.sh
+[ -x "$SCRIPT_UPGRADE" ] || SCRIPT_UPGRADE="$PROJECT_DIR/upgrade-docker.sh"
+
 SALIDA=0
 LOG_TMP="$(mktemp)"
 if SQUIDMGR_UPGRADE_FOREGROUND=1 PROJECT_DIR="$PROJECT_DIR" BRANCH="$RAMA" \
-        bash "$PROJECT_DIR/upgrade-docker.sh" >"$LOG_TMP" 2>&1; then
+        bash "$SCRIPT_UPGRADE" >"$LOG_TMP" 2>&1; then
     SALIDA=0
 else
     SALIDA=$?

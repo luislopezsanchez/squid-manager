@@ -22,16 +22,28 @@ cd "$PROJECT_DIR"
 # DB_USER. Sin esto, cron (que no hereda el entorno del shell interactivo)
 # no los ve -mismo motivo por el que purge_audit_log.py necesita el mismo
 # paso, ver docs/production.md-.
-if [ -f "$PROJECT_DIR/.env" ]; then
-    set -a
-    . "$PROJECT_DIR/.env"
-    set +a
-fi
+# Carga el .env SIN ejecutarlo: antes se hacia `. .env`, y en Docker ese fichero lo escribe el backend, asi que
+# un backend comprometido podia meter ahi comandos que root ejecutaria al correr este script (cron, upgrade...).
+# Solo se aceptan lineas CLAVE=VALOR, y el valor se toma tal cual (sin expansion ni sustitucion).
+cargar_env_seguro() {
+    local f="$1" linea clave valor
+    [ -f "$f" ] || return 0
+    while IFS= read -r linea || [ -n "$linea" ]; do
+        [[ "$linea" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+        clave="${BASH_REMATCH[2]}"; valor="${BASH_REMATCH[3]}"
+        if [[ "$valor" =~ ^\"(.*)\"[[:space:]]*$ ]] || [[ "$valor" =~ ^\'(.*)\'[[:space:]]*$ ]]; then valor="${BASH_REMATCH[1]}"; fi
+        export "$clave=$valor"
+    done < "$f"
+}
+
+cargar_env_seguro "$PROJECT_DIR/.env"
 
 DEPLOY_MODE="${DEPLOY_MODE:-docker}"
 DB_NAME="${DB_NAME:-squidmanager}"
 DB_USER="${DB_USER:-squid}"
 
+# Los volcados llevan la base entera (hashes de contraseñas, secretos cifrados): solo root los lee.
+umask 077
 BACKUP_DIR="$PROJECT_DIR/backups"
 mkdir -p "$BACKUP_DIR"
 

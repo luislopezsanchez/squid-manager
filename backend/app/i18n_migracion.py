@@ -224,6 +224,15 @@ NUEVAS: dict[str, dict[str, str]] = {
         "Importación masiva de usuarios": "Bulk user import",
         "El administrador «{a}» generó nuevas credenciales para el usuario «{l}».": "Administrator «{a}» generated new credentials for the user «{l}».",
         "El administrador «{a}» generó nuevas credenciales para {n} usuarios: {l}.": "Administrator «{a}» generated new credentials for {n} users: {l}.",
+        "El realm de Kerberos solo puede tener letras, números, puntos, guiones y guiones bajos.": "The Kerberos realm can only contain letters, numbers, dots, hyphens and underscores.",
+        "El FQDN del proxy no es un nombre de host válido (letras, números, guiones y puntos).": "The proxy FQDN is not a valid host name (letters, numbers, hyphens and dots).",
+        "El campo «{c}» no puede contener saltos de línea.": "The field «{c}» cannot contain line breaks.",
+        "Para probar otro servidor o cuenta escribe también su contraseña de enlace.": "To test another server or account, also type its bind password.",
+        "Para probar otro servidor, puerto o usuario escribe también su contraseña.": "To test another server, port or user, also type its password.",
+        "Para probar otra dirección o usuario escribe también su contraseña.": "To test another address or user, also type its password.",
+        "El valor de una ACL no puede llevar comillas.": "An ACL value cannot contain quotes.",
+        "El {e} del proxy padre no puede llevar espacios.": "The parent proxy {e} cannot contain spaces.",
+        "Debes cambiar tu contraseña antes de continuar.": "You must change your password before continuing.",
     },
     "pt": {
         "la lista «{ruta}» no se subió junto con el squid.conf (súbela para importar esta ACL)":
@@ -539,6 +548,15 @@ _VARIOS = {
         "Importación masiva de usuarios": "Importação em massa de usuários",
         "El administrador «{a}» generó nuevas credenciales para el usuario «{l}».": "O administrador «{a}» gerou novas credenciais para o usuário «{l}».",
         "El administrador «{a}» generó nuevas credenciales para {n} usuarios: {l}.": "O administrador «{a}» gerou novas credenciais para {n} usuários: {l}.",
+        "El realm de Kerberos solo puede tener letras, números, puntos, guiones y guiones bajos.": "O realm do Kerberos só pode ter letras, números, pontos, hífens e sublinhados.",
+        "El FQDN del proxy no es un nombre de host válido (letras, números, guiones y puntos).": "O FQDN do proxy não é um nome de host válido (letras, números, hífens e pontos).",
+        "El campo «{c}» no puede contener saltos de línea.": "O campo «{c}» não pode conter quebras de linha.",
+        "Para probar otro servidor o cuenta escribe también su contraseña de enlace.": "Para testar outro servidor ou conta, digite também a senha de vínculo.",
+        "Para probar otro servidor, puerto o usuario escribe también su contraseña.": "Para testar outro servidor, porta ou usuário, digite também a senha.",
+        "Para probar otra dirección o usuario escribe también su contraseña.": "Para testar outro endereço ou usuário, digite também a senha.",
+        "El valor de una ACL no puede llevar comillas.": "O valor de uma ACL não pode ter aspas.",
+        "El {e} del proxy padre no puede llevar espacios.": "O {e} do proxy pai não pode ter espaços.",
+        "Debes cambiar tu contraseña antes de continuar.": "Você deve alterar sua senha antes de continuar.",
     },
 }
 for _i, _d in _VARIOS.items():

@@ -18,7 +18,16 @@
 set -euo pipefail
 
 mkdir -p /etc/squid
-chown -R squidmgr:proxy /etc/squid
+# Todo /etc/squid pasa al usuario del backend EXCEPTO ssl_cert: ahi esta la clave privada de la CA de
+# SSL-bump, que el backend nunca lee (solo el certificado publico). Antes se le entregaba tambien, y
+# comprometer el backend permitia hacer MITM de todos los clientes que confian en esa CA.
+find /etc/squid -path /etc/squid/ssl_cert -prune -o -exec chown squidmgr:proxy {} +
+if [ -d /etc/squid/ssl_cert ]; then
+    chown proxy:proxy /etc/squid/ssl_cert
+    chmod 755 /etc/squid/ssl_cert
+    [ -f /etc/squid/ssl_cert/squid-ca.key ] && chown proxy:proxy /etc/squid/ssl_cert/squid-ca.key && chmod 600 /etc/squid/ssl_cert/squid-ca.key
+    [ -f /etc/squid/ssl_cert/squid-ca.crt ] && chown proxy:proxy /etc/squid/ssl_cert/squid-ca.crt && chmod 644 /etc/squid/ssl_cert/squid-ca.crt
+fi
 
 # PROJECT_DIR es un bind-mount del directorio del proyecto en el HOST (no un
 # volumen de Docker): su dueño es quien lo haya clonado ahí, casi siempre

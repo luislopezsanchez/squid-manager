@@ -319,6 +319,10 @@ def preview_config(
 ):
     """Previsualiza el squid.conf que se generaría."""
     config_text = generate_squid_config(db)
+    # La vista previa la puede pedir cualquier rol: la contraseña del proxy padre (`login=usuario:clave`)
+    # no sale nunca en claro.
+    import re as _re
+    config_text = _re.sub(r"(login=[^:\s]+:)\S+", r"\1********", config_text)
     return {"config": config_text}
 
 

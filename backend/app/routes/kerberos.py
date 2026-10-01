@@ -1,6 +1,7 @@
 """Rutas de configuración de Kerberos (autenticación Negotiate contra AD)."""
 
 import io
+import re
 import logging
 import zipfile
 from pathlib import Path
@@ -23,6 +24,19 @@ from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# El realm y el FQDN acaban dentro de un script de PowerShell que un administrador del dominio ejecuta
+# con privilegios, y dentro de `auth_param negotiate -s HTTP/fqdn@REALM`: solo se admiten los
+# caracteres que un realm o un nombre de host DNS tienen de verdad.
+_RE_REALM = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}")
+_RE_FQDN = re.compile(r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*")
+
+
+def _validar_realm_fqdn(realm: str | None, fqdn: str | None) -> None:
+    if realm and not _RE_REALM.fullmatch(realm):
+        raise HTTPException(400, detail="El realm de Kerberos solo puede tener letras, números, puntos, guiones y guiones bajos.")
+    if fqdn and not _RE_FQDN.fullmatch(fqdn):
+        raise HTTPException(400, detail="El FQDN del proxy no es un nombre de host válido (letras, números, guiones y puntos).")
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
@@ -90,6 +104,7 @@ def update_config(
     # directiva arbitraria en el squid.conf generado.
     realm = validate_value(data.realm, field="realm de Kerberos") if data.realm else None
     proxy_fqdn = validate_value(data.proxy_fqdn, field="FQDN del proxy") if data.proxy_fqdn else None
+    _validar_realm_fqdn(realm, proxy_fqdn)
 
     if data.enabled and not (realm and proxy_fqdn):
         raise HTTPException(
@@ -157,7 +172,7 @@ pause
 @router.get("/ad-setup-script")
 def get_ad_setup_script(
     db: Session = Depends(get_db),
-    _: Admin = Depends(get_current_admin),
+    _: Admin = Depends(require_writer),
 ):
     """Genera un .zip con el script para preparar el Active Directory y un
     lanzador .cmd, con Realm y FQDN ya completados con lo que hay guardado en
@@ -186,6 +201,10 @@ def get_ad_setup_script(
     # AD del cliente tiene su propia convención (SamAccountName admite hasta
     # 20 caracteres: "svc-squidmanager" deja margen).
     nombre_sugerido = "svc-squidmanager"
+
+    # Defensa en profundidad: lo guardado antes de esta validación (o escrito en la BD a mano) tampoco
+    # llega al script.
+    _validar_realm_fqdn(config.realm, config.proxy_fqdn)
 
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
     template = env.get_template("kerberos_ad_setup.ps1.j2")

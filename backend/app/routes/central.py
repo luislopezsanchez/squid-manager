@@ -314,6 +314,9 @@ def test_node(
     if tipo == "squidmanager" and password_a_usar == _MASCARA and data.id is not None:
         existente = db.query(MonitoredNode).filter(MonitoredNode.id == data.id).first()
         if existente:
+            # Solo contra la MISMA URL: la contraseña guardada no se envía a otro destino.
+            if (existente.url or "").rstrip("/") != _validar_url(data.url) or (existente.username or "") != (data.username or ""):
+                raise HTTPException(400, detail="Para probar otra dirección o usuario escribe también su contraseña.")
             password_a_usar = existente.password
 
     class _NodoTemporal:

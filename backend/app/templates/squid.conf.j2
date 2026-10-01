@@ -195,6 +195,12 @@ acl Safe_ports port 777         # multiling http
 acl Safe_ports port {{ p }}         # puerto propio (Configuración / importado)
 {% endfor %}
 acl CONNECT method CONNECT
+# Destinos que un cliente del proxy NUNCA debe alcanzar a través de él: el propio servidor
+# (backend, base de datos, servicios locales) y las direcciones de metadatos de la nube. Sin esto,
+# cualquier usuario del proxy podía pedir http://127.0.0.1:... o http://169.254.169.254/ (SSRF).
+# (Squid 6 ya trae «to_localhost» y «to_linklocal» predefinidas: se usan nombres propios para no redefinirlas.)
+acl destino_loopback dst 127.0.0.0/8 0.0.0.0/32 ::1/128
+acl destino_linklocal dst 169.254.0.0/16 fe80::/10
 {% if settings.get('proxy_auth_scheme', 'basic') != 'none' %}
 acl authenticated proxy_auth REQUIRED
 {% endif %}
@@ -240,6 +246,8 @@ http_access deny !Safe_ports
 http_access deny CONNECT !SSL_ports
 http_access allow localhost manager
 http_access deny manager
+http_access deny destino_loopback
+http_access deny destino_linklocal
 
 {% if trusted_sources %}
 # Orígenes que no tienen que autenticarse. Va ANTES de exigir credenciales: si

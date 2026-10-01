@@ -2,6 +2,7 @@
 
 import logging
 
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -140,6 +141,10 @@ def update_config(
             validate_value(data.username, field="usuario del proxy padre")
         if data.password and data.password != MARCADOR:
             validate_value(data.password, field="contraseña del proxy padre")
+        # Van en `cache_peer ... login=usuario:clave`: un espacio inyectaría otra opción de la directiva.
+        for etiqueta, v in (("usuario", data.username), ("contraseña", data.password)):
+            if v and v != MARCADOR and re.search(r"\s", v):
+                raise HTTPException(400, detail=f"El {etiqueta} del proxy padre no puede llevar espacios.")
     except HTTPException as e:
         return {"status": "error", "message": e.detail}
 

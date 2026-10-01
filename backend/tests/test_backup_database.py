@@ -76,7 +76,9 @@ def test_backup_carga_el_env_para_cron():
     el que purge_audit_log.py necesita el mismo paso-: sin cargar el
     .env, DEPLOY_MODE/DB_NAME/DB_USER no llegan al script."""
     contenido = _script(BACKUP)
-    assert '. "$PROJECT_DIR/.env"' in contenido
+    # Se carga con un lector que NO ejecuta el fichero (en Docker lo escribe el backend).
+    assert 'cargar_env_seguro "$PROJECT_DIR/.env"' in contenido
+    assert '. "$PROJECT_DIR/.env"' not in contenido
 
 
 def test_restore_pide_el_archivo_como_argumento():

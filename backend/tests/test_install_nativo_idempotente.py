@@ -135,7 +135,9 @@ def test_el_nginx_nativo_tiene_la_misma_csp_que_el_de_docker():
         pytest.skip("el proyecto no esta accesible desde aqui")
     docker = (raiz / "frontend" / "nginx.conf").read_text(encoding="utf-8")
     csp = [l.strip() for l in docker.splitlines() if l.strip().startswith("add_header Content-Security-Policy")]
-    assert len(csp) == 1
+    # La CSP se repite en cada location que declara su propio add_header (nginx no hereda los del
+    # server en ese caso): todas iguales, y las mismas en la config nativa.
+    assert len(set(csp)) == 1 and len(csp) >= 4
     assert csp[0] in _script()
     assert "gzip on;" in _script()
 

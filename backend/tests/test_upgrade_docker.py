@@ -40,7 +40,7 @@ def test_hace_backup_antes_de_tocar_el_codigo():
     no despues de que algo salga mal."""
     contenido = _script()
     pos_backup = contenido.index("backup-database.sh")
-    pos_checkout = contenido.index("git checkout --quiet -- .")
+    pos_checkout = contenido.index("g checkout --quiet -- .")
     assert pos_backup < pos_checkout
 
 
@@ -58,10 +58,10 @@ def test_descarta_cambios_locales_antes_de_cambiar_de_rama():
     script entero antes de llegar al reset --hard que la iba a descartar
     de todas formas."""
     contenido = _script()
-    assert "git checkout --quiet -- ." in contenido
-    assert "git clean -fdq" in contenido
-    pos_clean = contenido.index("git clean -fdq")
-    pos_branch_checkout = contenido.index('git checkout --quiet "$BRANCH"')
+    assert "g checkout --quiet -- ." in contenido
+    assert "g clean -fdq" in contenido
+    pos_clean = contenido.index("g clean -fdq")
+    pos_branch_checkout = contenido.index('g checkout --quiet "$BRANCH"')
     assert pos_clean < pos_branch_checkout
 
 
@@ -114,7 +114,7 @@ def test_declara_el_directorio_como_safe_antes_de_cualquier_git():
     contenido = _script()
     assert "safe.directory" in contenido
     pos_safe = contenido.index("safe.directory")
-    pos_primer_git = contenido.index("git checkout --quiet -- .")
+    pos_primer_git = contenido.index("g checkout --quiet -- .")
     assert pos_safe < pos_primer_git
     # idempotente: solo agrega si no estaba
     assert "--get-all safe.directory" in contenido
@@ -153,8 +153,8 @@ def test_valida_que_la_rama_exista_antes_de_intentar_el_checkout():
     contenido = _script()
     assert 'git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"' in contenido
     pos_check = contenido.index('git show-ref --verify')
-    pos_fetch = contenido.index("git fetch --all --quiet")
-    pos_checkout_real = contenido.index('git checkout --quiet "$BRANCH"')
+    pos_fetch = contenido.index("g fetch --all --quiet")
+    pos_checkout_real = contenido.index('g checkout --quiet "$BRANCH"')
     assert pos_fetch < pos_check < pos_checkout_real
     assert "BRANCH exportada de antes" in contenido
 
@@ -176,7 +176,7 @@ def test_se_desliga_de_la_terminal_para_sobrevivir_a_un_corte_de_ssh():
     assert "SQUIDMGR_UPGRADE_FOREGROUND" in contenido
     pos_detach = contenido.index("setsid bash")
     pos_backup = contenido.index("=== 1. Backup")
-    pos_git = contenido.index("git reset --hard --quiet")
+    pos_git = contenido.index("g reset --hard --quiet")
     assert pos_detach < pos_backup < pos_git
 
 
@@ -200,6 +200,6 @@ def test_aborta_si_no_es_una_instalacion_docker_antes_de_tocar_nada():
     assert "command -v docker" in contenido
     pos_check = contenido.index("command -v docker")
     pos_backup = contenido.index("=== 1. Backup")
-    pos_git = contenido.index("git reset --hard --quiet")
+    pos_git = contenido.index("g reset --hard --quiet")
     assert pos_check < pos_backup < pos_git
     assert "upgrade-nativo.sh" in contenido
