@@ -60,7 +60,7 @@ formato `rfc3164`, facility `local0`.
 
 ---
 
-## Notificaciones, reporte diario y zona horaria (0.25.0)
+## Notificaciones, reporte diario y zona horaria (1.0)
 
 - **Avisos por correo con formato** (HTML + texto plano) para todos los eventos; dos nuevos:
   *cuota agotada* e *intentos de entrar a sitios bloqueados* (umbral configurable).

@@ -596,12 +596,12 @@ git push --tags
 
 ## Actualizar desde el panel en instalaciones Docker
 
-Desde la versión 0.25.0, una instalación Docker se actualiza desde **Sistema → Actualizaciones** igual que una nativa:
+Desde la versión 1.0.0, una instalación Docker se actualiza desde **Sistema → Actualizaciones** igual que una nativa:
 el panel deja la aprobación en `.update_state.json` (raíz del proyecto) y un temporizador del servidor
 (`squidmanager-docker-autoupdate.timer`, cada minuto) ejecuta `upgrade-docker.sh` sobre la **rama que el checkout
 tenga activa**. La diferencia con nativo es de hasta un minuto de espera.
 
-**Si tu instalación Docker es anterior a 0.25.0** no trae ese temporizador ni `git` dentro del contenedor: haz la primera
+**Si tu instalación Docker es anterior a 1.0.0** no trae ese temporizador ni `git` dentro del contenedor: haz la primera
 actualización una vez a mano, desde el directorio del proyecto, y a partir de ahí se actualizará sola desde el panel:
 
 ```bash

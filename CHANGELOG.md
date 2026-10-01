@@ -5,7 +5,16 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [0.25.0] - Sin publicar (rama pruebas)
+## [1.0.0] - 2026-10-01
+
+Primera versión estable. Reúne todo el trabajo de la serie 0.25: instalación nativa sin Docker, actualización desde el
+panel también en Docker, panel central, Asistente de IA, cuotas, notificaciones por correo y Telegram, backup v2,
+instalación detrás de un proxy corporativo (Docker y nativa) y la revisión de seguridad de una auditoría externa. El
+detalle de cada cambio está en las secciones siguientes.
+
+> **Actualizar una instalación Docker anterior a 1.0.0 desde el panel:** esas versiones no traen el temporizador de
+> actualización ni `git` dentro del contenedor, así que la primera actualización se hace a mano con
+> `upgrade-docker.sh` (ver `docs/actualizacion.md`). Desde 1.0.0 se actualiza desde **Sistema → Actualizaciones**.
 
 ### Añadido
 
