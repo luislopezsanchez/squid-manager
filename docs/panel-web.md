@@ -1,5 +1,10 @@
 # Panel web — Secciones
 
+<p align="center">
+  <img src="img/dashboard.png" alt="Dashboard de SquidManager" width="900"><br>
+  <sub>El Dashboard, la pantalla de inicio del panel.</sub>
+</p>
+
 El panel se organiza en tres grupos:
 
 | Grupo | Sección | Función |

@@ -33,6 +33,11 @@
 
 ---
 
+<p align="center">
+  <img src="docs/img/dashboard.png" alt="SquidManager dashboard with live traffic, connections, cache hits and top users and sites" width="900"><br>
+  <sub>The SquidManager dashboard: live traffic, connections, cache hits and the top users and sites.</sub>
+</p>
+
 ## 📋 Table of contents
 
 - [Overview](#-overview)

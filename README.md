@@ -30,6 +30,11 @@
 
 ---
 
+<p align="center">
+  <img src="docs/img/dashboard.png" alt="Dashboard de SquidManager con tráfico en vivo, conexiones, caché y top de usuarios y sitios" width="900"><br>
+  <sub>El Dashboard de SquidManager: tráfico en vivo, conexiones, aciertos de caché y los principales usuarios y sitios.</sub>
+</p>
+
 ## 📖 Qué es
 
 **SquidManager** es una plataforma de gestión de Squid Proxy que permite
