@@ -164,7 +164,7 @@ Compose, e precisa vê-lo no mesmo local que ele tem no servidor.
 ### Passo 3: Subir os contêineres
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 Isso cria 4 contêineres:

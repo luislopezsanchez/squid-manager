@@ -324,7 +324,7 @@ cp .env.example .env
 nano .env
 
 # 4. Subir o sistema inteiro
-docker compose up -d
+docker compose up -d --build
 
 # 5. Aguardar o Squid compilar (na primeira vez: ~10-15 minutos)
 #    Ver o progresso:

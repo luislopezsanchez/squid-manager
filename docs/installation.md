@@ -169,8 +169,11 @@ y necesita verla en la misma ubicación que tiene en el servidor.
 ### Paso 3: Levantar los contenedores
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
+
+`--build` es importante: sin él, Docker reutiliza cualquier imagen que ya exista en el servidor con el mismo nombre (de una instalación
+anterior) y arrancarías una versión vieja aunque el código descargado sea el último.
 
 Esto creará 4 contenedores:
 

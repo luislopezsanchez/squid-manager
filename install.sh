@@ -312,7 +312,7 @@ ok "La ruta de instalación es accesible para el usuario del contenedor"
 # 5. Desplegar contenedores
 # ============================================
 info "Desplegando contenedores (la primera vez compila Squid, ~10-15 min)..."
-docker compose up -d
+docker compose up -d --build
 
 ok "Contenedores desplegados"
 

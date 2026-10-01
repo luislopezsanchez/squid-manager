@@ -163,7 +163,7 @@ and needs to see it at the same location it has on the server.
 ### Step 3: Bring the containers up
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 This creates 4 containers:

@@ -5,6 +5,16 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sin publicar
+
+### Corregido
+
+- **`install.sh` (y el paso manual de Docker) podía instalar una versión vieja.** Ejecutaba `docker compose up -d`, que **reutiliza
+  las imágenes locales que ya existan con el mismo nombre** (`squid-manager-backend`, `-frontend`, `-squid`) en vez de construirlas:
+  quien ya había instalado antes y volvía a instalar (o instalaba de nuevo tras quitar los contenedores, que no borra las imágenes)
+  arrancaba el código antiguo aunque el repositorio estuviera al día. Ahora usa `docker compose up -d --build`, que reconstruye lo
+  que haya cambiado (con la caché de capas es rápido si no cambió nada). Actualizado también en las guías de instalación.
+
 ## [1.0.2] - 2026-10-01
 
 ### Mejorado
