@@ -55,6 +55,33 @@ WEB_PORT=8080 PROXY_PORT=3130 sudo -E ./install-nativo.sh
 | `APP_USER` | `squidmgr` | Usuario con el que corre el panel |
 | `BRANCH` | `main` | Rama del repositorio a desplegar |
 
+## Si tu servidor sale a Internet por un proxy corporativo
+
+El instalador descarga paquetes (`apt`), el repositorio (`git`), las dependencias de Python (`pip`) y las de
+la interfaz (`npm`), así que necesita salir por el proxy, y el panel lo necesita después para comprobar y
+aplicar actualizaciones. La forma más cómoda es con el script, que además prueba la salida **antes** de
+instalar:
+
+```bash
+git clone https://github.com/luislopezsanchez/squid-manager.git && cd squid-manager
+cp proxy.conf.example proxy.conf && nano proxy.conf     # servidor, puerto y credenciales
+sudo ./install-tras-proxy.sh --nativo
+```
+
+Deja el proxy guardado en `/etc/squidmanager/proxy.env` (solo `root`) y lo usan el instalador, el panel y las
+actualizaciones, también las programadas. Si solo descargaste `install-nativo.sh`, exporta el proxy y usa
+`sudo -E`; el instalador lo detecta y lo guarda él mismo:
+
+```bash
+export https_proxy='http://USUARIO:CLAVE@IP_PROXY:PUERTO' http_proxy="$https_proxy"
+sudo -E ./install-nativo.sh
+```
+
+La guía completa (CA corporativa, destinos internos, manual) está en
+[instalacion-tras-proxy.md](instalacion-tras-proxy.md#instalación-nativa-sin-docker).
+
+---
+
 ## Recién instalado, el proxy no deja pasar a nadie
 
 Es deliberado, y conviene saberlo antes de probar.

@@ -17,6 +17,31 @@
 
 set -euo pipefail
 
+# Proxy corporativo: si install-tras-proxy.sh --nativo dejo /etc/squidmanager/proxy.env, se lee
+# como DATOS (no se ejecuta) y se exporta, para que apt, git, curl, pip y npm salgan por el proxy.
+if [ -r /etc/squidmanager/proxy.env ]; then
+    while IFS= read -r _linea_proxy || [ -n "$_linea_proxy" ]; do
+        if [[ "$_linea_proxy" =~ ^(http_proxy|https_proxy|no_proxy|HTTP_PROXY|HTTPS_PROXY|NO_PROXY|NODE_EXTRA_CA_CERTS|PIP_CERT|REQUESTS_CA_BUNDLE|SSL_CERT_FILE|CURL_CA_BUNDLE)=(.*)$ ]]; then
+            export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+        fi
+    done < /etc/squidmanager/proxy.env
+fi
+
+# Si el usuario exporto el proxy a mano (sudo -E ./install-nativo.sh, el camino de la guia cuando solo se
+# descarga este script) y todavia no hay fichero guardado, se guarda: el panel y las actualizaciones
+# programadas correran sin esas variables y tambien necesitan salir por el proxy.
+_PROXY_ENTORNO="${https_proxy:-${HTTPS_PROXY:-${http_proxy:-${HTTP_PROXY:-}}}}"
+if [ -n "$_PROXY_ENTORNO" ] && [ ! -f /etc/squidmanager/proxy.env ] && [ "$(id -u)" -eq 0 ]; then
+    _SIN_PROXY="${no_proxy:-${NO_PROXY:-}}"
+    case ",$_SIN_PROXY," in *,localhost,*) ;; *) _SIN_PROXY="localhost,127.0.0.1,::1${_SIN_PROXY:+,$_SIN_PROXY}" ;; esac
+    mkdir -p /etc/squidmanager
+    ( umask 077
+      printf '%s\n' "http_proxy=$_PROXY_ENTORNO" "https_proxy=$_PROXY_ENTORNO" "no_proxy=$_SIN_PROXY" \
+                     "HTTP_PROXY=$_PROXY_ENTORNO" "HTTPS_PROXY=$_PROXY_ENTORNO" "NO_PROXY=$_SIN_PROXY" > /etc/squidmanager/proxy.env )
+    export no_proxy="$_SIN_PROXY" NO_PROXY="$_SIN_PROXY"
+    echo "[INFO] Proxy detectado en el entorno: guardado en /etc/squidmanager/proxy.env (solo root) para el panel y las actualizaciones."
+fi
+
 # Colores para output
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
@@ -714,6 +739,7 @@ Description=SquidManager - Comprobar y aplicar actualizacion aprobada
 
 [Service]
 Type=oneshot
+EnvironmentFile=-/etc/squidmanager/proxy.env
 ExecStart=/usr/local/lib/squidmanager/autoupdate-check.sh
 EOF
 
@@ -813,6 +839,8 @@ User=${APP_USER}
 Group=$(id -gn "$APP_USER")
 WorkingDirectory=${INSTALL_DIR}/backend
 EnvironmentFile=${INSTALL_DIR}/.env
+# Proxy corporativo (lo crea install-tras-proxy.sh --nativo); el guion hace que sea opcional.
+EnvironmentFile=-/etc/squidmanager/proxy.env
 ExecStart=${INSTALL_DIR}/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT} --proxy-headers
 Restart=on-failure
 RestartSec=5
@@ -834,8 +862,28 @@ ok "Unidad systemd creada"
 paso "9. Compilando el panel web"
 
 cd "$INSTALL_DIR/frontend"
-npm install --silent --no-audit --no-fund >/dev/null 2>&1 || fail "npm install fallo."
-npm run build >/dev/null 2>&1 || fail "La compilacion del frontend fallo."
+# npm 9 (el que trae Ubuntu 24.04) NO envia las credenciales de un proxy con usuario y clave
+# (responde 407 aunque curl y pip si funcionen con la misma URL: comprobado con un proxy
+# autenticado). Con ese caso se usa una copia de npm 10, bajada con curl, solo para compilar.
+NPM_CMD=(npm)
+if [[ "${https_proxy:-${HTTPS_PROXY:-}}" == *@* ]]; then
+    _NPM_MAYOR="$(npm --version 2>/dev/null | cut -d. -f1)"
+    if [ "${_NPM_MAYOR:-0}" -lt 10 ]; then
+        info "npm $(npm --version) no envia las credenciales del proxy: se usa una copia de npm 10 solo para compilar el panel."
+        _NPM10_DIR="$(mktemp -d)"
+        if curl -fsSL -o "$_NPM10_DIR/npm.tgz" https://registry.npmjs.org/npm/-/npm-10.9.2.tgz \
+           && tar xzf "$_NPM10_DIR/npm.tgz" -C "$_NPM10_DIR" && [ -f "$_NPM10_DIR/package/bin/npm-cli.js" ]; then
+            NPM_CMD=(node "$_NPM10_DIR/package/bin/npm-cli.js")
+        else
+            warn "No se pudo bajar npm 10 por el proxy; se intenta con el npm del sistema."
+        fi
+    fi
+fi
+_NPM_LOG="$(mktemp)"
+"${NPM_CMD[@]}" install --silent --no-audit --no-fund >"$_NPM_LOG" 2>&1 \
+    || { tail -n 8 "$_NPM_LOG" >&2; fail "npm install fallo. Si el servidor sale por un proxy, revisa /etc/squidmanager/proxy.env (docs/instalacion-tras-proxy.md)."; }
+"${NPM_CMD[@]}" run build >"$_NPM_LOG" 2>&1 || { tail -n 8 "$_NPM_LOG" >&2; fail "La compilacion del frontend fallo."; }
+rm -f "$_NPM_LOG"
 [ -f dist/index.html ] || fail "La compilacion no genero dist/index.html."
 ok "Panel compilado en $INSTALL_DIR/frontend/dist"
 

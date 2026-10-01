@@ -5,7 +5,8 @@
 #
 #   cp proxy.conf.example proxy.conf
 #   nano proxy.conf
-#   sudo ./install-tras-proxy.sh
+#   sudo ./install-tras-proxy.sh            # instalacion con Docker
+#   sudo ./install-tras-proxy.sh --nativo   # instalacion nativa (sin Docker)
 #
 # proxy.conf esta en .gitignore: tus credenciales no se suben al repositorio
 # ni hacen que install.sh aborte por encontrar cambios locales.

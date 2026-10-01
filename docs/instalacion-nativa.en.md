@@ -58,6 +58,33 @@ WEB_PORT=8080 PROXY_PORT=3130 sudo -E ./install-nativo.sh
 | `APP_USER` | `squidmgr` | User the panel runs as |
 | `BRANCH` | `main` | Repository branch to deploy |
 
+## If your server reaches the Internet through a corporate proxy
+
+The installer downloads packages (`apt`), the repository (`git`), the Python dependencies (`pip`) and the
+interface ones (`npm`), so it has to go out through the proxy, and the panel needs it afterwards to check for
+and apply updates. The easiest way is the script, which also tests the connection **before** installing:
+
+```bash
+git clone https://github.com/luislopezsanchez/squid-manager.git && cd squid-manager
+cp proxy.conf.example proxy.conf && nano proxy.conf     # server, port and credentials
+sudo ./install-tras-proxy.sh --nativo
+```
+
+It saves the proxy in `/etc/squidmanager/proxy.env` (root only), and the installer, the panel and the updates
+(scheduled ones too) all use it. If you only downloaded `install-nativo.sh`, export the proxy and use
+`sudo -E`; the installer detects it and saves it for you:
+
+```bash
+export https_proxy='http://USER:PASSWORD@PROXY_IP:PORT' http_proxy="$https_proxy"
+sudo -E ./install-nativo.sh
+```
+
+Special characters in the password (`@`, `#`, `:`) must be percent-encoded when you export it by hand; the
+script does that for you. The full guide (corporate CA, internal destinations, manual steps) is in
+[instalacion-tras-proxy.md](instalacion-tras-proxy.md#instalación-nativa-sin-docker) (Spanish).
+
+---
+
 ## Freshly installed, the proxy lets nobody through
 
 This is deliberate, and worth knowing before you test it.

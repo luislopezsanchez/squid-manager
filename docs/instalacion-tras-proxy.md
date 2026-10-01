@@ -66,7 +66,8 @@ Opciones:
 
 | Opción | Qué hace |
 |---|---|
-| `--solo-configurar` | Deja el proxy configurado y no ejecuta `install.sh` |
+| `--nativo` | Instalación sin Docker: solo capa 1, guarda el proxy para el panel y las actualizaciones y lanza `install-nativo.sh` (ver [Instalación nativa](#instalación-nativa-sin-docker)) |
+| `--solo-configurar` | Deja el proxy configurado y no ejecuta el instalador |
 | `--sin-verificar` | Se salta las comprobaciones de las tres capas |
 
 Las credenciales viven en `proxy.conf`, que está en `.gitignore`. **No se edita
@@ -234,6 +235,93 @@ cd /opt/squid-manager && sudo -E ./install.sh
 
 ---
 
+## Instalación nativa (sin Docker)
+
+La instalación nativa (`install-nativo.sh`, ver [instalacion-nativa.md](instalacion-nativa.md))
+solo necesita la **capa 1**: no hay demonio de Docker ni builds en contenedores. Pero hay dos
+diferencias importantes con la instalación Docker:
+
+- El instalador descarga desde varios sitios: `apt` (paquetes, PostgreSQL, pgvector), `git`
+  (el repositorio), `pip` (dependencias de Python, **ejecutado como el usuario `squidmgr`**) y `npm`
+  (compilar la interfaz).
+- El proxy hace falta **también después de instalar**: el panel comprueba si hay versiones nuevas en
+  GitHub, y el temporizador y el script de actualización ejecutan `git`, `pip` y `npm` por su cuenta,
+  sin las variables de tu shell.
+
+### Con el script (recomendado)
+
+```bash
+cp proxy.conf.example proxy.conf
+nano proxy.conf
+sudo ./install-tras-proxy.sh --nativo
+```
+
+El script:
+
+1. Codifica la contraseña (`@`, `#`, `:`, espacios…) y arma la URL del proxy.
+2. Instala la CA corporativa en el sistema si indicas `PROXY_CA_CERT`.
+3. Configura `apt` y `git`.
+4. **Guarda el proxy en `/etc/squidmanager/proxy.env`** (propiedad de `root`, permisos `600`).
+5. Comprueba la salida real: `apt-get update`, GitHub, PyPI y npm. Si algo no sale, se detiene
+   **antes** de instalar y dice qué destino falló, para que redes lo habilite.
+6. Lanza `install-nativo.sh`, que lee ese fichero por sí solo (no hace falta `sudo -E`).
+
+Con `--solo-configurar` deja todo preparado sin instalar; luego basta con `sudo ./install-nativo.sh`.
+
+### Qué hace el fichero `/etc/squidmanager/proxy.env`
+
+| Quién lo usa | Para qué |
+|---|---|
+| `install-nativo.sh` | `apt`, `git`, `curl`, `pip` y `npm` durante la instalación |
+| `squidmanager.service` (el panel) | La comprobación de versiones en GitHub y las llamadas HTTP salientes del panel (por ejemplo, el Asistente de IA) |
+| `squidmanager-autoupdate.service` y `upgrade-nativo.sh` | El `git fetch`, `pip` y `npm` de las actualizaciones, también las programadas desde el panel |
+
+Lo leen `systemd` (como root, antes de ceder privilegios) y los scripts de root **como datos**: nunca
+se ejecuta. Si cambias de proxy o de contraseña, vuelve a ejecutar
+`sudo ./install-tras-proxy.sh --nativo --solo-configurar` y reinicia el panel
+(`sudo systemctl restart squidmanager`).
+
+> **Destinos internos:** el panel también habla con servidores de tu red (nodos del panel central, por
+> ejemplo) y esas llamadas no deben pasar por el proxy corporativo. Añádelos en
+> `PROXY_NO_PROXY_EXTRA` de `proxy.conf` (dominios o rangos separados por comas). `localhost` y `127.0.0.1`
+> ya están incluidos. LDAP y SMTP no usan el proxy HTTP, así que no les afecta.
+
+### Si el proxy inspecciona HTTPS
+
+Indica la CA en `PROXY_CA_CERT`. Además de instalarla en el sistema, el script exporta
+`NODE_EXTRA_CA_CERTS`, `PIP_CERT`, `REQUESTS_CA_BUNDLE` y `SSL_CERT_FILE` para que `npm`, `pip` y el
+panel la reconozcan.
+
+### Manual
+
+```bash
+# 1. URL del proxy (contraseña codificada, ver el paso 1 de la opción B)
+export PROXY_URL='http://USUARIO:CLAVE@IP_PROXY:PUERTO'
+sudo tee /etc/apt/apt.conf.d/95proxy > /dev/null <<EOF
+Acquire::http::Proxy "${PROXY_URL}";
+Acquire::https::Proxy "${PROXY_URL}";
+EOF
+
+# 2. Guardarlo para el panel y las actualizaciones
+sudo mkdir -p /etc/squidmanager
+sudo tee /etc/squidmanager/proxy.env > /dev/null <<EOF
+http_proxy=${PROXY_URL}
+https_proxy=${PROXY_URL}
+no_proxy=localhost,127.0.0.1,::1
+HTTP_PROXY=${PROXY_URL}
+HTTPS_PROXY=${PROXY_URL}
+NO_PROXY=localhost,127.0.0.1,::1
+EOF
+sudo chmod 600 /etc/squidmanager/proxy.env
+
+# 3. Instalar (lee el fichero solo)
+cd /opt/squid-manager && sudo ./install-nativo.sh
+```
+
+El fichero va **sin comillas**, una variable por línea.
+
+---
+
 ## Si falla con un error de certificado
 
 Significa que el proxy hace inspección TLS: descifra el tráfico HTTPS y lo
@@ -276,3 +364,5 @@ No hay que poner variables de proxy en los contenedores. Ver
 | Errores de certificado en `pip`, `npm` o `docker pull` | El proxy inspecciona TLS: falta su CA |
 | El instalador se detiene por cambios locales | Hay `Dockerfile` editados a mano (paso 8) |
 | Todo verifica bien pero `install.sh` falla igual | Se ejecutó sin `-E` y `sudo` descartó las variables |
+| Instalación nativa: funciona al instalar pero «Buscar actualizaciones» o la actualización fallan | No existe `/etc/squidmanager/proxy.env` (se instaló sin `--nativo`): créalo con `sudo ./install-tras-proxy.sh --nativo --solo-configurar` y reinicia el panel |
+| Instalación nativa: el panel no llega a un nodo interno | Falta ese destino en `PROXY_NO_PROXY_EXTRA` |

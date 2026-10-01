@@ -114,6 +114,9 @@ Primeros pasos después de instalar: [docs/primeros-pasos.md](docs/primeros-paso
 
 ¿Tu servidor sale a internet por un proxy corporativo? Ver
 [docs/instalacion-tras-proxy.md](docs/instalacion-tras-proxy.md) antes de instalar.
+Sirve para las dos instalaciones: con Docker (`install-tras-proxy.sh`) y nativa
+(`install-tras-proxy.sh --nativo`, que además deja el proxy guardado para el panel y las
+actualizaciones).
 
 ---
 

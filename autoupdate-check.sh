@@ -30,6 +30,16 @@
 #   install-nativo.sh, y no vale la pena sumarlo solo para esto-.
 set -euo pipefail
 
+# Proxy corporativo: si install-tras-proxy.sh --nativo dejo /etc/squidmanager/proxy.env, se lee
+# como DATOS (no se ejecuta) y se exporta, para que apt, git, curl, pip y npm salgan por el proxy.
+if [ -r /etc/squidmanager/proxy.env ]; then
+    while IFS= read -r _linea_proxy || [ -n "$_linea_proxy" ]; do
+        if [[ "$_linea_proxy" =~ ^(http_proxy|https_proxy|no_proxy|HTTP_PROXY|HTTPS_PROXY|NO_PROXY|NODE_EXTRA_CA_CERTS|PIP_CERT|REQUESTS_CA_BUNDLE|SSL_CERT_FILE|CURL_CA_BUNDLE)=(.*)$ ]]; then
+            export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+        fi
+    done < /etc/squidmanager/proxy.env
+fi
+
 INSTALL_DIR="${INSTALL_DIR:-/opt/squid-manager}"
 ESTADO="$INSTALL_DIR/backend/.update_state.json"
 # Resultado que escribe upgrade-nativo.sh al terminar ("ok <commit>" o

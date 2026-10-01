@@ -26,7 +26,11 @@ Corre cada 6 horas en segundo plano (se puede apagar con el casillero "Comprobar
 ## Nativo vs. Docker
 
 La diferencia real está en la demora de "Actualizar ahora": segundos en nativo (puede adelantar el temporizador con sudo), hasta un minuto en Docker (no hay sudo hacia el host desde dentro de un contenedor, siempre espera al próximo tic).
-`.trim(),
+
+
+## Si el servidor sale a Internet por un proxy
+
+Las comprobaciones y las actualizaciones necesitan llegar a GitHub. En una instalación nativa detrás de un proxy corporativo, el proxy se guarda en \`/etc/squidmanager/proxy.env\` (lo crea \`install-tras-proxy.sh --nativo\`, o el propio instalador si lo ejecutaste con el proxy exportado) y lo usan el panel y las actualizaciones programadas. Si el panel dice que no puede consultar GitHub, revisa ese fichero y reinicia el servicio del panel. Guía completa: \`docs/instalacion-tras-proxy.md\`.`.trim(),
   en: `
 ## What this is for
 
@@ -51,7 +55,11 @@ Runs every 6 hours in the background (can be turned off with the "Check automati
 ## Native vs. Docker
 
 The real difference is in how long "Update now" takes: seconds on native (it can nudge the timer forward via sudo), up to a minute on Docker (there's no sudo to the host from inside a container, so it always waits for the next tick).
-`.trim(),
+
+
+## If the server reaches the Internet through a proxy
+
+Checks and updates need to reach GitHub. On a native install behind a corporate proxy, the proxy is saved in \`/etc/squidmanager/proxy.env\` (created by \`install-tras-proxy.sh --nativo\`, or by the installer itself if you ran it with the proxy exported) and is used by the panel and the scheduled updates. If the panel says it cannot query GitHub, check that file and restart the panel service. Full guide: \`docs/instalacion-tras-proxy.md\`.`.trim(),
   pt: `
 ## Para que serve
 
@@ -76,5 +84,9 @@ Roda a cada 6 horas em segundo plano (pode ser desligada com a caixa "Verificar 
 ## Nativo vs. Docker
 
 A diferença real está na demora de "Atualizar agora": segundos no nativo (pode adiantar o temporizador via sudo), até um minuto no Docker (não há sudo para o host de dentro de um contêiner, então sempre espera o próximo tique).
-`.trim(),
+
+
+## Se o servidor acessa a Internet por um proxy
+
+As verificações e atualizações precisam chegar ao GitHub. Numa instalação nativa atrás de um proxy corporativo, o proxy fica guardado em \`/etc/squidmanager/proxy.env\` (criado por \`install-tras-proxy.sh --nativo\`, ou pelo próprio instalador se você o executou com o proxy exportado) e é usado pelo painel e pelas atualizações agendadas. Se o painel disser que não consegue consultar o GitHub, confira esse arquivo e reinicie o serviço do painel. Guia completo: \`docs/instalacion-tras-proxy.md\`.`.trim(),
 }

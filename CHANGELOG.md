@@ -7,6 +7,10 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.25.0] - Sin publicar (rama pruebas)
 
+### Añadido
+
+- **Instalación nativa detrás de un proxy corporativo.** `install-tras-proxy.sh --nativo` configura `apt` y `git`, prueba la salida real (apt, GitHub, PyPI y npm) antes de instalar, instala la CA corporativa si el proxy inspecciona HTTPS y guarda el proxy en `/etc/squidmanager/proxy.env` (solo root). Ese fichero lo leen `install-nativo.sh`, `upgrade-nativo.sh` y `autoupdate-check.sh` (como datos) y las unidades `squidmanager.service` y `squidmanager-autoupdate.service` (`EnvironmentFile`), de modo que la instalación, el panel y las actualizaciones programadas salen por el proxy. `install-nativo.sh` también guarda el proxy si se ejecuta con `sudo -E` y el proxy exportado. Documentado en `docs/instalacion-tras-proxy.md`, `docs/instalacion-nativa*.md`, `docs/actualizacion.md` y la ayuda de Actualizaciones.
+
 ### Seguridad (segunda ronda de la auditoría externa)
 
 - Restaurar un backup v2 valida ahora las configuraciones de LDAP, proxy padre, Kerberos y Syslog (sin saltos de línea; realm/FQDN y espacios con las mismas reglas que sus pantallas); el restore heredado usa una lista cerrada de campos.

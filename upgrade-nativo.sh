@@ -46,6 +46,16 @@
 # unico honesto de hacer sin esa certeza.
 set -euo pipefail
 
+# Proxy corporativo: si install-tras-proxy.sh --nativo dejo /etc/squidmanager/proxy.env, se lee
+# como DATOS (no se ejecuta) y se exporta, para que apt, git, curl, pip y npm salgan por el proxy.
+if [ -r /etc/squidmanager/proxy.env ]; then
+    while IFS= read -r _linea_proxy || [ -n "$_linea_proxy" ]; do
+        if [[ "$_linea_proxy" =~ ^(http_proxy|https_proxy|no_proxy|HTTP_PROXY|HTTPS_PROXY|NO_PROXY|NODE_EXTRA_CA_CERTS|PIP_CERT|REQUESTS_CA_BUNDLE|SSL_CERT_FILE|CURL_CA_BUNDLE)=(.*)$ ]]; then
+            export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+        fi
+    done < /etc/squidmanager/proxy.env
+fi
+
 # Defensivo, independiente de quien invoque este script: git (2.35.2+)
 # aborta CUALQUIER operacion con "fatal: $HOME not set" si la variable esta
 # directamente ausente del entorno (no alcanza con que este vacia), porque

@@ -5,7 +5,8 @@
 # Prepara el servidor cuando la salida a Internet pasa obligatoriamente por un
 # proxy, y despues lanza install.sh.
 #
-# Configura las TRES capas que necesitan el proxy por separado. Configurar solo
+# Con --nativo solo hace falta la capa 1 (mas dejar el proxy guardado para el panel y las
+# actualizaciones). Sin esa opcion, configura las TRES capas que necesitan el proxy por separado. Configurar solo
 # una no basta, y es el motivo habitual de que la instalacion falle a medias:
 #
 #   1. El host      apt y git: descargar Docker y clonar el repositorio.
@@ -20,7 +21,11 @@
 #   sudo ./install-tras-proxy.sh
 #
 # Opciones:
-#   --solo-configurar   Deja el proxy configurado y no ejecuta install.sh.
+#   --nativo            Instalacion NATIVA (sin Docker): configura el host (apt, git, curl,
+#                       pip, npm), deja el proxy guardado para el panel y las actualizaciones
+#                       (/etc/squidmanager/proxy.env) y lanza install-nativo.sh. Se salta las
+#                       capas 2 y 3, que son de Docker.
+#   --solo-configurar   Deja el proxy configurado y no ejecuta el instalador.
 #   --sin-verificar     Se salta las comprobaciones de las tres capas.
 #
 # Las credenciales van en proxy.conf, que esta en .gitignore. Los archivos del
@@ -45,12 +50,14 @@ fail()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 SOLO_CONFIGURAR=0
 VERIFICAR=1
+NATIVO=0
 for arg in "$@"; do
     case "$arg" in
         --solo-configurar) SOLO_CONFIGURAR=1 ;;
         --sin-verificar)   VERIFICAR=0 ;;
+        --nativo)          NATIVO=1 ;;
         -h|--help)
-            sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *) fail "Opcion desconocida: $arg (usa --help)" ;;
@@ -133,6 +140,7 @@ PROXY_URL_VISIBLE+="${PROXY_HOST}:${PROXY_PORT}"
 # contenedores. Sin esto, el backend intenta hablar con la base de datos a
 # traves del proxy corporativo y no llega.
 NO_PROXY_LIST="localhost,127.0.0.1,::1,db,backend,frontend,squid,squidmgr-db,squidmgr-backend,squidmgr-frontend,squidmgr-proxy"
+[[ $NATIVO -eq 1 ]] && NO_PROXY_LIST="localhost,127.0.0.1,::1"
 [[ -n "$PROXY_NO_PROXY_EXTRA" ]] && NO_PROXY_LIST+=",${PROXY_NO_PROXY_EXTRA}"
 
 info "Proxy: $PROXY_URL_VISIBLE"
@@ -175,6 +183,38 @@ fi
 export http_proxy="$PROXY_URL"   https_proxy="$PROXY_URL"   no_proxy="$NO_PROXY_LIST"
 export HTTP_PROXY="$PROXY_URL"   HTTPS_PROXY="$PROXY_URL"   NO_PROXY="$NO_PROXY_LIST"
 
+# Instalacion nativa: el panel (servicio systemd), el temporizador de actualizacion y los
+# scripts de actualizacion corren mucho despues de este script y sin las variables de este
+# shell. Se guarda el proxy en un fichero solo legible por root: systemd lo lee antes de
+# soltar privilegios (EnvironmentFile) y los scripts de root lo leen como datos.
+if [[ $NATIVO -eq 1 ]]; then
+    info "Guardando el proxy para el panel y las actualizaciones..."
+    mkdir -p /etc/squidmanager
+    _ca_sistema=""
+    [[ -n "$PROXY_CA_CERT" ]] && _ca_sistema="/usr/local/share/ca-certificates/$(basename "${PROXY_CA_CERT%.*}").crt"
+    ( umask 077
+      {
+        echo "http_proxy=${PROXY_URL}";  echo "https_proxy=${PROXY_URL}";  echo "no_proxy=${NO_PROXY_LIST}"
+        echo "HTTP_PROXY=${PROXY_URL}";  echo "HTTPS_PROXY=${PROXY_URL}";  echo "NO_PROXY=${NO_PROXY_LIST}"
+        if [[ -n "$PROXY_CA_CERT" ]]; then
+            echo "NODE_EXTRA_CA_CERTS=${_ca_sistema}"
+            echo "PIP_CERT=/etc/ssl/certs/ca-certificates.crt"
+            echo "REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt"
+            echo "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"
+        fi
+      } > /etc/squidmanager/proxy.env.tmp )
+    chown root:root /etc/squidmanager/proxy.env.tmp
+    chmod 600 /etc/squidmanager/proxy.env.tmp
+    mv -f /etc/squidmanager/proxy.env.tmp /etc/squidmanager/proxy.env
+    ok "Proxy guardado en /etc/squidmanager/proxy.env (solo root)"
+    # El instalador usa estas mismas variables en esta sesion.
+    if [[ -n "$PROXY_CA_CERT" ]]; then
+        export NODE_EXTRA_CA_CERTS="$_ca_sistema" PIP_CERT=/etc/ssl/certs/ca-certificates.crt \
+               REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+    fi
+fi
+
+if [[ $NATIVO -eq 0 ]]; then
 # ============================================
 # 5. Capa 2: el demonio de Docker
 # ============================================
@@ -258,13 +298,34 @@ EOF
     ok "config.json de Docker escrito"
 fi
 chmod 600 "$CONFIG_DOCKER"
+fi
 
 # ============================================
 # 7. Comprobar las tres capas
 # ============================================
 # Merece la pena tardar un minuto aqui: si algo falla, falla con un mensaje
 # que dice que capa es, en vez de a mitad de un build de quince minutos.
-if [[ $VERIFICAR -eq 1 ]]; then
+if [[ $VERIFICAR -eq 1 && $NATIVO -eq 1 ]]; then
+    info "Comprobando la salida a Internet por el proxy (apt, GitHub, PyPI y npm)..."
+    if command -v apt-get &>/dev/null; then
+        if apt-get update -qq >/dev/null 2>&1; then
+            ok "apt: salida correcta a traves del proxy"
+        else
+            fail "apt no puede actualizar sus listas a traves del proxy. Revisa servidor, puerto y credenciales en proxy.conf (y PROXY_CA_CERT si el proxy inspecciona HTTPS)"
+        fi
+    fi
+    if command -v curl &>/dev/null; then
+        for _destino in https://github.com https://pypi.org https://registry.npmjs.org; do
+            if curl -sS -o /dev/null --max-time 30 "$_destino" 2>/dev/null; then
+                ok "${_destino#https://}: accesible"
+            else
+                fail "${_destino#https://} no es accesible a traves del proxy. El instalador lo necesita: pide al area de redes que lo permita"
+            fi
+        done
+    else
+        warn "curl no disponible: no se comprueban GitHub, PyPI ni npm"
+    fi
+elif [[ $VERIFICAR -eq 1 ]]; then
     info "Comprobando las tres capas (puede tardar un par de minutos)..."
 
     if command -v curl &>/dev/null; then
@@ -302,8 +363,18 @@ fi
 # 8. Lanzar la instalacion
 # ============================================
 if [[ $SOLO_CONFIGURAR -eq 1 ]]; then
-    ok "Proxy configurado. Para instalar: sudo -E ./install.sh"
+    if [[ $NATIVO -eq 1 ]]; then
+        ok "Proxy configurado. Para instalar: sudo ./install-nativo.sh (lee /etc/squidmanager/proxy.env solo)"
+    else
+        ok "Proxy configurado. Para instalar: sudo -E ./install.sh"
+    fi
     exit 0
+fi
+
+if [[ $NATIVO -eq 1 ]]; then
+    [[ -f "$SCRIPT_DIR/install-nativo.sh" ]] || fail "No se encuentra install-nativo.sh junto a este script"
+    info "Lanzando install-nativo.sh con el proxy ya configurado..."
+    exec bash "$SCRIPT_DIR/install-nativo.sh"
 fi
 
 [[ -x "$SCRIPT_DIR/install.sh" ]] || fail "No se encuentra install.sh junto a este script"

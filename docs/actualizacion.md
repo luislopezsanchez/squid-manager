@@ -12,6 +12,11 @@ significa Docker).
 
 ## Instalación nativa (sin Docker)
 
+> **¿Detrás de un proxy corporativo?** El script lee `/etc/squidmanager/proxy.env` (lo crea
+> `install-tras-proxy.sh --nativo` al instalar) para que `git`, `pip` y `npm` salgan por el proxy, también
+> cuando la actualización la dispara el temporizador desde el panel. Si instalaste sin ese fichero, créalo
+> como indica [instalacion-tras-proxy.md](instalacion-tras-proxy.md#instalación-nativa-sin-docker).
+
 **Forma recomendada: `upgrade-nativo.sh`.** Es un script aparte del
 instalador, pensado para bajarse fresco cada vez —nunca la copia que ya
 tenés en `/opt/squid-manager`—:
