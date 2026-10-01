@@ -58,6 +58,17 @@ def _commit_actual() -> str:
 
 
 COMMIT_ACTUAL = _commit_actual()
+_commit_cache = {"t": 0.0, "v": COMMIT_ACTUAL}
+
+
+def commit_vigente() -> str:
+    """Commit del checkout AHORA (con caché de 30 s). Una actualización que solo cambia archivos
+    que no obligan a recrear el contenedor (p. ej. documentación) deja el proceso corriendo: el
+    valor calculado al arrancar quedaba desfasado respecto al código desplegado."""
+    import time
+    if time.time() - _commit_cache["t"] > 30:
+        _commit_cache.update(t=time.time(), v=_commit_actual())
+    return _commit_cache["v"]
 
 
 def _explicar_fallo_de_conexion(error: Exception) -> None:
@@ -481,4 +492,4 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": settings.APP_VERSION, "commit": COMMIT_ACTUAL}
+    return {"status": "ok", "version": settings.APP_VERSION, "commit": commit_vigente()}
