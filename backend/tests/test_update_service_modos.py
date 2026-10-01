@@ -65,3 +65,22 @@ def test_aprobar_actualizacion_dispara_el_empujon_solo_en_nativo(monkeypatch):
 
     us.aprobar_actualizacion("admin", None)
     assert disparado == [True]
+
+
+def test_en_docker_el_estado_y_el_git_viven_en_el_proyecto_montado(monkeypatch, tmp_path):
+    """En el contenedor el código corre en /app: el estado tiene que ir al proyecto del host
+    (PROJECT_DIR) o el temporizador del host nunca lo ve."""
+    from app.services import update_service as us
+    monkeypatch.setattr(us.settings, "DEPLOY_MODE", "docker")
+    monkeypatch.setenv("PROJECT_DIR", str(tmp_path))
+    assert us._raiz_proyecto() == tmp_path
+    assert us._ruta_estado() == tmp_path / ".update_state.json"
+    monkeypatch.setattr(us.settings, "DEPLOY_MODE", "native")
+    assert us._ruta_estado() == us.BACKEND_DIR / ".update_state.json"
+
+
+def test_el_script_docker_lee_el_mismo_archivo_que_escribe_el_backend():
+    import pathlib
+    sh = (pathlib.Path(__file__).parents[2] / "docker-autoupdate-check.sh")
+    if sh.exists():
+        assert 'ESTADO="$PROJECT_DIR/.update_state.json"' in sh.read_text()

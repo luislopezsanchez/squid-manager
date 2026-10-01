@@ -50,6 +50,11 @@ RUN install -m 0755 -d /etc/apt/keyrings \
 # El grupo 'proxy' (gid 13) ya viene de fábrica en python:3.12-slim
 # (paquete base-passwd de Debian) con ese mismo gid: no hace falta crearlo,
 # alcanza con sumar el usuario nuevo a él.
+# El proyecto montado desde el host pertenece a otro usuario que el del backend: sin esto git se
+# niega a leerlo («detected dubious ownership») y el commit y la rama desplegados salen vacíos,
+# con lo que nunca se detecta una actualización. Solo lee; no escribe en el repo.
+RUN git config --system --add safe.directory '*'
+
 RUN useradd -u 999 -g proxy -m -d /home/squidmgr -s /usr/sbin/nologin squidmgr
 # El CLI `docker` escribe su config (~/.docker/config.json) al primer uso;
 # sin un HOME real y escribible, esa escritura falla y con ella cualquier

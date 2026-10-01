@@ -30,7 +30,9 @@
 set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/opt/squid-manager}"
-ESTADO="$PROJECT_DIR/backend/.update_state.json"
+# En Docker el estado vive en la RAIZ del proyecto (no en backend/): el backend corre dentro del
+# contenedor con el proyecto montado en esta misma ruta, y solo el directorio raiz le pertenece.
+ESTADO="$PROJECT_DIR/.update_state.json"
 LOG_TAG="squidmanager-docker-autoupdate"
 
 log() { logger -t "$LOG_TAG" "$1"; }

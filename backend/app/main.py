@@ -4,6 +4,7 @@
 import logging
 import secrets
 import string
+import os
 import subprocess
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -45,7 +46,9 @@ def _commit_actual() -> str:
     try:
         resultado = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
-            cwd=BACKEND_DIR.parent, capture_output=True, text=True, timeout=3,
+            # En Docker el código está en /app, sin .git: el repo es el proyecto montado en PROJECT_DIR.
+            cwd=(os.environ.get("PROJECT_DIR") if os.environ.get("PROJECT_DIR") and os.path.isdir(os.environ.get("PROJECT_DIR", "")) and os.environ.get("DEPLOY_MODE", "").strip().lower() != "native" else BACKEND_DIR.parent),
+            capture_output=True, text=True, timeout=3,
         )
         if resultado.returncode == 0:
             return resultado.stdout.strip()

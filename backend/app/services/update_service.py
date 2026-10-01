@@ -54,7 +54,6 @@ from app.utils import utcnow
 logger = logging.getLogger(__name__)
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-ESTADO_PATH = BACKEND_DIR / ".update_state.json"
 
 REPO = "luislopezsanchez/squid-manager"
 GITHUB_API = "https://api.github.com"
@@ -90,6 +89,34 @@ def _es_nativo() -> bool:
     return settings.DEPLOY_MODE.strip().lower() == "native"
 
 
+def _raiz_proyecto() -> Path:
+    """Directorio del proyecto en el HOST, tal como lo ve este proceso.
+
+    Nativo: el árbol donde vive el código. Docker: el código corre en /app (dentro de la imagen,
+    sin `.git` ni nada compartido con el host), pero el proyecto se monta en la MISMA ruta que
+    tiene en el host (`PROJECT_DIR`, ver docker-compose.yml): ahí están el `.git` y el único
+    lugar donde el temporizador del host puede leer lo que escribe este proceso. Usar /app
+    (como se hacía) dejaba el archivo de estado dentro del contenedor: el temporizador del
+    host nunca veía la aprobación y la actualización desde la web no se aplicaba jamás.
+    """
+    if not _es_nativo():
+        p = os.environ.get("PROJECT_DIR", "")
+        if p and Path(p).is_dir():
+            return Path(p)
+    return BACKEND_DIR.parent
+
+
+def _ruta_estado() -> Path:
+    # Docker: en la raíz del proyecto (el entrypoint le da a ese directorio dueño al usuario del
+    # backend, así que puede crear y renombrar archivos ahí); backend/ pertenece a root.
+    if _es_nativo():
+        return BACKEND_DIR / ".update_state.json"
+    return _raiz_proyecto() / ".update_state.json"
+
+
+ESTADO_PATH = _ruta_estado()
+
+
 def _rama_actual() -> str:
     """Rama que este checkout tiene desactivada -mismo truco que ya usa
 
@@ -99,7 +126,7 @@ def _rama_actual() -> str:
     try:
         r = subprocess.run(
             ["git", "branch", "--show-current"],
-            cwd=BACKEND_DIR.parent, capture_output=True, text=True, timeout=3,
+            cwd=_raiz_proyecto(), capture_output=True, text=True, timeout=3,
         )
         rama = r.stdout.strip()
         return rama if r.returncode == 0 and rama else "main"
@@ -111,7 +138,7 @@ def _commit_actual() -> str:
     try:
         r = subprocess.run(
             ["git", "rev-parse", "HEAD"],
-            cwd=BACKEND_DIR.parent, capture_output=True, text=True, timeout=3,
+            cwd=_raiz_proyecto(), capture_output=True, text=True, timeout=3,
         )
         return r.stdout.strip() if r.returncode == 0 else ""
     except Exception:
