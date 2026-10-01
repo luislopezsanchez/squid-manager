@@ -341,3 +341,10 @@ docker exec squidmgr-backend pytest -v
 Los tests cubren:
 - Parser del access.log de Squid, incluida la lectura del fichero desde el final
 - Generador de squid.conf (Jinja2): orden de reglas, reglas SNI paralelas, exclusión de dominios del descifrado
+
+### Proxy inverso delante del panel y límite de intentos de login
+
+El límite de intentos de login usa la IP del cliente. `X-Forwarded-For` solo se tiene en cuenta si la conexión llega de un host de
+`TRUSTED_PROXY_HOSTS`, y se toma la entrada **más a la derecha que no sea uno de esos hosts** (lo que va a la izquierda lo escribe el
+cliente). Si pones otro proxy inverso delante del panel, añade su dirección o nombre a `TRUSTED_PROXY_HOSTS`; si no, todos los clientes
+compartirían el mismo contador.

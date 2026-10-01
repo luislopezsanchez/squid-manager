@@ -227,7 +227,9 @@ def notify(config, subject: str, message: str, event: str | None = None) -> dict
     if config.telegram_enabled:
         from app.i18n import traducir_dinamico
         idioma = getattr(config, "idioma", "es")
-        full_message = f"<b>{traducir_dinamico(subject, idioma)}</b>\n\n{traducir_dinamico(message, idioma)}"
+        import html as _html
+        # parse_mode=HTML: el texto va escapado (un nombre de usuario con "<" no debe romper el mensaje).
+        full_message = f"<b>{_html.escape(traducir_dinamico(subject, idioma))}</b>\n\n{_html.escape(traducir_dinamico(message, idioma))}"
         ok, _ = send_telegram(config, full_message)
         results["telegram"] = ok
 

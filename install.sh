@@ -120,7 +120,10 @@ if [[ -d "$INSTALL_DIR/.git" ]]; then
         cp -a "$INSTALL_DIR" "$BACKUP"
         fail "Revisa tus cambios locales (git status) y vuelve a ejecutar el instalador."
     fi
-    git pull origin main
+    # La rama que el checkout ya tiene (no "main" a ciegas): re-ejecutar el instalador en una instalacion
+    # que sigue otra rama la mezclaba con main.
+    RAMA_ACTUAL="$(git branch --show-current 2>/dev/null || true)"
+    git pull origin "${RAMA_ACTUAL:-main}"
 
     # El pull de arriba acaba de sobrescribir este mismo install.sh EN DISCO
     # si $0 es (o es una copia de) $INSTALL_DIR/install.sh -el caso tipico

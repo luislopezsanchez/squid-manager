@@ -58,6 +58,7 @@ def handle(line: str) -> str:
     # a unir con un espacio para reconstruir el texto original.
     partes = line.strip().split()
     motivo = " ".join(unquote(p) for p in partes)
+    motivo = motivo.replace("\\", "\\\\").replace('"', '\\"')  # una comilla no debe cerrar el valor
     return f'OK message="{motivo}"'
 
 

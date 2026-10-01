@@ -51,6 +51,16 @@ VERSION_FORMATO = 2
 MAX_PAQUETE_BYTES = 512 * 1024 * 1024
 MAX_PARTE_BYTES = 256 * 1024 * 1024  # una parte descomprimida (una lista enorme de dominios)
 
+
+def _gunzip_acotado(blob: bytes) -> bytes:
+    """Descomprime un gzip sin superar MAX_PARTE_BYTES (una «bomba» de compresión no agota la memoria)."""
+    import zlib
+    d = zlib.decompressobj(wbits=31)
+    salida = d.decompress(blob, MAX_PARTE_BYTES + 1)
+    if len(salida) > MAX_PARTE_BYTES:
+        raise ValueError("Una parte del paquete descomprimida es demasiado grande.")
+    return salida
+
 _COMUNES = {"id", "created_at", "updated_at"}
 
 
@@ -484,7 +494,7 @@ def restaurar(db, paquete: Paquete, modo: str = "combinar", simular: bool = True
                 obj.value = None
                 blob = paquete.listas.get(f["name"])
                 if blob is not None:
-                    texto = gzip.decompress(blob).decode("utf-8", errors="replace")
+                    texto = _gunzip_acotado(blob).decode("utf-8", errors="replace")
                     lista = [l.strip() for l in texto.splitlines() if l.strip()]
                     from app.services.squid_service import hash_domain_list
                     obj.line_count = len(lista)

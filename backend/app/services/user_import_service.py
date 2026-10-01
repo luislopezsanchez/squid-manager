@@ -78,6 +78,8 @@ def _leer_xlsx(datos: bytes) -> list[list[str]]:
     filas = []
     for fila in ws.iter_rows(values_only=True):
         filas.append(["" if c is None else (c.strftime("%Y-%m-%d") if isinstance(c, datetime) else str(c).strip()) for c in fila])
+        if len(filas) > MAX_FILAS + 2:  # basta para que quien llama diga «demasiadas filas»: no se lee el resto
+            break
     wb.close()
     return filas
 

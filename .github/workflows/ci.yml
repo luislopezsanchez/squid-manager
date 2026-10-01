@@ -8,6 +8,9 @@ name: CI
 # CHANGELOG.md, sección "Dependencias" de cada versión, para el criterio
 # de cada una).
 
+permissions:
+  contents: read   # el CI solo lee el repositorio
+
 on:
   push:
     branches: ["**"]

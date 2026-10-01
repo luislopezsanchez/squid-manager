@@ -23,6 +23,22 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
      actualización a esta versión hay que hacerla **una vez a mano** (`sudo bash upgrade-docker.sh`);
      a partir de ahí se actualizan solas desde el panel.
 
+### Seguridad (auditoría externa de 0.25.0)
+
+Detalle y estado de cada hallazgo en `docs/audits/2026-09-30-auditoria-externa.md`.
+
+- **El proxy ya no alcanza el propio servidor ni las direcciones de metadatos de la nube** (SSRF): se deniegan loopback y
+  link-local; en Docker, Squid vive en su propia red, sin acceso al backend, la base de datos ni el proxy del socket de Docker.
+- **La clave privada de la CA de SSL-bump deja de pertenecer al backend** (Docker).
+- **Kerberos**: `realm` y FQDN validados (inyección en el script de PowerShell y en `squid.conf`); el script solo lo descarga quien puede escribir.
+- **Secretos guardados** (SMTP, LDAP, nodos centrales): ya no se reenvían a otro servidor al «probar la conexión».
+- La vista previa de `squid.conf` enmascara la contraseña del proxy padre; `ldap_helper.conf` rechaza saltos de línea; las ACL rechazan comillas.
+- **Panel**: cabeceras de seguridad también en las páginas de la SPA; cuerpo máximo 2 MB salvo en las subidas; el límite de intentos de login
+  ya no se salta falsificando `X-Forwarded-For`; la API exige cambiar la contraseña inicial antes de seguir; exportaciones sin inyección de fórmulas.
+- **Actualización/instalación**: `pip` del instalador nativo como usuario de la app; los scripts de root no ejecutan el `.env`; el temporizador
+  Docker usa una copia del script propiedad de root; `squid.conf` se escribe atómicamente.
+- **Dependencias**: PyJWT 2.13.0 → 2.15.1 (13 CVE); `pip-audit` limpio.
+
 ### Mejorado (tercera revisión del usuario)
 
 - **Correos de aviso con redacción natural**: «El administrador «admin» aplicó los cambios de

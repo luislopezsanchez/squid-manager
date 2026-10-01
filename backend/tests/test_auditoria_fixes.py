@@ -209,3 +209,16 @@ def test_el_backend_no_tiene_nombres_sin_definir():
         pyflakes.check(f.read_text(encoding="utf-8"), str(f), Reporter(salida, salida))
     malos = [l for l in salida.getvalue().splitlines() if "undefined name '" in l]
     assert not malos, "\n".join(malos)
+
+
+def test_gunzip_acotado_rechaza_bombas_de_compresion():
+    import gzip
+    from app.services import backup_v2_service as b
+    assert b._gunzip_acotado(gzip.compress(b"hola")) == b"hola"
+    monkey = b.MAX_PARTE_BYTES
+    try:
+        b.MAX_PARTE_BYTES = 1000
+        with pytest.raises(ValueError):
+            b._gunzip_acotado(gzip.compress(b"0" * 5000))
+    finally:
+        b.MAX_PARTE_BYTES = monkey

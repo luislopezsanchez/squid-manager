@@ -20,7 +20,7 @@ pydantic-settings==2.5.2
 # 2026-09-09, hallazgo 06-001, recomendacion 3). PyJWT no depende de
 # pyasn1 ni ecdsa para HS256 (el unico algoritmo que usa este proyecto),
 # asi que los saca del arbol de dependencias por completo.
-PyJWT==2.13.0
+PyJWT==2.15.1
 # La usa directamente app/crypto_service.py (Fernet, cifrado en reposo de
 # las credenciales de terceros). Antes llegaba sin pin propio, arrastrada
 # como transitiva de "python-jose[cryptography]"; al migrar a PyJWT (que

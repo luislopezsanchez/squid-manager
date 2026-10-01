@@ -80,7 +80,7 @@ def _ancestros(dominio: str) -> list[str]:
     return [".".join(partes[i:]) for i in range(len(partes))]
 
 
-def domain_blocked(category: str, dominio: str) -> bool:
+def domain_blocked(category: str, dominio: str, _reintento: bool = False) -> bool:
     dominio = dominio.strip().lower().rstrip(".")
     if not dominio or not category:
         return False
@@ -109,6 +109,8 @@ def domain_blocked(category: str, dominio: str) -> bool:
         log_error(f"error consultando el índice para '{category}': {e}")
         global _conn
         _conn = None  # por si la conexión quedó en mal estado
+        if not _reintento:
+            return domain_blocked(category, dominio, True)  # un reintento con conexión nueva antes de rendirse
         return False
 
 

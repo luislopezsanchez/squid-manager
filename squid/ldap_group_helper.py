@@ -89,8 +89,12 @@ def _connect(config):
 
 
 def _resolve_group_dn(conn, search_base, group_name):
-    if group_name in _group_dn_cache:
-        return _group_dn_cache[group_name]
+    import time
+    hit = _group_dn_cache.get(group_name)
+    # Un grupo encontrado no cambia de DN mientras el helper vive; uno NO encontrado se vuelve a buscar
+    # al cabo de un minuto (si no, un grupo creado despues no se resolvia hasta reiniciar el helper).
+    if hit is not None and (hit[0] is not None or time.time() - hit[1] < 60):
+        return hit[0]
     from ldap3 import SUBTREE
 
     safe = _escapar_filtro_ldap(group_name)
@@ -99,7 +103,7 @@ def _resolve_group_dn(conn, search_base, group_name):
         search_scope=SUBTREE, attributes=["1.1"],
     )
     dn = conn.entries[0].entry_dn if conn.entries else None
-    _group_dn_cache[group_name] = dn
+    _group_dn_cache[group_name] = (dn, time.time())
     return dn
 
 
