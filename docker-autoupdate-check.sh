@@ -167,9 +167,16 @@ escribir_apply "running" "" ""
 # reiniciar. SQUIDMGR_UPGRADE_FOREGROUND evita que upgrade-docker.sh se
 # vuelva a re-lanzar en segundo plano (ese modo es para invocacion
 # interactiva por SSH, no hace falta aca).
+# La actualizacion tiene que seguir la rama que este checkout tiene activa (main, pruebas...). Sin
+# pasarla, upgrade-docker.sh usaba "main" por defecto y una instalacion que seguia otra rama
+# se "actualizaba" a main: codigo viejo sobre una base de datos ya migrada, y el backend en
+# bucle de reinicios. (autoupdate-check.sh, el de nativo, ya lo hacia.)
+RAMA="$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || true)"
+[ -n "$RAMA" ] || RAMA="main"
+
 SALIDA=0
 LOG_TMP="$(mktemp)"
-if SQUIDMGR_UPGRADE_FOREGROUND=1 PROJECT_DIR="$PROJECT_DIR" \
+if SQUIDMGR_UPGRADE_FOREGROUND=1 PROJECT_DIR="$PROJECT_DIR" BRANCH="$RAMA" \
         bash "$PROJECT_DIR/upgrade-docker.sh" >"$LOG_TMP" 2>&1; then
     SALIDA=0
 else

@@ -84,3 +84,16 @@ def test_el_script_docker_lee_el_mismo_archivo_que_escribe_el_backend():
     sh = (pathlib.Path(__file__).parents[2] / "docker-autoupdate-check.sh")
     if sh.exists():
         assert 'ESTADO="$PROJECT_DIR/.update_state.json"' in sh.read_text()
+
+
+def test_las_actualizaciones_siguen_la_rama_activa_y_no_main_a_ciegas():
+    import pathlib
+    raiz = pathlib.Path(__file__).parents[2]
+    docker = raiz / "docker-autoupdate-check.sh"
+    if docker.exists():
+        t = docker.read_text()
+        assert 'branch --show-current' in t and 'BRANCH="$RAMA"' in t
+    for f in ("upgrade-docker.sh", "upgrade-nativo.sh"):
+        p = raiz / f
+        if p.exists():
+            assert 'branch --show-current' in p.read_text(), f

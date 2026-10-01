@@ -35,6 +35,10 @@ export HOME="${HOME:-/root}"
 
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 cd "$PROJECT_DIR"
+# Sin BRANCH explicito se sigue la rama que este checkout ya tiene (no "main" a ciegas): correr el
+# script a mano en una instalacion que sigue otra rama la devolvia a main, con codigo viejo
+# sobre una base de datos ya migrada.
+BRANCH="${BRANCH:-$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || true)}"
 BRANCH="${BRANCH:-main}"
 
 if [ -f "$PROJECT_DIR/.env" ]; then

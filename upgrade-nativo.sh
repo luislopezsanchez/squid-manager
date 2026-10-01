@@ -78,6 +78,10 @@ paso()  { echo; echo -e "${BLUE}=== $1 ===${NC}"; }
 # chequeo de mas abajo ($INSTALL_DIR/.git) aborta con un mensaje claro si
 # aun asi no es un checkout de SquidManager.
 INSTALL_DIR="${INSTALL_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+# Sin BRANCH explicito se sigue la rama que este checkout ya tiene (no "main" a ciegas): correr el
+# script a mano en una instalacion que sigue otra rama la devolvia a main, con codigo viejo
+# sobre una base de datos ya migrada.
+BRANCH="${BRANCH:-$(git -C "$INSTALL_DIR" branch --show-current 2>/dev/null || true)}"
 BRANCH="${BRANCH:-main}"
 
 [ -d "$INSTALL_DIR/.git" ] || fail "No hay una instalacion de SquidManager en $INSTALL_DIR (o no es un checkout git). Corre este script desde el directorio donde esta instalado SquidManager, o pasa la ruta con INSTALL_DIR=/tu/ruta. Para instalar desde cero usa install-nativo.sh, no este script."
