@@ -1,4 +1,5 @@
 import { traducir } from '../i18n'
+import { IconEdit, IconTrash } from '../components/Icons'
 import { useState, useEffect } from 'react'
 import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
@@ -133,16 +134,18 @@ export default function Admins() {
                 <td className="px-6 py-3 text-ink-2 text-xs">{a.email || '-'}</td>
                 <td className="px-6 py-3">
                   <span className={`px-2 py-0.5 text-xs rounded-full ${a.is_active ? 'pill-ok' : 'pill-danger'}`}>
-                    {a.is_active ? 'Activo' : 'Inactivo'}
+                    {a.is_active ? traducir('Activo') : traducir('Inactivo')}
                   </span>
                 </td>
                 <td className="px-6 py-3 text-xs text-ink-3">{new Date(a.created_at).toLocaleDateString()}</td>
-                <td className="px-6 py-3 text-xs text-ink-3">{a.last_login ? new Date(a.last_login).toLocaleString() : 'Nunca'}</td>
-                <td className="px-6 py-3 text-right space-x-2">
-                  <button onClick={() => handleEdit(a)} className="text-xs px-2 py-1 rounded text-blue-600 hover:bg-blue-50">{traducir("Editar")}</button>
-                  {a.id !== 1 && (
-                    <button onClick={() => handleDelete(a)} className="text-xs px-2 py-1 rounded text-danger hover:bg-red-50">{traducir("Eliminar")}</button>
-                  )}
+                <td className="px-6 py-3 text-xs text-ink-3">{a.last_login ? new Date(a.last_login).toLocaleString() : traducir('Nunca')}</td>
+                <td className="px-6 py-3 text-right whitespace-nowrap">
+                  <div className="flex items-center justify-end gap-1">
+                    <button onClick={() => handleEdit(a)} className="btn-icon" title={traducir("Editar")} aria-label={traducir("Editar")}><IconEdit /></button>
+                    {a.id !== 1 && (
+                      <button onClick={() => handleDelete(a)} className="btn-icon btn-icon-danger" title={traducir("Eliminar")} aria-label={traducir("Eliminar")}><IconTrash /></button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

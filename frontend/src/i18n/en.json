@@ -1783,5 +1783,6 @@
   "En uso": "In use",
   "Sin uso": "Unused",
   "Uso": "Usage",
-  "Ninguna regla de acceso ni de ancho de banda la usa todavía: no tiene efecto hasta que la uses en una regla.": "No access or bandwidth rule uses it yet: it has no effect until you use it in a rule."
+  "Ninguna regla de acceso ni de ancho de banda la usa todavía: no tiene efecto hasta que la uses en una regla.": "No access or bandwidth rule uses it yet: it has no effect until you use it in a rule.",
+  "Nunca": "Never"
 }

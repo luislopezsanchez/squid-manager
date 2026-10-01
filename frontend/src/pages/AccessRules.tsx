@@ -1,6 +1,6 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
-import { IconUsers, IconGripVertical, IconChevronUp, IconChevronDown, IconShield } from '../components/Icons'
+import { IconUsers, IconGripVertical, IconChevronUp, IconChevronDown, IconShield, IconEdit, IconTrash } from '../components/Icons'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
@@ -352,8 +352,8 @@ export default function AccessRules() {
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-ink-3">#{rule.order}</span>
-                <button onClick={() => handleEdit(rule)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">{traducir("Editar")}</button>
-                <button onClick={() => handleDelete(rule.id)} className="text-danger hover:text-danger text-sm font-medium">{traducir("Eliminar")}</button>
+                <button onClick={() => handleEdit(rule)} className="btn-icon" title={traducir("Editar")} aria-label={traducir("Editar")}><IconEdit /></button>
+                <button onClick={() => handleDelete(rule.id)} className="btn-icon btn-icon-danger" title={traducir("Eliminar")} aria-label={traducir("Eliminar")}><IconTrash /></button>
               </div>
             </div>
             )

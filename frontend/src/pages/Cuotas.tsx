@@ -1,4 +1,5 @@
 import { traducir } from '../i18n'
+import { IconEdit, IconGroups } from '../components/Icons'
 import { useEffect, useMemo, useState } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
 import { useToast } from '../components/Toast'
@@ -543,16 +544,19 @@ export default function Cuotas() {
                     {fila.cuota.quota_action === 'throttle' ? traducir('Limitar velocidad') : traducir('Cortar')}
                   </td>
                   <td className="px-5 py-3"><PillEstado estado={estadoDe(fila.cuota)} /></td>
-                  <td className="px-5 py-3 text-right space-x-3 whitespace-nowrap">
-                    {fila.tipo === 'grupo' && (
-                      <button onClick={() => setBulkFor(groups.find(g => g.name === fila.nombre) || null)}
-                        className="text-brand-700 hover:underline text-sm font-medium">
-                        {traducir("Por miembro…")}
+                  <td className="px-5 py-3 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1">
+                      {fila.tipo === 'grupo' && (
+                        <button onClick={() => setBulkFor(groups.find(g => g.name === fila.nombre) || null)}
+                          className="btn-icon" title={traducir("Por miembro…")} aria-label={traducir("Por miembro…")}>
+                          <IconGroups />
+                        </button>
+                      )}
+                      <button onClick={() => setFormFor(fila)} className="btn-icon"
+                        title={traducir("Editar")} aria-label={traducir("Editar")}>
+                        <IconEdit />
                       </button>
-                    )}
-                    <button onClick={() => setFormFor(fila)} className="text-brand-700 hover:underline text-sm font-medium">
-                      {traducir("Editar")}
-                    </button>
+                    </div>
                   </td>
                 </tr>
               ))}

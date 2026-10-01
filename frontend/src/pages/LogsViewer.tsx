@@ -1,6 +1,6 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useCallback } from 'react'
-import { IconChevronLeft, IconChevronRight, IconDownload, IconSpinner } from '../components/Icons'
+import { IconChevronLeft, IconChevronRight, IconDownload, IconSpinner, IconStop } from '../components/Icons'
 import { api, getToken } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState } from '../components/AsyncState'
@@ -280,10 +280,11 @@ export default function LogsViewer() {
                   <td className="px-4 py-2 text-right">
                     {ipsActivas === null || ipsActivas.has(e.client_ip) ? (
                       <button onClick={() => handleDisconnect(e.client_ip)} disabled={disconnecting === e.client_ip}
-                      className="text-xs font-medium text-danger hover:underline disabled:opacity-50 disabled:cursor-wait"
-                      title={traducir("Termina las conexiones que este cliente tenga abiertas ahora mismo -no le bloquea el acceso futuro")}>
-                      {disconnecting === e.client_ip ? traducir('Terminando…') : traducir('Terminar conexión')}
-                    </button>
+                        className="btn-icon btn-icon-danger"
+                        title={traducir("Termina las conexiones que este cliente tenga abiertas ahora mismo -no le bloquea el acceso futuro")}
+                        aria-label={traducir('Terminar conexión')}>
+                        {disconnecting === e.client_ip ? <IconSpinner className="animate-spin" /> : <IconStop />}
+                      </button>
                     ) : (
                       <span className="text-xs text-ink-3" title={traducir("Este cliente no tiene ninguna conexión abierta ahora mismo")}>{traducir("Sin conexión activa")}</span>
                     )}

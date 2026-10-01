@@ -1,4 +1,5 @@
 import { traducir } from '../i18n'
+import { IconEdit, IconTrash, IconUpload } from '../components/Icons'
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api, notificarCambioPendiente } from '../api/client'
@@ -424,11 +425,18 @@ export default function ACLs() {
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button onClick={() => handleEdit(acl)} className="text-primary-600 hover:text-primary-800 text-sm font-medium">
-                      {acl.source === 'file' ? traducir('Reemplazar') : traducir('Editar')}
-                    </button>
-                    <button onClick={() => handleDelete(acl.id)} className="text-danger hover:text-danger text-sm font-medium">{traducir("Eliminar")}</button>
+                  <td className="px-6 py-4 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => handleEdit(acl)} className="btn-icon"
+                        title={acl.source === 'file' ? traducir('Reemplazar') : traducir('Editar')}
+                        aria-label={acl.source === 'file' ? traducir('Reemplazar') : traducir('Editar')}>
+                        {acl.source === 'file' ? <IconUpload /> : <IconEdit />}
+                      </button>
+                      <button onClick={() => handleDelete(acl.id)} className="btn-icon btn-icon-danger"
+                        title={traducir("Eliminar")} aria-label={traducir("Eliminar")}>
+                        <IconTrash />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
