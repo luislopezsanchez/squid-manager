@@ -48,6 +48,9 @@ class _DBFalsa:
 
 def _ejecutar_login(username: str, password: str, admin_service, monkeypatch):
     monkeypatch.setattr("app.routes.auth.authenticate_admin", admin_service)
+    # Si no es admin, login() prueba con los usuarios locales del proxy (si el módulo está activo): aquí no existe ninguno.
+    monkeypatch.setattr("app.routes.auth.modules_service.is_enabled", lambda *_a, **_k: True)
+    monkeypatch.setattr("app.routes.auth.authenticate_proxy_user", lambda *_a, **_k: None)
     form = _FormDataFalso(username, password)
     # login() es sync desde que las rutas de solo trabajo bloqueante dejaron
     # de declararse async def (ver metrics.py y el resto de app/routes/):

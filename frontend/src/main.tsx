@@ -6,7 +6,7 @@ import './index.css'
 import Login from './pages/Login'
 import { LoadingState } from './components/AsyncState'
 import Layout from './components/Layout'
-import { getToken, isSuperadmin } from './api/client'
+import { getToken, isSuperadmin, isProxyUser } from './api/client'
 import ModuloRequerido from './components/ModuloRequerido'
 
 // Carga perezosa por ruta: antes las ~30 páginas del panel viajaban todas en
@@ -17,6 +17,8 @@ import ModuloRequerido from './components/ModuloRequerido'
 // el código que hace falta para eso. Login se deja fuera a propósito: es la
 // primera pantalla que ve cualquiera sin sesión, no tiene sentido demorarla
 // con una carga aparte.
+const MiCuenta = lazy(() => import('./pages/MiCuenta'))
+const MiCuentaContrasena = lazy(() => import('./pages/MiCuentaContrasena'))
 const ChangePassword = lazy(() => import('./pages/ChangePassword'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const ProxyUsers = lazy(() => import('./pages/ProxyUsers'))
@@ -65,6 +67,21 @@ function App() {
           <Routes>
             <Route path="/cambiar-contrasena" element={<ChangePassword />} />
             <Route path="*" element={<Navigate to="/cambiar-contrasena" />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    )
+  }
+
+  // Usuario local del proxy: solo el portal de autoservicio, nunca el panel de administración.
+  if (token && isProxyUser()) {
+    return (
+      <BrowserRouter>
+        <Suspense fallback={<LoadingState />}>
+          <Routes>
+            <Route path="/" element={<MiCuenta />} />
+            <Route path="/cambiar-contrasena" element={<MiCuentaContrasena />} />
+            <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </Suspense>
       </BrowserRouter>

@@ -24,7 +24,7 @@ from app.database import engine, SessionLocal
 from app.models import *  # noqa: importa todos los modelos
 from app.routes import modules as modules_routes
 from app.routes import system_time as system_time_routes
-from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy, kerberos, ai, update, cache_manager, contact, smtp, quotas, group_quotas, network, central, search
+from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy, kerberos, ai, update, cache_manager, contact, smtp, quotas, group_quotas, network, central, search, self_service
 from app.middleware import rate_limit_middleware
 
 logging.basicConfig(level=logging.INFO)
@@ -440,6 +440,7 @@ app.middleware("http")(rate_limit_middleware)
 # Registrar rutas
 app.include_router(auth.router, prefix="/api/auth", tags=["Autenticación"])
 app.include_router(proxy_users.router, prefix="/api/proxy-users", tags=["Usuarios del Proxy"])
+app.include_router(self_service.router, prefix="/api/self", tags=["Autoservicio de usuarios"])
 app.include_router(acls.router, prefix="/api/acls", tags=["ACLs"])
 app.include_router(access_rules.router, prefix="/api/access-rules", tags=["Reglas de Acceso"])
 app.include_router(squid_config.router, prefix="/api/squid", tags=["Configuración Squid"])

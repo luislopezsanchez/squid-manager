@@ -3,12 +3,14 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.models.admin import Admin
 from app.models.audit_log import AuditLog
+from app.models.proxy_user import ProxyUser
 from app.services.auth_service import (
     get_current_admin, get_password_hash, require_superadmin, verify_password,
 )
@@ -91,6 +93,9 @@ def create_admin(
     """Crear un nuevo administrador (solo superadmin)."""
     if db.query(Admin).filter(Admin.username == data.username).first():
         raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
+    # Mismo criterio que al crear un usuario del proxy: evitar homónimos entre ambos tipos de cuenta.
+    if db.query(ProxyUser).filter(func.lower(ProxyUser.username) == data.username.lower()).first():
+        raise HTTPException(status_code=400, detail="Ya existe un usuario del proxy con ese nombre. Usa otro nombre para evitar confusiones.")
     if data.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail="Rol inválido. Debe ser: superadmin, admin o viewer")
 

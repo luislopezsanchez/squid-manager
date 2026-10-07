@@ -26,6 +26,7 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   login: { label: traducir("Inicio de sesión"), color: 'pill-ok' },
   login_failed: { label: traducir("Inicio fallido"), color: 'pill-danger' },
   reset_password: { label: traducir("Restablecer contraseña"), color: 'pill-warn' },
+  self_change_password: { label: traducir("Cambio de contraseña (por el usuario)"), color: 'pill-info' },
   add_member: { label: traducir("Añadir miembro"), color: 'pill-ok' },
   remove_member: { label: traducir("Quitar miembro"), color: 'pill-danger' },
   reorder: { label: traducir("Reordenar"), color: 'pill-info' },
@@ -160,6 +161,7 @@ export default function AuditLog() {
           <option value="login">{traducir("Inicio de sesión")}</option>
           <option value="login_failed">{traducir("Inicio fallido")}</option>
           <option value="reset_password">{traducir("Restablecer contraseña")}</option>
+          <option value="self_change_password">{traducir("Cambio de contraseña (por el usuario)")}</option>
           <option value="add_member">{traducir("Añadir miembro")}</option>
           <option value="remove_member">{traducir("Quitar miembro")}</option>
           <option value="reorder">{traducir("Reordenar")}</option>

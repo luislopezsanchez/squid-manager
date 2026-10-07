@@ -1,5 +1,7 @@
 """Servicio de autenticación: JWT + bcrypt."""
 
+import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -11,8 +13,14 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.admin import Admin
+from app.models.proxy_user import ProxyUser
+from app.utils import utcnow
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+# Marca (claim "typ") de los tokens del portal de autoservicio de los usuarios
+# del proxy. Los de administrador no la llevan.
+TOKEN_TYPE_PROXY_USER = "proxy_user"
 
 # bcrypt ignora todo lo que pase de 72 bytes. Se trunca de forma explícita
 # para que el comportamiento sea el mismo al crear y al verificar.
@@ -94,6 +102,10 @@ def get_current_admin(
         issued_at = payload.get("iat")
         if username is None:
             raise credentials_exception
+        # Un token de usuario del proxy (portal de autoservicio) nunca vale como
+        # administrador, aunque su nombre coincida con el de una cuenta admin.
+        if payload.get("typ") == TOKEN_TYPE_PROXY_USER:
+            raise credentials_exception
     except jwt.PyJWTError:
         raise credentials_exception
 
@@ -149,3 +161,71 @@ async def require_superadmin(admin: Admin = Depends(get_current_admin)) -> Admin
             detail="Solo el superadmin puede realizar esta acción",
         )
     return admin
+
+
+# ---------------------------------------------------------------------------
+# Portal de autoservicio: usuarios locales del proxy
+# ---------------------------------------------------------------------------
+
+def authenticate_proxy_user(db: Session, username: str, password: str) -> ProxyUser | None:
+    """Valida usuario y contraseña de un usuario local del proxy.
+
+    Solo entran cuentas que hoy pueden navegar (habilitadas y sin caducar): una
+    cuenta deshabilitada o vencida tampoco entra al portal.
+    """
+    user = db.query(ProxyUser).filter(ProxyUser.username == username).first()
+    if not user or not _proxy_user_activo(user):
+        verify_password(password, _HASH_FALSO)
+        return None
+    if not verify_password(password, user.password_hash):
+        return None
+    return user
+
+
+def _proxy_user_activo(user: ProxyUser) -> bool:
+    if not user.enabled:
+        return False
+    return user.expires_at is None or user.expires_at > utcnow()
+
+
+def _huella_password(user: ProxyUser) -> str:
+    """Huella corta del hash vigente: va dentro del token para que cambiar la
+    contraseña (el propio usuario o el admin) cierre las sesiones abiertas, sin
+    necesitar una columna nueva en la base."""
+    return hashlib.sha256((user.password_hash or "").encode()).hexdigest()[:16]
+
+
+def create_proxy_user_token(user: ProxyUser) -> str:
+    return create_access_token({
+        "sub": user.username,
+        "typ": TOKEN_TYPE_PROXY_USER,
+        "pwf": _huella_password(user),
+    })
+
+
+def get_current_proxy_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> ProxyUser:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No se pudieron validar las credenciales",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except jwt.PyJWTError:
+        raise credentials_exception
+    if payload.get("typ") != TOKEN_TYPE_PROXY_USER or not payload.get("sub"):
+        raise credentials_exception
+
+    user = db.query(ProxyUser).filter(ProxyUser.username == payload["sub"]).first()
+    if user is None or not _proxy_user_activo(user):
+        raise credentials_exception
+    if not hmac.compare_digest(str(payload.get("pwf", "")), _huella_password(user)):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="La sesión caducó porque se cambió la contraseña. Vuelve a entrar.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user

@@ -11,6 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, Form, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -197,6 +198,10 @@ def create_proxy_user(
     existing = db.query(ProxyUser).filter(ProxyUser.username == username).first()
     if existing:
         raise HTTPException(400, detail="El usuario ya existe")
+    # Un administrador y un usuario del proxy con el mismo nombre se confunden al entrar
+    # al panel (el login prueba primero la cuenta de administrador) y en la auditoría.
+    if db.query(Admin).filter(func.lower(Admin.username) == username.lower()).first():
+        raise HTTPException(400, detail="Ya existe un administrador con ese nombre. Usa otro nombre para evitar confusiones.")
 
     htpasswd_line = _generate_htpasswd_hash(username, data.password)
     realm = realm_actual(db)
@@ -657,12 +662,15 @@ def import_users(
 
     existentes = {u.username.lower(): u for u in db.query(ProxyUser).all()}
     ldap_nombres = {u.username.lower() for u in db.query(LdapUser).all()}
+    admin_nombres = {a.username.lower() for a in db.query(Admin).all()}
 
     a_crear, a_actualizar, omitidos = [], [], []
     for f in filas:
         clave = f["username"].lower()
         if clave in ldap_nombres and clave not in existentes:
             errores.append({"fila": f["fila"], "usuario": f["username"], "motivo": "Ya existe un usuario LDAP con ese nombre."})
+        elif clave in admin_nombres and clave not in existentes:
+            errores.append({"fila": f["fila"], "usuario": f["username"], "motivo": "Ya existe un administrador con ese nombre."})
         elif clave in existentes:
             if modo == "crear_o_actualizar":
                 a_actualizar.append((existentes[clave], f))

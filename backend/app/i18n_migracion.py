@@ -166,6 +166,7 @@ NUEVAS: dict[str, dict[str, str]] = {
         "Solo se puede generar credenciales de usuarios locales.": "Credentials can only be generated for local users.",
         "No existe.": "It does not exist.",
         "Ya existe un usuario LDAP con ese nombre.": "An LDAP user with that name already exists.",
+        "Ya existe un administrador con ese nombre.": "An administrator with that name already exists.",
         "Para activar el reporte diario hace falta un servidor SMTP configurado y un correo en la cuenta de administrador.": "To enable the daily report you need a configured SMTP server and an email on the administrator account.",
         "Falta configurar el SMTP o un correo en la cuenta de administrador": "The SMTP server or an administrator email is not configured",
         "Zona horaria no válida": "Invalid time zone",
@@ -388,6 +389,7 @@ NUEVAS: dict[str, dict[str, str]] = {
         "Solo se puede generar credenciales de usuarios locales.": "Só é possível gerar credenciais de usuários locais.",
         "No existe.": "Não existe.",
         "Ya existe un usuario LDAP con ese nombre.": "Já existe um usuário LDAP com esse nome.",
+        "Ya existe un administrador con ese nombre.": "Já existe um administrador com esse nome.",
     },
 }
 

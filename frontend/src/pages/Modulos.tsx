@@ -17,6 +17,10 @@ const DETALLE: Record<string, { incluye: string; alApagar: string }> = {
     incluye: 'Panel central: estado de varios proxies (SquidManager o Squid básico) en un solo lugar, con alertas de nodo caído.',
     alApagar: 'Desaparece del menú y deja de consultar y avisar de los nodos. Este servidor puede seguir siendo monitorizado por otro: eso no depende de este interruptor.',
   },
+  autoservicio: {
+    incluye: 'Los usuarios locales del proxy pueden iniciar sesión en este mismo panel y ven una página propia: su consumo por día, peticiones, bloqueos, cuota, grupos y un botón para cambiar su contraseña.',
+    alApagar: 'Dejan de poder entrar y sus sesiones abiertas se cierran. No afecta a su navegación por el proxy ni a los administradores. Los usuarios LDAP no entran por aquí.',
+  },
   asistente: {
     incluye: 'Asistente de IA en el menú Ayuda.',
     alApagar: 'Desaparece del menú. Su configuración (proveedor y claves) se conserva.',

@@ -14,9 +14,9 @@ class _DB:
         return _Res(self.filas)
 
 
-def test_por_defecto_analisis_y_asistente_si_panel_central_no():
+def test_por_defecto_analisis_y_asistente_si_panel_central_y_autoservicio_no():
     est = ms.get_all(_DB())
-    assert est == {"analisis": True, "panel_central": False, "asistente": True}
+    assert est == {"analisis": True, "panel_central": False, "autoservicio": False, "asistente": True}
 
 
 def test_lo_guardado_pisa_el_valor_por_defecto():

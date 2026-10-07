@@ -87,6 +87,8 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
             "The main superadmin cannot be deleted",
         "El usuario ya está en el grupo": "The user is already in the group",
         "El usuario ya existe": "The user already exists",
+        "Ya existe un administrador con ese nombre. Usa otro nombre para evitar confusiones.": "An administrator with that name already exists. Use a different name to avoid confusion.",
+        "Ya existe un usuario del proxy con ese nombre. Usa otro nombre para evitar confusiones.": "A proxy user with that name already exists. Use a different name to avoid confusion.",
         "Error de autenticación SMTP: usuario o contraseña incorrectos":
             "SMTP authentication error: wrong username or password",
         "Falta el destinatario (email_recipients)": "The recipient is missing (email_recipients)",
@@ -282,6 +284,8 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
             "O superadmin principal não pode ser excluído",
         "El usuario ya está en el grupo": "O usuário já está no grupo",
         "El usuario ya existe": "O usuário já existe",
+        "Ya existe un administrador con ese nombre. Usa otro nombre para evitar confusiones.": "Já existe um administrador com esse nome. Use outro nome para evitar confusão.",
+        "Ya existe un usuario del proxy con ese nombre. Usa otro nombre para evitar confusiones.": "Já existe um usuário do proxy com esse nome. Use outro nome para evitar confusão.",
         "Error de autenticación SMTP: usuario o contraseña incorrectos":
             "Erro de autenticação SMTP: usuário ou senha incorretos",
         "Falta el destinatario (email_recipients)": "Falta o destinatário (email_recipients)",

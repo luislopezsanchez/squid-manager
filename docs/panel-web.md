@@ -41,7 +41,9 @@ que usa cada sección.
 ### Módulos (Sistema → Módulos)
 
 Enciende o apaga las partes opcionales del panel. Todos vienen activos salvo
-**Panel central**, que se habilita a mano. Apagar un módulo no borra sus datos.
+**Panel central** y **Portal de autoservicio de usuarios** (ver
+[docs/authentication.md](authentication.md#portal-de-autoservicio-de-los-usuarios-locales)),
+que se habilitan a mano. Apagar un módulo no borra sus datos.
 
 ```bash
 # Consultar el estado desde la API (sesión de administrador)

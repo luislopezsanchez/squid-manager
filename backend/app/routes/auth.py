@@ -7,10 +7,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.admin import Admin
 from app.models.audit_log import AuditLog
+from app.services import modules_service
 from app.middleware import login_attempts_exceeded, record_failed_login
 from app.schemas.auth import Token, AdminResponse
 from app.services.auth_service import (
-    authenticate_admin, create_access_token, get_current_admin,
+    authenticate_admin, authenticate_proxy_user, create_access_token,
+    create_proxy_user_token, get_current_admin,
 )
 from app.utils import utcnow
 
@@ -34,6 +36,22 @@ def login(
     intentos que YA son incorrectos, que es lo único que hace falta frenar.
     """
     admin = authenticate_admin(db, form_data.username, form_data.password)
+    if not admin and modules_service.is_enabled(db, "autoservicio"):
+        # Portal de autoservicio: si no es un administrador, puede ser un usuario
+        # local del proxy. Su token es de otro tipo y solo abre /api/self/*.
+        proxy_user = authenticate_proxy_user(db, form_data.username, form_data.password)
+        if proxy_user:
+            db.add(AuditLog(
+                admin_id=None, admin_username=proxy_user.username,
+                action="login", entity="proxy_user", entity_id=proxy_user.id,
+            ))
+            db.commit()
+            return {
+                "access_token": create_proxy_user_token(proxy_user),
+                "token_type": "bearer",
+                "must_change_password": False,
+                "role": "user",
+            }
     if not admin:
         # Ya perdió (contraseña incorrecta): recién ahora, si la cuenta venía
         # excedida, se devuelve 429 en vez del 401 normal.

@@ -4,12 +4,12 @@ import { api } from '../api/client'
 /** Módulos opcionales del panel (ver backend/app/services/modules_service.py).
  * Un solo estado compartido para menú y rutas: se pide una vez al entrar y se
  * refresca cuando el superadmin enciende o apaga alguno. */
-export type ModuloClave = 'analisis' | 'panel_central' | 'asistente'
+export type ModuloClave = 'analisis' | 'panel_central' | 'autoservicio' | 'asistente'
 export type EstadoModulos = Record<ModuloClave, boolean>
 
 // Valores por defecto mientras llega la respuesta: los mismos que el servidor
-// (Análisis y Asistente sí, Panel central no), para que el menú no parpadee.
-const POR_DEFECTO: EstadoModulos = { analisis: true, panel_central: false, asistente: true }
+// (Análisis y Asistente sí, Panel central y Portal de autoservicio no), para que el menú no parpadee.
+const POR_DEFECTO: EstadoModulos = { analisis: true, panel_central: false, autoservicio: false, asistente: true }
 
 let estado: EstadoModulos = POR_DEFECTO
 let cargado = false

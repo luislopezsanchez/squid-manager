@@ -713,6 +713,41 @@ def rendimiento_serie(seconds, desde, hasta) -> dict:
     return {"granularidad": "hora" if por_hora else "dia", "puntos": puntos}
 
 
+def actividad_usuario(username: str, dias: int) -> dict:
+    """Actividad de UN usuario por día (zona horaria de la instalación) en los últimos `dias`.
+
+    Es lo único que lee el portal de autoservicio: el nombre llega siempre del token del
+    usuario, nunca de un parámetro de la petición.
+    """
+    seconds = dias * 86400
+    p = _p(seconds, None, None)
+    rows = _q("SELECT h, SUM(bytes), SUM(requests), SUM(denied) FROM ru_user WHERE username=:u "
+              "AND h BETWEEN :h0 AND :h1 GROUP BY h ORDER BY h", {**p, "u": username})
+    por_dia: dict[float, dict] = {}
+    for h, b, r, d in rows:
+        g = por_dia.setdefault(_tzs.inicio_dia(h), {"timestamp": _tzs.inicio_dia(h), "bytes": 0, "requests": 0, "bloqueadas": 0})
+        g["bytes"] += int(b)
+        g["requests"] += int(r)
+        g["bloqueadas"] += int(d)
+    puntos = _rellenar(sorted(por_dia.values(), key=lambda x: x["timestamp"]), False, p,
+                       {"bytes": 0, "requests": 0, "bloqueadas": 0})
+    if not puntos:  # sin actividad: igualmente se devuelve la rejilla de días vacía
+        puntos = _rellenar([{"timestamp": _tzs.inicio_dia(p["h1"]), "bytes": 0, "requests": 0, "bloqueadas": 0}],
+                           False, p, {"bytes": 0, "requests": 0, "bloqueadas": 0})
+    # La ventana por horas toca `dias + 1` días de calendario: se muestran solo los últimos `dias`.
+    puntos = puntos[-dias:]
+    return {
+        "granularidad": "dia",
+        "puntos": puntos,
+        "totales": {
+            "bytes": sum(x["bytes"] for x in puntos),
+            "requests": sum(x["requests"] for x in puntos),
+            "bloqueadas": sum(x["bloqueadas"] for x in puntos),
+            "dias_activos": sum(1 for x in puntos if x["requests"] > 0),
+        },
+    }
+
+
 def serie_entidad(user, domain, seconds, desde, hasta) -> list[dict]:
     p = _p(seconds, desde, hasta)
     if user:

@@ -28,6 +28,11 @@ export function getRole(): string {
   return localStorage.getItem('role') || 'admin'
 }
 
+/** Quien entra con una cuenta local del proxy (no de administrador) solo ve el portal de autoservicio. */
+export function isProxyUser(): boolean {
+  return getRole() === 'user'
+}
+
 /** Un viewer solo consulta: la API rechaza cualquier escritura suya con 403. */
 export function canWrite(): boolean {
   return getRole() !== 'viewer'
@@ -450,6 +455,11 @@ export const api = {
   updateAdmin: (id: number, data: any) => request<any>(`/admins/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAdmin: (id: number) => request<any>(`/admins/${id}`, { method: 'DELETE' }),
   changePassword: (current: string, newPass: string) => request<any>('/admins/change-password', { method: 'PUT', body: JSON.stringify({ current_password: current, new_password: newPass }) }),
+
+  // Portal de autoservicio (usuarios locales del proxy)
+  selfMe: () => request<{ username: string; display_name: string | null; email: string | null; expires_at: string | null }>('/self/me'),
+  selfDashboard: (ventana: '7d' | '30d') => request<any>(`/self/dashboard?ventana=${ventana}`),
+  selfChangePassword: (current: string, newPass: string) => request<any>('/self/change-password', { method: 'PUT', body: JSON.stringify({ current_password: current, new_password: newPass }) }),
 
   // Backup
   exportBackup: () => `${API_BASE}/backup/export`,

@@ -7,6 +7,28 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ## Sin publicar
 
+### Añadido
+
+- **Portal de autoservicio para los usuarios locales del proxy.** Un usuario del proxy puede entrar al panel con su propio usuario y
+  contraseña (la misma pantalla de acceso que los administradores) y ve una página suya, sin acceso a nada de administración:
+  su consumo de datos por día (última semana o último mes), peticiones, peticiones bloqueadas, su cuota de navegación (usado, límite
+  y cuándo se restablece), su correo y sus grupos. Desde ahí puede **cambiar su propia contraseña** cuando quiera (mínimo 10
+  caracteres): se actualizan el panel, el htpasswd y el digest de Squid, se purga la caché de credenciales de Squid y se cierran
+  sus sesiones abiertas. Antes solo podía cambiársela un administrador.
+  - El token de un usuario del proxy lleva un tipo propio y la API de administración lo rechaza (también si su nombre coincide con el
+    de un administrador); el de un administrador tampoco abre el portal. Cambiar la contraseña, deshabilitar o caducar la cuenta
+    cierra la sesión del usuario. Todo se filtra por el usuario del token: la API no admite pedir los datos de otro.
+  - Es un módulo nuevo en **Sistema → Módulos** («Portal de autoservicio de usuarios»), **apagado por defecto**: quien actualice no
+    ve ningún cambio hasta que un superadministrador lo active. Al apagarlo, los usuarios dejan de poder entrar y sus sesiones
+    abiertas se cierran. Los usuarios LDAP no entran por aquí.
+  - El cambio de contraseña del usuario queda en la auditoría como «Cambio de contraseña (por el usuario)».
+
+### Cambiado
+
+- **No se pueden crear un administrador y un usuario del proxy con el mismo nombre** (sin distinguir mayúsculas): el alta de cada
+  tipo, y la importación masiva de usuarios, rechazan el nombre si ya existe en el otro. Evita confusiones al iniciar sesión y en la
+  auditoría. Las cuentas que ya compartieran nombre siguen funcionando como antes; restaurar un backup no aplica esta regla.
+
 ### Corregido
 
 - **Panel central: un nodo respondía «403 al pedir el dashboard» si la cuenta guardada para monitorizarlo tenía la contraseña

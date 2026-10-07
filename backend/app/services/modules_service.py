@@ -17,6 +17,9 @@ MODULOS = {
     "panel_central": (False, "Panel central (monitoreo de varios proxies)",
                       "Para quien administra varios Squid: muestra el estado de todos en un solo panel. "
                       "Apagado por defecto."),
+    "autoservicio": (False, "Portal de autoservicio de usuarios",
+                     "Los usuarios locales del proxy entran al panel con su cuenta para ver su propia navegación y "
+                     "cambiar su contraseña. Apagado por defecto."),
     "asistente": (True, "Asistente de IA",
                   "Responde preguntas sobre el uso de la plataforma. Además de mostrarlo, necesita configurar un proveedor."),
 }

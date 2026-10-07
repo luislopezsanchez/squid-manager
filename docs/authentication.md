@@ -53,9 +53,37 @@ El helper consulta **primero local y luego LDAP**, de modo que ambas formas conv
 > cuentas de servicio o gente sin acceso previsto, van a poder navegar automáticamente
 > tras la primera sincronización.
 
+### Portal de autoservicio de los usuarios locales
+
+Cuando el módulo está activo, un usuario local del proxy (no un administrador) puede entrar al panel con su usuario y contraseña, en la misma pantalla de
+acceso. En lugar del panel de administración ve una página propia con:
+
+- su consumo de datos por día, las peticiones y las peticiones bloqueadas, de la última semana o del último mes;
+- su cuota de navegación (usado, límite, periodo y cuándo se restablece), si tiene una;
+- su correo, su fecha de caducidad (solo si la cuenta la tiene) y los grupos a los que pertenece;
+- el botón **Cambiar contraseña**: mínimo 10 caracteres, pide la actual, actualiza a la vez el panel y los ficheros de Squid, purga la
+  caché de credenciales de Squid y cierra las sesiones abiertas del usuario.
+
+Qué garantiza:
+
+- **Solo ve lo suyo.** La API (`/api/self/*`) toma el usuario del token; no admite pedir los datos de otro.
+- **No es un administrador.** Su token lleva un tipo propio (`typ: proxy_user`) que la API de administración rechaza, aunque su nombre
+  coincida con el de un administrador; y el token de un administrador no abre el portal.
+- **Respeta el estado de la cuenta.** Una cuenta deshabilitada o caducada no entra, y deshabilitarla o cambiarle la contraseña cierra
+  su sesión en el momento.
+- **Mismos límites de intentos fallidos** que el acceso de los administradores (por IP y por cuenta).
+- **Sin homónimos.** No se puede crear un administrador y un usuario del proxy con el mismo nombre (sin distinguir mayúsculas). Si
+  ya existieran dos cuentas así, el acceso prueba primero la de administrador.
+
+Los usuarios LDAP/AD no entran por aquí: su contraseña se cambia en el directorio.
+
+Es un módulo opcional y **viene apagado**. Un superadministrador lo activa (y lo apaga) en **Sistema → Módulos → Portal de
+autoservicio de usuarios**, sin reiniciar nada. Apagado, el acceso queda solo para administradores y los usuarios que tuvieran una
+sesión abierta vuelven a la pantalla de acceso. Cada cambio queda en la auditoría.
+
 ### Caducidad de usuarios locales
 
-Un usuario del proxy puede tener una fecha de caducidad opcional. Al regenerar `squid_passwd` (en cada cambio o cada pocos minutos), los usuarios caducados quedan fuera del fichero automáticamente, aunque sigan marcados como "habilitados" en la base de datos.
+Un usuario del proxy puede tener una fecha de caducidad opcional (hoy solo se fija al importar usuarios con la columna `caduca`, o por la API con `expires_at`). Al regenerar `squid_passwd` (en cada cambio o cada pocos minutos), los usuarios caducados quedan fuera del fichero automáticamente, aunque sigan marcados como "habilitados" en la base de datos.
 
 ---
 
