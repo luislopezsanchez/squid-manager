@@ -5,7 +5,7 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## Sin publicar
+## [1.0.3] - 2026-10-07
 
 ### Añadido
 
