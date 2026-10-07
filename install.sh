@@ -312,33 +312,46 @@ ok "La ruta de instalación es accesible para el usuario del contenedor"
 # 5. Desplegar contenedores
 # ============================================
 info "Desplegando contenedores (la primera vez compila Squid, ~10-15 min)..."
-docker compose up -d --build
+# En dos fases: primero todo salvo el servicio `updater` y despues este. Si solo falla construir el servicio de
+# actualizacion (p. ej. un limite de descargas de Docker Hub), el resto del stack NO debe quedarse sin instalar.
+# (Sin tuberias hacia `grep -q`: con `pipefail`, un grep que sale antes de tiempo da un falso negativo por SIGPIPE.)
+_SERVICIOS="$(docker compose config --services 2>/dev/null || true)"
+_PRINCIPALES=""
+if grep -qx 'updater' <<< "$_SERVICIOS"; then
+    _PRINCIPALES="$(grep -vx 'updater' <<< "$_SERVICIOS" | tr '\n' ' ')"
+fi
+# Sin servicio `updater` (compose antiguo) _PRINCIPALES queda vacio y esto es el `up -d --build` de siempre.
+# shellcheck disable=SC2086
+docker compose up -d --build $_PRINCIPALES
+if [ -n "$_PRINCIPALES" ]; then
+    docker compose up -d --build updater \
+        || warn "No se pudo construir el servicio de actualizaciones (updater). Reintenta: docker compose up -d --build updater"
+fi
 
 ok "Contenedores desplegados"
 
 # ============================================
-# 6. Temporizador de actualizaciones
+# 6. Actualizaciones desde el panel
 # ============================================
-# Mismo mecanismo que instalación nativa (ver install-nativo.sh y la nota de
-# diseño en app/services/update_service.py): el panel web nunca ejecuta nada
-# con privilegios, solo escribe un archivo de estado que este script del
-# HOST revisa cada minuto -y aplica, si corresponde, reconstruyendo los
-# contenedores con upgrade-docker.sh. Sin systemd-run (a diferencia de
-# nativo): esta unidad ya es un proceso del host, ajeno al ciclo de vida de
-# los contenedores que reinicia, así que puede aplicar la actualización
-# directo y en primer plano sin arriesgarse a cortarse a sí misma.
-info "Configurando el temporizador de actualizaciones..."
-# El directorio solo lo creaba install-nativo.sh: en un servidor que nunca tuvo una instalacion nativa
-# el `install` de abajo fallaba ("No such file or directory"), `set -e` cortaba el instalador justo aqui
-# y el temporizador no se instalaba nunca, asi que "Actualizar ahora" desde el panel no aplicaba nada.
-install -d -o root -g root -m 755 /usr/local/lib/squidmanager
-install -o root -g root -m 755 "$INSTALL_DIR/docker-autoupdate-check.sh" \
-    /usr/local/lib/squidmanager/docker-autoupdate-check.sh
-# Copia de upgrade-docker.sh propiedad de root: el temporizador ejecuta esa y no la del checkout.
-install -o root -g root -m 755 "$INSTALL_DIR/upgrade-docker.sh" \
-    /usr/local/lib/squidmanager/upgrade-docker.sh
+# Las aplica el servicio `updater` del propio stack (ver docker-compose.yml y updater/Dockerfile), que
+# acaba de levantarse con el resto de contenedores: no depende de nada instalado en el host.
+#
+# Ademas se instala el temporizador de systemd del host como RESPALDO (mismo mecanismo que en
+# instalacion nativa, ver install-nativo.sh y la nota de diseno en app/services/update_service.py): cede el
+# turno mientras el servicio `updater` este vivo y toma el relevo si deja de estarlo. Como es un respaldo,
+# un fallo aqui NO debe abortar la instalacion (antes `set -e` la cortaba en este punto, justo despues de
+# levantar los contenedores, si faltaba /usr/local/lib/squidmanager: el instalador terminaba sin resumen).
+info "Configurando las actualizaciones desde el panel..."
+instalar_temporizador_host() {
+    # El directorio solo lo creaba install-nativo.sh.
+    install -d -o root -g root -m 755 /usr/local/lib/squidmanager || return 1
+    install -o root -g root -m 755 "$INSTALL_DIR/docker-autoupdate-check.sh" \
+        /usr/local/lib/squidmanager/docker-autoupdate-check.sh || return 1
+    # Copia de upgrade-docker.sh propiedad de root: el temporizador ejecuta esa y no la del checkout.
+    install -o root -g root -m 755 "$INSTALL_DIR/upgrade-docker.sh" \
+        /usr/local/lib/squidmanager/upgrade-docker.sh || return 1
 
-cat > /etc/systemd/system/squidmanager-docker-autoupdate.service <<EOF
+    cat > /etc/systemd/system/squidmanager-docker-autoupdate.service <<EOF || return 1
 [Unit]
 Description=SquidManager (Docker) - Comprobar y aplicar actualizacion aprobada
 
@@ -348,7 +361,7 @@ Environment=PROJECT_DIR=$INSTALL_DIR
 ExecStart=/usr/local/lib/squidmanager/docker-autoupdate-check.sh
 EOF
 
-cat > /etc/systemd/system/squidmanager-docker-autoupdate.timer <<'EOF'
+    cat > /etc/systemd/system/squidmanager-docker-autoupdate.timer <<'EOF' || return 1
 [Unit]
 Description=SquidManager (Docker) - Revisar actualizaciones pendientes cada minuto
 
@@ -361,10 +374,21 @@ AccuracySec=10s
 WantedBy=timers.target
 EOF
 
-systemctl daemon-reload
-systemctl enable --now squidmanager-docker-autoupdate.timer >/dev/null 2>&1 \
-    || warn "No se pudo activar squidmanager-docker-autoupdate.timer"
-ok "Temporizador de actualizaciones activo (cada minuto)"
+    systemctl daemon-reload || return 1
+    systemctl enable --now squidmanager-docker-autoupdate.timer >/dev/null 2>&1 || return 1
+}
+if instalar_temporizador_host; then
+    ok "Temporizador de actualizaciones del host activo (respaldo, cada minuto)"
+else
+    warn "No se pudo instalar el temporizador de actualizaciones del host (es solo un respaldo)."
+    warn "El servicio 'updater' del stack aplica las actualizaciones igualmente: docker compose ps updater"
+fi
+_EN_MARCHA="$(docker compose ps --status running --services 2>/dev/null || true)"
+if grep -qx 'updater' <<< "$_EN_MARCHA"; then
+    ok "Servicio de actualizaciones (updater) en marcha"
+else
+    warn "El servicio de actualizaciones (updater) no esta en marcha todavia: docker compose logs updater"
+fi
 
 # ============================================
 # 7. Esperar al backend y recoger la contraseña del admin

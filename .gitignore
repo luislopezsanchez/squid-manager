@@ -87,3 +87,10 @@ tools/trafico_sim*
 
 # Estado de actualizaciones desde el panel en Docker (raiz del proyecto)
 /.update_state.json*
+# Senales de vida y bloqueo del servicio de actualizacion (docker-autoupdate-check.sh, updater/) y del
+# temporizador del host: ficheros de ejecucion, no codigo. Sin esto git los veia como "cambios sin confirmar":
+# install.sh se negaba a re-ejecutarse y `git status` salia sucio en cualquier instalacion Docker.
+/.update_heartbeat
+/.updater_alive
+/.update.lock
+backend/.update_heartbeat

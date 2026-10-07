@@ -46,8 +46,9 @@ consultar el estado, no aprobar nada.
 4. Pulsá **"Actualizar ahora"**. Queda aprobada al instante. En instalación
    nativa se aplica en los segundos siguientes (aprobar "ahora" adelanta el
    temporizador vía sudo); en Docker, el backend no tiene forma de tocar
-   systemd desde dentro del contenedor, así que el temporizador del host la
-   nota sola en su próximo ciclo (hasta 1 minuto).
+   nada fuera de su contenedor, así que el servicio `updater` del propio
+   stack (o, de respaldo, el temporizador del host) la nota solo en su
+   próximo ciclo (unos segundos).
 5. Mientras se aplica, la tarjeta muestra "Actualización en curso…" — el
    panel puede quedarse sin responder un momento (reinicia sus propios
    servicios). Cuando termina, aparece un aviso en la parte superior de
@@ -63,12 +64,13 @@ Mismos pasos 1 a 3 de arriba, y después:
 5. La tarjeta pasa a mostrar "Programada para: `<fecha>` (aprobada por
    `<usuario>`)", con un botón **"Cancelar"** por si te arrepentís antes de
    que llegue la hora.
-6. El sistema revisa **una vez por minuto** si ya es la hora: puede tardar
-   hasta un minuto después de lo elegido en arrancar. Si pasan más de 3
-   minutos sin arrancar, la tarjeta lo marca como **"atrasada"** — señal de
-   que el temporizador del servidor no está corriendo, hay que revisarlo por
-   SSH (`systemctl status squidmanager-autoupdate.timer` en nativo,
-   `systemctl status squidmanager-docker-autoupdate.timer` en Docker).
+6. El sistema revisa **una vez por minuto** (nativo) o cada pocos segundos
+   (Docker) si ya es la hora: puede tardar hasta un minuto después de lo
+   elegido en arrancar. Si pasan más de 3 minutos sin arrancar, la tarjeta lo
+   marca como **"atrasada"** — señal de que quien la aplica no está
+   corriendo, hay que revisarlo por SSH (`systemctl status
+   squidmanager-autoupdate.timer` en nativo, `docker compose ps updater` en
+   Docker).
 7. Igual que aplicar "ahora": al terminar, aparece el aviso de "Recargar" en
    cualquier página.
 
@@ -81,9 +83,11 @@ sobre el host en absoluto). Aprobar una actualización, desde el panel, solo
 escribe un archivo de estado (igual de privilegios que guardar cualquier otro
 ajuste; en Docker, ese archivo vive en el mismo volumen del proyecto que ya
 está montado en el mismo path dentro y fuera del contenedor, así que el host
-lo ve sin ningún mecanismo nuevo). Un temporizador de systemd **en el host**,
-corriendo como root cada minuto, es quien de verdad decide si corresponde
-actuar:
+lo ve sin ningún mecanismo nuevo). Quien de verdad decide si corresponde
+actuar es un proceso aparte, con privilegios, que el backend no controla: en
+nativo, un temporizador de systemd **en el host** (root, cada minuto); en
+Docker, el servicio `updater` del stack (que además cuenta con el
+temporizador del host como respaldo):
 
 - **Nativo**: puede además adelantarse al toque con la única orden de sudo
   que existe para esto, sin argumentos, e invoca `upgrade-nativo.sh` en una
@@ -91,29 +95,31 @@ actuar:
   actualización no la mate a mitad de camino—.
 - **Docker**: no hay ningún "adelantar" posible desde el panel (no hay sudo
   hacia el host desde dentro de un contenedor), así que siempre espera al
-  próximo tic. Al no compartir cgroup con ningún servicio que la
-  actualización vaya a reiniciar (el temporizador ya es un proceso del
-  host, ajeno a los contenedores), invoca `upgrade-docker.sh` directo, sin
-  necesitar la unidad aparte que sí hace falta en nativo.
+  próximo tic. El servicio `updater` no ejecuta la actualización él mismo
+  (al reconstruir el stack se recrearía a sí mismo y se cortaría): lanza un
+  contenedor auxiliar desacoplado que invoca `upgrade-docker.sh`. Es
+  el único componente con el socket de Docker completo; el backend no lo
+  tiene. Ver [actualizacion.md](actualizacion.md#actualizar-desde-el-panel-en-instalaciones-docker).
 
 ## Si una programación no arranca a tiempo
 
-El temporizador revisa cada minuto, así que una actualización programada
-debería empezar dentro del minuto de la hora elegida. Si pasan más de 3
-minutos sin que arranque, el panel lo marca como "atrasada" y avisa —no se
-cancela sola, pero deja de mostrar "programada" en silencio para siempre.
-Suele significar que el temporizador está caído: `systemctl status
-squidmanager-autoupdate.timer` (nativo) o `systemctl status
-squidmanager-docker-autoupdate.timer` (Docker) en el servidor.
+Quien la aplica revisa cada minuto (nativo) o cada pocos segundos (Docker), así
+que una actualización programada debería empezar enseguida tras la hora
+elegida. Si pasan más de 3 minutos sin que arranque, el panel lo marca como
+"atrasada" y avisa —no se cancela sola, pero deja de mostrar "programada" en
+silencio para siempre. Suele significar que no está corriendo: `systemctl
+status squidmanager-autoupdate.timer` (nativo) o `docker compose ps updater`
+(Docker) en el servidor. Desde la 1.0.4 el panel lo detecta solo y muestra el
+comando exacto para arreglarlo.
 
 ## Diferencias entre nativo y Docker
 
 | | Nativo | Docker |
 |---|---|---|
 | Comprobar y aprobar desde el panel | Sí | Sí |
-| Demora de "actualizar ahora" | Segundos | Hasta 1 minuto |
-| Quién aplica de verdad | `autoupdate-check.sh` + `upgrade-nativo.sh` | `docker-autoupdate-check.sh` + `upgrade-docker.sh` |
-| Instalado por | `install-nativo.sh` | `install.sh`, y se repara solo en la siguiente corrida de `upgrade-docker.sh` si faltara |
+| Demora de "actualizar ahora" | Segundos | Segundos (hasta 20 s) |
+| Quién aplica de verdad | Temporizador del host: `autoupdate-check.sh` + `upgrade-nativo.sh` | Servicio `updater` del stack (respaldo: temporizador del host): `docker-autoupdate-check.sh` + `upgrade-docker.sh` |
+| Instalado por | `install-nativo.sh` | `docker compose up` (cualquier despliegue); el respaldo del host, por `install.sh` / `upgrade-docker.sh` |
 
 En ambos casos el panel web nunca gana la capacidad de ejecutar algo con
 privilegios de root: solo escribe el mismo archivo de estado que ya escribía

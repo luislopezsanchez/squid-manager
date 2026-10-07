@@ -107,9 +107,15 @@ jobs:
           cd /opt/squid-manager && sudo docker compose ps || true
           sudo docker compose logs --tail=80 || true
 
+  # Si «Actualizar ahora» no funciona desde una instalacion limpia, la version no se publica: es justo lo que
+  # fallo tres veces tras mejorar el proyecto. Corre en paralelo con construir/probar, asi no alarga la espera.
+  actualizacion:
+    name: Actualizacion desde el panel (E2E)
+    uses: ./.github/workflows/update-e2e.yml
+
   publicar:
     name: Etiquetas publicas
-    needs: probar
+    needs: [probar, actualizacion]
     runs-on: ubuntu-latest
     steps:
       - uses: docker/setup-buildx-action@v3

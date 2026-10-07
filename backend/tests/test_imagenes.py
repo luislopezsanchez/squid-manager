@@ -42,7 +42,10 @@ def test_el_flujo_de_publicacion_prueba_antes_de_publicar():
     yaml = pytest.importorskip("yaml")
     wf = yaml.safe_load(_leer(".github/workflows/publicar-imagenes.yml"))
     jobs = wf["jobs"]
-    assert jobs["probar"]["needs"] == "construir" and jobs["publicar"]["needs"] == "probar"
+    assert jobs["probar"]["needs"] == "construir"
+    # publicar exige probar (como siempre) y ademas que la actualizacion desde el panel funcione en limpio
+    assert set(jobs["publicar"]["needs"]) == {"probar", "actualizacion"}
+    assert jobs["actualizacion"]["uses"] == "./.github/workflows/update-e2e.yml"
     assert wf["permissions"]["packages"] == "write"
     assert set(jobs["construir"]["strategy"]["matrix"]["servicio"]) == {"backend", "squid", "frontend"}
 

@@ -235,6 +235,22 @@ cd /opt/squid-manager && sudo -E ./install.sh
 
 ---
 
+## Actualizaciones desde el panel en Docker, detrás de un proxy
+
+El servicio `updater` (el que aplica las actualizaciones aprobadas desde el panel, ver
+[actualizacion.md](actualizacion.md#actualizar-desde-el-panel-en-instalaciones-docker)) hace `git fetch` desde su
+contenedor, que **no hereda el entorno de tu shell**. Si el servidor sale a Internet por un proxy, ponlo en el `.env` del
+proyecto (Compose lo pasa al servicio y al contenedor auxiliar que aplica la actualización):
+
+```bash
+HTTP_PROXY=http://usuario:clave@proxy.empresa:3128
+HTTPS_PROXY=http://usuario:clave@proxy.empresa:3128
+NO_PROXY=localhost,127.0.0.1
+```
+
+y aplica con `docker compose up -d updater`. La construcción de las imágenes (capa 3) sigue usando
+`/root/.docker/config.json`, como antes.
+
 ## Instalación nativa (sin Docker)
 
 La instalación nativa (`install-nativo.sh`, ver [instalacion-nativa.md](instalacion-nativa.md))

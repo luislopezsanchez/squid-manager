@@ -3,6 +3,8 @@
 ```
 squid-manager/
 ├── docker-compose.yml          # Orquestación de contenedores
+├── updater/                    # Servicio que aplica las actualizaciones aprobadas desde el panel (Docker)
+├── tests/e2e/                  # Pruebas de extremo a extremo de «Actualizar ahora» (instalación limpia, Docker y nativo)
 ├── .env.example                # Template de configuración
 ├── README.md                   # Resumen y enlaces a toda la documentación
 ├── LICENSE                     # AGPL-3.0-or-later + términos adicionales (autoría y marca)

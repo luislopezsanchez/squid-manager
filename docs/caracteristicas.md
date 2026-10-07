@@ -27,7 +27,7 @@ detrás de cada una, ver [architecture.md](architecture.md).
 - **Exclusión de dominios sensibles** — Banca, sanidad o apps con *certificate pinning* pueden excluirse del descifrado
 - **Auditoría completa** — Log de todos los cambios: quién, qué, cuándo, con retención automática
 - **Certificado CA** — Generación automática + descarga desde el panel, con instaladores para Windows, macOS e iOS
-- **Backend sin privilegios en los dos modos** — En Docker, el backend ya no monta el socket de Docker directo: habla con él a través de un proxy de socket acotado (`docker-socket-proxy`) que bloquea build/swarm/secretos/plugins, y corre como usuario sin privilegios — igual que en modo nativo
+- **Backend sin privilegios en los dos modos** — En Docker, el backend ya no monta el socket de Docker directo: habla con él a través de un proxy de socket acotado (`docker-socket-proxy`) que bloquea build/swarm/secretos/plugins, y corre como usuario sin privilegios — igual que en modo nativo. Las actualizaciones desde el panel las aplica un servicio aparte (`updater`) que no acepta conexiones y es el único con el socket completo
 
 ## Operación
 - **Aplicar cambios en caliente** — Valida la configuración contra Squid antes de escribirla; recarga (`squid -k reconfigure`) o reinicia solo cuando de verdad hace falta (cambio de puerto)

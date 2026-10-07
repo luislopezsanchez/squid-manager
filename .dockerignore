@@ -1,0 +1,8 @@
+# Solo el servicio `updater` construye con el directorio raiz como contexto (updater/Dockerfile):
+# el resto de servicios usan su propia carpeta. Se deja pasar unicamente lo que esa imagen copia,
+# para no enviar al demonio el repositorio entero (frontend, backups, .git, .env...).
+*
+!docker-autoupdate-check.sh
+!upgrade-docker.sh
+!backup-database.sh
+!updater/entrypoint.sh

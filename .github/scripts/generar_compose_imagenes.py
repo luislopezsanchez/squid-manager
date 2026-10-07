@@ -24,6 +24,9 @@ CABECERA = """# ================================================================
 # ============================================================================
 """
 
+# Desde el encabezado del servicio hasta justo antes de la seccion de volumenes.
+BLOQUE_UPDATER = re.compile(r"  # =+\n  # Updater - .*?(?=# =+\n# Vol)", re.S)
+
 PATRON = re.compile(r"^    build:\n      context: \./(backend|squid|frontend)\n      dockerfile: Dockerfile\n", re.M)
 
 
@@ -37,6 +40,11 @@ def generar() -> str:
                 % m.group(1))
 
     resultado = PATRON.sub(cambiar, texto)
+    # El servicio `updater` aplica actualizaciones con git sobre la carpeta del proyecto: en esta variante no hay
+    # carpeta de proyecto ni .git (se actualiza con `docker compose pull`), asi que no se incluye.
+    resultado, quitados = BLOQUE_UPDATER.subn("", resultado)
+    if quitados != 1 or "updater:" in re.sub(r"#.*", "", resultado):
+        raise SystemExit("No se pudo quitar el servicio updater del compose de imagenes (ver BLOQUE_UPDATER).")
     if sorted(sustituidos) != ["backend", "frontend", "squid"]:
         raise SystemExit(f"No se encontraron los tres bloques build (backend, squid, frontend): {sustituidos}")
     if "build:" in re.sub(r"#.*", "", resultado):

@@ -1,0 +1,78 @@
+# Prueba de extremo a extremo de "Actualizar ahora" desde el panel, en maquinas LIMPIAS.
+#
+# Por que existe: la actualizacion desde la web depende de piezas que viven fuera de la aplicacion
+# (un temporizador del servidor, scripts instalados en /usr/local/lib, el servicio `updater` del stack)
+# y ningun test unitario las ejercita. Asi llegaron a produccion varios fallos en los que, tras una mejora,
+# "Actualizar ahora" dejaba la orden pendiente para siempre en las instalaciones Docker. Cada trabajo hace lo
+# que hace un usuario, desde cero (ver tests/e2e/): instala con el instalador oficial, crea un commit nuevo,
+# pulsa «Actualizar ahora» por la API del panel y exige que se aplique. No usa GitHub como origen: usa un
+# repositorio local, asi que no depende de que el commit este publicado.
+#
+# Cuando corre: a mano, al tocar cualquier pieza del mecanismo de actualizacion, y al publicar una version
+# (lo llama publicar-imagenes.yml antes de publicar las imagenes).
+name: Actualizacion desde el panel (E2E)
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    paths:
+      - "docker-compose.yml"
+      - "updater/**"
+      - "docker-autoupdate-check.sh"
+      - "autoupdate-check.sh"
+      - "upgrade-docker.sh"
+      - "upgrade-nativo.sh"
+      - "install.sh"
+      - "install-nativo.sh"
+      - "backend/app/services/update_service.py"
+      - "backend/app/routes/update.py"
+      - "tests/e2e/**"
+      - ".github/workflows/update-e2e.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docker-compose.yml"
+      - "updater/**"
+      - "docker-autoupdate-check.sh"
+      - "autoupdate-check.sh"
+      - "upgrade-docker.sh"
+      - "upgrade-nativo.sh"
+      - "install.sh"
+      - "install-nativo.sh"
+      - "backend/app/services/update_service.py"
+      - "backend/app/routes/update.py"
+      - "tests/e2e/**"
+      - ".github/workflows/update-e2e.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    name: Docker (instalacion limpia + 2 actualizaciones)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # la prueba empuja este commit a un repositorio local: una copia superficial no se puede empujar
+      - name: Instalacion limpia y actualizaciones desde el panel
+        run: sudo bash tests/e2e/update_docker.sh "$GITHUB_WORKSPACE"
+
+  nativo:
+    name: Nativo (instalacion limpia + 2 actualizaciones)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # la prueba empuja este commit a un repositorio local: una copia superficial no se puede empujar
+      - name: Dejar la maquina limpia (la imagen del runner trae PostgreSQL, nginx y Apache preinstalados)
+        run: |
+          sudo systemctl stop postgresql nginx apache2 2>/dev/null || true
+          sudo apt-get purge -y 'postgresql*' 'nginx*' 'apache2*' >/dev/null 2>&1 || true
+          sudo apt-get autoremove -y >/dev/null 2>&1 || true
+          sudo rm -rf /var/lib/postgresql /etc/postgresql /etc/postgresql-common
+      - name: Instalacion limpia y actualizaciones desde el panel
+        run: sudo bash tests/e2e/update_native.sh "$GITHUB_WORKSPACE"

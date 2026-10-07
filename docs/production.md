@@ -163,9 +163,12 @@ La documentación interactiva (`/docs`, `/openapi.json`) solo se sirve si `DEBUG
 
 ### 6. Docker socket
 
-El backend monta `/var/run/docker.sock` para controlar Squid. Esto da al backend control total sobre Docker. En un entorno de alta seguridad, considera:
-- Usar un proxy Docker Socket restringido (ej: `docker-socket-proxy`)
-- O ejecutar el backend en un namespace aislado
+El backend controla Squid a través de un proxy de socket acotado (`docker-socket-proxy`), no monta el socket directamente. El
+único servicio con el socket completo es `updater` (aplica las actualizaciones aprobadas desde el panel): no publica puertos ni
+acepta conexiones, y el backend no tiene ese acceso. Si en un entorno de alta seguridad no quieres ese privilegio dentro del
+stack, quita el servicio `updater` de `docker-compose.yml` y actualiza con `sudo bash upgrade-docker.sh` (las actualizaciones
+desde el panel dejan de aplicarse). El temporizador del servidor (`squidmanager-docker-autoupdate.timer`) hace lo mismo desde el
+host con el mismo nivel de privilegio.
 
 ### 7. El backend está pensado para un único proceso — no añadir `--workers`
 

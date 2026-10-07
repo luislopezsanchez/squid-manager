@@ -596,26 +596,57 @@ git push --tags
 
 ## Actualizar desde el panel en instalaciones Docker
 
-Desde la versión 1.0.0, una instalación Docker se actualiza desde **Sistema → Actualizaciones** igual que una nativa:
-el panel deja la aprobación en `.update_state.json` (raíz del proyecto) y un temporizador del servidor
-(`squidmanager-docker-autoupdate.timer`, cada minuto) ejecuta `upgrade-docker.sh` sobre la **rama que el checkout
-tenga activa**. La diferencia con nativo es de hasta un minuto de espera.
+Una instalación Docker se actualiza desde **Sistema → Actualizaciones** igual que una nativa. Desde la 1.0.6 lo hace un
+**servicio del propio stack, `updater`** (contenedor `squidmgr-updater`): el panel deja la aprobación en
+`.update_state.json` (raíz del proyecto) y el servicio, que la revisa cada pocos segundos, lanza `upgrade-docker.sh` sobre
+la **rama que el checkout tenga activa**. Como es un servicio más de `docker-compose.yml`, está en **cualquier despliegue
+que ejecute `docker compose up`**: instalado con `install.sh`, hecho a mano con `git clone` + `docker compose up -d --build`
+o montado desde un panel como aaPanel. Ya no depende de nada instalado en el servidor.
 
-**Si tu instalación Docker es anterior a 1.0.0** no trae ese temporizador ni `git` dentro del contenedor: haz la primera
-actualización una vez a mano, desde el directorio del proyecto, y a partir de ahí se actualizará sola desde el panel:
+Cómo trabaja, por si hay que diagnosticarlo:
+
+1. El servicio consume la orden y lanza un contenedor **auxiliar** (`squidmgr-updater-run`) que ejecuta la actualización.
+   No la ejecuta él mismo porque, al reconstruir el stack, Compose recrea el propio servicio `updater` y se cortaría a sí
+   mismo a mitad de camino.
+2. La actualización hace copia de seguridad de la base, trae el código de la rama, reconstruye en **dos fases** (primero todo
+   salvo `updater`, después `updater`: si construir el servicio de actualización falla, el panel y el proxy se actualizan
+   igualmente) y verifica que el panel responda.
+3. El resultado queda en `.update_state.json` y se ve en el panel. Registro del servicio:
+   `docker compose logs updater`; estado: `docker compose ps updater`.
+
+**Copia de respaldo en el servidor.** Las instalaciones hechas con `install.sh` (o actualizadas con `upgrade-docker.sh`)
+conservan además el temporizador de systemd del servidor (`squidmanager-docker-autoupdate.timer`). Es un respaldo: cede el
+turno mientras el servicio `updater` esté vivo (`.updater_alive`) y toma el relevo si deja de estarlo. Un bloqueo
+(`.update.lock`) garantiza que una orden nunca se aplica dos veces.
+
+**Si tu instalación no tiene el servicio `updater`** (es anterior a la 1.0.6, o el servicio no se pudo construir), el panel
+lo avisa en **Sistema → Actualizaciones**, con el comando exacto. Cualquiera de estas dos formas lo deja funcionando:
 
 ```bash
-cd /opt/squid-manager
+cd /ruta/a/squid-manager
+git pull && docker compose up -d --build        # el método de siempre; basta con esto
+# o, con copia de seguridad previa y verificación:
 sudo bash upgrade-docker.sh
 ```
 
-**Si el temporizador no está instalado** (por ejemplo la instalación se desplegó a mano con `git clone` + `docker compose up
--d --build`, o desde un panel como aaPanel, sin pasar por `install.sh`; o se instaló con `install.sh` de una versión anterior
-a la 1.0.5 en un servidor sin instalación nativa previa, donde el instalador fallaba al crear `/usr/local/lib/squidmanager`): «Actualizar ahora» deja la orden guardada y
-nadie la recoge. Es lo mismo: una ejecución de `upgrade-docker.sh` (desde el directorio del proyecto, sea cual sea su ruta)
-lo instala y deja el panel al día.
+Si tenías una orden de actualización pendiente, el servicio nuevo la recoge y la aplica al arrancar (es inocua: ya estás en
+esa versión).
 
-**Cómo lo avisa el panel.** El temporizador anota la hora en `.update_heartbeat` (junto a `.update_state.json`) en cada tic.
-Si **Sistema → Actualizaciones** no ve ese latido, muestra un aviso con el comando exacto para el servidor en lugar de
-dejar la orden esperando. Si ya hubo latidos y dejaron de llegar, el aviso lo dice con la hora del último. Tras actualizar
-con una versión anterior a esta comprobación, el aviso puede verse hasta un minuto, hasta que llega el primer latido.
+**Instalaciones anteriores a la 1.0.0** no traen `git` dentro del contenedor del backend: haz la primera actualización una
+vez a mano (`sudo bash upgrade-docker.sh`) y a partir de ahí se actualizan desde el panel.
+
+**Si el panel dice que no detecta el servicio ni el temporizador.** El servicio anota la hora en `.update_heartbeat` (junto a
+`.update_state.json`) en cada pasada. Si no ve ese latido, el panel muestra un aviso con el comando exacto en lugar de dejar
+la orden esperando; si ya hubo latidos y dejaron de llegar, lo dice con la hora del último. Qué comprobar:
+
+```bash
+docker compose ps updater              # ¿está en marcha y «healthy»?
+docker compose logs --tail 30 updater
+docker compose up -d --build updater   # volver a levantarlo
+```
+
+**Seguridad.** El servicio `updater` monta el socket de Docker completo (necesita construir y recrear contenedores): equivale
+a root en el servidor, **el mismo privilegio que ya tenía el temporizador del servidor**, pero dentro del stack. El backend
+—la parte expuesta a la web— **no** lo tiene: sigue hablando con Docker por el proxy filtrado y solo escribe
+`.update_state.json`, que el servicio trata como dato no confiable. El servicio no publica puertos, sus scripts van horneados
+en su imagen (no se leen del checkout, que puede escribir el usuario del backend) y ningún otro servicio depende de él.

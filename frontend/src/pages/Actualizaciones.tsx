@@ -200,7 +200,7 @@ export default function Actualizaciones() {
   const hayPendiente = request?.approved
   // El temporizador del servidor es quien recoge la orden de «Actualizar ahora»: si no responde, no se aplicaría nunca.
   const sinTemporizador = estado.temporizador?.estado === 'no_detectado' || estado.temporizador?.estado === 'detenido'
-  const unidadTemporizador = estado.es_nativo ? 'squidmanager-autoupdate.timer' : 'squidmanager-docker-autoupdate.timer'
+  const unidadTemporizador = 'squidmanager-autoupdate.timer'  // solo nativo: en Docker se comprueba el servicio `updater`
   const comandoReparar = `cd ${estado.proyecto_dir || '/opt/squid-manager'} && sudo bash ${estado.es_nativo ? 'upgrade-nativo.sh' : 'upgrade-docker.sh'}`
 
   return (
@@ -233,22 +233,28 @@ export default function Actualizaciones() {
       {!estado.es_nativo && (
         <div className="card p-4 mb-6 note-info">
           <p className="text-sm text-ink-2">
-            {traducir("Esta instalación corre en modo Docker: un temporizador del servidor revisa cada minuto si aprobaste una actualización, en vez de aplicarla al instante como en instalación nativa. La diferencia práctica es de hasta un minuto.")}
+            {traducir("Esta instalación corre en modo Docker: un servicio del propio stack (updater) revisa cada pocos segundos si aprobaste una actualización, en vez de aplicarla al instante como en instalación nativa. La diferencia práctica es de unos segundos.")}
           </p>
         </div>
       )}
 
       {sinTemporizador && (
         <div className="card p-4 mb-6 note-warn" role="alert">
-          <p className="text-sm font-semibold text-ink mb-1">{traducir("El temporizador de actualizaciones del servidor no está activo")}</p>
+          <p className="text-sm font-semibold text-ink mb-1">{estado.es_nativo ? traducir("El temporizador de actualizaciones del servidor no está activo") : traducir("El servicio de actualizaciones del servidor no está activo")}</p>
           <p className="text-sm text-ink-2">
             {estado.temporizador.estado === 'detenido'
-              ? traducir("El temporizador del servidor dejó de responder (último aviso: {fecha}). Mientras tanto, «Actualizar ahora» y «Programar» no harán nada. Revísalo con systemctl status {unidad}; si no existe, instálalo ejecutando una vez en el servidor:", { fecha: formatearFecha(estado.temporizador.ultimo_latido), unidad: unidadTemporizador })
-              : traducir("Este servidor no está recogiendo las órdenes de actualización: no se detecta su temporizador (no está instalado, o esta instalación es anterior a esta comprobación). Mientras tanto, «Actualizar ahora» y «Programar» no harán nada. Para dejarlo funcionando, ejecuta una vez en el servidor:")}
+              ? (estado.es_nativo
+                ? traducir("El temporizador del servidor dejó de responder (último aviso: {fecha}). Mientras tanto, «Actualizar ahora» y «Programar» no harán nada. Revísalo con systemctl status {unidad}; si no existe, instálalo ejecutando una vez en el servidor:", { fecha: formatearFecha(estado.temporizador.ultimo_latido), unidad: unidadTemporizador })
+                : traducir("El servicio de actualizaciones del servidor dejó de responder (último aviso: {fecha}). Mientras tanto, «Actualizar ahora» y «Programar» no harán nada. Revísalo con docker compose logs updater; si no existe, créalo ejecutando una vez en el servidor:", { fecha: formatearFecha(estado.temporizador.ultimo_latido) }))
+              : (estado.es_nativo
+                ? traducir("Este servidor no está recogiendo las órdenes de actualización: no se detecta su temporizador (no está instalado, o esta instalación es anterior a esta comprobación). Mientras tanto, «Actualizar ahora» y «Programar» no harán nada. Para dejarlo funcionando, ejecuta una vez en el servidor:")
+                : traducir("Este servidor no está recogiendo las órdenes de actualización: no se detecta el servicio de actualizaciones (updater) ni el temporizador del servidor. Mientras tanto, «Actualizar ahora» y «Programar» no harán nada. Para dejarlo funcionando, ejecuta una vez en el servidor:"))}
           </p>
           <pre className="text-xs bg-black/[.06] rounded-md p-3 mt-2 overflow-x-auto select-all">{comandoReparar}</pre>
           <p className="text-xs text-ink-3 mt-2">
-            {traducir("Esa ejecución instala el temporizador y deja el panel al día; a partir de ahí, las siguientes actualizaciones se aplican desde aquí.")}
+            {estado.es_nativo
+              ? traducir("Esa ejecución instala el temporizador y deja el panel al día; a partir de ahí, las siguientes actualizaciones se aplican desde aquí.")
+              : traducir("Esa ejecución levanta el servicio de actualizaciones y deja el panel al día; a partir de ahí, las siguientes actualizaciones se aplican desde aquí.")}
           </p>
         </div>
       )}
@@ -333,13 +339,17 @@ export default function Actualizaciones() {
               </div>
               {request.atrasada && sinTemporizador ? (
                 <p className="text-xs text-danger mt-2">
-                  {traducir("La orden quedó guardada pero el servidor no la recoge porque su temporizador no está activo (ver el aviso de arriba). Cancélala y ejecuta en el servidor el comando indicado.")}
+                  {estado.es_nativo
+                    ? traducir("La orden quedó guardada pero el servidor no la recoge porque su temporizador no está activo (ver el aviso de arriba). Cancélala y ejecuta en el servidor el comando indicado.")
+                    : traducir("La orden quedó guardada pero el servidor no la recoge porque el servicio de actualizaciones no está activo (ver el aviso de arriba). Cancélala y ejecuta en el servidor el comando indicado.")}
                 </p>
               ) : request.atrasada ? (
                 <p className="text-xs text-danger mt-2">
-                  {traducir("Ya pasó bastante de la hora programada y todavía no se aplicó — el temporizador que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: systemctl status {unidad}).", {
-                    unidad: estado.es_nativo ? 'squidmanager-autoupdate.timer' : 'squidmanager-docker-autoupdate.timer',
-                  })}
+                  {estado.es_nativo
+                    ? traducir("Ya pasó bastante de la hora programada y todavía no se aplicó — el temporizador que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: systemctl status {unidad}).", {
+                      unidad: 'squidmanager-autoupdate.timer',
+                    })
+                    : traducir("Ya pasó bastante de la hora programada y todavía no se aplicó — el servicio que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: docker compose logs updater).")}
                 </p>
               ) : (
                 <p className="text-xs text-ink-3 mt-2">

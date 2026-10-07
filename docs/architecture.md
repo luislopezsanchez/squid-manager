@@ -309,10 +309,13 @@ Por IP y por cuenta (ver [docs/production.md](production.md)). Solo se confía e
 
 Es la diferencia de seguridad más relevante entre los dos modos.
 
-**En Docker**, el backend tiene montado `/var/run/docker.sock` para controlar el
-contenedor (reconfigure, restart, status). Ese socket equivale a root en la
-máquina anfitriona: con él se puede lanzar cualquier contenedor con cualquier
-montaje. En producción conviene restringir sus permisos.
+**En Docker**, el backend habla con el demonio a través de un proxy de socket acotado
+(`docker-socket-proxy`) para controlar el contenedor (reconfigure, restart, status); no monta el socket
+directamente. El socket completo equivale a root en la máquina anfitriona: con él se puede lanzar cualquier
+contenedor con cualquier montaje. Solo lo monta el servicio `updater`, que aplica las actualizaciones aprobadas
+desde el panel (necesita construir y recrear contenedores): no publica puertos, no acepta ninguna conexión,
+sus scripts van en su imagen y el backend solo le deja una orden en un archivo de estado.
+Ver [actualizacion.md](actualizacion.md#actualizar-desde-el-panel-en-instalaciones-docker).
 
 **En nativo**, el panel corre con el usuario `squidmgr` —no root— y un fichero
 de sudoers con tres órdenes literales, sin comodines:

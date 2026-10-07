@@ -193,32 +193,40 @@ Ver [actualizacion.md](actualizacion.md#la-actualización-desde-el-panel-falla-c
 
 ## «Actualizar ahora» no hace nada: «Ya pasó bastante de la hora programada y todavía no se aplicó…»
 
-El panel no aplica la actualización por sí mismo: deja la orden en un archivo y un **temporizador del servidor** la recoge
-cada minuto. Si pasan más de 3 minutos y el panel muestra ese aviso, nadie está recogiendo la orden. Compruébalo en el servidor:
+El panel no aplica la actualización por sí mismo: deja la orden en un archivo y otro proceso la recoge. Si pasan más de 3
+minutos y el panel muestra ese aviso, nadie la está recogiendo.
+
+**Instalación Docker (1.0.6 o posterior):** la recoge el servicio `updater` del stack.
 
 ```bash
-systemctl status squidmanager-docker-autoupdate.timer    # instalación Docker
-systemctl status squidmanager-autoupdate.timer           # instalación nativa
+docker compose ps updater                  # ¿existe y está «healthy»?
+docker compose logs --tail 30 updater
+docker compose up -d --build updater       # levantarlo / reconstruirlo
 ```
 
-- **`Unit ... could not be found`** → el temporizador **no está instalado**. Pasa cuando el servidor se desplegó a mano (por
-  ejemplo `git clone` + `docker compose up -d --build`, o desde un panel como aaPanel) en lugar de con `install.sh` /
-  `install-nativo.sh`; si se instaló con `install.sh` anterior a la 1.0.5 en un servidor Docker nuevo (el instalador fallaba
-  con `install: cannot create regular file '/usr/local/lib/squidmanager/...'`); o es anterior a la 1.0.0. Se arregla ejecutando **una sola vez**, desde la carpeta del proyecto
-  (sea cual sea su ruta), el script de actualización: instala el temporizador y deja el panel al día.
+- Si `updater` **no existe** (instalación anterior a la 1.0.6) o no está en marcha: `cd /ruta/a/squid-manager && git pull &&
+  docker compose up -d --build` (o `sudo bash upgrade-docker.sh`). Si había una orden pendiente, el servicio nuevo la aplica
+  al arrancar.
+- Antes de la 1.0.6 la recogía un temporizador del servidor (`squidmanager-docker-autoupdate.timer`). Si el panel de una
+  versión anterior avisa y `systemctl status` dice `Unit ... could not be found`, es que ese temporizador nunca se instaló
+  (instalación hecha a mano o con un `install.sh` anterior a la 1.0.5 en un servidor sin instalación nativa previa): el
+  mismo comando de arriba lo arregla.
 
-  ```bash
-  cd /ruta/a/squid-manager
-  sudo bash upgrade-docker.sh        # Docker  (nativo: sudo bash upgrade-nativo.sh)
-  ```
+**Instalación nativa:** la recoge un temporizador de systemd.
 
-  Antes de ejecutarlo, **cancela la orden pendiente** en Sistema → Actualizaciones; si no, el temporizador recién
-  instalado la recogerá y lanzará una segunda actualización innecesaria.
-- **`inactive (dead)`** → el temporizador existe pero está parado: `sudo systemctl enable --now <unidad>.timer`.
-- Si es una instalación Docker hecha con `install-imagenes.sh` (sin carpeta del proyecto), no se actualiza desde el panel:
-  `docker compose pull && docker compose up -d`.
+```bash
+systemctl status squidmanager-autoupdate.timer
+sudo systemctl enable --now squidmanager-autoupdate.timer   # si está parado
+cd /ruta/a/squid-manager && sudo bash upgrade-nativo.sh     # si no existe: lo instala
+```
 
-Desde la 1.0.4 el panel lo detecta solo y muestra este mismo comando en **Sistema → Actualizaciones**. Más detalle en
+**Instalación Docker hecha con `install-imagenes.sh`** (sin carpeta del proyecto): no se actualiza desde el panel:
+`docker compose pull && docker compose up -d`.
+
+Antes de ejecutar cualquiera de estos comandos, **cancela la orden pendiente** en Sistema → Actualizaciones si no quieres que
+se aplique en cuanto el mecanismo vuelva a funcionar.
+
+Desde la 1.0.4 el panel lo detecta solo y muestra el comando en **Sistema → Actualizaciones**. Más detalle en
 [actualizacion.md](actualizacion.md#actualizar-desde-el-panel-en-instalaciones-docker).
 
 ---

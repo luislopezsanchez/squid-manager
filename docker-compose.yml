@@ -262,6 +262,61 @@ services:
       retries: 3
       start_period: 10s
 
+  # ============================================
+  # Updater - aplica las actualizaciones aprobadas desde el panel
+  # ============================================
+  # Antes esto lo hacia solo un temporizador de systemd del HOST, que instalaban install.sh y
+  # upgrade-docker.sh: un servidor desplegado a mano (git pull + docker compose, aaPanel...) o con un
+  # instalador que fallo no lo tenia, y "Actualizar ahora" dejaba la orden pendiente para siempre. Como
+  # servicio del stack llega a cualquier despliegue por el solo hecho de hacer `docker compose up`.
+  #
+  # Seguridad (leer antes de tocar): este contenedor monta el socket de Docker COMPLETO (necesita
+  # construir y recrear contenedores), o sea que equivale a root en el host: el mismo privilegio que ya
+  # tenia el temporizador del host, pero encerrado aqui. Lo que lo hace aceptable:
+  #  - el backend (la parte expuesta a la web) NO tiene este acceso: solo escribe .update_state.json,
+  #    un JSON que este servicio trata como dato no confiable (solo lee booleanos y fechas);
+  #  - no publica puertos ni escucha en ninguna red: no acepta ninguna conexion de entrada;
+  #  - sus scripts van horneados en la imagen (updater/Dockerfile), no se leen del checkout que puede
+  #    escribir el usuario del backend;
+  #  - no es dependencia de nada: si falla, el resto del stack sigue igual.
+  updater:
+    build:
+      context: .
+      dockerfile: updater/Dockerfile
+    container_name: squidmgr-updater
+    restart: unless-stopped
+    init: true
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # El proyecto se monta en la MISMA ruta que en el host (igual que en el backend): compose graba
+      # su directorio de trabajo en las etiquetas de los contenedores.
+      PROJECT_DIR: ${PROJECT_DIR:-/opt/squid-manager}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-squid-manager}
+      # Salida a Internet por un proxy corporativo (git fetch), si el host lo define.
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+      http_proxy: ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      no_proxy: ${no_proxy:-}
+    volumes:
+      - ${PROJECT_DIR:-/opt/squid-manager}:${PROJECT_DIR:-/opt/squid-manager}
+      - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    healthcheck:
+      # Sano mientras su ultimo latido tenga menos de 2 minutos.
+      test: ["CMD-SHELL", "[ $$(( $$(date +%s) - $$(cat \"$$PROJECT_DIR/.updater_alive\" 2>/dev/null || echo 0) )) -lt 120 ] || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
 # ============================================
 # Volúmenes persistentes
 # ============================================

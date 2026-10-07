@@ -1533,3 +1533,41 @@ criterio que la comparación del 2026-09-18-:
   (`digest_ha1`/`write_digest_file` en el backend,
   `historical_log_service.py` + `HistoricalLogs.tsx` + tests) -ese
   documento no tiene nada pendiente.
+
+---
+
+## 2026-10-07 — «Actualizar ahora» en Docker deja de depender del servidor (servicio `updater`)
+
+**Qué pasó.** Tres veces seguidas, tras mejorar el proyecto, «Actualizar ahora» dejó la orden pendiente para siempre en
+instalaciones Docker. La causa era siempre la misma: el mecanismo de Docker (el temporizador del host, 2026-09-19) dependía de
+piezas instaladas **fuera** del stack —un temporizador de systemd y scripts en `/usr/local/lib/squidmanager`— que solo creaban
+`install.sh` y `upgrade-docker.sh`, y que podían faltar sin que nada lo detectara:
+
+1. `install.sh` y `upgrade-docker.sh` no creaban `/usr/local/lib/squidmanager` (solo lo hacía `install-nativo.sh`): en un
+   servidor sin instalación nativa previa, `install.sh` abortaba en el paso del temporizador y `upgrade-docker.sh` lo ocultaba
+   (`2>/dev/null || true`). Corregido en la 1.0.5.
+2. Un servidor desplegado a mano (`git clone` + `docker compose`, aaPanel) no pasó nunca por esos scripts: sin temporizador.
+3. El panel no podía saberlo: esperaba 3 minutos y mandaba a revisar una unidad inexistente. Corregido en la 1.0.4 (latido).
+
+La entrada de 2026-09-19 reconoce que esa implementación se hizo «sin verificación en vivo por falta de un entorno Docker».
+Ese es el hueco de fondo: ninguna prueba ejercitaba la cadena completa desde una máquina limpia.
+
+**Decisión.** Se adopta la «opción 2» de aquella evaluación —un contenedor actualizador dedicado—, ahora que sabemos que la
+dependencia del host es la causa de los fallos repetidos: el servicio `updater` del `docker-compose.yml` (ver
+[actualizacion.md](actualizacion.md#actualizar-desde-el-panel-en-instalaciones-docker)). Llega a cualquier despliegue por el
+solo hecho de hacer `docker compose up`. El temporizador del host se conserva como respaldo (cede el turno mientras el servicio
+vive; un bloqueo evita aplicar una orden dos veces).
+
+**Coste de seguridad, aceptado y acotado.** El servicio monta el socket de Docker completo (la opción 2 pedía un acceso
+«acotado», pero construir y recrear contenedores no se puede acotar más): equivale a root, el mismo privilegio que ya tenía el
+temporizador, ahora dentro del stack. El backend sigue sin él (proxy filtrado), el servicio no publica puertos, sus scripts van
+en su imagen y nada depende de él.
+
+**Lo que se aprendió probando en limpio** (cada punto lo encontró una prueba en un servidor real, no un test unitario):
+dentro del contenedor, `git` se negaba a leer el proyecto montado (propiedad del usuario del backend) y la rama salía vacía: se
+actualizaba contra `main` en lugar de la rama del servidor (ahora se hornea `safe.directory` y se falla en vez de adivinar la
+rama); el servicio recreado a mitad de una actualización la daba por muerta (ahora hay un margen y se comprueba el contenedor
+auxiliar); y un `upgrade-docker.sh` de otra versión intentaba instalar el temporizador del host dentro del contenedor.
+
+**Red de seguridad.** `tests/e2e/update_docker.sh` y `tests/e2e/update_native.sh` instalan desde cero con el instalador oficial,
+crean un commit nuevo y exigen que «Actualizar ahora» lo aplique; los ejecuta `.github/workflows/update-e2e.yml`.

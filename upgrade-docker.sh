@@ -192,7 +192,12 @@ echo "=== 3. Configurando el temporizador de actualizaciones ==="
 # corran con el script nuevo, sin tener que volver a correr install.sh a
 # mano. Mismo criterio que install.sh: sobrescribir las mismas unidades con
 # el mismo contenido no rompe nada si ya estaban.
-if [ "$(id -u)" = "0" ]; then
+if [ -n "${SQUIDMGR_IN_UPDATER:-}" ] && [ "${SQUIDMGR_IN_UPDATER}" != "0" ]; then
+    # Corre dentro del servicio `updater` del stack (ver updater/Dockerfile): no hay systemd del host
+    # aqui, y el propio servicio es el que aplica las actualizaciones. Un temporizador del host que ya
+    # existiera sigue funcionando como respaldo y cede el turno mientras el servicio este vivo.
+    echo "OK: la actualizacion la aplica el servicio 'updater' del stack (no hace falta tocar el temporizador del host)."
+elif [ "$(id -u)" = "0" ]; then
     # El directorio solo lo creaba install-nativo.sh: en un servidor que nunca tuvo una instalacion nativa los
     # `install` de abajo fallaban en silencio (antes llevaban `2>/dev/null || true`) y se creaba un temporizador
     # que apuntaba a un script inexistente. Ahora se crea, y un fallo se avisa en vez de ocultarse.
@@ -243,7 +248,22 @@ echo "=== 4. Reconstruyendo y levantando los contenedores ==="
 # --build no es opcional: sin el, Docker reutiliza las imagenes que ya
 # tiene y el codigo nuevo no llega a ejecutarse aunque el git de arriba
 # haya ido bien.
-docker compose up -d --build
+# En dos fases: primero todo salvo el servicio `updater`, y despues este. Un fallo al construir el
+# servicio de actualizacion (red caida, Docker Hub, etc.) no debe impedir actualizar el panel ni el
+# proxy, y como el `updater` se recrea a si mismo, va el ultimo. Si no se pueden listar los servicios
+# (compose antiguo) se hace como siempre: todo junto.
+_SERVICIOS="$(docker compose config --services 2>/dev/null || true)"
+if grep -qx 'updater' <<< "$_SERVICIOS"; then   # sin tuberias hacia `grep -q`: con pipefail daria un falso negativo por SIGPIPE
+    _PRINCIPALES="$(grep -vx 'updater' <<< "$_SERVICIOS" | tr '\n' ' ')"
+    # shellcheck disable=SC2086
+    docker compose up -d --build $_PRINCIPALES
+    if ! docker compose up -d --build updater; then
+        echo "AVISO: no se pudo construir/levantar el servicio de actualizacion (updater)."
+        echo "       El panel y el proxy SI se actualizaron. Reintenta: docker compose up -d --build updater"
+    fi
+else
+    docker compose up -d --build
+fi
 
 echo
 echo "=== 5. Reconstruyendo los indices de la base ==="
@@ -294,6 +314,14 @@ for _ in $(seq 1 20); do
 done
 
 echo
+if grep -qx 'updater' <<< "$_SERVICIOS"; then
+    _EN_MARCHA="$(docker compose ps --status running --services 2>/dev/null || true)"
+    if grep -qx 'updater' <<< "$_EN_MARCHA"; then
+        echo "OK: el servicio de actualizacion (updater) esta en marcha."
+    else
+        echo "AVISO: el servicio de actualizacion (updater) no esta en marcha: docker compose logs updater"
+    fi
+fi
 if [ -n "$_HEALTH" ]; then
     echo "OK: el backend responde -> $_HEALTH"
     echo

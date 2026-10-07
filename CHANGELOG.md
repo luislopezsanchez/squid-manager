@@ -5,6 +5,33 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.6] - 2026-10-07
+
+### Añadido
+
+- **«Actualizar ahora» en Docker deja de depender de lo que haya instalado en el servidor: nuevo servicio `updater` en el
+  `docker-compose.yml`.** Los últimos fallos tenían la misma raíz: el mecanismo dependía de un temporizador de systemd y de
+  scripts en `/usr/local/lib/squidmanager` que solo creaban `install.sh` y `upgrade-docker.sh`, y que podían faltar sin que nada
+  lo detectara (instalaciones hechas a mano o desde aaPanel, o con un instalador que fallaba). El servicio `updater` (contenedor
+  `squidmgr-updater`) hace el mismo trabajo como un servicio más del stack, así que está en **cualquier despliegue que ejecute
+  `docker compose up`**. La actualización la ejecuta un contenedor auxiliar desacoplado (el servicio se recrea a mitad de camino
+  al reconstruir el stack), `upgrade-docker.sh` reconstruye en dos fases (si el servicio de actualización no se puede construir,
+  el panel y el proxy se actualizan igualmente) y el temporizador del servidor se conserva como respaldo: cede el turno mientras
+  el servicio esté vivo, toma el relevo si no, y un bloqueo evita aplicar una orden dos veces. Quien tenga una instalación Docker
+  sin él solo necesita `git pull && docker compose up -d --build` (o `sudo bash upgrade-docker.sh`); el panel lo avisa con el
+  comando exacto. Seguridad: el servicio monta el socket de Docker completo (mismo privilegio que ya tenía el temporizador del
+  servidor); el backend no lo tiene, el servicio no publica puertos y sus scripts van dentro de su imagen. Ver
+  `docs/actualizacion.md`, `docs/production.md` y `docs/project-log.md`.
+- **Pruebas de extremo a extremo de la actualización desde el panel** (`tests/e2e/update_docker.sh`, `update_native.sh` y el
+  flujo `.github/workflows/update-e2e.yml`): instalan desde cero con el instalador oficial en una máquina limpia, crean un commit
+  nuevo y exigen que «Actualizar ahora» lo aplique (en Docker, además, uno que cambia la imagen del propio servicio). Es la
+  prueba que habría detectado los fallos anteriores.
+
+### Cambiado
+
+- `install.sh`: el temporizador del servidor pasa a ser un respaldo cuya instalación ya no puede abortar el instalador.
+- El panel (Sistema → Actualizaciones) habla del servicio de actualizaciones en Docker, no del temporizador.
+
 ## [1.0.5] - 2026-10-07
 
 ### Corregido
