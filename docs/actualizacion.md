@@ -608,3 +608,13 @@ actualización una vez a mano, desde el directorio del proyecto, y a partir de a
 cd /opt/squid-manager
 sudo bash upgrade-docker.sh
 ```
+
+**Si la instalación se desplegó a mano** (por ejemplo con `git clone` + `docker compose up -d --build`, o desde un panel
+como aaPanel, sin pasar por `install.sh`), el temporizador **nunca se instaló**: «Actualizar ahora» deja la orden guardada y
+nadie la recoge. Es lo mismo: una ejecución de `upgrade-docker.sh` (desde el directorio del proyecto, sea cual sea su ruta)
+lo instala y deja el panel al día.
+
+**Cómo lo avisa el panel.** El temporizador anota la hora en `.update_heartbeat` (junto a `.update_state.json`) en cada tic.
+Si **Sistema → Actualizaciones** no ve ese latido, muestra un aviso con el comando exacto para el servidor en lugar de
+dejar la orden esperando. Si ya hubo latidos y dejaron de llegar, el aviso lo dice con la hora del último. Tras actualizar
+con una versión anterior a esta comprobación, el aviso puede verse hasta un minuto, hasta que llega el primer latido.

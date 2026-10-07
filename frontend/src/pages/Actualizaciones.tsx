@@ -198,6 +198,10 @@ export default function Actualizaciones() {
 
   const { check, request, apply } = estado
   const hayPendiente = request?.approved
+  // El temporizador del servidor es quien recoge la orden de «Actualizar ahora»: si no responde, no se aplicaría nunca.
+  const sinTemporizador = estado.temporizador?.estado === 'no_detectado' || estado.temporizador?.estado === 'detenido'
+  const unidadTemporizador = estado.es_nativo ? 'squidmanager-autoupdate.timer' : 'squidmanager-docker-autoupdate.timer'
+  const comandoReparar = `cd ${estado.proyecto_dir || '/opt/squid-manager'} && sudo bash ${estado.es_nativo ? 'upgrade-nativo.sh' : 'upgrade-docker.sh'}`
 
   return (
     <div className="p-6 md:p-7">
@@ -230,6 +234,21 @@ export default function Actualizaciones() {
         <div className="card p-4 mb-6 note-info">
           <p className="text-sm text-ink-2">
             {traducir("Esta instalación corre en modo Docker: un temporizador del servidor revisa cada minuto si aprobaste una actualización, en vez de aplicarla al instante como en instalación nativa. La diferencia práctica es de hasta un minuto.")}
+          </p>
+        </div>
+      )}
+
+      {sinTemporizador && (
+        <div className="card p-4 mb-6 note-warn" role="alert">
+          <p className="text-sm font-semibold text-ink mb-1">{traducir("El temporizador de actualizaciones del servidor no está activo")}</p>
+          <p className="text-sm text-ink-2">
+            {estado.temporizador.estado === 'detenido'
+              ? traducir("El temporizador del servidor dejó de responder (último aviso: {fecha}). Mientras tanto, «Actualizar ahora» y «Programar» no harán nada. Revísalo con systemctl status {unidad}; si no existe, instálalo ejecutando una vez en el servidor:", { fecha: formatearFecha(estado.temporizador.ultimo_latido), unidad: unidadTemporizador })
+              : traducir("Este servidor no está recogiendo las órdenes de actualización: no se detecta su temporizador (no está instalado, o esta instalación es anterior a esta comprobación). Mientras tanto, «Actualizar ahora» y «Programar» no harán nada. Para dejarlo funcionando, ejecuta una vez en el servidor:")}
+          </p>
+          <pre className="text-xs bg-black/[.06] rounded-md p-3 mt-2 overflow-x-auto select-all">{comandoReparar}</pre>
+          <p className="text-xs text-ink-3 mt-2">
+            {traducir("Esa ejecución instala el temporizador y deja el panel al día; a partir de ahí, las siguientes actualizaciones se aplican desde aquí.")}
           </p>
         </div>
       )}
@@ -312,7 +331,11 @@ export default function Actualizaciones() {
                 </p>
                 <button onClick={handleCancelar} className="btn btn-ghost text-sm">{traducir("Cancelar")}</button>
               </div>
-              {request.atrasada ? (
+              {request.atrasada && sinTemporizador ? (
+                <p className="text-xs text-danger mt-2">
+                  {traducir("La orden quedó guardada pero el servidor no la recoge porque su temporizador no está activo (ver el aviso de arriba). Cancélala y ejecuta en el servidor el comando indicado.")}
+                </p>
+              ) : request.atrasada ? (
                 <p className="text-xs text-danger mt-2">
                   {traducir("Ya pasó bastante de la hora programada y todavía no se aplicó — el temporizador que la aplica puede estar caído. Cancelá y avisá a quien administra el servidor si sigue así (revisar: systemctl status {unidad}).", {
                     unidad: estado.es_nativo ? 'squidmanager-autoupdate.timer' : 'squidmanager-docker-autoupdate.timer',

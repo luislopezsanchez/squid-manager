@@ -40,7 +40,7 @@ import os
 import subprocess
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -243,6 +243,32 @@ def _unidad_en_curso() -> bool:
 _MARGEN_DEMORA_SEGUNDOS = 3 * 60
 
 
+# El temporizador del host anota la hora en este archivo en CADA tic (cada minuto, ver
+# docker-autoupdate-check.sh y autoupdate-check.sh). El panel lo lee para saber si hay alguien
+# recogiendo las órdenes: sin esto, «Actualizar ahora» en un servidor sin temporizador (p. ej.
+# desplegado a mano con `git pull` + `docker compose`, sin install.sh) esperaba en silencio.
+_MARGEN_LATIDO_SEGUNDOS = 3 * 60
+
+
+def _ruta_latido() -> Path:
+    return ESTADO_PATH.parent / ".update_heartbeat"
+
+
+def estado_temporizador() -> dict:
+    """Estado del temporizador del host: `activo`, `detenido` (hubo latidos pero dejaron de
+    llegar), `no_detectado` (nunca hubo, o el archivo no se puede leer) o `no_aplica` (Docker con
+    imágenes ya construidas: se actualiza descargando imágenes, no con este mecanismo)."""
+    if instalacion_por_imagenes():
+        return {"estado": "no_aplica", "ultimo_latido": None}
+    try:
+        ultimo = int(_ruta_latido().read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return {"estado": "no_detectado", "ultimo_latido": None}
+    ultimo_iso = _iso(datetime.fromtimestamp(ultimo, timezone.utc).replace(tzinfo=None))
+    vivo = time.time() - ultimo <= _MARGEN_LATIDO_SEGUNDOS
+    return {"estado": "activo" if vivo else "detenido", "ultimo_latido": ultimo_iso}
+
+
 def estado_actual() -> dict:
     estado = leer_estado()
     if estado["apply"]["status"] == "running" and not _unidad_en_curso():
@@ -262,6 +288,9 @@ def estado_actual() -> dict:
     else:
         estado["request"]["atrasada"] = False
 
+    estado["temporizador"] = estado_temporizador()
+    # Dónde está el proyecto en el servidor: el panel lo usa para mostrar el comando exacto de reparación.
+    estado["proyecto_dir"] = str(_raiz_proyecto())
     return estado
 
 

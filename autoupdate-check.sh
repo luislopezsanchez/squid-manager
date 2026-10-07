@@ -54,6 +54,13 @@ LOG_TAG="squidmanager-autoupdate"
 
 log() { logger -t "$LOG_TAG" "$1"; }
 
+# Latido: en CADA tic, antes de cualquier salida anticipada, se anota la hora en $INSTALL_DIR/backend/.update_heartbeat. El panel lo lee para saber
+# si ESTE temporizador esta vivo: sin esto, "Actualizar ahora" deja una orden que nadie recoge y desde el panel no hay
+# forma de verlo (un servidor desplegado a mano, sin install-nativo.sh ni upgrade-nativo.sh, nunca tuvo el temporizador). Si no se puede escribir,
+# no pasa nada: nunca debe impedir aplicar una actualizacion.
+LATIDO="$INSTALL_DIR/backend/.update_heartbeat"
+{ date -u +%s > "$LATIDO.tmp" && chmod 644 "$LATIDO.tmp" && mv -f "$LATIDO.tmp" "$LATIDO"; } 2>/dev/null || true
+
 [ -f "$ESTADO" ] || exit 0  # nada corrio nunca una comprobacion: nada que hacer
 
 PY="$INSTALL_DIR/backend/.venv/bin/python3"

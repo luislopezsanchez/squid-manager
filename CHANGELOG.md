@@ -5,6 +5,19 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.4] - 2026-10-07
+
+### Corregido
+
+- **«Actualizar ahora» no hacía nada en una instalación Docker desplegada a mano, y el panel no lo explicaba.** Si el servidor
+  se instaló con `git clone` + `docker compose` (o desde un panel como aaPanel) en vez de con `install.sh`, el temporizador del
+  host que recoge la orden de actualización nunca existió: el panel dejaba la orden aprobada, esperaba 3 minutos y entonces
+  mandaba a revisar `systemctl status squidmanager-docker-autoupdate.timer`, una unidad que ni existía. Ahora el temporizador
+  (Docker y nativo) anota la hora en `.update_heartbeat` en cada tic, y **Sistema → Actualizaciones** avisa de inmediato
+  cuando no lo detecta (o dejó de responder), con el comando exacto para dejarlo funcionando en ese servidor
+  (`sudo bash upgrade-docker.sh` o `upgrade-nativo.sh`, desde la carpeta del proyecto) y un mensaje claro si hay una orden
+  atrasada. Documentado en `docs/actualizacion.md`.
+
 ## [1.0.3] - 2026-10-07
 
 ### Añadido
