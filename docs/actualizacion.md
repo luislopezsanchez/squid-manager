@@ -609,8 +609,9 @@ cd /opt/squid-manager
 sudo bash upgrade-docker.sh
 ```
 
-**Si la instalación se desplegó a mano** (por ejemplo con `git clone` + `docker compose up -d --build`, o desde un panel
-como aaPanel, sin pasar por `install.sh`), el temporizador **nunca se instaló**: «Actualizar ahora» deja la orden guardada y
+**Si el temporizador no está instalado** (por ejemplo la instalación se desplegó a mano con `git clone` + `docker compose up
+-d --build`, o desde un panel como aaPanel, sin pasar por `install.sh`; o se instaló con `install.sh` de una versión anterior
+a la 1.0.5 en un servidor sin instalación nativa previa, donde el instalador fallaba al crear `/usr/local/lib/squidmanager`): «Actualizar ahora» deja la orden guardada y
 nadie la recoge. Es lo mismo: una ejecución de `upgrade-docker.sh` (desde el directorio del proyecto, sea cual sea su ruta)
 lo instala y deja el panel al día.
 

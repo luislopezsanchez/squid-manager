@@ -328,6 +328,10 @@ ok "Contenedores desplegados"
 # los contenedores que reinicia, así que puede aplicar la actualización
 # directo y en primer plano sin arriesgarse a cortarse a sí misma.
 info "Configurando el temporizador de actualizaciones..."
+# El directorio solo lo creaba install-nativo.sh: en un servidor que nunca tuvo una instalacion nativa
+# el `install` de abajo fallaba ("No such file or directory"), `set -e` cortaba el instalador justo aqui
+# y el temporizador no se instalaba nunca, asi que "Actualizar ahora" desde el panel no aplicaba nada.
+install -d -o root -g root -m 755 /usr/local/lib/squidmanager
 install -o root -g root -m 755 "$INSTALL_DIR/docker-autoupdate-check.sh" \
     /usr/local/lib/squidmanager/docker-autoupdate-check.sh
 # Copia de upgrade-docker.sh propiedad de root: el temporizador ejecuta esa y no la del checkout.

@@ -191,6 +191,38 @@ sin ningún mensaje de error.
 Ver [actualizacion.md](actualizacion.md#la-actualización-desde-el-panel-falla-con-fatal-home-not-set)
 — afecta a instalaciones nativas o Docker entre las versiones 0.24.2 y 0.24.7.
 
+## «Actualizar ahora» no hace nada: «Ya pasó bastante de la hora programada y todavía no se aplicó…»
+
+El panel no aplica la actualización por sí mismo: deja la orden en un archivo y un **temporizador del servidor** la recoge
+cada minuto. Si pasan más de 3 minutos y el panel muestra ese aviso, nadie está recogiendo la orden. Compruébalo en el servidor:
+
+```bash
+systemctl status squidmanager-docker-autoupdate.timer    # instalación Docker
+systemctl status squidmanager-autoupdate.timer           # instalación nativa
+```
+
+- **`Unit ... could not be found`** → el temporizador **no está instalado**. Pasa cuando el servidor se desplegó a mano (por
+  ejemplo `git clone` + `docker compose up -d --build`, o desde un panel como aaPanel) en lugar de con `install.sh` /
+  `install-nativo.sh`; si se instaló con `install.sh` anterior a la 1.0.5 en un servidor Docker nuevo (el instalador fallaba
+  con `install: cannot create regular file '/usr/local/lib/squidmanager/...'`); o es anterior a la 1.0.0. Se arregla ejecutando **una sola vez**, desde la carpeta del proyecto
+  (sea cual sea su ruta), el script de actualización: instala el temporizador y deja el panel al día.
+
+  ```bash
+  cd /ruta/a/squid-manager
+  sudo bash upgrade-docker.sh        # Docker  (nativo: sudo bash upgrade-nativo.sh)
+  ```
+
+  Antes de ejecutarlo, **cancela la orden pendiente** en Sistema → Actualizaciones; si no, el temporizador recién
+  instalado la recogerá y lanzará una segunda actualización innecesaria.
+- **`inactive (dead)`** → el temporizador existe pero está parado: `sudo systemctl enable --now <unidad>.timer`.
+- Si es una instalación Docker hecha con `install-imagenes.sh` (sin carpeta del proyecto), no se actualiza desde el panel:
+  `docker compose pull && docker compose up -d`.
+
+Desde la 1.0.4 el panel lo detecta solo y muestra este mismo comando en **Sistema → Actualizaciones**. Más detalle en
+[actualizacion.md](actualizacion.md#actualizar-desde-el-panel-en-instalaciones-docker).
+
+---
+
 ## Un "Aplicar cambios" corta el servicio con una ACL grande
 
 Corregido — ver la entrada correspondiente en [CHANGELOG.md](../CHANGELOG.md).

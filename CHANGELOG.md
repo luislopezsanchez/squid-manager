@@ -5,6 +5,20 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.5] - 2026-10-07
+
+### Corregido
+
+- **Una instalación Docker nueva no instalaba nunca el temporizador de actualizaciones, y «Actualizar ahora» no aplicaba nada.**
+  El directorio `/usr/local/lib/squidmanager` solo lo creaba `install-nativo.sh`. En un servidor que nunca tuvo una instalación
+  nativa, `install.sh` fallaba en el paso del temporizador (`install: cannot create regular file
+  '/usr/local/lib/squidmanager/docker-autoupdate-check.sh': No such file or directory`), cortaba la instalación justo después de
+  levantar los contenedores y no creaba el temporizador; y `upgrade-docker.sh` ocultaba ese mismo error (`2>/dev/null || true`)
+  y dejaba un temporizador apuntando a un script inexistente. Ahora ambos crean el directorio, y `upgrade-docker.sh` avisa si algo
+  falla en vez de ocultarlo. **Quien tenga una instalación Docker en esa situación** (el panel de la 1.0.4 en adelante lo avisa
+  en Sistema → Actualizaciones) debe ejecutar una vez `sudo bash upgrade-docker.sh` desde la carpeta del proyecto; a partir de ahí
+  las actualizaciones se aplican desde el panel. Documentado en `docs/actualizacion.md` y `docs/solucion-problemas.md`.
+
 ## [1.0.4] - 2026-10-07
 
 ### Corregido

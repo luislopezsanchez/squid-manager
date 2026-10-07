@@ -193,12 +193,19 @@ echo "=== 3. Configurando el temporizador de actualizaciones ==="
 # mano. Mismo criterio que install.sh: sobrescribir las mismas unidades con
 # el mismo contenido no rompe nada si ya estaban.
 if [ "$(id -u)" = "0" ]; then
+    # El directorio solo lo creaba install-nativo.sh: en un servidor que nunca tuvo una instalacion nativa los
+    # `install` de abajo fallaban en silencio (antes llevaban `2>/dev/null || true`) y se creaba un temporizador
+    # que apuntaba a un script inexistente. Ahora se crea, y un fallo se avisa en vez de ocultarse.
+    install -d -o root -g root -m 755 /usr/local/lib/squidmanager \
+        || echo "AVISO: no se pudo crear /usr/local/lib/squidmanager; el temporizador de actualizaciones no va a funcionar."
     install -o root -g root -m 755 "$PROJECT_DIR/docker-autoupdate-check.sh" \
-        /usr/local/lib/squidmanager/docker-autoupdate-check.sh 2>/dev/null || true
+        /usr/local/lib/squidmanager/docker-autoupdate-check.sh \
+        || echo "AVISO: no se pudo instalar docker-autoupdate-check.sh; el temporizador de actualizaciones no va a funcionar."
     # Copia de ESTE script propiedad de root: el temporizador (root) ejecuta esa copia y no la del checkout,
     # que en Docker tiene un directorio del que es dueño el usuario del backend.
     install -o root -g root -m 755 "$PROJECT_DIR/upgrade-docker.sh" \
-        /usr/local/lib/squidmanager/upgrade-docker.sh 2>/dev/null || true
+        /usr/local/lib/squidmanager/upgrade-docker.sh \
+        || echo "AVISO: no se pudo instalar la copia de upgrade-docker.sh del temporizador."
 
     cat > /etc/systemd/system/squidmanager-docker-autoupdate.service <<EOF
 [Unit]
