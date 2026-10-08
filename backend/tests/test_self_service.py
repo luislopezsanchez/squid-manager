@@ -9,6 +9,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
+from fastapi import BackgroundTasks
 from fastapi import HTTPException
 
 from app.services import auth_service as a
@@ -219,13 +220,17 @@ def test_con_el_modulo_apagado_el_login_no_prueba_usuarios_del_proxy(monkeypatch
     monkeypatch.setattr(auth_routes.modules_service, "is_enabled", lambda *_a, **_k: False)
     llamadas = []
     monkeypatch.setattr(auth_routes, "authenticate_proxy_user", lambda *a, **k: llamadas.append(a))
+    monkeypatch.setattr(auth_routes.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(auth_routes, "queue_notification", lambda *a, **k: None)
 
     class _DB:
         def add(self, _o): pass
         def commit(self): pass
 
     with pytest.raises(HTTPException) as e:
-        auth_routes.login(form_data=SimpleNamespace(username="ana", password="x"), db=_DB())
+        auth_routes.login(request=SimpleNamespace(client=SimpleNamespace(host="198.51.100.1"), headers={}),
+                          background_tasks=BackgroundTasks(),
+                          form_data=SimpleNamespace(username="ana", password="x"), db=_DB())
     assert e.value.status_code == 401
     assert llamadas == []
 

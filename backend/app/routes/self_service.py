@@ -9,7 +9,7 @@ import calendar
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -20,7 +20,7 @@ from app.models.user_group import UserGroup, UserGroupMember
 from app.routes.proxy_users import (
     _generate_digest_ha1, _generate_htpasswd_hash, _revocar, _sync_passwd,
 )
-from app.services.auth_service import get_current_proxy_user, get_password_hash, verify_password
+from app.services.auth_service import get_current_proxy_user, get_password_hash, verify_password, validar_largo_bcrypt
 from app.services import modules_service, rollup_service
 from app.services.quota_service import proximo_reinicio
 from app.services.squid_service import realm_actual
@@ -48,6 +48,7 @@ class SelfMeResponse(BaseModel):
 class SelfPasswordChange(BaseModel):
     current_password: str = Field(..., min_length=1, max_length=100)
     new_password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=100)
+    _largo = field_validator("new_password")(validar_largo_bcrypt)
 
 
 @router.get("/me", response_model=SelfMeResponse)

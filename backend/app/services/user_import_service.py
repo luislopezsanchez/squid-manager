@@ -145,7 +145,10 @@ def parse_archivo(nombre: str, datos: bytes) -> tuple[list[dict], list[dict]]:
         )
     cuerpo = filas[1:]
     if len(cuerpo) > MAX_FILAS:
-        raise ValueError(f"Demasiadas filas ({len(cuerpo)}): el máximo es {MAX_FILAS} por archivo.")
+        raise ValueError(
+            f"Demasiadas filas ({len(cuerpo)}): el máximo es {MAX_FILAS} por archivo. "
+            f"Divide el archivo en partes de hasta {MAX_FILAS} usuarios e impórtalas una tras otra."
+        )
 
     validas, errores, vistos = [], [], set()
     for i, fila in enumerate(cuerpo, start=2):
@@ -162,6 +165,9 @@ def parse_archivo(nombre: str, datos: bytes) -> tuple[list[dict], list[dict]]:
             errores.append({"fila": i, "usuario": usuario, "motivo": "Usuario repetido en el archivo."})
             continue
         password = d.get("password", "")
+        if password and len(password.encode("utf-8")) > 72:
+            errores.append({"fila": i, "usuario": usuario, "motivo": "La contraseña supera los 72 bytes (límite de bcrypt)."})
+            continue
         if password and not (8 <= len(password) <= 100):
             errores.append({"fila": i, "usuario": usuario, "motivo": "La contraseña debe tener entre 8 y 100 caracteres (déjala vacía para generar una)."})
             continue

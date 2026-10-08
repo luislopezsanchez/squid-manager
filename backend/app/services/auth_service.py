@@ -27,6 +27,22 @@ TOKEN_TYPE_PROXY_USER = "proxy_user"
 _BCRYPT_MAX_BYTES = 72
 
 
+def validar_largo_bcrypt(password: str | None) -> str | None:
+    """Rechaza contraseñas que bcrypt truncaría en silencio (más de 72 bytes).
+
+    Los caracteres con acento ocupan 2 bytes o más, así que 72 bytes son menos de 72 caracteres.
+    Sin este rechazo, dos contraseñas iguales en los primeros 72 bytes eran la misma contraseña
+    y quien elegía una frase larga creía tener más seguridad de la real. Se usa en los esquemas
+    de entrada; las contraseñas ya guardadas siguen funcionando como siempre.
+    """
+    if password is not None and len(password.encode("utf-8")) > _BCRYPT_MAX_BYTES:
+        raise ValueError(
+            f"La contraseña no puede superar {_BCRYPT_MAX_BYTES} bytes "
+            "(los caracteres con acento ocupan más de uno). Usa una más corta."
+        )
+    return password
+
+
 def _prepare(password: str) -> bytes:
     return password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
 

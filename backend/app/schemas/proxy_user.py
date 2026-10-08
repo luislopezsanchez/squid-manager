@@ -1,7 +1,9 @@
 """Schemas de usuarios del proxy."""
 
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.services.auth_service import validar_largo_bcrypt
 
 
 class ProxyUserCreate(BaseModel):
@@ -14,6 +16,8 @@ class ProxyUserCreate(BaseModel):
     enabled: bool = True
     expires_at: datetime | None = None
 
+    _largo = field_validator("password")(validar_largo_bcrypt)
+
 
 class ProxyUserUpdate(BaseModel):
     password: str | None = Field(None, min_length=8, max_length=100)
@@ -21,6 +25,8 @@ class ProxyUserUpdate(BaseModel):
     email: str | None = Field(None, max_length=255)
     enabled: bool | None = None
     expires_at: datetime | None = None
+
+    _largo = field_validator("password")(validar_largo_bcrypt)
 
 
 class ProxyUserResponse(BaseModel):

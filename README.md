@@ -184,7 +184,7 @@ propio proceso de actualización: [docs/actualizacion.md](docs/actualizacion.md)
 | **Producción** | [Guía de despliegue en producción](docs/production.md) |
 | **Problemas** | [Solución de problemas](docs/solucion-problemas.md) |
 | **Proyecto** | [CHANGELOG](CHANGELOG.md) · [Cómo contribuir](CONTRIBUTING.md) · [Bitácora](docs/project-log.md) |
-| **Backups de referencia** | [backups/](backups/README.md) — despliegue completo listo para restaurar en Proxmox |
+| **Backups de referencia** | [backups/](backups/README.md) — imagen LXC retirada (contenía claves reales); usa el instalador o las imágenes Docker |
 
 ---
 

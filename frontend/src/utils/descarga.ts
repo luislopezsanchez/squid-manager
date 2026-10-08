@@ -17,7 +17,7 @@ export async function descargarArchivo(
   url: string,
   nombre: string,
   onProgreso?: (bytesRecibidos: number) => void,
-): Promise<void> {
+): Promise<boolean> {
   const r = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } })
   if (!r.ok) {
     let motivo = `HTTP ${r.status}`
@@ -51,6 +51,8 @@ export async function descargarArchivo(
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(u), 10_000)
+  // El servidor marca las exportaciones que no incluyen todo lo pedido (p. ej. más de 50 000 registros).
+  return r.headers.get('X-Export-Parcial') === 'true'
 }
 
 /** Estado de una descarga en curso, para deshabilitar el botón y mostrar el avance. */
@@ -64,8 +66,12 @@ export function useDescarga(showToast: (msg: string, tipo?: 'success' | 'error' 
     setBytes(0)
     showToast(traducir('Preparando la descarga... los archivos grandes tardan unos segundos.'), 'info')
     try {
-      await descargarArchivo(url, nombre, setBytes)
-      showToast(textoOk ?? traducir('Descarga lista'), 'success')
+      const parcial = await descargarArchivo(url, nombre, setBytes)
+      if (parcial) {
+        showToast(traducir('El archivo es PARCIAL: hay más registros de los que caben en una exportación (máx. 50 000). Acota con filtros para obtener el resto.'), 'warning')
+      } else {
+        showToast(textoOk ?? traducir('Descarga lista'), 'success')
+      }
     } catch (e: any) {
       showToast(`${traducir('Error en la descarga')}: ${e.message}`, 'error')
     } finally {

@@ -27,8 +27,13 @@ reutiliza (`05-003` = tercer hallazgo de seguridad de la historia del proyecto).
 | 05-006 | Mayor | 5 | Imagen de Proxmox de descarga pública con claves reales de una instalación (`SECRET_KEY`, `DB_PASS`) | `backups/README.md:3-9,25`; `curl -sI` → HTTP 200, 2,99 GB | 2026-10-08 | 2026-10-08 — Probable: contenido no descargado; **Crítico si la instalación de origen sigue activa** |
 | 05-007 | Menor | 5 | El servicio `updater` monta el socket de Docker completo (pendiente de aceptación expresa) | `docker-compose.yml` (servicio `updater`); test `test_solo_el_updater_monta_el_socket_de_docker_completo` | 2026-10-08 | 2026-10-08 |
 | 08-002 | Menor | 8 | IP pública y privada reales en informes y CHANGELOG públicos | `docs/audits/2026-09-14-audit-full.md:135-140`, `CHANGELOG.md:700,711`, `backups/README.md:25` | 2026-10-08 | 2026-10-08 |
-| 13-002 | Menor | 13 | Versiones 1.0.4, 1.0.5 y 1.0.6 sin etiqueta git | `git tag` → última `v1.0.3`; `docs/actualizacion.md:582-591` | 2026-10-08 | 2026-10-08 |
+| 13-002 | Menor | 13 | Versiones 1.0.4 a 1.0.9 sin etiqueta git | `git tag` → última `v1.0.3`; `docs/actualizacion.md:582-591` | 2026-10-08 | 2026-10-08 |
 | 03-002 | Menor | 3 | Cinco ficheros por encima de 1000 líneas | `Dashboard.tsx` 1602, `metrics_service.py` 1367, `ProxyUsers.tsx` 1221, `PanelCentral.tsx` 1211, `ai_service.py` 1137 | 2026-10-08 | 2026-10-08 |
+| 01-004 | Menor | 1 | Ayuda integrada sin ACLs en bloque ni portal de autoservicio | `frontend/src/content/docsAcls.ts` | 2026-10-08 | 2026-10-08 |
+| 04-003 | Menor | 4 | Cobertura 55 % (23 pruebas añadidas en 1.0.10; sigue abierto); backup 13 %, proxy_users 20 %, ldap 27 %, acls 35 % | `pytest --cov=app` | 2026-10-08 | 2026-10-08 |
+| 09-002 | Menor | 9 | Las pantallas descargan todos los usuarios para filtrar en el navegador | `frontend/src/api/client.ts` (`listarTodo`) | 2026-10-08 | 2026-10-08 |
+| 10-005 | Menor | 10 | Notificaciones sin cola ni «circuit breaker» | `notification_service.py` (`notify`) | 2026-10-08 | 2026-10-08 |
+| 13-003 | Menor | 13 | CI sin linter de Python (24 imports sin uso) | `pyflakes backend/app` | 2026-10-08 | 2026-10-08 |
 
 ## Riesgos aceptados
 
@@ -41,6 +46,10 @@ reutiliza (`05-003` = tercer hallazgo de seguridad de la historia del proyecto).
 
 | ID | Sev | Título | Corregido el | Commit | Reverificado el |
 |---|---|---|---|---|---|
+| 01-002 | Menor | Lista de grupos LDAP truncada a 1000 sin avisar | 2026-10-08 | *(1.0.10)* | 2026-10-08 — pruebas nuevas + comprobado en el CT 103 |
+| 01-003 | Menor | «Exportar logs» corta en 50 000 sin aviso | 2026-10-08 | *(1.0.10)* | 2026-10-08 — pruebas nuevas + comprobado en el CT 103 |
+| 05-008 | Menor | El límite de intentos por cuenta no frenaba nada (ahora retraso creciente + aviso) | 2026-10-08 | *(1.0.10)* | 2026-10-08 — pruebas nuevas + comprobado en el CT 103 |
+| 05-009 | Menor | bcrypt trunca a 72 bytes pero se aceptaban 100–128 (ahora se rechazan) | 2026-10-08 | *(1.0.10)* | 2026-10-08 — pruebas nuevas + comprobado en el CT 103 |
 | 11-003 | Mayor | Regresión de la 1.0.4: los ficheros de latido no estaban en `.gitignore`; `git status` salía sucio y `install.sh` se negaba a re-ejecutarse en Docker | 2026-10-08 | *(entrega 1.0.6)* | 2026-10-08 — `git status` limpio tras actualizar un servidor real; test `test_git_ignora_de_verdad_esos_ficheros` |
 | 10-003 | Mayor | Servicio de actualización: `git` no leía el proyecto montado («dubious ownership»), la rama salía vacía y se actualizaba contra `main` | 2026-10-08 | *(entrega 1.0.6)* | 2026-10-08 — E2E en servidores limpios; tests dedicados |
 | 10-002 | Mayor | Contenedor auxiliar de actualización sin tiempo límite (podía quedar «en curso» para siempre) | 2026-10-08 | *(entrega 1.0.6)* | 2026-10-08 — `timeout 7200` visto en un servidor real; test |
@@ -77,6 +86,9 @@ reutiliza (`05-003` = tercer hallazgo de seguridad de la historia del proyecto).
 - **12-N01** — Volver a una versión anterior a la 1.0.6 deja el contenedor `updater` huérfano; `docs/actualizacion.md:493-510` no menciona `--remove-orphans`. 2026-10-08.
 - **04-N01** — El E2E de Docker (≈17 min) condiciona la publicación de versiones: un fallo del entorno bloquearía un release sin fallo real. 2026-10-08.
 - **11-N02** — Auxiliar con CLI de Docker 27 / Compose 2.33 frente a un host con Compose 5.x (probado y funciona). 2026-10-08.
+- **07-N01** — La sincronización LDAP nunca retira cuentas que ya no están en el directorio y compara el nombre distinguiendo mayúsculas (`routes/ldap.py:~418-460`). 2026-10-08.
+- **02-N01** — Hilos de fondo y límites de peticiones en memoria suponen un único worker de uvicorn (`backend/Dockerfile:81`, `main.py:321,354`). 2026-10-08.
+- **02-N02** — Conviven dos sistemas de copia de seguridad; el heredado responde 500 ante un archivo mal formado (`routes/backup.py:249,288`). 2026-10-08.
 - **13-N01** — Bus factor de facto 1 (`git shortlog -sn --all`: prácticamente un único autor bajo
   distintas configuraciones de git; 2026-10-08: `luislopezsanchez` 197, `root` 139, `llopez` 57). No accionable, solo contexto de riesgo de continuidad.
 
@@ -88,6 +100,7 @@ reutiliza (`05-003` = tercer hallazgo de seguridad de la historia del proyecto).
 |---|---|---|---|---|---|---|
 | 2026-09-13 | full | NO APTO | 0 | 2 | 3 | `2026-09-13-audit-full.md` |
 | 2026-09-14 | full | APTO CON RESERVAS | 0 | 3 | 6 | `2026-09-14-audit-full.md` |
+| 2026-10-08 (tras 1.0.9) | full | APTO CON RESERVAS | 0 | 1 | 16 (9 nuevos) | `2026-10-08-audit-full.md` — sin Críticos ni Mayores nuevos; familia de «límites silenciosos» y huecos de pruebas |
 | 2026-10-08 | release | APTO CON RESERVAS | 0 | 1 | 7 | `2026-10-08-audit-release.md` — reservas: 05-006 (imagen LXC pública con claves) y aceptación expresa de 05-007 |
 | 2026-09-14 (correcciones) | — | APTO* | 0 | 0 | 3 abiertos (Menor, previos) | 05-005/10-001/08-001/13-001/14-001/11-002 corregidos el mismo día; *pendiente de verificar el flujo de actualización en la VM tras el push* |
 | 2026-09-13 (correcciones) | — | APTO* | 0 | 0 | 2 abiertos (Menor) | ver 04-001/06-001/11-001 arriba — reverificado el mismo día tras corregir ambos Mayores; *pendiente de commit/push para que el CI de GitHub lo confirme también* |

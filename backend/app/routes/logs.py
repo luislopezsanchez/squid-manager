@@ -117,14 +117,17 @@ async def export_logs(
         get_logs, limit=50000, offset=0, user=user, status=status, domain=domain, ip=ip, denied_only=denied,
     )
     entries = result["entries"]
-    stamp = utcnow().strftime("%Y%m%d-%H%M%S")
+    # Hay más coincidencias que las exportadas, o el escaneo se cortó por tiempo/líneas: el archivo es PARCIAL.
+    parcial = bool(result.get("has_more") or result.get("truncated"))
+    stamp = utcnow().strftime("%Y%m%d-%H%M%S") + ("-parcial" if parcial else "")
+    aviso = {"X-Export-Parcial": "true", "Access-Control-Expose-Headers": "X-Export-Parcial"} if parcial else {}
 
     if format == "raw":
         content = "\n".join(e["raw_line"] for e in entries) + ("\n" if entries else "")
         return StreamingResponse(
             iter([content]),
             media_type="text/plain",
-            headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.log"},
+            headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.log", **aviso},
         )
 
     if format == "ndjson":
@@ -135,7 +138,7 @@ async def export_logs(
         return StreamingResponse(
             _gen(),
             media_type="application/x-ndjson",
-            headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.ndjson"},
+            headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.ndjson", **aviso},
         )
 
     output = io.StringIO()
@@ -154,7 +157,7 @@ async def export_logs(
     return StreamingResponse(
         output,
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.csv"}
+        headers={"Content-Disposition": f"attachment; filename=squid-logs-{stamp}.csv", **aviso}
     )
 
 

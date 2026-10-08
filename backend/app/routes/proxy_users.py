@@ -456,6 +456,19 @@ def _hashes(username: str, password: str, realm: str) -> tuple[str, str, str]:
     )
 
 
+def _segundos_estimados(n: int) -> int:
+    """Cuánto tardará calcular n contraseñas en ESTE servidor (se mide un bcrypt real, con el coste vigente)."""
+    import os
+    import time
+
+    if n <= 0:
+        return 0
+    t0 = time.perf_counter()
+    get_password_hash("medicion-de-coste")
+    un_hash = time.perf_counter() - t0
+    return int(n * un_hash / max(1, min(4, os.cpu_count() or 1))) + 1
+
+
 def _hashes_en_paralelo(items: list[tuple[str, str]], realm: str) -> dict[str, tuple[str, str, str]]:
     """{username: hashes}. bcrypt suelta el GIL: los hilos sí aprovechan varios núcleos."""
     from concurrent.futures import ThreadPoolExecutor
@@ -679,8 +692,10 @@ def import_users(
         else:
             a_crear.append(f)
 
+    con_clave_n = len(a_crear) + sum(1 for _, f in a_actualizar if f["password"])
     informe = {
         "simulacion": simular, "modo": modo, "total_filas": len(filas) + len(errores),
+        "segundos_estimados": _segundos_estimados(con_clave_n),
         "a_crear": len(a_crear), "a_actualizar": len(a_actualizar),
         "omitidos": omitidos, "errores": errores, "credenciales": [],
         "creados": 0, "actualizados": 0,

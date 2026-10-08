@@ -312,7 +312,7 @@ export const api = {
   syncLdapUsers: () => request<any>('/ldap/sync', { method: 'POST' }),
   listLdapUsers: () => listarTodo('/ldap/users'),
   toggleLdapUser: (id: number) => request<any>(`/ldap/users/${id}/toggle`, { method: 'PATCH' }),
-  listLdapGroups: () => request<{ groups: string[] }>('/ldap/groups'),
+  listLdapGroups: () => request<{ groups: string[]; total?: number; truncado?: boolean }>('/ldap/groups'),
 
   // Buscador global de referencias (dónde aparece un usuario, dominio, ACL...)
   searchReferences: (q: string) => request<any>(`/search/references?q=${encodeURIComponent(q)}`),

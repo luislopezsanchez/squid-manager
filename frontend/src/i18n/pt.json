@@ -1859,5 +1859,8 @@
   "ACL(s) procesadas": "ACL(s) processadas",
   "omitidas": "ignoradas",
   "ACL no encontrada": "ACL não encontrada",
-  "Ninguna ACL coincide con la búsqueda o los filtros.": "Nenhuma ACL corresponde à busca ou aos filtros."
+  "Ninguna ACL coincide con la búsqueda o los filtros.": "Nenhuma ACL corresponde à busca ou aos filtros.",
+  "El archivo es PARCIAL: hay más registros de los que caben en una exportación (máx. 50 000). Acota con filtros para obtener el resto.": "O arquivo é PARCIAL: há mais registros do que cabem em uma exportação (máx. 50 000). Restrinja com filtros para obter o restante.",
+  "El directorio tiene {n} grupos y solo se listan los primeros {m}. Escribe el nombre del grupo a mano.": "O diretório tem {n} grupos e só os primeiros {m} são listados. Digite o nome do grupo manualmente.",
+  "Calcular las contraseñas tardará unos {n} minutos en este servidor; no cierres esta ventana.": "Calcular as senhas levará cerca de {n} minutos neste servidor; não feche esta janela."
 }

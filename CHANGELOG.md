@@ -5,6 +5,33 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.10] - 2026-10-08
+
+### Seguridad
+
+- **Contraseñas de más de 72 bytes rechazadas** (administradores, usuarios del proxy, autoservicio e importación): bcrypt las truncaba
+  en silencio, así que dos contraseñas iguales en los primeros 72 bytes eran la misma. Los acentos cuentan como más de un byte. Las
+  contraseñas ya guardadas siguen funcionando.
+- **Inicio de sesión: retraso creciente y aviso.** Desde el 3.er intento fallido en un minuto contra una cuenta, cada respuesta
+  tarda más (1, 2, 4, 8 s); al 5.º se envía una alerta de seguridad (correo/Telegram/XMPP) con la cuenta y la IP. Una contraseña
+  correcta sigue entrando al instante.
+- **Imagen LXC pública retirada de la documentación** (`backups/README.md`): contenía claves reales de la instalación de origen.
+
+### Corregido
+
+- **La lista de grupos LDAP se cortaba a 1000 sin avisar.** Ahora se devuelven todos (tope de 20 000, con aviso si se supera).
+- **«Exportar logs» no avisaba de que el archivo era parcial** (máx. 50 000 registros). Ahora el nombre lleva `-parcial` y el
+  panel muestra un aviso.
+- **Importación de usuarios:** el mensaje del límite de 5000 filas explica cómo seguir y la simulación estima el tiempo que
+  tardará en calcular las contraseñas.
+
+### Pruebas
+
+- 23 pruebas nuevas: sincronización y grupos de LDAP, exportación de logs, restauración heredada, importación y endurecimiento
+  del acceso (suite: 1159).
+
+---
+
 ## [1.0.9] - 2026-10-08
 
 ### Corregido

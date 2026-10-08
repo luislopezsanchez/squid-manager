@@ -1,6 +1,8 @@
 """Rutas de autenticación del admin."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import time
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -8,7 +10,11 @@ from app.database import get_db
 from app.models.admin import Admin
 from app.models.audit_log import AuditLog
 from app.services import modules_service
-from app.middleware import login_attempts_exceeded, record_failed_login
+from app.middleware import (
+    LOGIN_MAX_PER_USER, _get_client_ip, failed_login_count, login_attempts_exceeded, login_failure_delay,
+    record_failed_login,
+)
+from app.services.notification_service import queue_notification
 from app.schemas.auth import Token, AdminResponse
 from app.services.auth_service import (
     authenticate_admin, authenticate_proxy_user, create_access_token,
@@ -21,6 +27,8 @@ router = APIRouter()
 
 @router.post("/login", response_model=Token)
 def login(
+    request: Request,
+    background_tasks: BackgroundTasks,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
@@ -57,6 +65,19 @@ def login(
         # excedida, se devuelve 429 en vez del 401 normal.
         excedido = login_attempts_exceeded(form_data.username)
         record_failed_login(form_data.username)
+        intentos = failed_login_count(form_data.username)
+        if intentos == LOGIN_MAX_PER_USER:
+            # Una vez por ventana: avisa por los canales de «alertas de seguridad» de un posible intento de adivinar claves.
+            cuenta = "".join(c for c in form_data.username if c.isprintable())[:64]
+            queue_notification(
+                background_tasks, db, "security_alert", "Intentos fallidos de inicio de sesión",
+                f"Se registraron {intentos} intentos fallidos en un minuto contra la cuenta «{cuenta}», "
+                f"desde la dirección {_get_client_ip(request)}.",
+            )
+        # Retraso creciente en la respuesta (no bloquea las contraseñas correctas).
+        demora = login_failure_delay(intentos)
+        if demora:
+            time.sleep(demora)
         db.add(AuditLog(
             admin_id=None, admin_username=form_data.username,
             action="login_failed", entity="admin",

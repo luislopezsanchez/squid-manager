@@ -221,7 +221,10 @@ export default function Groups() {
       setLdapEnabled(!!c.enabled)
       // Solo tiene sentido pedir grupos si LDAP está habilitado -si no, el
       // backend responde 400 igual que con cualquier otra búsqueda al directorio.
-      if (c.enabled) api.listLdapGroups().then(r => setLdapGroups(r.groups)).catch(() => {})
+      if (c.enabled) api.listLdapGroups().then(r => {
+        setLdapGroups(r.groups)
+        if (r.truncado) showToast(traducir("El directorio tiene {n} grupos y solo se listan los primeros {m}. Escribe el nombre del grupo a mano.", { n: r.total ?? r.groups.length, m: r.groups.length }), 'warning')
+      }).catch(() => {})
     }).catch(() => {})
   }, [])
 

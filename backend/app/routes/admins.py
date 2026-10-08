@@ -5,13 +5,14 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.database import get_db
 from app.models.admin import Admin
 from app.models.audit_log import AuditLog
 from app.models.proxy_user import ProxyUser
 from app.services.auth_service import (
+    validar_largo_bcrypt,
     get_current_admin, get_password_hash, require_superadmin, verify_password,
 )
 from app.utils import utcnow
@@ -25,6 +26,7 @@ MIN_PASSWORD_LENGTH = 10
 class AdminCreate(BaseModel):
     username: str = Field(..., min_length=1, max_length=100)
     password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _largo = field_validator("password")(validar_largo_bcrypt)
     email: str | None = None
     role: str = "admin"  # superadmin, admin, viewer
     # Quien crea la cuenta conoce la contraseña, así que por defecto se pide cambiarla al entrar. Se desmarca
@@ -55,6 +57,7 @@ class AdminResponse(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _largo = field_validator("new_password")(validar_largo_bcrypt)
 
 
 def _audit(db: Session, actor: Admin, action: str, target: Admin | None,

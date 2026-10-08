@@ -1859,5 +1859,8 @@
   "ACL(s) procesadas": "ACL(s) processed",
   "omitidas": "skipped",
   "ACL no encontrada": "ACL not found",
-  "Ninguna ACL coincide con la búsqueda o los filtros.": "No ACL matches the search or filters."
+  "Ninguna ACL coincide con la búsqueda o los filtros.": "No ACL matches the search or filters.",
+  "El archivo es PARCIAL: hay más registros de los que caben en una exportación (máx. 50 000). Acota con filtros para obtener el resto.": "The file is PARTIAL: there are more records than one export can hold (max. 50,000). Narrow it with filters to get the rest.",
+  "El directorio tiene {n} grupos y solo se listan los primeros {m}. Escribe el nombre del grupo a mano.": "The directory has {n} groups and only the first {m} are listed. Type the group name by hand.",
+  "Calcular las contraseñas tardará unos {n} minutos en este servidor; no cierres esta ventana.": "Computing the passwords will take about {n} minutes on this server; do not close this window."
 }

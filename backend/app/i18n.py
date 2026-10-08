@@ -105,6 +105,9 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "La contraseña nueva debe ser distinta de la actual":
             "The new password must be different from the current one",
         "Mensaje de Telegram enviado": "Telegram message sent",
+        "Intentos fallidos de inicio de sesión": "Failed sign-in attempts",
+        "Se registraron {n} intentos fallidos en un minuto contra la cuenta «{c}», desde la dirección {ip}.": "{n} failed attempts were recorded in one minute against the account «{c}», from address {ip}.",
+        "La contraseña supera los 72 bytes (límite de bcrypt).": "The password exceeds 72 bytes (bcrypt limit).",
         "Notificaciones por XMPP deshabilitadas": "XMPP notifications are disabled",
         "Falta el servidor, la cuenta (JID) o la contraseña de XMPP": "The XMPP server, account (JID) or password is missing",
         "Falta al menos un destinatario o una sala de XMPP": "At least one XMPP recipient or room is missing",
@@ -316,6 +319,9 @@ TRADUCCIONES: dict[str, dict[str, str]] = {
         "La contraseña nueva debe ser distinta de la actual":
             "A nova senha deve ser diferente da atual",
         "Mensaje de Telegram enviado": "Mensagem do Telegram enviada",
+        "Intentos fallidos de inicio de sesión": "Tentativas de login malsucedidas",
+        "Se registraron {n} intentos fallidos en un minuto contra la cuenta «{c}», desde la dirección {ip}.": "Foram registradas {n} tentativas malsucedidas em um minuto contra a conta «{c}», a partir do endereço {ip}.",
+        "La contraseña supera los 72 bytes (límite de bcrypt).": "A senha excede 72 bytes (limite do bcrypt).",
         "Notificaciones por XMPP deshabilitadas": "Notificações por XMPP desabilitadas",
         "Falta el servidor, la cuenta (JID) o la contraseña de XMPP": "Falta o servidor, a conta (JID) ou a senha do XMPP",
         "Falta al menos un destinatario o una sala de XMPP": "Falta pelo menos um destinatário ou uma sala XMPP",

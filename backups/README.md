@@ -1,5 +1,11 @@
 # Backups de despliegue — Proxmox LXC
 
+> 🛑 **IMAGEN RETIRADA (2026-10-08).** Esta imagen contiene las claves reales de la instalación con la que se creó y ya
+> no se enlaza desde aquí. **No la uses.** Si la descargaste alguna vez, quien tenga el archivo puede abrir el panel de esa
+> instalación original: sus `SECRET_KEY` y `DB_PASS` deben darse por comprometidas y rotarse en ella
+> (`openssl rand -hex 32` para `SECRET_KEY`; `ALTER USER … PASSWORD` y `DB_PASS` en el `.env` para la base de datos).
+> Para desplegar rápido, usa las [imágenes Docker publicadas](../docs/docker-imagenes.md) o el instalador.
+
 > ⚠️ **Esta imagen trae las claves reales de la instalación con la que se
 > creó** (`SECRET_KEY` y `DB_PASS` — ver la sección "Qué trae adentro"). Nada
 > en el arranque las regenera solas: es el **primer** paso a hacer después de
@@ -22,7 +28,7 @@ la tabla de abajo tiene su enlace de descarga y su checksum.
 
 | Archivo | Fecha | Commit de SquidManager | Tamaño | SHA-256 |
 |---|---|---|---|---|
-| [vzdump-lxc-888-2026_08_28-16_27_41.tar.lzo](https://ftp.innovanet.uy/Proxmox_Container/vzdump-lxc-888-2026_08_28-16_27_41.tar.lzo) | 2026-08-28 | [`913a1e8`](https://github.com/luislopezsanchez/squid-manager/commit/913a1e8) | 2.99 GB | `4ea522c3f6c834337312c3c5bb1618d30631a5f47a6303af659a768fd175f1a6` |
+| ~~vzdump-lxc-888-2026_08_28-16_27_41.tar.lzo~~ — **RETIRADA** (ver el aviso de arriba) | 2026-08-28 | [`913a1e8`](https://github.com/luislopezsanchez/squid-manager/commit/913a1e8) | 2.99 GB | `4ea522c3f6c834337312c3c5bb1618d30631a5f47a6303af659a768fd175f1a6` |
 
 **Verificá siempre el checksum después de descargar** — un archivo de este
 tamaño se puede corromper en la transferencia sin que se note hasta que falla

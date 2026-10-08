@@ -55,6 +55,7 @@ export function CredencialesModal({ credenciales, titulo, onClose }: {
 interface InformeImport {
   simulacion: boolean
   total_filas: number
+  segundos_estimados?: number
   a_crear: number
   a_actualizar: number
   creados: number
@@ -133,6 +134,9 @@ export function ImportarUsuariosModal({ onClose, onImportado }: {
           <ul className="space-y-1 text-ink-2">
             <li><IconCheck className="w-3.5 h-3.5 inline text-ok mr-1.5" />{traducir("{n} usuarios se crearán", { n: informe.a_crear })}</li>
             {informe.a_actualizar > 0 && <li><IconCheck className="w-3.5 h-3.5 inline text-ok mr-1.5" />{traducir("{n} usuarios se actualizarán", { n: informe.a_actualizar })}</li>}
+            {(informe.segundos_estimados ?? 0) > 20 && (
+              <li className="text-warn">{traducir("Calcular las contraseñas tardará unos {n} minutos en este servidor; no cierres esta ventana.", { n: Math.max(1, Math.round((informe.segundos_estimados ?? 0) / 60)) })}</li>
+            )}
             {informe.omitidos.length > 0 && <li>{traducir("{n} se omitirán porque ya existen", { n: informe.omitidos.length })}</li>}
             {informe.errores.length > 0 && <li className="text-danger">{traducir("{n} filas tienen errores y se omitirán", { n: informe.errores.length })}</li>}
           </ul>

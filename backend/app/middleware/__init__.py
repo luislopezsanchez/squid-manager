@@ -159,6 +159,27 @@ def login_attempts_exceeded(username: str) -> bool:
     return len(window) >= LOGIN_MAX_PER_USER
 
 
+def failed_login_count(username: str) -> int:
+    """Intentos fallidos contra esta cuenta en la ventana actual (sin registrar nada)."""
+    now = time.time()
+    window = _requests[_login_key(username)]
+    while window and now - window[0] > WINDOW_SECONDS:
+        window.popleft()
+    return len(window)
+
+
+def login_failure_delay(count: int) -> float:
+    """Espera (segundos) antes de contestar un intento fallido, creciente desde el 3.º de la ventana.
+
+    No bloquea a nadie —una contraseña correcta entra siempre, ver `login_attempts_exceeded`—,
+    pero encarece adivinar contraseñas contra una cuenta aunque se reparta entre muchas IP:
+    de 6 intentos por minuto en adelante cada respuesta tarda 8 s.
+    """
+    if count < 3:
+        return 0.0
+    return float(min(2 ** (count - 3), 8))
+
+
 def record_failed_login(username: str) -> None:
     """Registra un intento fallido contra esta cuenta.
 
@@ -175,7 +196,14 @@ def record_failed_login(username: str) -> None:
     servicio dirigida y gratis contra una cuenta puntual, distinta de (y más
     barata que) intentar de verdad adivinar la contraseña-.
     """
-    _check_rate_limit(_login_key(username), LOGIN_MAX_PER_USER)
+    # Se anota SIEMPRE (no se usa _check_rate_limit, que deja de contar al llegar al tope): el retraso creciente y el
+    # aviso de «5 intentos» necesitan saber cuántos van de verdad, no sólo que se llegó al límite.
+    now = time.time()
+    _prune(now)
+    window = _requests[_login_key(username)]
+    while window and now - window[0] > WINDOW_SECONDS:
+        window.popleft()
+    window.append(now)
 
 
 async def rate_limit_middleware(request: Request, call_next):

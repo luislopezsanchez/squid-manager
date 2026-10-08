@@ -327,7 +327,10 @@ def list_ldap_groups(
             nombres.add(cn)
 
     conn.unbind()
-    return {"groups": sorted(nombres)[:1000]}
+    # Antes se cortaba a 1000 DESPUÉS de leerlos todos: los últimos (por orden alfabético) no se podían elegir y nada lo decía.
+    # Se devuelven todos; el tope sólo existe para no mandar una respuesta absurda, y si salta, se avisa.
+    ordenados = sorted(nombres)
+    return {"groups": ordenados[:MAX_GRUPOS_LDAP], "total": len(ordenados), "truncado": len(ordenados) > MAX_GRUPOS_LDAP}
 
 
 # ============================================================
@@ -352,6 +355,9 @@ def _sync_ldap_files(db: Session):
     allowed = [u.username for u in db.query(LdapUser).filter(LdapUser.enabled == True).all()]
     write_ldap_aux_files(config, allowed)
     reload_squid()
+
+
+MAX_GRUPOS_LDAP = 20000
 
 
 @router.get("/users", response_model=list[LdapUserResponse])

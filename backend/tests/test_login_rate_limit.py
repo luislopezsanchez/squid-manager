@@ -51,11 +51,17 @@ def _ejecutar_login(username: str, password: str, admin_service, monkeypatch):
     # Si no es admin, login() prueba con los usuarios locales del proxy (si el módulo está activo): aquí no existe ninguno.
     monkeypatch.setattr("app.routes.auth.modules_service.is_enabled", lambda *_a, **_k: True)
     monkeypatch.setattr("app.routes.auth.authenticate_proxy_user", lambda *_a, **_k: None)
+    # Sin esperas reales ni base de datos: el retraso creciente y el aviso se verifican en test_endurecimiento_acceso.py.
+    monkeypatch.setattr("app.routes.auth.time.sleep", lambda _s: None)
+    monkeypatch.setattr("app.routes.auth.queue_notification", lambda *_a, **_k: None)
     form = _FormDataFalso(username, password)
     # login() es sync desde que las rutas de solo trabajo bloqueante dejaron
     # de declararse async def (ver metrics.py y el resto de app/routes/):
     # se llama directo, sin asyncio.run().
-    return login_route(form_data=form, db=_DBFalsa())
+    from types import SimpleNamespace
+    from fastapi import BackgroundTasks
+    peticion = SimpleNamespace(client=SimpleNamespace(host="203.0.113.7"), headers={})
+    return login_route(request=peticion, background_tasks=BackgroundTasks(), form_data=form, db=_DBFalsa())
 
 
 # --- El núcleo del bug: contraseña correcta nunca debe bloquearse ----------
