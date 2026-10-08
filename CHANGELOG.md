@@ -5,6 +5,15 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.13] - 2026-10-08
+
+### Corregido
+
+- **Carga masiva de ACLs: las líneas con un comentario al final** (`192.168.17.104 # equipo de Juan`) se rechazaban enteras. Ahora
+  se descarta el comentario y se usa la entrada. El comentario no se guarda.
+
+---
+
 ## [1.0.12] - 2026-10-08
 
 ### Añadido

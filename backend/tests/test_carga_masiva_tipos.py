@@ -85,3 +85,12 @@ def test_una_categoria_solo_puede_ser_de_dominio(monkeypatch):
     with pytest.raises(HTTPException) as e:
         _llamar(monkeypatch, "src", "10.0.0.1\n", is_category=True)
     assert e.value.status_code == 400
+
+
+def test_comentarios_al_final_de_la_linea():
+    lineas = ["192.168.17.103", "192.168.17.104 # equipo de Juan", "192.168.17.105   #sin espacio", "# solo comentario", "10.0.0.1 # x"]
+    validos, malos = validar_lista_por_tipo("src", lineas)
+    assert validos == ["192.168.17.103", "192.168.17.104", "192.168.17.105", "10.0.0.1"] and malos == []
+    assert validar_lista_por_tipo("dstdomain", [".a.com # nota"]) == ([".a.com"], [])
+    assert validar_lista_por_tipo("port", ["443 # https"]) == (["443"], [])
+    assert validar_lista_por_tipo("src", ["10.0.0.1 # ok", "mala # x"]) == (["10.0.0.1"], ["mala # x"])

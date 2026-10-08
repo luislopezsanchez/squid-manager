@@ -271,8 +271,18 @@ def validar_lista_por_tipo(acl_type: str, lineas: list[str]) -> tuple[list[str],
     se ignoraron. Los regex se comprueban con `re` de Python, que acepta algo mas que el POSIX de Squid: lo
     que Squid no entienda lo detecta `squid -k parse` al aplicar, antes de recargar.
     """
+    # Comentario al final de la linea («192.168.17.104 # equipo de Juan»): muy comun en listas hechas a mano.
+    # Se descarta; ninguna entrada valida lleva espacio seguido de «#».
+    originales = {}
+    limpias = []
+    for cruda in lineas:
+        limpia = re.split(r"\s+#", cruda, maxsplit=1)[0]
+        originales.setdefault(limpia, cruda)
+        limpias.append(limpia)
+    lineas = limpias
     if acl_type in TIPOS_DOMINIO:
-        return validar_lista_dominios(lineas)
+        validos, malos = validar_lista_dominios(lineas)
+        return validos, [originales.get(m, m) for m in malos]
     comprobar = {
         "src": _entrada_ip_valida, "dst": _entrada_ip_valida,
         "port": _entrada_puerto_valida,
@@ -287,7 +297,7 @@ def validar_lista_por_tipo(acl_type: str, lineas: list[str]) -> tuple[list[str],
         if not linea or linea.startswith("#"):
             continue
         if not comprobar(linea):
-            rechazados.append(cruda.rstrip("\n"))
+            rechazados.append(originales.get(cruda, cruda).rstrip("\n"))
             continue
         clave = linea.lower() if insensible else linea
         if clave in vistos:
