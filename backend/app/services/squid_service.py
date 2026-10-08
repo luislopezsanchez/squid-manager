@@ -279,7 +279,7 @@ def aplicar_lista_dominios(
     old_value = None
     if acl:
         old_count = acl.line_count if acl.source == "file" else len((acl.value or "").split())
-        old_value = f"{acl.name} {acl.type} ({old_count} dominios)"
+        old_value = f"{acl.name} {acl.type} ({old_count} {'dominios' if acl.type.startswith('dst') and 'dom' in acl.type else 'entradas'})"
 
     if nuevo_source == "file":
         hash_nuevo = hash_domain_list(combinados)
@@ -340,7 +340,7 @@ def aplicar_lista_dominios(
         admin_id=admin_id, admin_username=admin_username,
         action=accion, entity="acl", entity_id=acl.id,
         old_value=old_value,
-        new_value=f"{acl.name} {acl.type} ({len(combinados)} dominios, {nuevo_source})",
+        new_value=f"{acl.name} {acl.type} ({len(combinados)} {'dominios' if 'dom' in acl_type else 'entradas'}, {nuevo_source})",
     ))
     db.commit()
     if not sin_cambios:

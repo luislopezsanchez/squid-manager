@@ -47,6 +47,18 @@ const ACL_TYPES = [
 
 const ACLS_POR_PAGINA = 50
 
+/** Tipos que admiten carga desde archivo (una entrada por línea) y lo que se espera en cada línea. */
+type TipoCarga = 'dstdomain' | 'dstdom_regex' | 'src' | 'dst' | 'url_regex' | 'urlpath_regex' | 'port'
+const TIPOS_CARGA: { value: TipoCarga; label: string; ayuda: string }[] = [
+  { value: 'dstdomain', label: traducir('Dominio (dstdomain)'), ayuda: traducir('Un dominio por línea, ej: .facebook.com') },
+  { value: 'dstdom_regex', label: traducir('Regex de dominio (dstdom_regex)'), ayuda: traducir('Una expresión regular por línea, sin espacios') },
+  { value: 'src', label: traducir('IP de origen (src)'), ayuda: traducir('Una IP, red o rango por línea, ej: 192.168.1.10, 10.0.0.0/8 o 10.0.0.1-10.0.0.50 (IPv4 o IPv6)') },
+  { value: 'dst', label: traducir('IP de destino (dst)'), ayuda: traducir('Una IP, red o rango por línea, ej: 192.168.1.10, 10.0.0.0/8 o 10.0.0.1-10.0.0.50 (IPv4 o IPv6)') },
+  { value: 'url_regex', label: traducir('Regex de URL (url_regex)'), ayuda: traducir('Una expresión regular por línea, sin espacios') },
+  { value: 'urlpath_regex', label: traducir('Regex de path URL (urlpath_regex)'), ayuda: traducir('Una expresión regular por línea, sin espacios') },
+  { value: 'port', label: traducir('Puerto destino (port)'), ayuda: traducir('Un puerto o rango por línea, ej: 443 o 8000-8100') },
+]
+
 type FormAcl = { name: string; type: string; value: string; description: string; enabled: boolean }
 const FORM_VACIO: FormAcl = { name: '', type: 'dstdomain', value: '', description: '', enabled: true }
 
@@ -117,8 +129,8 @@ function BulkUploadModal({ bulkAclName, setBulkAclName, bulkType, setBulkType, b
   bulkBusy, bulkFileRef, onClose, onSubmit }: {
   bulkAclName: string
   setBulkAclName: (v: string) => void
-  bulkType: 'dstdomain' | 'dstdom_regex'
-  setBulkType: (v: 'dstdomain' | 'dstdom_regex') => void
+  bulkType: TipoCarga
+  setBulkType: (v: TipoCarga) => void
   bulkModo: 'reemplazar' | 'agregar'
   setBulkModo: (v: 'reemplazar' | 'agregar') => void
   bulkBusy: boolean
@@ -127,9 +139,9 @@ function BulkUploadModal({ bulkAclName, setBulkAclName, bulkType, setBulkType, b
   onSubmit: (e: React.FormEvent) => void
 }) {
   return (
-    <Modal title={traducir('Cargar dominios desde archivo')} onClose={onClose} maxWidth="max-w-xl">
+    <Modal title={traducir('Cargar lista desde archivo')} onClose={onClose} maxWidth="max-w-xl">
       <p className="text-xs text-ink-3 mb-4">
-        {traducir('Un dominio por línea (líneas vacías o que empiezan con # se ignoran). Listas grandes se guardan en un archivo aparte que Squid lee directo, no como una única línea gigante en squid.conf.')}
+        {TIPOS_CARGA.find(t => t.value === bulkType)?.ayuda}. {traducir('Las líneas vacías o que empiezan con # se ignoran. Listas grandes se guardan en un archivo aparte que Squid lee directo, no como una única línea gigante en squid.conf.')}
       </p>
       <form onSubmit={onSubmit}>
         <div className="grid grid-cols-1 gap-4">
@@ -142,8 +154,7 @@ function BulkUploadModal({ bulkAclName, setBulkAclName, bulkType, setBulkType, b
             <div>
               <label htmlFor="acl-bulk-type" className="field-label block mb-1.5">{traducir("Tipo")}</label>
               <select id="acl-bulk-type" value={bulkType} onChange={e => setBulkType(e.target.value as any)} className="input">
-                <option value="dstdomain">{traducir('Dominio (dstdomain)')}</option>
-                <option value="dstdom_regex">{traducir('Regex de dominio (dstdom_regex)')}</option>
+                {TIPOS_CARGA.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div>
@@ -175,7 +186,7 @@ function BulkUploadModal({ bulkAclName, setBulkAclName, bulkType, setBulkType, b
               <div className="indeterminate-bar-fill h-full rounded-full bg-primary-500" />
             </div>
             <p className="text-xs text-ink-3 mt-1.5">
-              {traducir('Leyendo y validando el archivo… con listas de millones de dominios puede tardar varios segundos.')}
+              {traducir('Leyendo y validando el archivo… con listas de millones de entradas puede tardar varios segundos.')}
             </p>
           </div>
         )}
@@ -259,7 +270,7 @@ export default function ACLs() {
   const [showBulk, setShowBulk] = useState(false)
   const [bulkAclName, setBulkAclName] = useState('')
   const [bulkModo, setBulkModo] = useState<'reemplazar' | 'agregar'>('reemplazar')
-  const [bulkType, setBulkType] = useState<'dstdomain' | 'dstdom_regex'>('dstdomain')
+  const [bulkType, setBulkType] = useState<TipoCarga>('dstdomain')
   const [bulkBusy, setBulkBusy] = useState(false)
   const bulkFileRef = useRef<HTMLInputElement>(null)
 
@@ -272,7 +283,7 @@ export default function ACLs() {
       const result = await api.bulkUploadDomains(file, bulkAclName.trim(), bulkModo, bulkType)
       notificarCambioPendiente()
       showToast(
-        `"${bulkAclName}": ${result.dominios_importados} dominios (${result.acl.source === 'file' ? 'archivo' : 'inline'})` +
+        `"${bulkAclName}": ${result.dominios_importados} ${traducir('entradas')} (${result.acl.source === 'file' ? 'archivo' : 'inline'})` +
         (result.total_rechazados > 0 ? `, ${result.total_rechazados} línea(s) rechazada(s)` : '')
       )
       setShowBulk(false)
@@ -369,7 +380,7 @@ export default function ACLs() {
             className="btn btn-ghost"
             title={traducir("Para listas grandes (blocklists): un dominio por línea")}
           >
-            {traducir('Cargar dominios')}
+            {traducir('Cargar lista')}
           </button>
           <button
             onClick={() => { setForm(FORM_VACIO); setEditingId(null); setShowForm(true) }}

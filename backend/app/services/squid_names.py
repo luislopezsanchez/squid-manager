@@ -221,6 +221,82 @@ def validar_lista_dominios(lineas: list[str]) -> tuple[list[str], list[str]]:
     return validos, rechazados
 
 
+# Tipos que admiten carga masiva desde un archivo (una entrada por linea). El resto (time, proto, method,
+# maxconn...) son valores cortos y fijos que no se importan en masa.
+TIPOS_DOMINIO = ("dstdomain", "dstdom_regex")
+TIPOS_CARGA_MASIVA = TIPOS_DOMINIO + ("src", "dst", "url_regex", "urlpath_regex", "port")
+_MAX_LARGO_REGEX = 1000
+
+
+def _entrada_ip_valida(linea: str) -> bool:
+    """IP, red CIDR/mascara o rango `a-b` (IPv4 o IPv6), las formas que Squid admite en src/dst."""
+    import ipaddress
+
+    try:
+        if "-" in linea:
+            ini, fin = (x.strip() for x in linea.split("-", 1))
+            a, b = ipaddress.ip_address(ini), ipaddress.ip_address(fin)
+            return a.version == b.version and int(a) <= int(b)
+        ipaddress.ip_network(linea, strict=False)
+        return True
+    except ValueError:
+        return False
+
+
+def _entrada_puerto_valida(linea: str) -> bool:
+    partes = linea.split("-")
+    if len(partes) > 2 or not all(p.isdigit() for p in partes):
+        return False
+    nums = [int(p) for p in partes]
+    return all(0 <= n <= 65535 for n in nums) and nums == sorted(nums)
+
+
+def _entrada_regex_valida(linea: str) -> bool:
+    """Sin espacios (en una ACL 'inline' los valores se separan por espacio) y que compile."""
+    import re
+
+    if len(linea) > _MAX_LARGO_REGEX or re.search(r"\s", linea):
+        return False
+    try:
+        re.compile(linea)
+    except re.error:
+        return False
+    return True
+
+
+def validar_lista_por_tipo(acl_type: str, lineas: list[str]) -> tuple[list[str], list[str]]:
+    """Como validar_lista_dominios, pero para cualquier tipo de TIPOS_CARGA_MASIVA.
+
+    Devuelve (validos sin duplicar, rechazados): una linea mala no descarta el archivo, pero el admin ve cuales
+    se ignoraron. Los regex se comprueban con `re` de Python, que acepta algo mas que el POSIX de Squid: lo
+    que Squid no entienda lo detecta `squid -k parse` al aplicar, antes de recargar.
+    """
+    if acl_type in TIPOS_DOMINIO:
+        return validar_lista_dominios(lineas)
+    comprobar = {
+        "src": _entrada_ip_valida, "dst": _entrada_ip_valida,
+        "port": _entrada_puerto_valida,
+        "url_regex": _entrada_regex_valida, "urlpath_regex": _entrada_regex_valida,
+    }[acl_type]
+    insensible = acl_type in ("src", "dst")
+    vistos: set[str] = set()
+    validos: list[str] = []
+    rechazados: list[str] = []
+    for cruda in lineas:
+        linea = cruda.strip()
+        if not linea or linea.startswith("#"):
+            continue
+        if not comprobar(linea):
+            rechazados.append(cruda.rstrip("\n"))
+            continue
+        clave = linea.lower() if insensible else linea
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        validos.append(linea)
+    return validos, rechazados
+
+
 def known_acl_names(db) -> set[str]:
     """Conjunto de nombres utilizables en una regla de acceso."""
     from app.models.acl import Acl

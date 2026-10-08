@@ -15,7 +15,8 @@ from app.services.auth_service import get_current_admin, require_writer
 from app.services.notification_service import queue_notification
 from app.services.config_state import mark_dirty
 from app.services.squid_names import (
-    validate_name, validate_acl_type, validate_value, validar_lista_dominios,
+    validate_name, validate_acl_type, validate_value, validar_lista_por_tipo,
+    TIPOS_CARGA_MASIVA, TIPOS_DOMINIO,
     ensure_not_referenced, find_references,
 )
 
@@ -389,20 +390,22 @@ async def cargar_dominios_masivo(
     """
     if modo not in ("reemplazar", "agregar"):
         raise HTTPException(400, detail="El modo debe ser 'reemplazar' o 'agregar'.")
-    if acl_type not in ("dstdomain", "dstdom_regex"):
-        raise HTTPException(400, detail="La carga masiva es solo para ACLs de dominio (dstdomain/dstdom_regex).")
+    if acl_type not in TIPOS_CARGA_MASIVA:
+        raise HTTPException(400, detail=f"La carga masiva admite estos tipos: {', '.join(TIPOS_CARGA_MASIVA)}.")
+    if is_category and acl_type not in TIPOS_DOMINIO:
+        raise HTTPException(400, detail="Una categoría solo puede ser de tipo dominio (dstdomain o dstdom_regex).")
 
     name = validate_name(acl_name, "ACL")
 
     contenido = await _leer_archivo_subido(file)
     texto = contenido.decode("utf-8", errors="replace")
-    dominios_nuevos, rechazados = validar_lista_dominios(texto.splitlines())
+    dominios_nuevos, rechazados = validar_lista_por_tipo(acl_type, texto.splitlines())
 
     if not dominios_nuevos:
         raise HTTPException(
             400,
             detail=(
-                "El archivo no tiene ningún dominio válido para importar"
+                "El archivo no tiene ninguna entrada válida para importar"
                 + (f" ({len(rechazados)} línea(s) rechazada(s))." if rechazados else ".")
             ),
         )
@@ -418,7 +421,7 @@ async def cargar_dominios_masivo(
     if background_tasks:
         queue_notification(background_tasks, db, "acl_change",
                            "Se cargó una ACL desde un archivo",
-                           f"El administrador «{current_admin.username}» cargó {info['combinados']} dominios en la ACL «{name}» (origen: {info['source']}).")
+                           f"El administrador «{current_admin.username}» cargó {info['combinados']} entradas en la ACL «{name}» (origen: {info['source']}).")
 
     return {
         "acl": _to_response(acl).model_dump(mode="json"),

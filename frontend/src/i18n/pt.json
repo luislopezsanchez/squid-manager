@@ -1878,5 +1878,14 @@
   "{n} usuarios deshabilitados": "{n} usuários desabilitados",
   "Deshabilitar los ausentes": "Desabilitar os ausentes",
   "Ausente del directorio": "Ausente do diretório",
-  "La última sincronización no encontró esta cuenta en el directorio.": "A última sincronização não encontrou esta conta no diretório."
+  "La última sincronización no encontró esta cuenta en el directorio.": "A última sincronização não encontrou esta conta no diretório.",
+  "Cargar lista": "Carregar lista",
+  "Cargar lista desde archivo": "Carregar lista de arquivo",
+  "Un dominio por línea, ej: .facebook.com": "Um domínio por linha, ex.: .facebook.com",
+  "Una expresión regular por línea, sin espacios": "Uma expressão regular por linha, sem espaços",
+  "Una IP, red o rango por línea, ej: 192.168.1.10, 10.0.0.0/8 o 10.0.0.1-10.0.0.50 (IPv4 o IPv6)": "Um IP, rede ou intervalo por linha, ex.: 192.168.1.10, 10.0.0.0/8 ou 10.0.0.1-10.0.0.50 (IPv4 ou IPv6)",
+  "Un puerto o rango por línea, ej: 443 o 8000-8100": "Uma porta ou intervalo por linha, ex.: 443 ou 8000-8100",
+  "Las líneas vacías o que empiezan con # se ignoran. Listas grandes se guardan en un archivo aparte que Squid lee directo, no como una única línea gigante en squid.conf.": "Linhas vazias ou que começam com # são ignoradas. Listas grandes são guardadas em um arquivo separado que o Squid lê diretamente, não como uma única linha gigante no squid.conf.",
+  "entradas": "entradas",
+  "Leyendo y validando el archivo… con listas de millones de entradas puede tardar varios segundos.": "Lendo e validando o arquivo… listas com milhões de entradas podem levar vários segundos."
 }

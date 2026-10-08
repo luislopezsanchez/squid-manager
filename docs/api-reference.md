@@ -498,7 +498,7 @@ Content-Type: application/json
 `accion` es `delete`, `enable` o `disable` (hasta 1000 ids). Responde `{"hechas": ["nombre", ...], "omitidas": [{"id": 4, "name": "x", "motivo": "En uso: ..."}]}`.
 Eliminar no borra una ACL que use alguna regla de acceso o de ancho de banda: queda en `omitidas` con el motivo.
 
-### Carga masiva de dominios
+### Carga masiva de ACLs desde archivo
 ```http
 POST /api/acls/bulk-domains
 Authorization: Bearer <token>
@@ -511,7 +511,16 @@ acl_type: dstdomain
 description: (opcional)
 ```
 
-Para blocklists de miles de dominios, uno por línea (líneas vacías o que empiezan con `#` se ignoran). Solo para `dstdomain`/`dstdom_regex` — el resto de tipos de ACL no tiene sentido cargarlos así.
+Para listas grandes, una entrada por línea (líneas vacías o que empiezan con `#` se ignoran, los duplicados se quitan). `acl_type` admite `dstdomain`, `dstdom_regex`, `src`, `dst`, `url_regex`, `urlpath_regex` y `port`; cualquier otro da 400. Cada línea se valida según el tipo y las inválidas se devuelven en `rechazados` (las 20 primeras) y `total_rechazados`:
+
+| Tipo | Línea válida |
+|---|---|
+| `dstdomain`, `dstdom_regex` | dominio |
+| `src`, `dst` | IP, red CIDR o con máscara, o rango `a-b` (IPv4 o IPv6) |
+| `url_regex`, `urlpath_regex` | expresión regular sin espacios que compile |
+| `port` | puerto 0-65535 o rango `a-b` |
+
+Por encima de 200 entradas la ACL pasa a ser de archivo (Squid lo lee directo). El campo de la respuesta se sigue llamando `dominios_importados` por compatibilidad, aunque cuente entradas de cualquier tipo.
 
 `is_category` (`true`/`false`, opcional, default `false`): marca la ACL resultante como una categoría de dominio — la muestra en la pantalla **Categorías de dominios** del panel en vez de (o además de) la lista general de ACLs. No cambia en nada cómo Squid la usa: para Squid, una categoría es una ACL de dominios como cualquier otra.
 

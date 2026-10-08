@@ -5,7 +5,7 @@ detrás de cada una, ver [architecture.md](architecture.md).
 
 ## Gestión de proxy
 - **ACLs visuales** — Crea listas de control de acceso por dominio, IP, horario, regex, puerto, método HTTP y más (29 tipos soportados)
-- **Carga masiva de dominios** — Sube un archivo con miles de dominios para una blocklist; por debajo de 200 entra como ACL normal, por encima se respalda en un archivo aparte que Squid lee directo, no como una línea gigante en `squid.conf`
+- **Carga masiva de listas** — Sube un archivo con miles de dominios, IPs/redes, expresiones de URL o puertos (una entrada por línea); por debajo de 200 entra como ACL normal, por encima se respalda en un archivo aparte que Squid lee directo, no como una línea gigante en `squid.conf`
 - **Categorías de dominios** — Agrupa dominios bajo un nombre reutilizable (ej: Redes sociales, Streaming), creado a mano, cargado desde archivo, o con un clic desde 9 listas predefinidas de HaGeZi dns-blocklists (apuestas, contenido adulto, piratería, redes sociales, sitios falsos, evasión del proxy, pop-ups, amenazas de seguridad, acortadores de URL) que se sincronizan solas una vez al día
 - **Reglas de acceso** — Ordena reglas `http_access` con botones de subir/bajar
 - **Grupos de usuarios** — Agrupa usuarios locales o LDAP y aplica políticas de acceso a todo el grupo de una vez

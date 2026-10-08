@@ -5,6 +5,19 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.12] - 2026-10-08
+
+### Añadido
+
+- **Carga masiva de ACLs desde archivo para más tipos que dominio.** «Cargar dominios» pasa a «Cargar lista» y admite
+  `dstdomain`, `dstdom_regex`, `src`, `dst` (IP, red CIDR o con máscara, rango `a-b`; IPv4 e IPv6), `url_regex`, `urlpath_regex`
+  (sin espacios y que compile) y `port` (puerto o rango). Cada línea se valida según el tipo; las inválidas se ignoran y se
+  informan. Por encima de 200 entradas la ACL pasa a archivo, como con los dominios. Una categoría sigue siendo solo de dominio.
+  El endpoint sigue siendo `POST /api/acls/bulk-domains` (el campo `dominios_importados` se mantiene por compatibilidad).
+  Los regex se validan con el motor de Python: lo que Squid no entienda lo detecta `squid -k parse` al aplicar.
+
+---
+
 ## [1.0.11] - 2026-10-08
 
 Entrega del plan de mejoras de la auditoría completa (`docs/audits/2026-10-08-audit-full.md`).
