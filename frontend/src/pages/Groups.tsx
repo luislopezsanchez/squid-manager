@@ -1,6 +1,7 @@
 import { traducir } from '../i18n'
 import { useState, useEffect } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
+import { DatalistUsuarios } from '../hooks/useSugerenciasUsuarios'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
@@ -197,7 +198,6 @@ export default function Groups() {
   const [newMember, setNewMember] = useState<Record<number, string>>({})
   // Grupo abierto en el detalle (modal): ahí se gestionan sus miembros.
   const [abierto, setAbierto] = useState<number | null>(null)
-  const [allUsers, setAllUsers] = useState<string[]>([])
   const [ldapEnabled, setLdapEnabled] = useState(false)
   const [ldapGroups, setLdapGroups] = useState<string[]>([])
   const [ldapNombreManual, setLdapNombreManual] = useState(false)
@@ -212,11 +212,6 @@ export default function Groups() {
 
   useEffect(() => {
     loadGroups()
-    // Combinar usuarios locales + LDAP para autocompletar
-    Promise.all([
-      api.listUsers().then(us => us.map((u: any) => u.username)).catch(() => []),
-      api.listLdapUsers().then(us => us.map((u: any) => u.username)).catch(() => []),
-    ]).then(([local, ldap]) => setAllUsers([...new Set([...local, ...ldap])]))
     api.getLdapConfig().then(c => {
       setLdapEnabled(!!c.enabled)
       // Solo tiene sentido pedir grupos si LDAP está habilitado -si no, el
@@ -300,9 +295,6 @@ export default function Groups() {
   return (
     <div className="p-6 md:p-7">
       <ToastContainer />
-      <datalist id="member-options">
-        {allUsers.map(u => <option key={u} value={u} />)}
-      </datalist>
       <div className="flex items-center justify-between mb-6">
         <h1 className="page-title">{traducir("Grupos de Usuarios")}</h1>
         <button
@@ -437,6 +429,7 @@ export default function Groups() {
                     placeholder={traducir("nombre de usuario (local o LDAP)")}
                     list="member-options"
                   />
+                  <DatalistUsuarios id="member-options" texto={newMember[group.id] || ''} />
                   <button onClick={() => handleAddMember(group.id)} className="btn btn-primary">{traducir("Añadir")}</button>
                 </div>
               </>

@@ -1,7 +1,7 @@
 import { traducir, idiomaActual } from '../i18n'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, type EstadoCanal } from '../api/client'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 
@@ -34,6 +34,28 @@ interface NotifConfig {
   daily_report_requisitos: { smtp: boolean; admin_con_email: boolean; destinatarios: string[]; ok: boolean }
 }
 
+
+/** Línea de estado de un canal: último error y si está en pausa por fallar varias veces seguidas. */
+function EstadoDelCanal({ e }: { e?: EstadoCanal }) {
+  if (!e || (e.estado === 'sin_actividad' && !e.ultimo_error)) return null
+  const hace = (t: number | null) => {
+    if (!t) return ''
+    const m = Math.max(0, Math.round((Date.now() / 1000 - t) / 60))
+    return m < 1 ? traducir('hace menos de un minuto') : m < 60 ? traducir('hace {n} min', { n: m }) : traducir('hace {n} h', { n: Math.round(m / 60) })
+  }
+  if (e.estado === 'ok' && !e.ultimo_error) return <p className="text-xs text-ok mb-3">{traducir("Último envío correcto")} {hace(e.ultimo_ok_en)}</p>
+  const pausado = e.estado === 'pausado'
+  return (
+    <div className={`text-xs rounded-lg p-3 mb-3 ${pausado ? 'bg-danger-soft text-danger' : 'bg-warn-soft text-warn'}`} role="status">
+      {pausado
+        ? traducir("Canal en pausa {n} min más: falló {f} veces seguidas y se descartan los avisos hasta entonces ({d} descartados).",
+            { n: Math.max(1, Math.ceil(e.pausado_segundos / 60)), f: e.fallos_seguidos, d: e.descartados })
+        : traducir("Último envío fallido")} {hace(e.ultimo_error_en)}
+      {e.ultimo_error && <div className="mt-1 font-mono break-all">{e.ultimo_error}</div>}
+    </div>
+  )
+}
+
 export default function Notifications() {
   const [config, setConfig] = useState<NotifConfig | null>(null)
   const [loading, setLoading] = useState(true)
@@ -46,6 +68,8 @@ export default function Notifications() {
   const [testingTelegram, setTestingTelegram] = useState(false)
   const [enviandoReporte, setEnviandoReporte] = useState(false)
   const { showToast, ToastContainer } = useToast()
+  const [estados, setEstados] = useState<Record<string, EstadoCanal>>({})
+  const cargarEstados = () => api.getNotificationEstado().then(setEstados).catch(() => {})
 
   const cargar = () => {
     setLoading(true)
@@ -54,7 +78,7 @@ export default function Notifications() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar(); cargarEstados() }, [])
 
   const save = async () => {
     if (!config) return
@@ -110,6 +134,7 @@ export default function Notifications() {
     try {
       const r = await api.testEmail({ email_recipients: config.email_recipients })
       showToast(r.message, r.ok ? 'success' : 'error')
+      cargarEstados()
     } catch (e: any) {
       showToast(e.message, 'error')
     } finally {
@@ -141,6 +166,7 @@ export default function Notifications() {
         telegram_chat_id: config.telegram_chat_id || undefined,
       })
       showToast(r.message, r.ok ? 'success' : 'error')
+      cargarEstados()
     } catch (e: any) {
       showToast(e.message, 'error')
     } finally {
@@ -168,6 +194,7 @@ export default function Notifications() {
         xmpp_room: config.xmpp_room || undefined,
       })
       showToast(r.message, r.ok ? 'success' : 'error')
+      cargarEstados()
     } catch (e: any) {
       showToast(e.message, 'error')
     } finally {
@@ -195,6 +222,7 @@ export default function Notifications() {
             <span className="text-sm">{traducir("Habilitar")}</span>
           </label>
         </div>
+        {config.email_enabled && <EstadoDelCanal e={estados.email} />}
         {config.email_enabled && (
           <div className="space-y-3">
             <p className="text-xs text-ink-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -229,6 +257,7 @@ export default function Notifications() {
             <span className="text-sm">{traducir("Habilitar")}</span>
           </label>
         </div>
+        {config.telegram_enabled && <EstadoDelCanal e={estados.telegram} />}
         {config.telegram_enabled && (
           <div className="space-y-3">
             <div>
@@ -268,6 +297,7 @@ export default function Notifications() {
             <span className="text-sm">{traducir("Habilitar")}</span>
           </label>
         </div>
+        {config.xmpp_enabled && <EstadoDelCanal e={estados.xmpp} />}
         {config.xmpp_enabled && (
           <div className="space-y-3">
             <p className="text-xs text-ink-3">

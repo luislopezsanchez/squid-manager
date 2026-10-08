@@ -19,9 +19,10 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.i18n import idioma_de_cabecera, traducir, traducir_dinamico
+from app.i18n import idioma_de_cabecera, traducir_dinamico
 from app.database import engine, SessionLocal
-from app.models import *  # noqa: importa todos los modelos
+from app.models import *  # noqa: F403 - importa todos los modelos
+from app.routes import usuarios_busqueda
 from app.routes import modules as modules_routes
 from app.routes import system_time as system_time_routes
 from app.routes import auth, proxy_users, acls, access_rules, squid_config, ldap, delay_pools, audit, metrics, admins, backup, logs, notifications, user_groups, syslog, parent_proxy, kerberos, ai, update, cache_manager, contact, smtp, quotas, group_quotas, network, central, search, self_service
@@ -354,9 +355,24 @@ def _aplicar_configuracion_definitiva():
     threading.Thread(target=tarea, name="config-inicial", daemon=True).start()
 
 
+def _avisar_si_hay_varios_procesos() -> None:
+    """Las tareas periódicas, los límites de intentos y las importaciones en segundo plano viven en la memoria de UN proceso:
+    con varios se duplicarían las tareas y se multiplicarían los límites (auditoría 02-N01)."""
+    import os
+    try:
+        procesos = int(os.getenv("WEB_CONCURRENCY", "1") or "1")
+    except ValueError:
+        return
+    if procesos > 1:
+        logger.warning(
+            "WEB_CONCURRENCY=%d: SquidManager está pensado para UN solo proceso del backend. Con varios, las tareas "
+            "periódicas se duplican y los límites de intentos de acceso se multiplican. Deja WEB_CONCURRENCY=1.", procesos)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Iniciando SquidManager Backend...")
+    _avisar_si_hay_varios_procesos()
     run_migrations()
     seed_data()
     logger.info("Base de datos inicializada")
@@ -441,6 +457,7 @@ app.middleware("http")(rate_limit_middleware)
 app.include_router(auth.router, prefix="/api/auth", tags=["Autenticación"])
 app.include_router(proxy_users.router, prefix="/api/proxy-users", tags=["Usuarios del Proxy"])
 app.include_router(self_service.router, prefix="/api/self", tags=["Autoservicio de usuarios"])
+app.include_router(usuarios_busqueda.router, prefix="/api/users", tags=["Búsqueda de usuarios"])
 app.include_router(acls.router, prefix="/api/acls", tags=["ACLs"])
 app.include_router(access_rules.router, prefix="/api/access-rules", tags=["Reglas de Acceso"])
 app.include_router(squid_config.router, prefix="/api/squid", tags=["Configuración Squid"])

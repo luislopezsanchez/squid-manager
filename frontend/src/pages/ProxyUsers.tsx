@@ -36,6 +36,7 @@ interface LdapUserRow {
   enabled: boolean
   display_name: string | null
   email: string | null
+  en_directorio?: boolean
   created_at: string | null
 }
 
@@ -1045,6 +1046,12 @@ export default function ProxyUsers() {
                     }`}>
                       {u.source === 'local' ? 'Local' : 'LDAP'}
                     </span>
+                    {u.source === 'ldap' && u.en_directorio === false && (
+                      <span className="ml-1 inline-flex px-2 py-1 text-xs font-medium rounded-full pill-mute"
+                        title={traducir("La última sincronización no encontró esta cuenta en el directorio.")}>
+                        {traducir("Ausente del directorio")}
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${

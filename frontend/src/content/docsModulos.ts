@@ -13,7 +13,7 @@ No todas las instalaciones usan todo. **Módulos** te deja encender o apagar las
 
 ## Valores por defecto
 
-Todos los módulos vienen **activos**, salvo **Panel central**, que se habilita a mano porque solo tiene sentido cuando vas a vigilar varios servidores desde uno.
+Todos los módulos vienen **activos**, salvo **Panel central** (se habilita a mano porque solo tiene sentido cuando vas a vigilar varios servidores desde uno) y **Portal de autoservicio de usuarios** (también apagado: ver la ayuda de Usuarios).
 
 ## Ejemplo
 

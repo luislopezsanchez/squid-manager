@@ -2,6 +2,7 @@ import { traducir } from '../i18n'
 import { IconEdit, IconGroups } from '../components/Icons'
 import { useEffect, useMemo, useState } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
+import { DatalistUsuarios } from '../hooks/useSugerenciasUsuarios'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import Modal from '../components/Modal'
@@ -84,9 +85,8 @@ function BarraConsumo({ usado, total }: { usado: number; total: number }) {
  * resto de los campos (tamaño, periodo, acción). Igual patrón visual que
  * QuotaModal de ProxyUsers.tsx.
  */
-function CuotaFormModal({ existente, usuariosDisponibles, gruposLocales, onClose, onSave, onRemove }: {
+function CuotaFormModal({ existente, gruposLocales, onClose, onSave, onRemove }: {
   existente?: Fila
-  usuariosDisponibles: string[]
   gruposLocales: Group[]
   onClose: () => void
   onSave: (args: {
@@ -198,9 +198,7 @@ function CuotaFormModal({ existente, usuariosDisponibles, gruposLocales, onClose
             </select>
           )}
           {!esEdicion && tipo === 'usuario' && (
-            <datalist id="cuotas-usuarios-datalist">
-              {usuariosDisponibles.map(u => <option key={u} value={u} />)}
-            </datalist>
+            <DatalistUsuarios id="cuotas-usuarios-datalist" texto={nombre} />
           )}
           {!esEdicion && tipo === 'grupo' && gruposLocales.length === 0 && (
             <p className="field-help mt-1">{traducir("No hay grupos locales creados todavía (Gestión → Grupos).")}</p>
@@ -369,7 +367,6 @@ export default function Cuotas() {
   const [userQuotas, setUserQuotas] = useState<UserQuota[]>([])
   const [groupQuotas, setGroupQuotas] = useState<GroupQuota[]>([])
   const [groups, setGroups] = useState<Group[]>([])
-  const [usuariosDisponibles, setUsuariosDisponibles] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [filtro, setFiltro] = useState<Filtro>('todas')
@@ -383,16 +380,10 @@ export default function Cuotas() {
       api.listQuotas().catch(() => []),
       api.listGroupQuotas().catch(() => []),
       api.listGroups().catch(() => []),
-      api.listUsers().catch(() => []),
-      api.listLdapUsers().catch(() => []),
-    ]).then(([uq, gq, gr, local, ldap]) => {
+    ]).then(([uq, gq, gr]) => {
       setUserQuotas(uq)
       setGroupQuotas(gq)
       setGroups(gr)
-      setUsuariosDisponibles([
-        ...local.map((u: any) => u.username),
-        ...ldap.map((u: any) => u.username),
-      ])
       setLoadError(false)
     }).catch(() => setLoadError(true))
       .finally(() => setLoading(false))
@@ -575,7 +566,6 @@ export default function Cuotas() {
       {formFor && (
         <CuotaFormModal
           existente={formFor === 'nueva' ? undefined : formFor}
-          usuariosDisponibles={usuariosDisponibles}
           gruposLocales={formFor === 'nueva' ? gruposLocalesSinCuota : gruposLocales}
           onClose={() => setFormFor(null)}
           onSave={handleSave}

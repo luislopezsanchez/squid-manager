@@ -1,5 +1,9 @@
 # Backup, Restore y Migración — SquidManager
 
+> **Formato heredado (JSON) obsoleto.** `POST /api/backup/restore` sigue existiendo para restaurar copias antiguas, pero las copias
+> nuevas deben hacerse con el formato v2 (`.smbackup`, `/export-v2` y `/restore-v2`). Ante un archivo mal formado responde `400`
+> («Backup mal formado…») y no restaura nada.
+
 ## Tipos de exportación
 
 SquidManager ofrece tres opciones de exportación/importación:

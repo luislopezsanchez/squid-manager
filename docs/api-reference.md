@@ -173,6 +173,30 @@ Genera una contraseña aleatoria de 16 caracteres, la aplica y purga la caché d
 }
 ```
 
+### Importar usuarios desde un archivo
+```http
+POST /api/proxy-users/import
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+file=@usuarios.csv  modo=crear|crear_o_actualizar  simular=true|false  segundo_plano=true|false
+```
+
+Columnas reconocidas (CSV, Excel o texto): usuario, contraseña, nombre, email, habilitado y caduca. `simular=true` (por defecto) solo valida y
+devuelve el informe: `a_crear`, `a_actualizar`, `omitidos`, `errores` por fila y `segundos_estimados`. Si el usuario no trae contraseña se
+genera una; la contraseña no puede pasar de 72 bytes.
+
+**Segundo plano.** Con `segundo_plano=true` (lo que usa el panel) el máximo es de 20 000 filas y, con `simular=false`, la respuesta llega enseguida
+con `"tarea": "<id>"`. El progreso se consulta con:
+
+```http
+GET /api/proxy-users/import/estado/<id>
+→ {"estado": "en_curso|terminada|error", "fase": "calculando|guardando", "hechos": 120, "total": 400, "segundos": 12}
+```
+
+Al terminar incluye `informe` con `creados`, `actualizados` y las `credenciales` generadas, que se entregan **una sola vez**. Solo puede haber una
+importación a la vez (`409` si hay otra en curso). Sin `segundo_plano` el máximo son 5000 filas y la respuesta llega cuando todo terminó.
+
 ### Regenerar el fichero de contraseñas
 ```http
 POST /api/proxy-users/sync

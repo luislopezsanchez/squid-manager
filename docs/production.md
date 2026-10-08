@@ -83,6 +83,14 @@ acceso que ya haría falta para editar la base de datos a mano.
 
 ---
 
+## Un solo proceso del backend
+
+El backend corre con **un único proceso** de uvicorn (no añadas `--workers`): las tareas periódicas (comprobar actualizaciones, anomalías,
+sincronización de categorías, alertas de nodos, reenvío a syslog), los límites de intentos de acceso y las importaciones masivas en
+segundo plano viven en la memoria de ese proceso. Con varios procesos las tareas se duplicarían y los límites se multiplicarían. Para
+más capacidad, sube recursos o usa un balanceador entre instalaciones (ver `balanceo-de-carga.md`). Si se detecta más de un proceso, el
+backend lo avisa en el log al arrancar.
+
 ## Límites de recursos (Docker)
 
 `docker-compose.yml` fija `mem_limit` en `backend` (512m) y `squid` (1g) — un

@@ -39,6 +39,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      - name: Lint (errores de pyflakes: imports sin uso, nombres sin definir, claves repetidas)
+        working-directory: backend
+        run: ruff check app --select F
+
       - name: Tests
         working-directory: backend
         env:
@@ -54,7 +58,8 @@ jobs:
         # fallaron por esto, sin ejecutar un solo test (auditoria
         # 2026-09-09, hallazgo 13-001). "python -m pytest" si agrega el
         # directorio actual, que es lo que hace que "import app" funcione.
-        run: python -m pytest tests/ -q
+        run: python -m pytest tests/ -q --cov=app --cov-report=term:skip-covered
+        # La cobertura es informativa (sin umbral): sirve para ver la tendencia y dónde faltan pruebas.
 
       - name: Auditoría de dependencias (informativo)
         working-directory: backend
@@ -84,6 +89,10 @@ jobs:
       - name: Comprobar tipos
         working-directory: frontend
         run: npm run typecheck
+
+      - name: Pruebas (Vitest)
+        working-directory: frontend
+        run: npm test
 
       # traducir("texto") usa el propio texto en español como clave (ver
       # src/i18n/index.ts): un texto nuevo sin su entrada en en.json/pt.json

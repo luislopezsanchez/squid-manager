@@ -13,7 +13,7 @@ from app.models.notification_config import NotificationConfig
 from app.models.smtp_config import SmtpConfig
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.daily_report_service import condiciones, guardar_idioma, enviar as enviar_reporte
-from app.services.notification_service import test_email, test_telegram, test_xmpp, send_email, send_telegram
+from app.services.notification_service import estado_canales, test_email, test_telegram, test_xmpp
 
 router = APIRouter()
 
@@ -207,6 +207,12 @@ def update_config(
     ))
     db.commit()
     return {"status": "ok", "message": "Configuración de notificaciones guardada"}
+
+
+@router.get("/estado")
+def estado_de_los_canales(_: Admin = Depends(get_current_admin)):
+    """Estado de cada canal (correo, Telegram, XMPP): último error, fallos seguidos y si está en pausa por fallar."""
+    return estado_canales()
 
 
 @router.post("/test-email")

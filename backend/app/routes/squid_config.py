@@ -2,10 +2,7 @@
 
 import logging
 import re
-import subprocess
-from pathlib import Path
 
-import docker as docker_sdk
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
@@ -18,10 +15,9 @@ from app.models.squid_settings import SquidSetting
 from app.models.audit_log import AuditLog
 from app.services.auth_service import get_current_admin, require_writer
 from app.services.config_generator import generate_squid_config
-from app.services.squid_service import reload_squid, get_squid_status, restart_squid, start_squid, write_ldap_aux_files, apply_squid_config
+from app.services.squid_service import get_squid_status, start_squid, apply_squid_config
 from app.services.notification_service import queue_notification
-from app.services.config_state import mark_dirty, mark_clean, is_dirty
-from app.config import settings
+from app.services.config_state import mark_dirty, is_dirty
 
 logger = logging.getLogger(__name__)
 

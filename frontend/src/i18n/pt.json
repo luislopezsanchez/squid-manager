@@ -1862,5 +1862,21 @@
   "Ninguna ACL coincide con la búsqueda o los filtros.": "Nenhuma ACL corresponde à busca ou aos filtros.",
   "El archivo es PARCIAL: hay más registros de los que caben en una exportación (máx. 50 000). Acota con filtros para obtener el resto.": "O arquivo é PARCIAL: há mais registros do que cabem em uma exportação (máx. 50 000). Restrinja com filtros para obter o restante.",
   "El directorio tiene {n} grupos y solo se listan los primeros {m}. Escribe el nombre del grupo a mano.": "O diretório tem {n} grupos e só os primeiros {m} são listados. Digite o nome do grupo manualmente.",
-  "Calcular las contraseñas tardará unos {n} minutos en este servidor; no cierres esta ventana.": "Calcular as senhas levará cerca de {n} minutos neste servidor; não feche esta janela."
+  "Calcular las contraseñas tardará unos {n} minutos en este servidor; se hace en segundo plano y verás el progreso.": "Calcular as senhas levará cerca de {n} minutos neste servidor; é feito em segundo plano e você verá o progresso.",
+  "Guardando los usuarios…": "Salvando os usuários…",
+  "Calculando contraseñas…": "Calculando senhas…",
+  "Puedes cerrar esta ventana: la importación sigue en el servidor.": "Você pode fechar esta janela: a importação continua no servidor.",
+  "La importación falló": "A importação falhou",
+  "Se muestran los primeros 50: escribe para afinar la búsqueda.": "Os primeiros 50 são mostrados: digite para refinar a busca.",
+  "hace menos de un minuto": "há menos de um minuto",
+  "hace {n} min": "há {n} min",
+  "hace {n} h": "há {n} h",
+  "Último envío correcto": "Último envio correto",
+  "Último envío fallido": "Último envio malsucedido",
+  "Canal en pausa {n} min más: falló {f} veces seguidas y se descartan los avisos hasta entonces ({d} descartados).": "Canal em pausa por mais {n} min: falhou {f} vezes seguidas e os avisos são descartados até lá ({d} descartados).",
+  "{n} usuarios ya no están en el directorio (los marcó la última sincronización). Siguen pudiendo navegar si estaban habilitados.": "{n} usuários não estão mais no diretório (marcados pela última sincronização). Ainda podem navegar se estavam habilitados.",
+  "{n} usuarios deshabilitados": "{n} usuários desabilitados",
+  "Deshabilitar los ausentes": "Desabilitar os ausentes",
+  "Ausente del directorio": "Ausente do diretório",
+  "La última sincronización no encontró esta cuenta en el directorio.": "A última sincronização não encontrou esta conta no diretório."
 }

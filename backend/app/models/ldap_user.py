@@ -20,5 +20,8 @@ class LdapUser(Base):
     email = Column(String(255), nullable=True)
     # allow-list estricto: por defecto NO navegan hasta que el admin los habilite
     enabled = Column(Boolean, default=False, nullable=False)
+    # False si la última sincronización no encontró la cuenta en el directorio (se borró o se movió). No se borra ni se
+    # deshabilita sola: el admin decide (botón «Deshabilitar los ausentes»).
+    en_directorio = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

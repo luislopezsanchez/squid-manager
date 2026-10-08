@@ -1862,5 +1862,21 @@
   "Ninguna ACL coincide con la búsqueda o los filtros.": "No ACL matches the search or filters.",
   "El archivo es PARCIAL: hay más registros de los que caben en una exportación (máx. 50 000). Acota con filtros para obtener el resto.": "The file is PARTIAL: there are more records than one export can hold (max. 50,000). Narrow it with filters to get the rest.",
   "El directorio tiene {n} grupos y solo se listan los primeros {m}. Escribe el nombre del grupo a mano.": "The directory has {n} groups and only the first {m} are listed. Type the group name by hand.",
-  "Calcular las contraseñas tardará unos {n} minutos en este servidor; no cierres esta ventana.": "Computing the passwords will take about {n} minutes on this server; do not close this window."
+  "Calcular las contraseñas tardará unos {n} minutos en este servidor; se hace en segundo plano y verás el progreso.": "Computing the passwords will take about {n} minutes on this server; it runs in the background and you will see the progress.",
+  "Guardando los usuarios…": "Saving the users…",
+  "Calculando contraseñas…": "Computing passwords…",
+  "Puedes cerrar esta ventana: la importación sigue en el servidor.": "You can close this window: the import keeps running on the server.",
+  "La importación falló": "The import failed",
+  "Se muestran los primeros 50: escribe para afinar la búsqueda.": "The first 50 are shown: type to narrow the search.",
+  "hace menos de un minuto": "less than a minute ago",
+  "hace {n} min": "{n} min ago",
+  "hace {n} h": "{n} h ago",
+  "Último envío correcto": "Last send succeeded",
+  "Último envío fallido": "Last send failed",
+  "Canal en pausa {n} min más: falló {f} veces seguidas y se descartan los avisos hasta entonces ({d} descartados).": "Channel paused for {n} more min: it failed {f} times in a row and alerts are dropped until then ({d} dropped).",
+  "{n} usuarios ya no están en el directorio (los marcó la última sincronización). Siguen pudiendo navegar si estaban habilitados.": "{n} users are no longer in the directory (flagged by the last sync). They can still browse if they were enabled.",
+  "{n} usuarios deshabilitados": "{n} users disabled",
+  "Deshabilitar los ausentes": "Disable the absent ones",
+  "Ausente del directorio": "Absent from the directory",
+  "La última sincronización no encontró esta cuenta en el directorio.": "The last sync did not find this account in the directory."
 }

@@ -1,6 +1,7 @@
 import { traducir } from '../i18n'
 import { useState, useEffect, useMemo } from 'react'
 import { api, notificarCambioPendiente } from '../api/client'
+import { useSugerenciasUsuarios } from '../hooks/useSugerenciasUsuarios'
 import { useToast } from '../components/Toast'
 import { LoadingState, ErrorState } from '../components/AsyncState'
 import RequiereAplicar from '../components/RequiereAplicar'
@@ -62,7 +63,6 @@ export default function DelayPools() {
   const [pools, setPools] = useState<DelayPool[]>([])
   const [acls, setAcls] = useState<Acl[]>([])
   const [groups, setGroups] = useState<string[]>([])
-  const [usuarios, setUsuarios] = useState<string[]>([])
   const [presets, setPresets] = useState<Preset[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -95,10 +95,6 @@ export default function DelayPools() {
     loadPools()
     api.listAcls().then(setAcls).catch(() => {})
     api.listGroups().then(g => setGroups(g.map((x: any) => x.name))).catch(() => {})
-    Promise.all([
-      api.listUsers().then(us => us.map((u: any) => u.username)).catch(() => []),
-      api.listLdapUsers().then(us => us.map((u: any) => u.username)).catch(() => []),
-    ]).then(([a, b]) => setUsuarios([...new Set<string>([...a, ...b])].sort()))
     api.getDelayPoolPresets().then(setPresets).catch(() => {})
   }, [])
 
@@ -109,6 +105,9 @@ export default function DelayPools() {
     [acls],
   )
 
+  // Usuarios: se buscan en el servidor según lo que se escribe en el filtro (máx. 50), no se descargan todos.
+  const { nombres: usuarios, hayMas: hayMasUsuarios } = useSugerenciasUsuarios(filtro, categoria === 'user')
+
   const opciones = useMemo(() => {
     const q = filtro.trim().toLowerCase()
     const lista: { value: string; label: string; detalle?: string }[] =
@@ -117,7 +116,7 @@ export default function DelayPools() {
       : categoria === 'user' ? usuarios.map(u => ({ value: u, label: u }))
       : categoria === 'group' ? groups.map(g => ({ value: g, label: g }))
       : []
-    return q ? lista.filter(o => `${o.label} ${o.detalle ?? ''}`.toLowerCase().includes(q)) : lista
+    return q && categoria !== 'user' ? lista.filter(o => `${o.label} ${o.detalle ?? ''}`.toLowerCase().includes(q)) : lista
   }, [categoria, aclsElegibles, presets, usuarios, groups, filtro])
 
   const estaElegido = (kind: string, value: string) => seleccion.some(o => o.kind === kind && o.value === value)
@@ -299,6 +298,9 @@ export default function DelayPools() {
                               {o.detalle && <span className="text-[11.5px] text-ink-3 truncate">{o.detalle}</span>}
                             </label>
                           ))}
+                          {categoria === 'user' && hayMasUsuarios && (
+                            <p className="text-[12.5px] text-ink-3 py-2 text-center">{traducir("Se muestran los primeros 50: escribe para afinar la búsqueda.")}</p>
+                          )}
                           {opciones.length === 0 && <p className="text-[13px] text-ink-3 py-3 text-center">{traducir("No hay nada que elegir aquí todavía.")}</p>}
                         </div>
                       </>

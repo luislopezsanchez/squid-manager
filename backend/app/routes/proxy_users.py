@@ -469,12 +469,25 @@ def _segundos_estimados(n: int) -> int:
     return int(n * un_hash / max(1, min(4, os.cpu_count() or 1))) + 1
 
 
-def _hashes_en_paralelo(items: list[tuple[str, str]], realm: str) -> dict[str, tuple[str, str, str]]:
-    """{username: hashes}. bcrypt suelta el GIL: los hilos sí aprovechan varios núcleos."""
+def _hashes_en_paralelo(items: list[tuple[str, str]], realm: str, progreso=None) -> dict[str, tuple[str, str, str]]:
+    """{username: hashes}. bcrypt suelta el GIL: los hilos sí aprovechan varios núcleos.
+    `progreso(hechos)` se llama a medida que terminan, para la barra de la importación."""
     from concurrent.futures import ThreadPoolExecutor
+    import threading
+
+    hechos = [0]
+    cerrojo = threading.Lock()
+
+    def uno(it):
+        r = _hashes(it[0], it[1], realm)
+        if progreso:
+            with cerrojo:
+                hechos[0] += 1
+                progreso(hechos[0])
+        return r
 
     with ThreadPoolExecutor(max_workers=4) as ex:
-        resultados = list(ex.map(lambda it: _hashes(it[0], it[1], realm), items))
+        resultados = list(ex.map(uno, items))
     return {u: r for (u, _), r in zip(items, resultados)}
 
 
@@ -646,12 +659,24 @@ def import_template(
                     headers={"Content-Disposition": f"attachment; filename=plantilla-usuarios.{format}"})
 
 
+@router.get("/import/estado/{tarea}")
+def import_estado(tarea: str, _: Admin = Depends(get_current_admin)):
+    """Progreso de una importación en segundo plano. Al terminar trae el informe (con las contraseñas generadas,
+    que se entregan una sola vez)."""
+    from app.services import import_jobs
+    e = import_jobs.estado(tarea)
+    if e is None:
+        raise HTTPException(404, detail="Importación desconocida (¿se reinició el servidor?). Revisa la lista de usuarios.")
+    return e
+
+
 @router.post("/import")
 def import_users(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     modo: Literal["crear", "crear_o_actualizar"] = Form("crear"),
     simular: bool = Form(True),
+    segundo_plano: bool = Form(False),
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_writer),
 ):
@@ -662,12 +687,17 @@ def import_users(
     `simular=false`. Las filas con errores se reportan y se omiten, el resto
     se importa. A los usuarios nuevos sin contraseña en el archivo se les
     genera una, y se devuelve UNA sola vez en `credenciales`.
+
+    `segundo_plano=true` (lo que usa el panel) admite hasta 20 000 filas: con `simular=false` responde enseguida con
+    `tarea` y el progreso se consulta en `GET /import/estado/{tarea}`. Sin él, el máximo son 5000 filas y la respuesta
+    llega cuando todo terminó (puede tardar minutos).
     """
     from app.services import user_import_service as svc
 
     datos = file.file.read(svc.MAX_BYTES + 1)
     try:
-        filas, errores = svc.parse_archivo(file.filename or "", datos)
+        filas, errores = svc.parse_archivo(
+            file.filename or "", datos, max_filas=svc.MAX_FILAS_SEGUNDO_PLANO if segundo_plano else svc.MAX_FILAS)
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
     except Exception as e:  # archivo corrupto (xlsx roto, etc.)
@@ -703,6 +733,39 @@ def import_users(
     if simular or (not a_crear and not a_actualizar):
         return informe
 
+    if segundo_plano:
+        # Calcular miles de contraseñas tarda minutos: se hace en segundo plano y el panel pregunta cómo va.
+        from app.services import import_jobs
+        admin_id, admin_nombre = current_admin.id, current_admin.username
+        nombres_a_actualizar = [(u.username, f) for u, f in a_actualizar]
+
+        def _trabajo(progreso):
+            from app.database import SessionLocal
+            sesion = SessionLocal()
+            try:
+                return _aplicar_importacion(
+                    sesion, informe, a_crear, nombres_a_actualizar, admin_id, admin_nombre,
+                    file.filename, progreso=progreso, background_tasks=None,
+                )
+            finally:
+                sesion.close()
+
+        total = len(a_crear) + sum(1 for _, f in a_actualizar if f["password"])
+        job_id = import_jobs.iniciar(total, _trabajo)
+        if job_id is None:
+            raise HTTPException(409, detail="Ya hay una importación en curso. Espera a que termine.")
+        return {**informe, "tarea": job_id, "en_segundo_plano": True}
+
+    return _aplicar_importacion(
+        db, informe, a_crear, [(u.username, f) for u, f in a_actualizar], current_admin.id,
+        current_admin.username, file.filename, progreso=None, background_tasks=background_tasks,
+    )
+
+
+def _aplicar_importacion(db, informe, a_crear, a_actualizar, admin_id, admin_nombre, nombre_archivo,
+                         progreso, background_tasks):
+    """Calcula los hashes, guarda los usuarios y deja el archivo de Squid al día. Sirve tanto para la
+    petición normal (con `background_tasks`) como para la tarea en segundo plano (con su propia sesión)."""
     realm = realm_actual(db)
     con_clave: list[tuple[str, str]] = []
     generadas: dict[str, str] = {}
@@ -714,19 +777,28 @@ def import_users(
     for _, f in a_actualizar:
         if f["password"]:
             con_clave.append((f["username"], f["password"]))
-    hashes = _hashes_en_paralelo(con_clave, realm) if con_clave else {}
+    hashes = _hashes_en_paralelo(con_clave, realm, progreso) if con_clave else {}
+    if progreso:
+        progreso(len(con_clave), "guardando")
+
+    existentes = {}
+    if a_actualizar:
+        nombres = [n for n, _ in a_actualizar]
+        existentes = {u.username: u for u in db.query(ProxyUser).filter(ProxyUser.username.in_(nombres)).all()}
 
     revocar = False
     for f in a_crear:
         ph, hl, ha1 = hashes[f["username"]]
-        u = ProxyUser(
+        db.add(ProxyUser(
             username=f["username"], display_name=f["display_name"], email=f["email"],
             password_hash=ph, htpasswd_hash=hl, digest_ha1=ha1, digest_ha1_realm=realm,
             enabled=True if f["enabled"] is None else f["enabled"],
             expires_at=f["expires_at"],
-        )
-        db.add(u)
-    for u, f in a_actualizar:
+        ))
+    for nombre, f in a_actualizar:
+        u = existentes.get(nombre)
+        if u is None:  # lo borraron mientras tanto
+            continue
         if f["display_name"] is not None:
             u.display_name = f["display_name"]
         if f["email"] is not None:
@@ -742,18 +814,22 @@ def import_users(
             u.digest_ha1_realm = realm
             revocar = True
     db.add(AuditLog(
-        admin_id=current_admin.id, admin_username=current_admin.username,
+        admin_id=admin_id, admin_username=admin_nombre,
         action="import", entity="proxy_user", entity_id=None,
-        new_value=f"{len(a_crear)} creados, {len(a_actualizar)} actualizados ({file.filename})",
+        new_value=f"{len(a_crear)} creados, {len(a_actualizar)} actualizados ({nombre_archivo})",
     ))
     _sync_passwd(db)
     db.commit()
     if revocar:
         _revocar(background_tasks)
 
-    queue_notification(background_tasks, db, "user_change",
-                       "Importación masiva de usuarios",
-                       f"El administrador «{current_admin.username}» importó usuarios desde un archivo: {len(a_crear)} nuevos y {len(a_actualizar)} actualizados.")
+    texto = (f"El administrador «{admin_nombre}» importó usuarios desde un archivo: "
+             f"{len(a_crear)} nuevos y {len(a_actualizar)} actualizados.")
+    if background_tasks is not None:
+        queue_notification(background_tasks, db, "user_change", "Importación masiva de usuarios", texto)
+    else:
+        from app.services.notification_service import notify_now
+        notify_now(db, "user_change", "Importación masiva de usuarios", texto)
     informe.update({
         "creados": len(a_crear), "actualizados": len(a_actualizar),
         "credenciales": [{"usuario": u, "password": p} for u, p in generadas.items()],

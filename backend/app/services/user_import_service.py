@@ -25,6 +25,7 @@ import unicodedata
 from datetime import datetime
 
 MAX_FILAS = 5000
+MAX_FILAS_SEGUNDO_PLANO = 20000  # en segundo plano no hay un tiempo de espera de petición que respetar
 MAX_BYTES = 5 * 1024 * 1024
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
@@ -78,7 +79,7 @@ def _leer_xlsx(datos: bytes) -> list[list[str]]:
     filas = []
     for fila in ws.iter_rows(values_only=True):
         filas.append(["" if c is None else (c.strftime("%Y-%m-%d") if isinstance(c, datetime) else str(c).strip()) for c in fila])
-        if len(filas) > MAX_FILAS + 2:  # basta para que quien llama diga «demasiadas filas»: no se lee el resto
+        if len(filas) > MAX_FILAS_SEGUNDO_PLANO + 2:  # basta para que quien llama diga «demasiadas filas»: no se lee el resto
             break
     wb.close()
     return filas
@@ -114,7 +115,7 @@ def _parse_fecha(valor: str) -> datetime | None:
     return None
 
 
-def parse_archivo(nombre: str, datos: bytes) -> tuple[list[dict], list[dict]]:
+def parse_archivo(nombre: str, datos: bytes, max_filas: int = MAX_FILAS) -> tuple[list[dict], list[dict]]:
     """Devuelve (filas_validas, errores). Cada fila válida es un dict con
     username, password ('' si no vino), display_name, email, enabled
     (None si no vino), expires_at (None si no vino) y `fila` (nº en el
@@ -144,10 +145,10 @@ def parse_archivo(nombre: str, datos: bytes) -> tuple[list[dict], list[dict]]:
             "y tener una columna llamada «usuario» (o username)."
         )
     cuerpo = filas[1:]
-    if len(cuerpo) > MAX_FILAS:
+    if len(cuerpo) > max_filas:
         raise ValueError(
-            f"Demasiadas filas ({len(cuerpo)}): el máximo es {MAX_FILAS} por archivo. "
-            f"Divide el archivo en partes de hasta {MAX_FILAS} usuarios e impórtalas una tras otra."
+            f"Demasiadas filas ({len(cuerpo)}): el máximo es {max_filas} por archivo. "
+            f"Divide el archivo en partes de hasta {max_filas} usuarios e impórtalas una tras otra."
         )
 
     validas, errores, vistos = [], [], set()

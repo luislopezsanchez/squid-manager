@@ -21,31 +21,30 @@ reutiliza (`05-003` = tercer hallazgo de seguridad de la historia del proyecto).
 
 | ID | Sev | Dim | Título | Evidencia | Detectado | Última verificación |
 |---|---|---|---|---|---|---|
-| 04-002 | Menor | 4 | Sin suite de tests para el frontend | `frontend/package.json` sin script `test`; sin archivos `*.test.tsx` | 2026-09-13 | 2026-09-14 |
 | 03-001 | Menor | 3 | 6 copias independientes del mismo doble de prueba (`_FakeQuery`/`_Consulta`) | Ver lista de archivos en el informe 2026-09-13-audit-full.md | 2026-09-13 | 2026-09-14 |
 | 09-001 | Menor | 9 | N+1 en `find_references` al listar ACLs sin uso | `backend/app/services/squid_names.py:119`, `backend/app/routes/acls.py` (`list_unused_acls`) | 2026-09-13 | 2026-09-14 |
-| 05-006 | Mayor | 5 | Imagen de Proxmox de descarga pública con claves reales de una instalación (`SECRET_KEY`, `DB_PASS`) | `backups/README.md:3-9,25`; `curl -sI` → HTTP 200, 2,99 GB | 2026-10-08 | 2026-10-08 — Probable: contenido no descargado; **Crítico si la instalación de origen sigue activa** |
-| 05-007 | Menor | 5 | El servicio `updater` monta el socket de Docker completo (pendiente de aceptación expresa) | `docker-compose.yml` (servicio `updater`); test `test_solo_el_updater_monta_el_socket_de_docker_completo` | 2026-10-08 | 2026-10-08 |
 | 08-002 | Menor | 8 | IP pública y privada reales en informes y CHANGELOG públicos | `docs/audits/2026-09-14-audit-full.md:135-140`, `CHANGELOG.md:700,711`, `backups/README.md:25` | 2026-10-08 | 2026-10-08 |
 | 13-002 | Menor | 13 | Versiones 1.0.4 a 1.0.9 sin etiqueta git | `git tag` → última `v1.0.3`; `docs/actualizacion.md:582-591` | 2026-10-08 | 2026-10-08 |
 | 03-002 | Menor | 3 | Cinco ficheros por encima de 1000 líneas | `Dashboard.tsx` 1602, `metrics_service.py` 1367, `ProxyUsers.tsx` 1221, `PanelCentral.tsx` 1211, `ai_service.py` 1137 | 2026-10-08 | 2026-10-08 |
-| 01-004 | Menor | 1 | Ayuda integrada sin ACLs en bloque ni portal de autoservicio | `frontend/src/content/docsAcls.ts` | 2026-10-08 | 2026-10-08 |
-| 04-003 | Menor | 4 | Cobertura 55 % (23 pruebas añadidas en 1.0.10; sigue abierto); backup 13 %, proxy_users 20 %, ldap 27 %, acls 35 % | `pytest --cov=app` | 2026-10-08 | 2026-10-08 |
-| 09-002 | Menor | 9 | Las pantallas descargan todos los usuarios para filtrar en el navegador | `frontend/src/api/client.ts` (`listarTodo`) | 2026-10-08 | 2026-10-08 |
-| 10-005 | Menor | 10 | Notificaciones sin cola ni «circuit breaker» | `notification_service.py` (`notify`) | 2026-10-08 | 2026-10-08 |
-| 13-003 | Menor | 13 | CI sin linter de Python (24 imports sin uso) | `pyflakes backend/app` | 2026-10-08 | 2026-10-08 |
+| 04-003 | Menor | 4 | Cobertura 55 % (1.0.11: 57 %; proxy_users 42 %, backup 32 %, ldap 56 %, acls 50 %; sigue abierto); backup 13 %, proxy_users 20 %, ldap 27 %, acls 35 % | `pytest --cov=app` | 2026-10-08 | 2026-10-08 |
 
 ## Riesgos aceptados
 
 | ID | Sev | Título | Motivo de la aceptación | Aceptado el | Revisar el |
 |---|---|---|---|---|---|
+| 05-007 | Menor | El servicio `updater` monta el socket de Docker completo | Es el mismo privilegio que ya tenía el temporizador del servidor, está aislado del backend, no publica puertos y evita que «Actualizar ahora» dependa de piezas del servidor que fallaron tres veces | 2026-10-08 (decisión del propietario) | Al cambiar el mecanismo de actualización |
 
-(ninguno todavía)
 
 ## Corregidos
 
 | ID | Sev | Título | Corregido el | Commit | Reverificado el |
 |---|---|---|---|---|---|
+| 04-002 | Menor | Sin suite de tests para el frontend | 2026-10-08 | *(1.0.11)* | 2026-10-08 — Vitest con 12 pruebas de humo, en CI |
+| 13-003 | Menor | CI sin linter de Python | 2026-10-08 | *(1.0.11)* | 2026-10-08 — `ruff check --select F` en CI; 24 imports eliminados |
+| 10-005 | Menor | Notificaciones sin cola ni «circuit breaker» | 2026-10-08 | *(1.0.11)* | 2026-10-08 — pausa tras 3 fallos, tope de 2 envíos, estado en pantalla; 6 pruebas |
+| 09-002 | Menor | Las pantallas descargaban todos los usuarios para filtrar en el navegador | 2026-10-08 | *(1.0.11)* | 2026-10-08 — selectores con búsqueda en servidor; prueba en vivo |
+| 01-004 | Menor | Ayuda integrada sin ACLs en bloque ni portal de autoservicio | 2026-10-08 | *(1.0.11)* | 2026-10-08 — añadidas en es/en/pt |
+| 05-006 | Mayor | La imagen LXC pública del `backups/README.md` lleva claves de una instalación de origen (contenedor local de pruebas) | 2026-10-08 | *(1.0.10 + borrado en el servidor)* | 2026-10-08 — archivo eliminado de `ftp.innovanet.uy`: ahora HTTP 404 |
 | 01-002 | Menor | Lista de grupos LDAP truncada a 1000 sin avisar | 2026-10-08 | *(1.0.10)* | 2026-10-08 — pruebas nuevas + comprobado en el CT 103 |
 | 01-003 | Menor | «Exportar logs» corta en 50 000 sin aviso | 2026-10-08 | *(1.0.10)* | 2026-10-08 — pruebas nuevas + comprobado en el CT 103 |
 | 05-008 | Menor | El límite de intentos por cuenta no frenaba nada (ahora retraso creciente + aviso) | 2026-10-08 | *(1.0.10)* | 2026-10-08 — pruebas nuevas + comprobado en el CT 103 |
@@ -82,13 +81,13 @@ reutiliza (`05-003` = tercer hallazgo de seguridad de la historia del proyecto).
 - **06-N01** — `docker-socket-proxy` con permisos casi totales (`docker-compose.yml:24-33`); ya reconocido en `update_service.py:7-10`. 2026-09-14.
 - **06-N02** — Imagen base del servicio `updater` por etiqueta móvil (`docker:27-cli`) y `apk add` sin versiones (`updater/Dockerfile:10-13`); acciones de CI por etiqueta. 2026-10-08.
 - **03-N03** — 16 bloques `except Exception: pass` en `backend/app` (`main.py:55`, `quota_service.py:95,103`, `syslog_service.py:51,59`…): mejor esfuerzo; falta al menos un `logger.debug`. 2026-10-08.
-- **11-N01** — 6 scripts sin bit de ejecución en el índice (`autoupdate-check.sh`, `upgrade-nativo.sh`, `backend/entrypoint.sh`, `squid/*.sh`). 2026-10-08.
+- **11-N01** — 6 scripts sin bit de ejecución en el índice (`autoupdate-check.sh`, `upgrade-nativo.sh`, `backend/entrypoint.sh`, `squid/*.sh`). 2026-10-08. **Resuelta en 1.0.11.**
 - **12-N01** — Volver a una versión anterior a la 1.0.6 deja el contenedor `updater` huérfano; `docs/actualizacion.md:493-510` no menciona `--remove-orphans`. 2026-10-08.
 - **04-N01** — El E2E de Docker (≈17 min) condiciona la publicación de versiones: un fallo del entorno bloquearía un release sin fallo real. 2026-10-08.
 - **11-N02** — Auxiliar con CLI de Docker 27 / Compose 2.33 frente a un host con Compose 5.x (probado y funciona). 2026-10-08.
-- **07-N01** — La sincronización LDAP nunca retira cuentas que ya no están en el directorio y compara el nombre distinguiendo mayúsculas (`routes/ldap.py:~418-460`). 2026-10-08.
-- **02-N01** — Hilos de fondo y límites de peticiones en memoria suponen un único worker de uvicorn (`backend/Dockerfile:81`, `main.py:321,354`). 2026-10-08.
-- **02-N02** — Conviven dos sistemas de copia de seguridad; el heredado responde 500 ante un archivo mal formado (`routes/backup.py:249,288`). 2026-10-08.
+- **07-N01** — La sincronización LDAP nunca retira cuentas que ya no están en el directorio y compara el nombre distinguiendo mayúsculas (`routes/ldap.py:~418-460`). 2026-10-08. **Resuelta en 1.0.11.**
+- **02-N01** — Hilos de fondo y límites de peticiones en memoria suponen un único worker de uvicorn (`backend/Dockerfile:81`, `main.py:321,354`). 2026-10-08. **Resuelta en 1.0.11.**
+- **02-N02** — Conviven dos sistemas de copia de seguridad; el heredado responde 500 ante un archivo mal formado (`routes/backup.py:249,288`). 2026-10-08. **Resuelta en 1.0.11.**
 - **13-N01** — Bus factor de facto 1 (`git shortlog -sn --all`: prácticamente un único autor bajo
   distintas configuraciones de git; 2026-10-08: `luislopezsanchez` 197, `root` 139, `llopez` 57). No accionable, solo contexto de riesgo de continuidad.
 

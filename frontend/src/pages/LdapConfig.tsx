@@ -36,6 +36,8 @@ export default function LdapConfig() {
   const [testResults, setTestResults] = useState<any[]>([])
   const [testUser, setTestUser] = useState({ username: '', password: '' })
   const [ldapUserCount, setLdapUserCount] = useState(0)
+  const [ldapAusentes, setLdapAusentes] = useState(0)
+  const [deshabilitando, setDeshabilitando] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
@@ -44,7 +46,7 @@ export default function LdapConfig() {
     api.getLdapConfig().then(r => { setConfig(r); setLoadError(false) })
       .catch(e => { showToast(traducir("Error al cargar config LDAP"), 'error'); setLoadError(true) })
       .finally(() => setLoading(false))
-    api.listLdapUsers().then(u => setLdapUserCount(u.length)).catch(() => {})
+    api.resumenUsuarios().then(r => { setLdapUserCount(r.ldap); setLdapAusentes(r.ldap_ausentes) }).catch(() => {})
   }
 
   useEffect(() => { cargar() }, [])
@@ -54,7 +56,7 @@ export default function LdapConfig() {
     try {
       const result = await api.syncLdapUsers()
       showToast(traducir('Sincronizados {n} usuarios del directorio. Gestiónalos en Usuarios.', { n: result.synced }), 'success')
-      api.listLdapUsers().then(u => setLdapUserCount(u.length)).catch(() => {})
+      api.resumenUsuarios().then(r => { setLdapUserCount(r.ldap); setLdapAusentes(r.ldap_ausentes) }).catch(() => {})
     } catch (e: any) {
       showToast(`Error al sincronizar: ${e.message}`, 'error')
     } finally {
@@ -287,6 +289,19 @@ export default function LdapConfig() {
             {syncing ? traducir('Sincronizando…') : traducir('Sincronizar con AD')}
           </button>
         </div>
+        {ldapAusentes > 0 && (
+          <div className="mt-4 bg-warn-soft text-warn text-sm rounded-lg p-3 flex items-center justify-between gap-3">
+            <span>{traducir("{n} usuarios ya no están en el directorio (los marcó la última sincronización). Siguen pudiendo navegar si estaban habilitados.", { n: ldapAusentes })}</span>
+            <button className="btn btn-outline whitespace-nowrap" disabled={deshabilitando} onClick={async () => {
+              setDeshabilitando(true)
+              try {
+                const r = await api.disableMissingLdapUsers()
+                showToast(traducir("{n} usuarios deshabilitados", { n: r.deshabilitados }), 'success')
+                api.resumenUsuarios().then(x => { setLdapUserCount(x.ldap); setLdapAusentes(x.ldap_ausentes) }).catch(() => {})
+              } catch (e: any) { showToast(e.message, 'error') } finally { setDeshabilitando(false) }
+            }}>{traducir("Deshabilitar los ausentes")}</button>
+          </div>
+        )}
 
         {/* Ya no es allow-list estricto: un usuario nuevo importado del
             directorio puede navegar de inmediato. Se deshabilita a mano a

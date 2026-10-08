@@ -26,7 +26,6 @@ significa "no con `fixed`, probá `passthru`". Ver docs/proxy-padre.md.
 """
 
 import base64
-import ipaddress
 import logging
 import os
 import re

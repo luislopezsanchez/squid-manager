@@ -33,6 +33,14 @@ Crear el usuario \`contratista_web\`, generar una contraseña automática, y pon
 ## Buscar usuarios
 
 El buscador encuentra por **nombre de usuario, nombre visible o correo**, tanto en usuarios locales como en los de LDAP.
+
+## Importar muchos usuarios (CSV / Excel / texto)
+
+**Importar** acepta hasta **20 000 filas** por archivo (CSV, Excel o texto). Primero **Revisar archivo**: muestra cuántos se crearán, cuáles se omiten y los errores por fila, y estima cuánto tardará (calcular las contraseñas es lento a propósito: unos 0,1 s por usuario). Al confirmar, la importación corre **en segundo plano** con una barra de progreso; puedes cerrar la ventana y sigue en el servidor. Solo puede haber una importación a la vez. Las contraseñas generadas se muestran **una sola vez** al terminar. La contraseña no puede pasar de 72 bytes.
+
+## Portal de autoservicio
+
+Si un superadministrador activa el módulo **Portal de autoservicio de usuarios** (Sistema → Módulos, viene apagado), cada usuario local puede entrar al panel con su usuario y contraseña y ver **solo lo suyo**: su consumo, su cuota, sus grupos y el botón para **cambiar su contraseña**. Los usuarios de LDAP/AD no entran por aquí.
 `.trim(),
   en: `
 ## What this is for
@@ -65,6 +73,14 @@ Create the user \`web_contractor\`, generate an automatic password, and set it t
 ## Searching users
 
 The search box matches **username, display name or email**, for both local and LDAP users.
+
+## Importing many users (CSV / Excel / text)
+
+**Import** accepts up to **20,000 rows** per file (CSV, Excel or text). First **Review file**: it shows how many will be created, which are skipped and the errors per row, and estimates how long it will take (computing passwords is slow on purpose: about 0.1 s per user). When you confirm, the import runs **in the background** with a progress bar; you can close the window and it keeps going on the server. Only one import can run at a time. Generated passwords are shown **only once** when it finishes. A password cannot exceed 72 bytes.
+
+## Self-service portal
+
+If a superadministrator turns on the **User self-service portal** module (System → Modules, off by default), each local user can sign in to the panel with their username and password and see **only their own data**: usage, quota, groups and the button to **change their password**. LDAP/AD users do not sign in here.
 `.trim(),
   pt: `
 ## Para que serve
@@ -97,5 +113,13 @@ Criar o usuário \`prestador_web\`, gerar uma senha automática, e definir venci
 ## Buscar usuários
 
 A busca encontra por **nome de usuário, nome de exibição ou e-mail**, tanto em usuários locais quanto LDAP.
+
+## Importar muitos usuários (CSV / Excel / texto)
+
+**Importar** aceita até **20 000 linhas** por arquivo (CSV, Excel ou texto). Primeiro **Revisar arquivo**: mostra quantos serão criados, quais são ignorados e os erros por linha, e estima quanto tempo levará (calcular as senhas é lento de propósito: cerca de 0,1 s por usuário). Ao confirmar, a importação roda **em segundo plano** com uma barra de progresso; você pode fechar a janela e ela continua no servidor. Só pode haver uma importação por vez. As senhas geradas são mostradas **uma única vez** ao terminar. A senha não pode passar de 72 bytes.
+
+## Portal de autosserviço
+
+Se um superadministrador ativar o módulo **Portal de autosserviço de usuários** (Sistema → Módulos, vem desligado), cada usuário local pode entrar no painel com seu usuário e senha e ver **apenas o que é seu**: consumo, cota, grupos e o botão para **trocar a senha**. Usuários de LDAP/AD não entram por aqui.
 `.trim(),
 }

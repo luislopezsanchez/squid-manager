@@ -5,7 +5,7 @@ import logging
 from io import StringIO
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
-from fastapi.responses import StreamingResponse, PlainTextResponse, Response
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, defer
 
@@ -22,8 +22,7 @@ from app.models.ldap_user import LdapUser
 from app.models.monitored_node import MonitoredNode
 from app.models.user_group import UserGroup, UserGroupMember
 from app.models.audit_log import AuditLog
-from app.services.auth_service import get_current_admin, require_writer
-from app.services.config_generator import generate_squid_config
+from app.services.auth_service import require_writer
 from app.services.config_state import mark_dirty
 from app.services.squid_names import (
     validate_name, validate_acl_type, validate_value, validate_acl_names,
@@ -199,7 +198,8 @@ async def restore_backup(
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_writer),
 ):
-    """Restaurar configuración desde un archivo JSON de backup de SquidManager."""
+    """Restaurar configuración desde un archivo JSON de backup de SquidManager (formato heredado, OBSOLETO: se mantiene para
+    poder restaurar copias antiguas; las nuevas deben hacerse con el formato v2 `/export-v2` y `/restore-v2`)."""
     content = await _read_upload(file)
     try:
         backup = json.loads(content.decode("utf-8"))
@@ -211,6 +211,16 @@ async def restore_backup(
     if "metadata" not in backup or "platform" not in backup["metadata"]:
         raise HTTPException(status_code=400, detail="No es un backup válido de SquidManager")
 
+    try:
+        return _aplicar_backup_heredado(db, backup, admin)
+    except (KeyError, TypeError, AttributeError, ValueError) as e:
+        # Un archivo con campos que faltan o de otro tipo no es un error del servidor: se deshace lo hecho y se explica.
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Backup mal formado ({type(e).__name__}: {e}). No se restauró nada.")
+
+
+def _aplicar_backup_heredado(db, backup: dict, admin):
+    """Aplica un backup JSON del formato heredado (v1). Obsoleto: usa «Exportar/Restaurar (.smbackup)» (v2)."""
     results = {
         "settings": 0, "acls": 0, "rules": 0, "users": 0,
         "delay_pools": 0, "groups": 0, "ldap_users": 0, "ldap": False,

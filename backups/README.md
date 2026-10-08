@@ -1,7 +1,7 @@
 # Backups de despliegue — Proxmox LXC
 
-> 🛑 **IMAGEN RETIRADA (2026-10-08).** Esta imagen contiene las claves reales de la instalación con la que se creó y ya
-> no se enlaza desde aquí. **No la uses.** Si la descargaste alguna vez, quien tenga el archivo puede abrir el panel de esa
+> 🛑 **IMAGEN RETIRADA Y ELIMINADA (2026-10-08).** Contenía las claves de la instalación con la que se creó (un contenedor
+> de pruebas) y se borró del servidor de descargas. **Ya no existe.** Si la descargaste alguna vez, quien tenga el archivo puede abrir el panel de esa
 > instalación original: sus `SECRET_KEY` y `DB_PASS` deben darse por comprometidas y rotarse en ella
 > (`openssl rand -hex 32` para `SECRET_KEY`; `ALTER USER … PASSWORD` y `DB_PASS` en el `.env` para la base de datos).
 > Para desplegar rápido, usa las [imágenes Docker publicadas](../docs/docker-imagenes.md) o el instalador.

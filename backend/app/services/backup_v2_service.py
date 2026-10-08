@@ -478,7 +478,6 @@ def restaurar(db, paquete: Paquete, modo: str = "combinar", simular: bool = True
     """Aplica el paquete dentro de una transacción. Con `simular` se ejecuta todo
     y se deshace al final (no se escribe ningún archivo)."""
     from app.models.access_rule import AccessRule
-    from app.models.acl import Acl
     from app.models.delay_pool import DelayPool
     from app.models.user_group import UserGroup, UserGroupMember
     from app.services import modules_service

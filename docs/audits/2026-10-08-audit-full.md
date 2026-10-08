@@ -172,3 +172,20 @@ Consecuencia: la lista permitida acumula cuentas obsoletas (no pueden autenticar
 
 Recomendación de orden: 1 → 2 → 3 → 6 en la próxima tanda (todo lo que sube confianza con poco riesgo); 4 y 5 cuando haya más
 usuarios reales con volumen; el resto, al paso.
+
+## 8. Estado tras las versiones 1.0.10 y 1.0.11
+
+Plan de mejoras aplicado por decisión del propietario (2026-10-08):
+
+| Hallazgo | Estado |
+|---|---|
+| 05-006 imagen LXC pública | **Corregido**: archivo borrado de `ftp.innovanet.uy` (HTTP 404); era un contenedor de pruebas |
+| 05-007 `updater` con socket de Docker | **Riesgo aceptado** por el propietario |
+| 01-002, 01-003, 05-008, 05-009 | **Corregidos** en 1.0.10 |
+| 01-004, 09-002, 10-005, 13-003, 04-002 | **Corregidos** en 1.0.11 |
+| 07-N01, 02-N01, 02-N02, 11-N01 | **Resueltas** en 1.0.11 |
+| 04-003 cobertura | **Abierto**: 55 % → 57 % (`proxy_users` 42 %, `backup` 32 %, `ldap` 56 %, `acls` 50 %) |
+| 13-002 etiquetas git | Pendiente: se crean tras verificar la 1.0.11 |
+| 03-002 ficheros de más de 1000 líneas | Sin cambios, por decisión (refactor solo al tocarlos por otro motivo) |
+
+Además se añadió la importación masiva en segundo plano (hasta 20 000 filas), que elimina la causa del tope de 5000 filas.

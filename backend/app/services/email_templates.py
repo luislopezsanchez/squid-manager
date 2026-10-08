@@ -7,7 +7,6 @@ conviene hacer, la fecha y hora (en la zona horaria de la instalación) y un pie
 texto plano se manda también, para clientes de correo que no muestran HTML.
 """
 import html
-from datetime import datetime
 
 from app.services import timezone_service as tzs
 

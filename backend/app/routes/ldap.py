@@ -1,6 +1,5 @@
 """Rutas de configuración LDAP/Active Directory."""
 
-import subprocess
 import logging
 import re
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -343,6 +342,7 @@ class LdapUserResponse(BaseModel):
     display_name: str | None
     email: str | None
     enabled: bool
+    en_directorio: bool = True
     created_at: datetime | None = None
 
     class Config:
@@ -431,7 +431,9 @@ def sync_ldap_users(
 
     synced = 0
     # Una sola consulta con los existentes: con decenas de miles de usuarios, una consulta por usuario tardaba minutos.
-    existentes = {u.username: u for u in db.query(LdapUser).all()}
+    # Sin distinguir mayúsculas: el directorio puede devolver «Ana» y la base tener «ana» (el nombre de usuario es único).
+    existentes = {u.username.lower(): u for u in db.query(LdapUser).all()}
+    vistos: set[int] = set()
     for entry in entries:
         if entry.get("type") != "searchResEntry":
             continue
@@ -454,24 +456,58 @@ def sync_ldap_users(
         cn = _attr("cn")
         mail = _attr("mail")
 
-        existing = existentes.get(username)
+        existing = existentes.get(username.lower())
         if existing:
             existing.display_name = cn
             existing.email = mail
+            existing.en_directorio = True
+            vistos.add(id(existing))
         else:
             # deny-list: nuevos usuarios habilitados por defecto, se
             # deshabilita a mano a quien no deba navegar
-            nuevo = LdapUser(username=username, display_name=cn, email=mail, enabled=True)
+            nuevo = LdapUser(username=username, display_name=cn, email=mail, enabled=True, en_directorio=True)
             db.add(nuevo)
-            existentes[username] = nuevo  # un nombre repetido en el directorio no debe insertarse dos veces
+            existentes[username.lower()] = nuevo  # un nombre repetido en el directorio no debe insertarse dos veces
+            vistos.add(id(nuevo))
         synced += 1
+
+    # Quien ya estaba en la base y el directorio no devolvió: se MARCA (no se borra ni se deshabilita solo).
+    # Si el directorio no devolvió a NADIE (filtro o base mal puestos), no se marca a todo el mundo como ausente.
+    ausentes = 0
+    for u in (existentes.values() if synced else ()):
+        if id(u) not in vistos:
+            if u.en_directorio:
+                u.en_directorio = False
+            ausentes += 1
 
     conn.unbind()
     db.commit()
 
     _sync_ldap_files(db)
 
-    return {"status": "ok", "synced": synced}
+    return {"status": "ok", "synced": synced, "ausentes": ausentes}
+
+
+@router.post("/users/disable-missing")
+def deshabilitar_ausentes(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_writer),
+):
+    """Deshabilita a los usuarios LDAP que la última sincronización no encontró en el directorio."""
+    ausentes = db.query(LdapUser).filter(LdapUser.en_directorio == False, LdapUser.enabled == True).all()  # noqa: E712
+    for u in ausentes:
+        u.enabled = False
+    if ausentes:
+        db.add(AuditLog(
+            admin_id=current_admin.id, admin_username=current_admin.username,
+            action="disable_missing", entity="ldap_user", entity_id=None,
+            new_value=f"{len(ausentes)} usuarios: " + ", ".join(u.username for u in ausentes[:20]),
+        ))
+    db.commit()
+    if ausentes:
+        _sync_ldap_files(db)
+        purge_credentials()
+    return {"status": "ok", "deshabilitados": len(ausentes)}
 
 
 @router.patch("/users/{user_id}/toggle", response_model=LdapUserResponse)

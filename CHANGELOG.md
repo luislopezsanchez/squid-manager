@@ -5,6 +5,43 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.11] - 2026-10-08
+
+Entrega del plan de mejoras de la auditoría completa (`docs/audits/2026-10-08-audit-full.md`).
+
+### Añadido
+
+- **Importación masiva de usuarios en segundo plano, con barra de progreso.** Hasta 20 000 filas por archivo (antes 5000): al
+  confirmar, la importación corre en el servidor y el panel muestra el avance (calculando contraseñas / guardando); se puede cerrar
+  la ventana. Solo una importación a la vez. La simulación estima cuánto tardará. Endpoint `GET /api/proxy-users/import/estado/{id}`.
+- **Selectores de usuarios con búsqueda en el servidor** (Grupos, Cuotas, Delay pools) y conteos sin descargar (página LDAP): ya no
+  se descargan miles de usuarios para autocompletar. Endpoints `GET /api/users/buscar` y `GET /api/users/resumen`.
+- **Estado de cada canal de notificación** (correo, Telegram, XMPP) en la pantalla Notificaciones: último error y cuándo, y si el
+  canal está en pausa. Tras 3 fallos seguidos un canal se pausa 5 minutos (los avisos se descartan en vez de acumular tareas
+  bloqueadas); como máximo 2 envíos simultáneos por canal; una prueba correcta lo reactiva.
+- **La sincronización con LDAP marca a los usuarios que ya no están en el directorio** («Ausente del directorio») sin borrarlos ni
+  deshabilitarlos; el botón «Deshabilitar los ausentes» los deshabilita en bloque. Compara los nombres sin distinguir mayúsculas y
+  no marca a nadie si el directorio no devolvió ninguna cuenta. Migración `0048`.
+- **Ayuda integrada:** ACLs (filtros y acciones en bloque), Usuarios (importación y portal de autoservicio) y Módulos, en es/en/pt.
+- **Pruebas del frontend** (Vitest, `npm test`): 12 pruebas de humo sobre las pantallas donde se escaparon fallos (carga de 11 000
+  usuarios, filtros y acciones en bloque de ACLs, importación con progreso, formulario XMPP y estado de canales). Se ejecutan en CI.
+
+### Corregido
+
+- La restauración de copias del formato heredado responde **400** con un mensaje claro ante un archivo mal formado (antes 500) y
+  deshace lo hecho. Marcada como obsoleta: las copias nuevas usan el formato v2.
+- Dos traducciones duplicadas en `i18n_migracion.py` (las encontró el nuevo linter).
+
+### Mantenimiento
+
+- CI: nuevo paso de lint (`ruff check --select F`), informe de cobertura (informativo) y pruebas del frontend.
+- Eliminados 24 imports sin uso; 6 scripts con permiso de ejecución en git.
+- Aviso en el log si se arranca el backend con más de un proceso (`WEB_CONCURRENCY`).
+- 22 pruebas nuevas de rutas del backend (usuarios, ACLs, LDAP, copias, notificaciones): suite 1187; cobertura 55 % → 57 %
+  (`proxy_users` 20 → 42 %, `backup` 13 → 32 %, `ldap` 27 → 56 %, `acls` 35 → 50 %).
+
+---
+
 ## [1.0.10] - 2026-10-08
 
 ### Seguridad

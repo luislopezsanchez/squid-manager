@@ -41,6 +41,13 @@ El modo **"Agregar a lo que ya había"** suma los dominios nuevos a los que ya t
 ## Columna «Uso»
 
 La tabla indica qué ACLs están **en uso** (las referencia alguna regla de acceso o de ancho de banda) y cuáles **sin uso**. Al pasar el ratón sobre «En uso · N» ves dónde se usa. Sirve para saber de un vistazo cuáles puedes borrar: una ACL en uso no se puede eliminar hasta quitar esas referencias; una sin uso no tiene ningún efecto sobre el tráfico.
+
+## Filtrar, marcar varias y actuar en bloque
+
+- **Filtros:** sobre la tabla puedes elegir **Uso** (en uso / sin uso) y **Estado** (activas / inactivas), además de la búsqueda por texto. El contador de la derecha dice cuántas ACLs muestra el filtro.
+- **Marcar:** cada fila tiene una casilla; la de la cabecera marca **todas las que muestra el filtro**, también las de otras páginas.
+- **Acciones en bloque:** al marcar alguna aparece una barra con **Activar**, **Desactivar** y **Eliminar**. Ejemplo para limpiar: filtra por «Sin uso», marca todas y pulsa Eliminar.
+- **Las ACLs en uso no se borran:** si alguna regla de acceso o de ancho de banda usa una ACL, se omite y el aviso dice cuáles; el resto sí se elimina. Los cambios quedan en Auditoría y se aplican con «Aplicar cambios».
 `.trim(),
   en: `
 ## What this is for
@@ -81,6 +88,13 @@ An ACL (Access Control List) is a named condition -an IP range, a list of domain
 ## "Usage" column
 
 The table shows which ACLs are **in use** (referenced by an access or bandwidth rule) and which are **unused**. Hover "In use · N" to see where. It tells you at a glance which ones you can delete: an ACL in use cannot be deleted until those references are removed; an unused one has no effect on traffic.
+
+## Filter, select several and act in bulk
+
+- **Filters:** above the table you can pick **Usage** (in use / unused) and **Status** (active / inactive), besides the text search. The counter on the right says how many ACLs the filter shows.
+- **Select:** each row has a checkbox; the header one selects **everything the filter shows**, including other pages.
+- **Bulk actions:** as soon as something is selected a bar appears with **Enable**, **Disable** and **Delete**. Cleaning-up example: filter by "Unused", select all and press Delete.
+- **ACLs in use are not deleted:** if an access or bandwidth rule uses an ACL it is skipped and the notice says which ones; the rest are deleted. Changes are recorded in Audit and applied with "Apply changes".
 `.trim(),
   pt: `
 ## Para que serve
@@ -121,5 +135,12 @@ O modo **"Adicionar ao que já havia"** soma os domínios novos aos que a ACL j�
 ## Coluna «Uso»
 
 A tabela indica quais ACLs estão **em uso** (referenciadas por alguma regra de acesso ou de largura de banda) e quais **sem uso**. Passando o mouse em «Em uso · N» você vê onde é usada. Serve para saber de relance quais pode apagar: uma ACL em uso não pode ser excluída até remover essas referências; uma sem uso não tem efeito sobre o tráfego.
+
+## Filtrar, marcar várias e agir em bloco
+
+- **Filtros:** acima da tabela você pode escolher **Uso** (em uso / sem uso) e **Estado** (ativas / inativas), além da busca por texto. O contador à direita diz quantas ACLs o filtro mostra.
+- **Marcar:** cada linha tem uma caixa; a do cabeçalho marca **tudo o que o filtro mostra**, inclusive as de outras páginas.
+- **Ações em bloco:** ao marcar alguma aparece uma barra com **Ativar**, **Desativar** e **Excluir**. Exemplo de limpeza: filtre por «Sem uso», marque todas e pressione Excluir.
+- **ACLs em uso não são excluídas:** se uma regra de acesso ou de largura de banda usa uma ACL, ela é ignorada e o aviso diz quais; as demais são excluídas. As alterações ficam na Auditoria e são aplicadas com «Aplicar alterações».
 `.trim(),
 }

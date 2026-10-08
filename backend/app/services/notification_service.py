@@ -1,6 +1,8 @@
 """Servicio de notificaciones: envío de alertas por email, Telegram y XMPP."""
 
 import logging
+import threading
+import time
 import smtplib
 import urllib.parse
 import urllib.request
@@ -9,6 +11,98 @@ from email.mime.multipart import MIMEMultipart
 from types import SimpleNamespace
 
 logger = logging.getLogger(__name__)
+
+# --- Estado y «corte automático» por canal -----------------------------------------------------------------------
+# Con un canal caído (servidor de correo, Telegram o XMPP sin respuesta) y eventos frecuentes, cada aviso esperaba su
+# tiempo máximo (15-45 s) y las tareas se iban acumulando. Ahora: como mucho 2 envíos a la vez por canal y, tras
+# FALLOS_PARA_PAUSAR fallos seguidos, el canal se pausa PAUSA_SEGUNDOS (los avisos se descartan y se cuentan). El primer
+# éxito —o una prueba correcta— lo reactiva. El estado vive en memoria (el backend corre con un único proceso) y se
+# muestra en la pantalla Notificaciones: antes un fallo sólo quedaba en el log.
+FALLOS_PARA_PAUSAR = 3
+PAUSA_SEGUNDOS = 300
+ENVIOS_SIMULTANEOS = 2
+CANALES = ("email", "telegram", "xmpp")
+
+_estado_lock = threading.Lock()
+_estado: dict[str, dict] = {}
+_semaforos = {c: threading.BoundedSemaphore(ENVIOS_SIMULTANEOS) for c in CANALES}
+
+
+def _nuevo_estado() -> dict:
+    return {"fallos_seguidos": 0, "pausado_hasta": 0.0, "ultimo_error": None, "ultimo_error_en": None,
+            "ultimo_ok_en": None, "descartados": 0}
+
+
+def _canal(nombre: str) -> dict:
+    return _estado.setdefault(nombre, _nuevo_estado())
+
+
+def estado_canales() -> dict:
+    """Resumen por canal para la pantalla: estado (sin_actividad | ok | con_errores | pausado), último error, etc."""
+    ahora = time.time()
+    salida = {}
+    with _estado_lock:
+        for nombre in CANALES:
+            e = _canal(nombre)
+            pausado = e["pausado_hasta"] > ahora
+            if pausado:
+                st = "pausado"
+            elif e["fallos_seguidos"] > 0:
+                st = "con_errores"
+            elif e["ultimo_ok_en"]:
+                st = "ok"
+            else:
+                st = "sin_actividad"
+            salida[nombre] = {
+                "estado": st, "fallos_seguidos": e["fallos_seguidos"], "descartados": e["descartados"],
+                "ultimo_error": e["ultimo_error"], "ultimo_error_en": e["ultimo_error_en"],
+                "ultimo_ok_en": e["ultimo_ok_en"],
+                "pausado_segundos": int(e["pausado_hasta"] - ahora) if pausado else 0,
+            }
+    return salida
+
+
+def reiniciar_canal(nombre: str) -> None:
+    """Reactiva un canal (una prueba correcta lo hace)."""
+    with _estado_lock:
+        e = _canal(nombre)
+        e.update(fallos_seguidos=0, pausado_hasta=0.0)
+        e["ultimo_ok_en"] = time.time()
+
+
+def _registrar(nombre: str, ok: bool, mensaje: str) -> None:
+    ahora = time.time()
+    with _estado_lock:
+        e = _canal(nombre)
+        if ok:
+            e.update(fallos_seguidos=0, pausado_hasta=0.0, ultimo_ok_en=ahora)
+            return
+        e["fallos_seguidos"] += 1
+        e["ultimo_error"], e["ultimo_error_en"] = (mensaje or "")[:300], ahora
+        if e["fallos_seguidos"] >= FALLOS_PARA_PAUSAR:
+            e["pausado_hasta"] = ahora + PAUSA_SEGUNDOS
+            logger.warning("Canal de notificación %s en pausa %d s tras %d fallos seguidos: %s",
+                           nombre, PAUSA_SEGUNDOS, e["fallos_seguidos"], mensaje)
+
+
+def _por_canal(nombre: str, enviar) -> bool:
+    """Ejecuta `enviar()` -> (ok, mensaje) respetando la pausa y el tope de envíos simultáneos."""
+    with _estado_lock:
+        if _canal(nombre)["pausado_hasta"] > time.time():
+            _canal(nombre)["descartados"] += 1
+            return False
+    if not _semaforos[nombre].acquire(blocking=False):
+        with _estado_lock:
+            _canal(nombre)["descartados"] += 1
+        return False
+    try:
+        ok, mensaje = enviar()
+    except Exception as e:  # un canal roto nunca debe romper a quien notifica
+        ok, mensaje = False, f"{type(e).__name__}: {e}"
+    finally:
+        _semaforos[nombre].release()
+    _registrar(nombre, ok, mensaje)
+    return ok
 
 # Mapa de eventos a atributos de config
 EVENT_CONFIG_MAP = {
@@ -346,8 +440,7 @@ def notify(config, subject: str, message: str, event: str | None = None) -> dict
         except Exception as e:  # una plantilla rota no debe perder el aviso: sale en texto plano
             logger.warning("No se pudo construir el correo con formato: %s", e)
             cuerpo_html, texto = None, message
-        ok, _ = send_email(config, subject, texto, html_body=cuerpo_html)
-        results["email"] = ok
+        results["email"] = _por_canal("email", lambda: send_email(config, subject, texto, html_body=cuerpo_html))
 
     if config.telegram_enabled:
         from app.i18n import traducir_dinamico
@@ -355,17 +448,25 @@ def notify(config, subject: str, message: str, event: str | None = None) -> dict
         import html as _html
         # parse_mode=HTML: el texto va escapado (un nombre de usuario con "<" no debe romper el mensaje).
         full_message = f"<b>{_html.escape(traducir_dinamico(subject, idioma))}</b>\n\n{_html.escape(traducir_dinamico(message, idioma))}"
-        ok, _ = send_telegram(config, full_message)
-        results["telegram"] = ok
+        results["telegram"] = _por_canal("telegram", lambda: send_telegram(config, full_message))
 
     if getattr(config, "xmpp_enabled", False):
         from app.i18n import traducir_dinamico
         idioma = getattr(config, "idioma", "es")
         texto_chat = f"{traducir_dinamico(subject, idioma)}\n\n{traducir_dinamico(message, idioma)}"
-        ok, _ = send_xmpp(config, texto_chat)
-        results["xmpp"] = ok
+        results["xmpp"] = _por_canal("xmpp", lambda: send_xmpp(config, texto_chat))
 
     return results
+
+
+def _resultado_prueba(canal: str, ok: bool, mensaje: str) -> None:
+    """Una prueba manual no cuenta para la pausa, pero si sale bien reactiva el canal y si falla deja su motivo visible."""
+    if ok:
+        reiniciar_canal(canal)
+    else:
+        with _estado_lock:
+            e = _canal(canal)
+            e["ultimo_error"], e["ultimo_error_en"] = (mensaje or "")[:300], time.time()
 
 
 def test_email(config) -> dict:
@@ -377,6 +478,7 @@ def test_email(config) -> dict:
         getattr(config, "idioma", "es"),
     )
     ok, message = send_email(config, "SquidManager - Prueba de notificación", texto, html_body=cuerpo_html)
+    _resultado_prueba("email", ok, message)
     return {"ok": ok, "message": message}
 
 
@@ -386,6 +488,7 @@ def test_telegram(config) -> dict:
         config,
         "SquidManager - Prueba de notificación\n\nSi recibes esto, la configuración de Telegram es correcta.",
     )
+    _resultado_prueba("telegram", ok, message)
     return {"ok": ok, "message": message}
 
 
@@ -395,4 +498,5 @@ def test_xmpp(config) -> dict:
         config,
         "SquidManager - Prueba de notificación\n\nSi recibes esto, la configuración de XMPP es correcta.",
     )
+    _resultado_prueba("xmpp", ok, message)
     return {"ok": ok, "message": message}

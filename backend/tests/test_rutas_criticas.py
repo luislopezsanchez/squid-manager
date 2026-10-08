@@ -63,7 +63,7 @@ def _fake_ldap(monkeypatch, entradas):
 
 def test_sync_ldap_crea_actualiza_y_omite_cuentas_de_maquina(monkeypatch):
     monkeypatch.setattr(rldap, "_sync_ldap_files", lambda db: None)
-    existente = N(username="ana", display_name="vieja", email=None)
+    existente = N(username="ana", display_name="vieja", email=None, en_directorio=True)
     db = _DB(_config(), [existente])
     _fake_ldap(monkeypatch, [
         _entrada(sAMAccountName="ana", cn="Ana Nueva", mail="ana@e.l"),
@@ -74,7 +74,7 @@ def test_sync_ldap_crea_actualiza_y_omite_cuentas_de_maquina(monkeypatch):
         {"type": "searchResRef"},
     ])
     out = rldap.sync_ldap_users(db=db, current_admin=N(id=1, username="admin"))
-    assert out == {"status": "ok", "synced": 3}
+    assert out == {"status": "ok", "synced": 3, "ausentes": 0}
     assert existente.display_name == "Ana Nueva" and existente.email == "ana@e.l"
     assert sorted(u.username for u in db.nuevos) == ["luis", "maria"]
     assert all(u.enabled for u in db.nuevos) and db.commits == 1

@@ -135,6 +135,16 @@ async function listarTodo(ruta: string): Promise<any[]> {
   }
 }
 
+export interface EstadoCanal {
+  estado: 'sin_actividad' | 'ok' | 'con_errores' | 'pausado'
+  fallos_seguidos: number
+  descartados: number
+  ultimo_error: string | null
+  ultimo_error_en: number | null
+  ultimo_ok_en: number | null
+  pausado_segundos: number
+}
+
 export const api = {
   // Función genérica para requests GET con query params
   request: <T = any>(path: string) => request<T>(path),
@@ -180,8 +190,13 @@ export const api = {
     f.append('file', file)
     f.append('modo', modo)
     f.append('simular', String(simular))
+    f.append('segundo_plano', 'true') // el panel siempre importa en segundo plano: hasta 20 000 filas, con barra de progreso
     return request<any>('/proxy-users/import', { method: 'POST', body: f })
   },
+  buscarUsuarios: (q: string, limit = 50) =>
+    request<{ usuarios: { username: string; origen: 'local' | 'ldap' }[]; hay_mas: boolean }>(`/users/buscar?q=${encodeURIComponent(q)}&limit=${limit}`),
+  resumenUsuarios: () => request<{ local: number; ldap: number; ldap_ausentes: number }>('/users/resumen'),
+  importUsersEstado: (tarea: string) => request<any>(`/proxy-users/import/estado/${tarea}`),
   exportUsersUrl: (format: 'csv' | 'xlsx') => `${API_BASE}/proxy-users/export?format=${format}`,
   importTemplateUrl: (format: 'csv' | 'xlsx') => `${API_BASE}/proxy-users/import-template?format=${format}`,
 
@@ -309,6 +324,7 @@ export const api = {
   getSyslogConfig: () => request<any>('/syslog/config'),
   updateSyslogConfig: (data: any) => request<any>('/syslog/config', { method: 'PUT', body: JSON.stringify(data) }),
   testSyslog: (data: any) => request<any>('/syslog/test', { method: 'POST', body: JSON.stringify(data) }),
+  disableMissingLdapUsers: () => request<{ status: string; deshabilitados: number }>('/ldap/users/disable-missing', { method: 'POST' }),
   syncLdapUsers: () => request<any>('/ldap/sync', { method: 'POST' }),
   listLdapUsers: () => listarTodo('/ldap/users'),
   toggleLdapUser: (id: number) => request<any>(`/ldap/users/${id}/toggle`, { method: 'PATCH' }),
@@ -585,6 +601,7 @@ export const api = {
   updateNotificationConfig: (data: any) => request<any>('/notifications/config', { method: 'PUT', body: JSON.stringify(data) }),
   testEmail: (data: any) => request<any>('/notifications/test-email', { method: 'POST', body: JSON.stringify(data) }),
   testTelegram: (data: any) => request<any>('/notifications/test-telegram', { method: 'POST', body: JSON.stringify(data) }),
+  getNotificationEstado: () => request<Record<string, EstadoCanal>>('/notifications/estado'),
   testXmpp: (data: any) => request<any>('/notifications/test-xmpp', { method: 'POST', body: JSON.stringify(data) }),
 
   // SMTP (Sistema > SMTP): servidor de correo compartido por Notificaciones y Contacto.

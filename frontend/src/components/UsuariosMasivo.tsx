@@ -76,6 +76,8 @@ export function ImportarUsuariosModal({ onClose, onImportado }: {
   const [informe, setInforme] = useState<InformeImport | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  // Progreso de la importación en segundo plano (la ventana puede cerrarse: la tarea sigue en el servidor).
+  const [progreso, setProgreso] = useState<{ hechos: number; total: number; fase: string; segundos: number } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const plantilla = async (formato: 'csv' | 'xlsx') => {
@@ -89,10 +91,19 @@ export function ImportarUsuariosModal({ onClose, onImportado }: {
     if (!archivo) return
     setBusy(true); setErr('')
     try {
-      const r: InformeImport = await api.importUsers(archivo, modo, simular)
-      if (simular) setInforme(r)
-      else { onImportado(r); onClose() }
-    } catch (e: any) { setErr(e.message) } finally { setBusy(false) }
+      const r: InformeImport & { tarea?: string } = await api.importUsers(archivo, modo, simular)
+      if (simular) { setInforme(r); return }
+      if (!r.tarea) { onImportado(r); onClose(); return }
+      // Segundo plano: preguntar cada 1,5 s hasta que termine.
+      setProgreso({ hechos: 0, total: r.a_crear + r.a_actualizar, fase: 'calculando', segundos: 0 })
+      for (;;) {
+        await new Promise(res => setTimeout(res, 1500))
+        const e = await api.importUsersEstado(r.tarea)
+        if (e.estado === 'error') throw new Error(e.error || traducir('La importación falló'))
+        setProgreso({ hechos: e.hechos, total: e.total, fase: e.fase, segundos: e.segundos })
+        if (e.estado === 'terminada') { onImportado(e.informe); onClose(); return }
+      }
+    } catch (e: any) { setErr(e.message); setProgreso(null) } finally { setBusy(false) }
   }
 
   const hayAlgo = informe && (informe.a_crear + informe.a_actualizar) > 0
@@ -126,6 +137,24 @@ export function ImportarUsuariosModal({ onClose, onImportado }: {
         </div>
       </div>
 
+      {progreso && (
+        <div className="mt-5 border border-line-soft rounded-lg p-4 text-[13.5px]" role="status">
+          <div className="font-medium text-ink mb-2">
+            {progreso.fase === 'guardando' ? traducir("Guardando los usuarios…") : traducir("Calculando contraseñas…")}
+          </div>
+          <div className="h-2.5 rounded-full bg-line-soft overflow-hidden">
+            <div className="h-full rounded-full" style={{
+              width: `${progreso.total ? Math.min(100, Math.round((progreso.hechos / progreso.total) * 100)) : 100}%`,
+              backgroundColor: '#0B497C', transition: 'width .4s',
+            }} />
+          </div>
+          <div className="mt-2 text-ink-3 text-[12.5px]">
+            {progreso.hechos.toLocaleString()} / {progreso.total.toLocaleString()} · {Math.floor(progreso.segundos / 60)}:{String(progreso.segundos % 60).padStart(2, '0')}
+            {" · "}{traducir("Puedes cerrar esta ventana: la importación sigue en el servidor.")}
+          </div>
+        </div>
+      )}
+
       {err && <div className="mt-4 bg-danger-soft text-danger text-[13px] p-3 rounded-lg">{err}</div>}
 
       {informe && (
@@ -135,7 +164,7 @@ export function ImportarUsuariosModal({ onClose, onImportado }: {
             <li><IconCheck className="w-3.5 h-3.5 inline text-ok mr-1.5" />{traducir("{n} usuarios se crearán", { n: informe.a_crear })}</li>
             {informe.a_actualizar > 0 && <li><IconCheck className="w-3.5 h-3.5 inline text-ok mr-1.5" />{traducir("{n} usuarios se actualizarán", { n: informe.a_actualizar })}</li>}
             {(informe.segundos_estimados ?? 0) > 20 && (
-              <li className="text-warn">{traducir("Calcular las contraseñas tardará unos {n} minutos en este servidor; no cierres esta ventana.", { n: Math.max(1, Math.round((informe.segundos_estimados ?? 0) / 60)) })}</li>
+              <li className="text-warn">{traducir("Calcular las contraseñas tardará unos {n} minutos en este servidor; se hace en segundo plano y verás el progreso.", { n: Math.max(1, Math.round((informe.segundos_estimados ?? 0) / 60)) })}</li>
             )}
             {informe.omitidos.length > 0 && <li>{traducir("{n} se omitirán porque ya existen", { n: informe.omitidos.length })}</li>}
             {informe.errores.length > 0 && <li className="text-danger">{traducir("{n} filas tienen errores y se omitirán", { n: informe.errores.length })}</li>}
@@ -151,7 +180,7 @@ export function ImportarUsuariosModal({ onClose, onImportado }: {
       )}
 
       <div className="mt-6 flex justify-end gap-2.5">
-        <button className="btn btn-outline" onClick={onClose}>{traducir("Cancelar")}</button>
+        <button className="btn btn-outline" onClick={onClose}>{progreso ? traducir("Cerrar") : traducir("Cancelar")}</button>
         {!informe || !hayAlgo ? (
           <button className="btn btn-primary" disabled={!archivo || busy} onClick={() => ejecutar(true)}>
             {busy ? <IconSpinner className="animate-spin" /> : null}{traducir("Revisar archivo")}
