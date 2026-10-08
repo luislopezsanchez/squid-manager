@@ -53,3 +53,10 @@ reportlab==4.2.5
 # Importar/exportar usuarios en Excel (.xlsx) -carga masiva de cuentas, ver
 # app/services/user_import_service.py.
 openpyxl==3.1.5
+# Cliente XMPP: canal de notificaciones hacia el servidor de mensajeria interno de la empresa
+# (app/services/notification_service.py, send_xmpp). SquidManager solo se conecta como cliente.
+# Puro Python; arrastra aiodns/pycares (rueda precompilada) y pyasn1-modules (pyasn1 ya esta fijado arriba).
+slixmpp==1.17.0
+aiodns==4.0.4
+pycares==5.1.0
+pyasn1-modules==0.4.2

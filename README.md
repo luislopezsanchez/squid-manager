@@ -45,7 +45,7 @@ Además de lo esperable en un panel de Squid (ACLs, reglas, usuarios locales/LDA
 - **📊 Análisis**: panorama, tendencias, actividad de red (equipos desde los que entran varias cuentas, cuotas agotadas), latencia y errores, con informes en PDF. Las consultas de 24 h, 7 y 30 días tardan milisegundos gracias a los agregados por hora.
 - **📥 Importar un Squid que ya tienes** (`squid.conf`, htpasswd/htdigest, listas de ACL) **conservando las contraseñas**, y backup/restauración con vista previa de lo que cambiaría y restauración «todo o nada».
 - **⏱️ Cuotas y ancho de banda**: cuotas por usuario o grupo con periodos de calendario, y reglas de ancho de banda por usuario, grupo, ACL o tipo de tráfico.
-- **🔔 Avisos y reporte diario** por correo (HTML, en el idioma del panel) y Telegram.
+- **🔔 Avisos y reporte diario** por correo (HTML, en el idioma del panel), Telegram y XMPP (chat interno de la empresa).
 - **🧩 Módulos opcionales**: activa solo lo que necesitas.
 - **🔒 Seguridad revisada**: pasó una auditoría externa y sus hallazgos están corregidos (`docs/audits/`).
 - **🌍 Interfaz en español, inglés y portugués**; instalación con Docker (imágenes ya construidas o compilando), nativa sin Docker, y detrás de un proxy corporativo.

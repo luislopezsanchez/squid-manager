@@ -35,7 +35,7 @@ detrás de cada una, ver [architecture.md](architecture.md).
 - **Dashboard** — Tráfico en tiempo real, top usuarios y dominios, estado del sistema
 - **Histórico de logs** — Meses ya cerrados, organizados por año/mes con un resumen precalculado (usuarios, dominios, denegados), con retención configurable — separado del visor en vivo
 - **Backup y migración** — Backup automático de la base de datos con retención (script listo para cron, en los dos modos de despliegue), exporta toda la configuración a JSON, o importa un `squid.conf` tradicional con un informe previo de qué se puede traer y qué no (soporta `include`)
-- **Notificaciones** — Avisos por email o Telegram cuando se aplican cambios o se detecta actividad sospechosa
+- **Notificaciones** — Avisos por email, Telegram o XMPP (chat interno) cuando se aplican cambios o se detecta actividad sospechosa
 - **Syslog externo** — Reenvía los logs de acceso a un servidor syslog (SIEM, ELK, Splunk) además de escribirlos localmente
 
 ## Asistente de IA

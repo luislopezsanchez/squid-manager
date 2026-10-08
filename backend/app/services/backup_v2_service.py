@@ -16,7 +16,7 @@ Diseño:
   `config.json` (toda la configuración sin secretos), `acl_lists/*.txt.gz`
   (contenido de las listas grandes de dominios) y, solo si se eligió una
   contraseña, `secrets.enc`: los secretos (hashes de contraseñas de usuarios,
-  claves de LDAP/SMTP/Telegram/IA, keytab...) cifrados con Fernet y una clave
+  claves de LDAP/SMTP/Telegram/XMPP/IA, keytab...) cifrados con Fernet y una clave
   derivada de esa contraseña con scrypt. Sin contraseña, el backup no lleva
   ningún secreto.
 - **Restaurar es transaccional**: se valida y aplica todo dentro de una
@@ -98,7 +98,7 @@ ENTIDADES: list[Entidad] = [
     Entidad("syslog_config", "app.models.syslog_config:SyslogConfig"),
     Entidad("smtp_config", "app.models.smtp_config:SmtpConfig", secretas=frozenset({"smtp_password"})),
     Entidad("notification_config", "app.models.notification_config:NotificationConfig",
-            secretas=frozenset({"telegram_bot_token"})),
+            secretas=frozenset({"telegram_bot_token", "xmpp_password"})),
     Entidad("central_monitor_config", "app.models.central_config:CentralMonitorConfig",
             excluir=frozenset({"instance_id"})),
     Entidad("monitored_nodes", "app.models.monitored_node:MonitoredNode", ("name",),

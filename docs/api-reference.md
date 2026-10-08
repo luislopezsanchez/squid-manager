@@ -1394,7 +1394,7 @@ GET /api/notifications/config
 Authorization: Bearer <token>
 ```
 
-Los secretos (contraseña SMTP, token de Telegram) se devuelven como `smtp_password_set: true/false`, nunca en claro.
+Los secretos (contraseña SMTP, token de Telegram, contraseña XMPP) se devuelven como `smtp_password_set: true/false`, nunca en claro.
 
 ### Guardar configuración
 ```http
@@ -1411,6 +1411,15 @@ Content-Type: application/json
   "smtp_encryption": "starttls",
   "email_recipients": "admin@miempresa.com",
   "telegram_enabled": false,
+  "xmpp_enabled": true,
+  "xmpp_host": "xmpp.miempresa.local",
+  "xmpp_port": 5222,
+  "xmpp_jid": "squid@miempresa.local",
+  "xmpp_password": "...",
+  "xmpp_encryption": "starttls",
+  "xmpp_verify_cert": true,
+  "xmpp_recipients": "admin@miempresa.local, soporte@miempresa.local",
+  "xmpp_room": "avisos@conference.miempresa.local",
   "notify_on_apply": true,
   "notify_on_security_alert": true
 }
@@ -1433,6 +1442,20 @@ Content-Type: application/json
 
 {"telegram_bot_token": "...", "telegram_chat_id": "..."}
 ```
+
+### Probar XMPP
+```http
+POST /api/notifications/test-xmpp
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"xmpp_host": "xmpp.miempresa.local", "xmpp_port": 5222, "xmpp_jid": "squid@miempresa.local",
+ "xmpp_password": "...", "xmpp_encryption": "starttls", "xmpp_verify_cert": true,
+ "xmpp_recipients": "admin@miempresa.local", "xmpp_room": "avisos@conference.miempresa.local"}
+```
+
+Lo que falte (típicamente la contraseña ya guardada) se toma de la configuración guardada. Responde `{"ok": true|false, "message": "..."}`.
+`xmpp_encryption` es `starttls` (por defecto), `ssl` o `none`. La contraseña se guarda cifrada y nunca se devuelve (`xmpp_password_set`).
 
 ---
 

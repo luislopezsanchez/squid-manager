@@ -23,7 +23,7 @@ El panel se organiza en tres grupos:
 | | Kerberos | Autenticación Negotiate (SSO) contra Active Directory |
 | | Certificado | Descarga CA + instaladores por sistema operativo |
 | | Configuración | Parámetros generales de Squid |
-| | Notificaciones | Avisos por email y Telegram |
+| | Notificaciones | Avisos por email, Telegram y XMPP |
 | | Syslog externo | Reenvío del access.log a un SIEM/ELK/Splunk |
 | | Proxy padre | Salir a Internet por otro proxy (encadenado) |
 | | Backup y migración | Exportar/restaurar configuración, importar squid.conf |

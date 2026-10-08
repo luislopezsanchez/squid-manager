@@ -5,12 +5,13 @@ export const DOC_NOTIFICACIONES: Record<'es' | 'en' | 'pt', string> = {
   es: `
 ## Para qué sirve
 
-Avisa por email o Telegram cuando pasa algo relevante en el panel -sin tener que estar mirando Auditoría todo el día para enterarse.
+Avisa por email, Telegram o XMPP (chat interno) cuando pasa algo relevante en el panel -sin tener que estar mirando Auditoría todo el día para enterarse.
 
-## Dos canales, independientes entre sí
+## Tres canales, independientes entre sí
 
 - **Email**: usa el servidor SMTP configurado en Sistema > SMTP -el mismo que usa Contacto, para no tener que configurar el correo saliente dos veces en dos lugares distintos.
 - **Telegram**: un bot propio (token) y el ID del chat o canal donde se mandan los avisos.
+- **XMPP**: el chat interno de tu empresa (Openfire, Prosody, ejabberd…). SquidManager no instala ningún servidor: se conecta como un cliente más al que ya tengas. Indicas el servidor (IP o nombre) y el puerto (5222 con STARTTLS, 5223 con SSL), la cuenta emisora con su contraseña (por ejemplo \`squid@miempresa.local\`, que crea tu administrador del chat), los destinatarios (uno o varios usuarios) y, si quieres, una sala de grupo. Si tu servidor usa un certificado propio, desmarca «Verificar certificado del servidor».
 
 Cada uno se activa por separado, y cada uno tiene su propio botón de prueba -antes de depender de una notificación real, conviene confirmar que efectivamente llega.
 
@@ -47,12 +48,13 @@ Si falta alguno de los dos requisitos, la casilla queda bloqueada y la pantalla 
   en: `
 ## What this is for
 
-Alerts by email or Telegram when something relevant happens in the panel -without having to watch Audit all day to find out.
+Alerts by email, Telegram or XMPP (internal chat) when something relevant happens in the panel -without having to watch Audit all day to find out.
 
-## Two channels, independent of each other
+## Three channels, independent of each other
 
 - **Email**: uses the SMTP server configured under System > SMTP -the same one Contact uses, so outgoing mail doesn't need to be set up twice in two different places.
 - **Telegram**: your own bot (token) and the chat or channel ID where alerts are sent.
+- **XMPP**: your company's internal chat (Openfire, Prosody, ejabberd…). SquidManager does not install any server: it connects as one more client to the one you already have. You enter the server (IP or name) and port (5222 with STARTTLS, 5223 with SSL), the sender account and its password (for example \`squid@mycompany.local\`, created by your chat administrator), the recipients (one or several users) and, optionally, a group room. If your server uses a self-signed certificate, untick «Verify the server certificate».
 
 Each one is turned on separately, and each has its own test button -before relying on a real notification, it's worth confirming it actually arrives.
 
@@ -89,12 +91,13 @@ If either requirement is missing the checkbox is locked and the screen says whic
   pt: `
 ## Para que serve
 
-Avisa por e-mail ou Telegram quando algo relevante acontece no painel -sem precisar ficar olhando Auditoria o dia todo para saber.
+Avisa por e-mail, Telegram ou XMPP (chat interno) quando algo relevante acontece no painel -sem precisar ficar olhando Auditoria o dia todo para saber.
 
-## Dois canais, independentes entre si
+## Três canais, independentes entre si
 
 - **E-mail**: usa o servidor SMTP configurado em Sistema > SMTP -o mesmo que Contato usa, para não precisar configurar o e-mail de saída duas vezes em dois lugares diferentes.
 - **Telegram**: um bot próprio (token) e o ID do chat ou canal para onde os avisos são enviados.
+- **XMPP**: o chat interno da sua empresa (Openfire, Prosody, ejabberd…). O SquidManager não instala nenhum servidor: conecta-se como mais um cliente ao que você já tem. Você informa o servidor (IP ou nome) e a porta (5222 com STARTTLS, 5223 com SSL), a conta emissora com sua senha (por exemplo \`squid@suaempresa.local\`, criada pelo administrador do chat), os destinatários (um ou vários usuários) e, se quiser, uma sala de grupo. Se o servidor usar certificado próprio, desmarque «Verificar certificado do servidor».
 
 Cada um é ativado separadamente, e cada um tem seu próprio botão de teste -antes de depender de uma notificação real, vale confirmar que ela realmente chega.
 

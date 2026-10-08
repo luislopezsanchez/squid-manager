@@ -10,6 +10,7 @@ a nadie. Todo lo que guarda (usuarios, ACLs, registros, auditoría, configuraci�
 | **HaGeZi** (`raw.githubusercontent.com`) | Solo si activas las listas de bloqueo (se refrescan una vez al día) | Una descarga | No activar esas categorías |
 | **Proveedor de IA** (el que elijas) | Solo si configuras el Asistente de IA y haces una pregunta | La pregunta, el contexto de la documentación y, en modo agéntico, los datos que el asistente consulta de tu panel (por ejemplo usuarios o sitios) | No configurar el asistente, o usar «Ollama en tu red» (no sale de tu red) |
 | **Telegram** | Solo si activas los avisos por Telegram | El texto de cada aviso | No activarlos |
+| **Tu servidor XMPP** | Solo si activas los avisos por XMPP | El texto de cada aviso, al servidor de mensajería que tú indicas (normalmente interno) | No activarlos |
 | **Tu servidor SMTP** | Avisos y reporte por correo | El contenido de cada correo, a los destinatarios que tú configuras | No configurar SMTP |
 | **Formulario de Contacto** | Cuando alguien lo envía | Su mensaje, el email de respuesta que escriba y, si lo marca, versión/modo de despliegue/Squid/sistema. **Nunca** usuarios, direcciones ni claves | Variable `CONTACT_EMAIL` del `.env`: pon el correo de tu equipo, o déjala vacía para no enviar nada (el mensaje se guarda en tu instalación). Solo sale si hay un SMTP configurado y sale por ese SMTP |
 

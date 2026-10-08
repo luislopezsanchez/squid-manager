@@ -570,6 +570,7 @@ export const api = {
   updateNotificationConfig: (data: any) => request<any>('/notifications/config', { method: 'PUT', body: JSON.stringify(data) }),
   testEmail: (data: any) => request<any>('/notifications/test-email', { method: 'POST', body: JSON.stringify(data) }),
   testTelegram: (data: any) => request<any>('/notifications/test-telegram', { method: 'POST', body: JSON.stringify(data) }),
+  testXmpp: (data: any) => request<any>('/notifications/test-xmpp', { method: 'POST', body: JSON.stringify(data) }),
 
   // SMTP (Sistema > SMTP): servidor de correo compartido por Notificaciones y Contacto.
   getSmtpConfig: () => request<any>('/smtp/config'),

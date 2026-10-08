@@ -48,7 +48,7 @@ Besides what you'd expect from a Squid panel (ACLs, rules, local/LDAP/Kerberos u
 - **📊 Analytics**: overview, trends, network activity (machines used by several accounts, exhausted quotas), latency and errors, with PDF reports. 24-hour, 7-day and 30-day queries take milliseconds thanks to hourly aggregates.
 - **📥 Import the Squid you already run** (`squid.conf`, htpasswd/htdigest, ACL list files) **keeping the passwords**, plus backup/restore with a preview of what would change and all-or-nothing restores.
 - **⏱️ Quotas and bandwidth**: per-user or per-group quotas with calendar periods, and bandwidth rules per user, group, ACL or traffic type.
-- **🔔 Alerts and a daily report** by email (HTML, in the panel's language) and Telegram.
+- **🔔 Alerts and a daily report** by email (HTML, in the panel's language), Telegram and XMPP (internal company chat).
 - **🧩 Optional modules**: turn on only what you need.
 - **🔒 Reviewed security**: it went through an external audit and its findings are fixed (`docs/audits/`).
 - **🌍 UI in Spanish, English and Portuguese**; install with Docker (pre-built images or compiling), natively without Docker, and behind a corporate proxy.
@@ -124,7 +124,7 @@ means deploying one SquidManager instance per node.
 - **Dashboard** — Real-time traffic, top users and domains, system status
 - **Historical logs** — Closed months, organized by year/month with a precomputed summary (users, domains, denials), with configurable retention — kept separate from the live viewer
 - **Backup and migration** — Automated database backup with retention (cron-ready script, for both deployment modes), export the whole configuration to JSON, or import a traditional `squid.conf` with an up-front report of what can and can't be brought over (supports `include`)
-- **Notifications** — Email or Telegram alerts when changes are applied or suspicious activity is detected
+- **Notifications** — Email, Telegram or XMPP alerts when changes are applied or suspicious activity is detected
 - **External syslog** — Forwards access logs to a syslog server (SIEM, ELK, Splunk) in addition to writing them locally
 
 ### AI Assistant
@@ -664,7 +664,7 @@ The panel is organised into three groups:
 | **System** | LDAP | LDAP / Active Directory configuration |
 | | Certificate | CA download plus per-OS installers |
 | | Settings | General Squid parameters |
-| | Notifications | Email and Telegram alerts |
+| | Notifications | Email, Telegram and XMPP alerts |
 | | Backup and migration | Export/restore configuration, import a squid.conf |
 | | Administrators | Panel account management (superadmin only) |
 

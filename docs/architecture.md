@@ -166,7 +166,7 @@ cosas, su tráfico también cuenta en la tarjeta de tráfico en tiempo real.
 | backup | /api/backup | Exportar/restaurar JSON, descargar/importar squid.conf |
 | logs | /api/logs | Consulta del access.log, alertas de fuerza bruta, export CSV/NDJSON/nativo |
 | metrics | /api/metrics | Dashboard, tráfico en vivo, top usuarios/dominios, conexiones |
-| notifications | /api/notifications | Configuración y prueba de email/Telegram |
+| notifications | /api/notifications | Configuración y prueba de email/Telegram/XMPP |
 | admins | /api/admins | CRUD de administradores, cambio de contraseña propia (solo superadmin gestiona otros) |
 | audit | /api/audit | Log de auditoría + estadísticas |
 | syslog | /api/syslog | Configuración y prueba del reenvío del access.log a un SIEM externo (UDP/TCP, RFC 3164/5424) |
@@ -228,7 +228,7 @@ De ahí salen los dos orígenes del binario, uno por modo:
 | ldap_users | Usuarios LDAP sincronizados (deny-list: habilitados por defecto) |
 | user_groups | Grupos de usuarios |
 | user_group_members | Miembros de cada grupo (con clave foránea en cascada) |
-| notification_config | Configuración de notificaciones por email/Telegram |
+| notification_config | Configuración de notificaciones por email/Telegram/XMPP |
 | audit_log | Log de cambios |
 | syslog_config | Configuración del reenvío a syslog externo (fila única, apagada por defecto) |
 

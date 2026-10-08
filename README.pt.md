@@ -48,7 +48,7 @@ Além do esperado em um painel de Squid (ACLs, regras, usuários locais/LDAP/Ker
 - **📊 Análise**: panorama, tendências, atividade de rede (equipamentos usados por várias contas, cotas esgotadas), latência e erros, com relatórios em PDF. As consultas de 24 h, 7 e 30 dias levam milissegundos graças aos agregados por hora.
 - **📥 Importar o Squid que você já tem** (`squid.conf`, htpasswd/htdigest, listas de ACL) **mantendo as senhas**, e backup/restauração com pré-visualização do que mudaria e restauração «tudo ou nada».
 - **⏱️ Cotas e largura de banda**: cotas por usuário ou grupo com períodos de calendário, e regras de largura de banda por usuário, grupo, ACL ou tipo de tráfego.
-- **🔔 Avisos e relatório diário** por e-mail (HTML, no idioma do painel) e Telegram.
+- **🔔 Avisos e relatório diário** por e-mail (HTML, no idioma do painel), Telegram e XMPP (chat interno da empresa).
 - **🧩 Módulos opcionais**: ative só o que precisa.
 - **🔒 Segurança revisada**: passou por uma auditoria externa e os achados estão corrigidos (`docs/audits/`).
 - **🌍 Interface em espanhol, inglês e português**; instalação com Docker (imagens prontas ou compilando), nativa sem Docker, e atrás de um proxy corporativo.
@@ -125,7 +125,7 @@ uma instância do SquidManager por nó.
 - **Painel** — Tráfego em tempo real, principais usuários e domínios, estado do sistema
 - **Histórico de logs** — Meses já fechados, organizados por ano/mês com um resumo pré-calculado (usuários, domínios, negados), com retenção configurável — separado do visualizador ao vivo
 - **Backup e migração** — Backup automático do banco de dados com retenção (script pronto para cron, nos dois modos de implantação), exporte toda a configuração para JSON, ou importe um `squid.conf` tradicional com um relatório prévio do que pode e do que não pode ser trazido (suporta `include`)
-- **Notificações** — Alertas por e-mail ou Telegram quando alterações são aplicadas ou se detecta atividade suspeita
+- **Notificações** — Alertas por e-mail, Telegram ou XMPP quando alterações são aplicadas ou se detecta atividade suspeita
 - **Syslog externo** — Encaminha os logs de acesso a um servidor syslog (SIEM, ELK, Splunk) além de gravá-los localmente
 
 ### Assistente de IA
@@ -667,7 +667,7 @@ O painel se organiza em três grupos:
 | **Sistema** | LDAP | Configuração LDAP / Active Directory |
 | | Certificado | Download da CA e instaladores por sistema operacional |
 | | Configuração | Parâmetros gerais do Squid |
-| | Notificações | Alertas por e-mail e Telegram |
+| | Notificações | Alertas por e-mail, Telegram e XMPP |
 | | Backup e migração | Exportar/restaurar configuração, importar um squid.conf |
 | | Administradores | Gerenciamento das contas do painel (só superadmin) |
 

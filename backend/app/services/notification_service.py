@@ -1,4 +1,4 @@
-"""Servicio de notificaciones: envío de alertas por email y Telegram."""
+"""Servicio de notificaciones: envío de alertas por email, Telegram y XMPP."""
 
 import logging
 import smtplib
@@ -39,13 +39,22 @@ def _snapshot_config(notif_config, smtp_config, idioma: str = "es") -> SimpleNam
         telegram_enabled=notif_config.telegram_enabled,
         telegram_bot_token=notif_config.telegram_bot_token,
         telegram_chat_id=notif_config.telegram_chat_id,
+        xmpp_enabled=notif_config.xmpp_enabled,
+        xmpp_host=notif_config.xmpp_host,
+        xmpp_port=notif_config.xmpp_port,
+        xmpp_jid=notif_config.xmpp_jid,
+        xmpp_password=notif_config.xmpp_password,
+        xmpp_encryption=notif_config.xmpp_encryption,
+        xmpp_verify_cert=notif_config.xmpp_verify_cert,
+        xmpp_recipients=notif_config.xmpp_recipients,
+        xmpp_room=notif_config.xmpp_room,
         idioma=idioma,
     )
 
 
 def _snapshot_si_habilitado(db, event_type: str) -> SimpleNamespace | None:
     """Verifica que el evento esté habilitado en la config (notify_on_*) y
-    que al menos un canal (email o Telegram) esté habilitado; si es así,
+    que al menos un canal (email, Telegram o XMPP) esté habilitado; si es así,
     devuelve el snapshot listo para `notify()`, si no, None.
     """
     from app.models.notification_config import NotificationConfig
@@ -59,7 +68,7 @@ def _snapshot_si_habilitado(db, event_type: str) -> SimpleNamespace | None:
     if attr and not getattr(config, attr, False):
         return None
 
-    if not (config.email_enabled or config.telegram_enabled):
+    if not (config.email_enabled or config.telegram_enabled or config.xmpp_enabled):
         return None
 
     smtp_config = db.query(SmtpConfig).first()
@@ -213,9 +222,122 @@ def send_telegram(config, message: str) -> tuple[bool, str]:
         return False, f"Error enviando Telegram: {e}"
 
 
+def xmpp_destinos(config) -> list[str]:
+    """JIDs de usuario a los que se escribe (coma-separados en la config)."""
+    return [r.strip() for r in (config.xmpp_recipients or "").split(",") if r.strip()]
+
+
+async def _enviar_xmpp_async(config, texto: str, destinos: list[str], sala: str | None) -> tuple[bool, str]:
+    import asyncio
+    import ssl
+    import slixmpp
+
+    cifrado = (config.xmpp_encryption or "starttls").lower()
+    xmpp = slixmpp.ClientXMPP(config.xmpp_jid, config.xmpp_password or "")
+    xmpp.enable_direct_tls = cifrado == "ssl"
+    xmpp.enable_starttls = cifrado == "starttls"
+    xmpp.enable_plaintext = cifrado == "none"
+    if cifrado == "none":  # sin cifrado el servidor sólo ofrece PLAIN: se permite porque el admin lo eligió
+        xmpp["feature_mechanisms"].unencrypted_plain = True
+    if not config.xmpp_verify_cert:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        xmpp.ssl_context = ctx
+    xmpp.register_plugin("xep_0199")  # ping: la respuesta confirma que el servidor ya recibió los mensajes
+    if sala:
+        xmpp.register_plugin("xep_0045")
+
+    resultado: asyncio.Future = asyncio.get_running_loop().create_future()
+
+    def _fin(ok: bool, msg: str):
+        if not resultado.done():
+            resultado.set_result((ok, msg))
+
+    async def _sesion(_evento):
+        try:
+            if cifrado == "starttls" and not xmpp.transport.get_extra_info("ssl_object"):
+                _fin(False, "El servidor XMPP no ofreció STARTTLS: elige «Sin cifrar» si es lo que quieres")
+                return
+            enviados = 0
+            for jid in destinos:
+                xmpp.send_message(mto=jid, mbody=texto, mtype="chat")
+                enviados += 1
+            if sala:
+                await xmpp.plugin["xep_0045"].join_muc_wait(slixmpp.JID(sala), "SquidManager", timeout=10)
+                xmpp.send_message(mto=sala, mbody=texto, mtype="groupchat")
+                enviados += 1
+            try:  # ida y vuelta al servidor: el flujo es ordenado, así que al volver ya recibió todo lo anterior
+                await xmpp.plugin["xep_0199"].ping(timeout=8)
+            except Exception:
+                await asyncio.sleep(1)
+            _fin(True, f"Mensaje XMPP enviado a {enviados} destino(s)")
+        except Exception as e:
+            _fin(False, f"Error enviando por XMPP: {e or type(e).__name__}")
+
+    xmpp.add_event_handler("session_start", _sesion)
+    xmpp.add_event_handler("failed_auth", lambda _e: _fin(False, "Error de autenticación XMPP: cuenta o contraseña incorrectas"))
+    xmpp.add_event_handler("ssl_invalid_chain", lambda _e: _fin(False, (
+        "El certificado del servidor XMPP no es de confianza: desmarca «Verificar certificado» si es un certificado propio")))
+    xmpp.add_event_handler("connection_failed", lambda _e: _fin(False, (
+        "No se pudo conectar al servidor XMPP: revisa host, puerto y cifrado"
+        + ("; si el certificado es propio, desmarca «Verificar certificado»" if config.xmpp_verify_cert else ""))))
+    xmpp.connect(config.xmpp_host, int(config.xmpp_port))
+    try:
+        return await asyncio.wait_for(resultado, timeout=25)
+    except asyncio.TimeoutError:
+        return False, "Tiempo agotado hablando con el servidor XMPP"
+    finally:
+        try:
+            await asyncio.wait_for(xmpp.disconnect(wait=3), timeout=8)
+        except Exception:
+            pass
+
+
+def send_xmpp(config, texto: str) -> tuple[bool, str]:
+    """Envía un mensaje por XMPP a los destinos configurados (usuarios y/o sala).
+
+    SquidManager sólo actúa de cliente: se conecta a un servidor XMPP que ya existe
+    con la cuenta que el admin indicó. slixmpp es asyncio y esto se llama desde código
+    síncrono (tareas de fondo, hilos), así que corre en un hilo propio con su bucle de
+    eventos y un tiempo máximo: un servidor caído nunca bloquea el panel.
+    """
+    import asyncio
+    import threading
+
+    if not config.xmpp_enabled:
+        return False, "Notificaciones por XMPP deshabilitadas"
+    if not (config.xmpp_host and config.xmpp_jid and config.xmpp_password):
+        return False, "Falta el servidor, la cuenta (JID) o la contraseña de XMPP"
+    destinos = xmpp_destinos(config)
+    sala = (config.xmpp_room or "").strip() or None
+    if not destinos and not sala:
+        return False, "Falta al menos un destinatario o una sala de XMPP"
+
+    salida: list = []
+
+    def _hilo():
+        try:
+            salida.append(asyncio.run(_enviar_xmpp_async(config, texto, destinos, sala)))
+        except Exception as e:
+            salida.append((False, f"Error enviando por XMPP: {e}"))
+
+    t = threading.Thread(target=_hilo, daemon=True)
+    t.start()
+    t.join(timeout=45)
+    if not salida:
+        return False, "Tiempo agotado hablando con el servidor XMPP"
+    ok, msg = salida[0]
+    if ok:
+        logger.info(msg)
+    else:
+        logger.warning("XMPP: %s", msg)
+    return ok, msg
+
+
 def notify(config, subject: str, message: str, event: str | None = None) -> dict:
-    """Envía notificación por email y/o Telegram según configuración."""
-    results = {"email": False, "telegram": False}
+    """Envía notificación por email, Telegram y/o XMPP según configuración."""
+    results = {"email": False, "telegram": False, "xmpp": False}
 
     if config.email_enabled:
         from app.services.email_templates import construir_correo
@@ -235,6 +357,13 @@ def notify(config, subject: str, message: str, event: str | None = None) -> dict
         full_message = f"<b>{_html.escape(traducir_dinamico(subject, idioma))}</b>\n\n{_html.escape(traducir_dinamico(message, idioma))}"
         ok, _ = send_telegram(config, full_message)
         results["telegram"] = ok
+
+    if getattr(config, "xmpp_enabled", False):
+        from app.i18n import traducir_dinamico
+        idioma = getattr(config, "idioma", "es")
+        texto_chat = f"{traducir_dinamico(subject, idioma)}\n\n{traducir_dinamico(message, idioma)}"
+        ok, _ = send_xmpp(config, texto_chat)
+        results["xmpp"] = ok
 
     return results
 
@@ -256,5 +385,14 @@ def test_telegram(config) -> dict:
     ok, message = send_telegram(
         config,
         "SquidManager - Prueba de notificación\n\nSi recibes esto, la configuración de Telegram es correcta.",
+    )
+    return {"ok": ok, "message": message}
+
+
+def test_xmpp(config) -> dict:
+    """Prueba el envío por XMPP."""
+    ok, message = send_xmpp(
+        config,
+        "SquidManager - Prueba de notificación\n\nSi recibes esto, la configuración de XMPP es correcta.",
     )
     return {"ok": ok, "message": message}

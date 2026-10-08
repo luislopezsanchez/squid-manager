@@ -39,6 +39,7 @@ se pueden sustituir por otra versión). `certifi` es **MPL-2.0**, sin modificar.
 | Paquete | Versión | Licencia |
 |---|---|---|
 | alembic | 1.13.3 | MIT |
+| aiodns | 4.0.4 | MIT |
 | annotated-doc | 0.0.5 | MIT |
 | annotated-types | 0.8.0 | MIT |
 | anyio | 4.15.1 | MIT |
@@ -66,6 +67,8 @@ se pueden sustituir por otra versión). `certifi` es **MPL-2.0**, sin modificar.
 | pillow | 12.3.0 | MIT-CMU |
 | psycopg | 3.2.13 | LGPL-3.0-only |
 | pyasn1 | 0.6.4 | BSD-2-Clause |
+| pyasn1-modules | 0.4.2 | BSD |
+| pycares | 5.1.0 | MIT |
 | pycparser | 3.0 | BSD-3-Clause |
 | pydantic | 2.9.2 | MIT |
 | pydantic-settings | 2.5.2 | MIT |
@@ -75,6 +78,7 @@ se pueden sustituir por otra versión). `certifi` es **MPL-2.0**, sin modificar.
 | python-multipart | 0.0.31 | Apache-2.0 |
 | reportlab | 4.2.5 | BSD License |
 | requests | 2.34.2 | Apache-2.0 |
+| slixmpp | 1.17.0 | MIT |
 | sniffio | 1.3.1 | MIT OR Apache-2.0 |
 | SQLAlchemy | 2.0.35 | MIT |
 | starlette | 1.6.0 | BSD-3-Clause |

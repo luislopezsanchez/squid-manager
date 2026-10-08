@@ -11,6 +11,15 @@ interface NotifConfig {
   telegram_enabled: boolean
   telegram_bot_token_set: boolean
   telegram_chat_id: string | null
+  xmpp_enabled: boolean
+  xmpp_host: string | null
+  xmpp_port: number
+  xmpp_jid: string | null
+  xmpp_password_set: boolean
+  xmpp_encryption: 'none' | 'starttls' | 'ssl'
+  xmpp_verify_cert: boolean
+  xmpp_recipients: string | null
+  xmpp_room: string | null
   notify_on_apply: boolean
   notify_on_user_change: boolean
   notify_on_acl_change: boolean
@@ -31,6 +40,8 @@ export default function Notifications() {
   const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [telegramToken, setTelegramToken] = useState('')
+  const [xmppPassword, setXmppPassword] = useState('')
+  const [testingXmpp, setTestingXmpp] = useState(false)
   const [testingEmail, setTestingEmail] = useState(false)
   const [testingTelegram, setTestingTelegram] = useState(false)
   const [enviandoReporte, setEnviandoReporte] = useState(false)
@@ -55,6 +66,15 @@ export default function Notifications() {
         telegram_enabled: config.telegram_enabled,
         telegram_bot_token: telegramToken || undefined,
         telegram_chat_id: config.telegram_chat_id,
+        xmpp_enabled: config.xmpp_enabled,
+        xmpp_host: config.xmpp_host,
+        xmpp_port: Number(config.xmpp_port) || 5222,
+        xmpp_jid: config.xmpp_jid,
+        xmpp_password: xmppPassword || undefined,
+        xmpp_encryption: config.xmpp_encryption,
+        xmpp_verify_cert: config.xmpp_verify_cert,
+        xmpp_recipients: config.xmpp_recipients,
+        xmpp_room: config.xmpp_room,
         notify_on_apply: config.notify_on_apply,
         notify_on_user_change: config.notify_on_user_change,
         notify_on_acl_change: config.notify_on_acl_change,
@@ -71,6 +91,7 @@ export default function Notifications() {
       await api.updateNotificationConfig(payload)
       showToast(traducir("Configuración guardada correctamente"), 'success')
       setTelegramToken('')
+      setXmppPassword('')
       // Recargar config para actualizar los indicadores "(guardado)"
       const refreshed = await api.getNotificationConfig()
       setConfig(refreshed)
@@ -127,6 +148,33 @@ export default function Notifications() {
     }
   }
 
+  const testXmpp = async () => {
+    if (!config) return
+    if (!config.xmpp_host) { showToast(traducir("Falta el servidor XMPP"), 'error'); return }
+    if (!config.xmpp_jid) { showToast(traducir("Falta la cuenta XMPP (JID)"), 'error'); return }
+    if (!xmppPassword && !config.xmpp_password_set) { showToast(traducir("Falta la contraseña de XMPP"), 'error'); return }
+    if (!config.xmpp_recipients && !config.xmpp_room) { showToast(traducir("Falta al menos un destinatario o una sala de XMPP"), 'error'); return }
+
+    setTestingXmpp(true)
+    try {
+      const r = await api.testXmpp({
+        xmpp_host: config.xmpp_host,
+        xmpp_port: Number(config.xmpp_port) || 5222,
+        xmpp_jid: config.xmpp_jid,
+        xmpp_password: xmppPassword || undefined,
+        xmpp_encryption: config.xmpp_encryption,
+        xmpp_verify_cert: config.xmpp_verify_cert,
+        xmpp_recipients: config.xmpp_recipients || undefined,
+        xmpp_room: config.xmpp_room || undefined,
+      })
+      showToast(r.message, r.ok ? 'success' : 'error')
+    } catch (e: any) {
+      showToast(e.message, 'error')
+    } finally {
+      setTestingXmpp(false)
+    }
+  }
+
   if (loading) return <LoadingState />
   if (loadError || !config) return <ErrorState onRetry={cargar} />
 
@@ -134,7 +182,7 @@ export default function Notifications() {
     <div className="p-8 max-w-3xl">
       <h1 className="text-2xl font-bold mb-6" style={{ color: '#0A2C48' }}>{traducir("Notificaciones")}</h1>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-xs text-blue-800">{traducir("Configura alertas por email y/o Telegram para enterarte de cambios críticos en el proxy. Guarda la configuración primero, o usa los botones de prueba para validar los datos actuales del formulario.")}</div>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-xs text-blue-800">{traducir("Configura alertas por email, Telegram y/o XMPP (chat interno) para enterarte de cambios críticos en el proxy. Guarda la configuración primero, o usa los botones de prueba para validar los datos actuales del formulario.")}</div>
 
       {/* Email */}
       <div className="card p-6 mb-6">
@@ -209,6 +257,87 @@ export default function Notifications() {
         )}
       </div>
 
+      {/* XMPP */}
+      <div className="card p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-medium text-ink">{traducir("Notificaciones por XMPP (chat interno)")}</h3>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={config.xmpp_enabled}
+              onChange={e => setConfig({ ...config, xmpp_enabled: e.target.checked })}
+              className="w-4 h-4" style={{ accentColor: '#0B497C' }} />
+            <span className="text-sm">{traducir("Habilitar")}</span>
+          </label>
+        </div>
+        {config.xmpp_enabled && (
+          <div className="space-y-3">
+            <p className="text-xs text-ink-3">
+              {traducir("SquidManager se conecta como cliente a un servidor XMPP que ya tengas (Openfire, Prosody, ejabberd…). No instala ningún servidor.")}
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <label htmlFor="xmpp-host" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Servidor (IP o nombre)")}</label>
+                <input id="xmpp-host" type="text" value={config.xmpp_host || ''} placeholder="xmpp.empresa.local"
+                  onChange={e => setConfig({ ...config, xmpp_host: e.target.value })} className="input text-sm" />
+              </div>
+              <div>
+                <label htmlFor="xmpp-port" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Puerto")}</label>
+                <input id="xmpp-port" type="number" min={1} max={65535} value={config.xmpp_port}
+                  onChange={e => setConfig({ ...config, xmpp_port: Number(e.target.value) })} className="input text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="xmpp-jid" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Cuenta emisora (JID)")}</label>
+                <input id="xmpp-jid" type="text" value={config.xmpp_jid || ''} placeholder="squid@empresa.local"
+                  onChange={e => setConfig({ ...config, xmpp_jid: e.target.value })} className="input text-sm" />
+              </div>
+              <div>
+                <label htmlFor="xmpp-password" className="block text-xs font-medium text-ink-3 mb-1">
+                  {traducir("Contraseña")} {config.xmpp_password_set && <span className="text-ok">{traducir("(guardado)")}</span>}
+                </label>
+                <input id="xmpp-password" type="password" value={xmppPassword} autoComplete="new-password"
+                  placeholder={config.xmpp_password_set ? '••••••••' : traducir('Nueva contraseña')}
+                  onChange={e => setXmppPassword(e.target.value)} className="input text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="xmpp-encryption" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Cifrado")}</label>
+                <select id="xmpp-encryption" value={config.xmpp_encryption} className="input text-sm"
+                  onChange={e => setConfig({ ...config, xmpp_encryption: e.target.value as NotifConfig['xmpp_encryption'] })}>
+                  <option value="starttls">STARTTLS (5222)</option>
+                  <option value="ssl">SSL/TLS (5223)</option>
+                  <option value="none">{traducir("Sin cifrar")}</option>
+                </select>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer self-end pb-2">
+                <input type="checkbox" checked={config.xmpp_verify_cert}
+                  onChange={e => setConfig({ ...config, xmpp_verify_cert: e.target.checked })}
+                  className="w-4 h-4" style={{ accentColor: '#0B497C' }} />
+                <span className="text-sm">{traducir("Verificar certificado del servidor")}</span>
+              </label>
+            </div>
+            {config.xmpp_encryption === 'none' && (
+              <p className="text-xs text-warn bg-warn-soft rounded-lg p-3">{traducir("Sin cifrar, la contraseña y los avisos viajan en claro por la red. Úsalo solo en una red de confianza.")}</p>
+            )}
+            <div>
+              <label htmlFor="xmpp-recipients" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Destinatarios (JID separados por comas)")}</label>
+              <input id="xmpp-recipients" type="text" value={config.xmpp_recipients || ''} placeholder="admin@empresa.local, soporte@empresa.local"
+                onChange={e => setConfig({ ...config, xmpp_recipients: e.target.value })} className="input text-sm" />
+            </div>
+            <div>
+              <label htmlFor="xmpp-room" className="block text-xs font-medium text-ink-3 mb-1">{traducir("Sala de chat (opcional)")}</label>
+              <input id="xmpp-room" type="text" value={config.xmpp_room || ''} placeholder="avisos@conference.empresa.local"
+                onChange={e => setConfig({ ...config, xmpp_room: e.target.value })} className="input text-sm" />
+            </div>
+            <button onClick={testXmpp} disabled={testingXmpp}
+              className="px-4 py-2 text-white rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: '#48B3D0' }}>
+              {testingXmpp ? traducir('Enviando…') : traducir('Enviar mensaje de prueba')}
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Eventos a notificar */}
       <div className="card p-6 mb-6">
         <h3 className="font-medium text-ink mb-4">{traducir("Eventos a notificar")}</h3>
@@ -244,8 +373,8 @@ export default function Notifications() {
             <span className="text-xs text-ink-3 w-full">{traducir("Se avisa una sola vez por usuario y por hora, aunque siga intentándolo.")}</span>
           </div>
         )}
-        {!config.email_enabled && !config.telegram_enabled && (
-          <p className="text-xs text-warn bg-warn-soft rounded-lg p-3 mt-4">{traducir("Ningún canal está habilitado: activa el correo o Telegram arriba para que estos avisos lleguen.")}</p>
+        {!config.email_enabled && !config.telegram_enabled && !config.xmpp_enabled && (
+          <p className="text-xs text-warn bg-warn-soft rounded-lg p-3 mt-4">{traducir("Ningún canal está habilitado: activa el correo, Telegram o XMPP arriba para que estos avisos lleguen.")}</p>
         )}
       </div>
 

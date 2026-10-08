@@ -5,6 +5,23 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.7] - 2026-10-08
+
+### Añadido
+
+- **Notificaciones por XMPP (chat interno de la empresa).** Nuevo canal en **Notificaciones**, junto al correo y Telegram:
+  los mismos avisos (aplicar cambios, alertas de seguridad, nodo caído, cuota agotada, accesos bloqueados…) llegan por chat a
+  uno o varios usuarios y, si se quiere, a una sala de grupo. SquidManager **no instala ningún servidor de mensajería**: se
+  conecta como cliente al servidor XMPP que la empresa ya tenga (Openfire, Prosody, ejabberd…). El administrador indica el
+  servidor (IP o nombre) y el puerto, la cuenta emisora (JID) con su contraseña, el cifrado (STARTTLS, SSL/TLS o sin cifrar),
+  si se verifica el certificado (para certificados propios), los destinatarios y la sala opcional, y tiene un botón de prueba.
+  La contraseña se guarda cifrada en reposo y viaja cifrada en el backup. El envío corre en un hilo propio con tiempo máximo:
+  un servidor de chat caído nunca bloquea el panel ni los otros canales. Funciona igual en Docker y en nativo (nueva
+  dependencia de Python `slixmpp`, que la actualización instala sola). Migración `0047`. Verificado contra un servidor Prosody
+  real (STARTTLS, SSL directo, sin cifrar, sala MUC, clave errónea, puerto cerrado, certificado propio).
+
+---
+
 ## [1.0.6] - 2026-10-07
 
 ### Añadido
