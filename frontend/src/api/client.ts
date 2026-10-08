@@ -122,6 +122,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json()
 }
 
+// Los listados de usuarios (locales y LDAP) vienen paginados del servidor (máx. 5000 por petición). Las pantallas
+// filtran y paginan en el navegador, así que piden todas las páginas: sin esto, con más de 1000 usuarios sólo
+// se veían los primeros 1000 (y el resto no aparecía ni en búsquedas, ni en grupos, ni en cuotas).
+const POR_PETICION = 5000
+async function listarTodo(ruta: string): Promise<any[]> {
+  const todos: any[] = []
+  for (let offset = 0; ; offset += POR_PETICION) {
+    const pagina = await request<any[]>(`${ruta}?limit=${POR_PETICION}&offset=${offset}`)
+    todos.push(...pagina)
+    if (pagina.length < POR_PETICION) return todos
+  }
+}
+
 export const api = {
   // Función genérica para requests GET con query params
   request: <T = any>(path: string) => request<T>(path),
@@ -154,7 +167,7 @@ export const api = {
   },
 
   // Proxy Users
-  listUsers: () => request<any[]>('/proxy-users/'),
+  listUsers: () => listarTodo('/proxy-users/'),
   createUser: (data: any) => request<any>('/proxy-users/', { method: 'POST', body: JSON.stringify(data) }),
   updateUser: (id: number, data: any) => request<any>(`/proxy-users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteUser: (id: number) => request<void>(`/proxy-users/${id}`, { method: 'DELETE' }),
@@ -297,7 +310,7 @@ export const api = {
   updateSyslogConfig: (data: any) => request<any>('/syslog/config', { method: 'PUT', body: JSON.stringify(data) }),
   testSyslog: (data: any) => request<any>('/syslog/test', { method: 'POST', body: JSON.stringify(data) }),
   syncLdapUsers: () => request<any>('/ldap/sync', { method: 'POST' }),
-  listLdapUsers: () => request<any[]>('/ldap/users'),
+  listLdapUsers: () => listarTodo('/ldap/users'),
   toggleLdapUser: (id: number) => request<any>(`/ldap/users/${id}/toggle`, { method: 'PATCH' }),
   listLdapGroups: () => request<{ groups: string[] }>('/ldap/groups'),
 

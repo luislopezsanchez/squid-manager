@@ -424,6 +424,8 @@ def sync_ldap_users(
         raise HTTPException(400, detail=f"Error buscando usuarios: {e}")
 
     synced = 0
+    # Una sola consulta con los existentes: con decenas de miles de usuarios, una consulta por usuario tardaba minutos.
+    existentes = {u.username: u for u in db.query(LdapUser).all()}
     for entry in entries:
         if entry.get("type") != "searchResEntry":
             continue
@@ -446,14 +448,16 @@ def sync_ldap_users(
         cn = _attr("cn")
         mail = _attr("mail")
 
-        existing = db.query(LdapUser).filter(LdapUser.username == username).first()
+        existing = existentes.get(username)
         if existing:
             existing.display_name = cn
             existing.email = mail
         else:
             # deny-list: nuevos usuarios habilitados por defecto, se
             # deshabilita a mano a quien no deba navegar
-            db.add(LdapUser(username=username, display_name=cn, email=mail, enabled=True))
+            nuevo = LdapUser(username=username, display_name=cn, email=mail, enabled=True)
+            db.add(nuevo)
+            existentes[username] = nuevo  # un nombre repetido en el directorio no debe insertarse dos veces
         synced += 1
 
     conn.unbind()

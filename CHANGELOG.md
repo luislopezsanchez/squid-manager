@@ -5,6 +5,19 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.9] - 2026-10-08
+
+### Corregido
+
+- **Con más de 1000 usuarios, el panel sólo mostraba los primeros 1000.** El servidor pagina los listados de usuarios locales y
+  LDAP (1000 por defecto) y las pantallas no pedían el resto: los demás no aparecían en Usuarios, ni en las búsquedas, ni al
+  elegir usuarios en Grupos, Cuotas y Delay pools, y el contador de la página LDAP se quedaba en 1000. La sincronización con LDAP
+  siempre guardó a todos; era sólo la visualización. Ahora las pantallas piden todas las páginas.
+- **La sincronización con LDAP es mucho más rápida con directorios grandes:** ya no consulta la base de datos una vez por
+  usuario.
+
+---
+
 ## [1.0.8] - 2026-10-08
 
 ### Añadido
