@@ -184,7 +184,7 @@ Plan de mejoras aplicado por decisión del propietario (2026-10-08):
 | 01-002, 01-003, 05-008, 05-009 | **Corregidos** en 1.0.10 |
 | 01-004, 09-002, 10-005, 13-003, 04-002 | **Corregidos** en 1.0.11 |
 | 07-N01, 02-N01, 02-N02, 11-N01 | **Resueltas** en 1.0.11 |
-| 04-003 cobertura | **Abierto**: 55 % → 57 % (`proxy_users` 42 %, `backup` 32 %, `ldap` 56 %, `acls` 50 %) |
+| 04-003 cobertura | **Mejorado en 1.0.14**: 55 % → 65 % (`proxy_users` 95 %, `ldap` 97 %, `acls` 93 %, `backup` 72 %). Las pruebas nuevas usan SQLite en memoria con las tablas reales y no destaparon fallos. Queda sin cubrir la extracción .rar/.7z y la consulta DNS del análisis de Squid |
 | 13-002 etiquetas git | **Corregido**: `v1.0.4` a `v1.0.11` creadas y subidas |
 | 03-002 ficheros de más de 1000 líneas | Sin cambios, por decisión (refactor solo al tocarlos por otro motivo) |
 

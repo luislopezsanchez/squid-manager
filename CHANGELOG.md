@@ -5,6 +5,18 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.14] - 2026-10-08
+
+### Pruebas
+
+- **Cobertura del backend 57 % → 65 %** (1351 pruebas), sin cambios en el producto. Nuevas pruebas contra una base SQLite en memoria
+  con las tablas reales (consultas, filtros y borrados de verdad, sin PostgreSQL): backup y restauración heredada y v2 (72 % /
+  84 %), usuarios del proxy (95 %: alta, edición, baja, acciones en bloque, exportar e importar), ACLs (93 %: alta, edición, uso,
+  carga masiva por archivo, acciones en bloque) y LDAP con un servidor simulado (97 %: configuración, prueba, grupos,
+  sincronización y ausentes). Incluyen los casos de archivos manipulados y entradas peligrosas. No destaparon fallos nuevos.
+
+---
+
 ## [1.0.13] - 2026-10-08
 
 ### Corregido

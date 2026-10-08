@@ -25,7 +25,7 @@ reutiliza (`05-003` = tercer hallazgo de seguridad de la historia del proyecto).
 | 09-001 | Menor | 9 | N+1 en `find_references` al listar ACLs sin uso | `backend/app/services/squid_names.py:119`, `backend/app/routes/acls.py` (`list_unused_acls`) | 2026-09-13 | 2026-09-14 |
 | 08-002 | Menor | 8 | IP pública y privada reales en informes y CHANGELOG públicos | `docs/audits/2026-09-14-audit-full.md:135-140`, `CHANGELOG.md:700,711`, `backups/README.md:25` | 2026-10-08 | 2026-10-08 |
 | 03-002 | Menor | 3 | Cinco ficheros por encima de 1000 líneas | `Dashboard.tsx` 1602, `metrics_service.py` 1367, `ProxyUsers.tsx` 1221, `PanelCentral.tsx` 1211, `ai_service.py` 1137 | 2026-10-08 | 2026-10-08 |
-| 04-003 | Menor | 4 | Cobertura 55 % (1.0.11: 57 %; proxy_users 42 %, backup 32 %, ldap 56 %, acls 50 %; sigue abierto); backup 13 %, proxy_users 20 %, ldap 27 %, acls 35 % | `pytest --cov=app` | 2026-10-08 | 2026-10-08 |
+| 04-003 | Menor | 4 | Cobertura 55 % → 65 % en 1.0.14 (proxy_users 95 %, ldap 97 %, acls 93 %, backup 72 %; pruebas con SQLite real, sin hallar fallos nuevos). Pendiente: extracción .rar/.7z y consulta DNS del análisis de Squid | `pytest --cov=app` | 2026-10-08 | 2026-10-08 |
 
 ## Riesgos aceptados
 
