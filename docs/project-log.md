@@ -1571,3 +1571,19 @@ auxiliar); y un `upgrade-docker.sh` de otra versión intentaba instalar el tempo
 
 **Red de seguridad.** `tests/e2e/update_docker.sh` y `tests/e2e/update_native.sh` instalan desde cero con el instalador oficial,
 crean un commit nuevo y exigen que «Actualizar ahora» lo aplique; los ejecuta `.github/workflows/update-e2e.yml`.
+
+---
+
+## 2026-10-08 — Auditoría de la entrega 1.0.6 (modo release)
+
+**Objetivo.** Validar el servicio `updater` y las pruebas E2E antes de publicar, y revisar el proyecto completo con muestreo.
+Informe: [audits/2026-10-08-audit-release.md](audits/2026-10-08-audit-release.md); ledger: [audits/findings.md](audits/findings.md).
+
+**Veredicto: APTO CON RESERVAS.** Suite 1115 pasados; E2E de instalación limpia + 2 actualizaciones en Docker y nativo (local y en
+GitHub); actualización por la web verificada en instalaciones reales 1.0.1/1.0.2. Se corrigieron 4 hallazgos del propio cambio antes
+de congelar el alcance (11-003, 10-003, 10-002, 01-001).
+
+**Riesgos y continuidad.** Abierto 05-006 (Mayor): la imagen LXC pública del `backups/README.md` lleva claves reales; confirmar si la
+instalación de origen sigue activa y rotarlas. 05-007: aceptación expresa del privilegio del servicio `updater`. Pendiente de
+etiquetar `v1.0.6` (13-002). Verificar en el VPS de producción que el servicio queda «healthy» tras `git pull && docker compose up -d --build`.
+
