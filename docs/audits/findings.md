@@ -24,7 +24,6 @@ reutiliza (`05-003` = tercer hallazgo de seguridad de la historia del proyecto).
 | 03-001 | Menor | 3 | 6 copias independientes del mismo doble de prueba (`_FakeQuery`/`_Consulta`) | Ver lista de archivos en el informe 2026-09-13-audit-full.md | 2026-09-13 | 2026-09-14 |
 | 09-001 | Menor | 9 | N+1 en `find_references` al listar ACLs sin uso | `backend/app/services/squid_names.py:119`, `backend/app/routes/acls.py` (`list_unused_acls`) | 2026-09-13 | 2026-09-14 |
 | 08-002 | Menor | 8 | IP pública y privada reales en informes y CHANGELOG públicos | `docs/audits/2026-09-14-audit-full.md:135-140`, `CHANGELOG.md:700,711`, `backups/README.md:25` | 2026-10-08 | 2026-10-08 |
-| 13-002 | Menor | 13 | Versiones 1.0.4 a 1.0.9 sin etiqueta git | `git tag` → última `v1.0.3`; `docs/actualizacion.md:582-591` | 2026-10-08 | 2026-10-08 |
 | 03-002 | Menor | 3 | Cinco ficheros por encima de 1000 líneas | `Dashboard.tsx` 1602, `metrics_service.py` 1367, `ProxyUsers.tsx` 1221, `PanelCentral.tsx` 1211, `ai_service.py` 1137 | 2026-10-08 | 2026-10-08 |
 | 04-003 | Menor | 4 | Cobertura 55 % (1.0.11: 57 %; proxy_users 42 %, backup 32 %, ldap 56 %, acls 50 %; sigue abierto); backup 13 %, proxy_users 20 %, ldap 27 %, acls 35 % | `pytest --cov=app` | 2026-10-08 | 2026-10-08 |
 
@@ -39,6 +38,7 @@ reutiliza (`05-003` = tercer hallazgo de seguridad de la historia del proyecto).
 
 | ID | Sev | Título | Corregido el | Commit | Reverificado el |
 |---|---|---|---|---|---|
+| 13-002 | Menor | Versiones 1.0.4 a 1.0.10 sin etiqueta git | 2026-10-08 | *(etiquetas v1.0.4–v1.0.11)* | 2026-10-08 — creadas y subidas; solo `v1.0.11` dispara la publicación de imágenes |
 | 04-002 | Menor | Sin suite de tests para el frontend | 2026-10-08 | *(1.0.11)* | 2026-10-08 — Vitest con 12 pruebas de humo, en CI |
 | 13-003 | Menor | CI sin linter de Python | 2026-10-08 | *(1.0.11)* | 2026-10-08 — `ruff check --select F` en CI; 24 imports eliminados |
 | 10-005 | Menor | Notificaciones sin cola ni «circuit breaker» | 2026-10-08 | *(1.0.11)* | 2026-10-08 — pausa tras 3 fallos, tope de 2 envíos, estado en pantalla; 6 pruebas |

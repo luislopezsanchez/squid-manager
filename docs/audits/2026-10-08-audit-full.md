@@ -185,7 +185,7 @@ Plan de mejoras aplicado por decisión del propietario (2026-10-08):
 | 01-004, 09-002, 10-005, 13-003, 04-002 | **Corregidos** en 1.0.11 |
 | 07-N01, 02-N01, 02-N02, 11-N01 | **Resueltas** en 1.0.11 |
 | 04-003 cobertura | **Abierto**: 55 % → 57 % (`proxy_users` 42 %, `backup` 32 %, `ldap` 56 %, `acls` 50 %) |
-| 13-002 etiquetas git | Pendiente: se crean tras verificar la 1.0.11 |
+| 13-002 etiquetas git | **Corregido**: `v1.0.4` a `v1.0.11` creadas y subidas |
 | 03-002 ficheros de más de 1000 líneas | Sin cambios, por decisión (refactor solo al tocarlos por otro motivo) |
 
 Además se añadió la importación masiva en segundo plano (hasta 20 000 filas), que elimina la causa del tope de 5000 filas.
