@@ -461,6 +461,19 @@ Authorization: Bearer <token>
 
 Se rechaza con `409` si alguna regla de acceso la está usando, indicando cuál.
 
+
+### Acción en bloque sobre ACLs
+```http
+POST /api/acls/bulk
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"ids": [3, 4, 7], "accion": "delete"}
+```
+
+`accion` es `delete`, `enable` o `disable` (hasta 1000 ids). Responde `{"hechas": ["nombre", ...], "omitidas": [{"id": 4, "name": "x", "motivo": "En uso: ..."}]}`.
+Eliminar no borra una ACL que use alguna regla de acceso o de ancho de banda: queda en `omitidas` con el motivo.
+
 ### Carga masiva de dominios
 ```http
 POST /api/acls/bulk-domains

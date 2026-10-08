@@ -1843,5 +1843,21 @@
   "Destinatarios (JID separados por comas)": "Destinatários (JIDs separados por vírgulas)",
   "Sala de chat (opcional)": "Sala de chat (opcional)",
   "Configura alertas por email, Telegram y/o XMPP (chat interno) para enterarte de cambios críticos en el proxy. Guarda la configuración primero, o usa los botones de prueba para validar los datos actuales del formulario.": "Configure alertas por e-mail, Telegram e/ou XMPP (chat interno) para saber de alterações críticas no proxy. Salve a configuração primeiro, ou use os botões de teste para validar os dados atuais do formulário.",
-  "Ningún canal está habilitado: activa el correo, Telegram o XMPP arriba para que estos avisos lleguen.": "Nenhum canal está habilitado: ative o e-mail, o Telegram ou o XMPP acima para que estes avisos cheguem."
+  "Ningún canal está habilitado: activa el correo, Telegram o XMPP arriba para que estos avisos lleguen.": "Nenhum canal está habilitado: ative o e-mail, o Telegram ou o XMPP acima para que estes avisos cheguem.",
+  "Activas": "Ativas",
+  "Inactivas": "Inativas",
+  "Quitar filtros": "Limpar filtros",
+  "Activar": "Ativar",
+  "Desactivar": "Desativar",
+  "seleccionadas": "selecionadas",
+  "Quitar selección": "Limpar seleção",
+  "Seleccionar todas": "Selecionar todas",
+  "Seleccionar todas las que muestra el filtro": "Selecionar todas as que o filtro mostra",
+  "Seleccionar": "Selecionar",
+  "¿Eliminar las ACLs seleccionadas?": "Excluir as ACLs selecionadas?",
+  "ACL(s) procesadas correctamente": "ACL(s) processadas com sucesso",
+  "ACL(s) procesadas": "ACL(s) processadas",
+  "omitidas": "ignoradas",
+  "ACL no encontrada": "ACL não encontrada",
+  "Ninguna ACL coincide con la búsqueda o los filtros.": "Nenhuma ACL corresponde à busca ou aos filtros."
 }

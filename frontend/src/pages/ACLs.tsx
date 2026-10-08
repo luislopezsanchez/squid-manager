@@ -193,6 +193,10 @@ export default function ACLs() {
   const [form, setForm] = useState<FormAcl>(FORM_VACIO)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [filtroUso, setFiltroUso] = useState<'todas' | 'uso' | 'sinuso'>('todas')
+  const [filtroEstado, setFiltroEstado] = useState<'todas' | 'activa' | 'inactiva'>('todas')
+  const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
+  const [procesando, setProcesando] = useState(false)
   const { showToast, ToastContainer } = useToast()
   // Las categorías de dominio (HaGeZi, o las creadas a mano) son ACLs
   // dstdomain/dstdom_regex por dentro, pero tienen su propia página
@@ -297,17 +301,52 @@ export default function ACLs() {
   // una ACL puntual desplazándose a mano dejaba de ser práctico. Pedido en
   // vivo, 2026-09-27.
   const term = search.trim().toLowerCase()
-  const filteredAcls = term
-    ? acls.filter(a =>
-        a.name.toLowerCase().includes(term) ||
-        a.type.toLowerCase().includes(term) ||
-        (a.value ?? '').toLowerCase().includes(term) ||
-        (a.description ?? '').toLowerCase().includes(term)
-      )
-    : acls
+  const filteredAcls = acls.filter(a =>
+    (!term ||
+      a.name.toLowerCase().includes(term) ||
+      a.type.toLowerCase().includes(term) ||
+      (a.value ?? '').toLowerCase().includes(term) ||
+      (a.description ?? '').toLowerCase().includes(term)) &&
+    (filtroUso === 'todas' || (filtroUso === 'uso') === !!usos[a.name]) &&
+    (filtroEstado === 'todas' || (filtroEstado === 'activa') === a.enabled)
+  )
+
+  // Selección múltiple: «todas» se refiere a todo lo que filtran la búsqueda y los filtros (no sólo a la página visible).
+  const idsFiltrados = filteredAcls.map(a => a.id)
+  const todasMarcadas = idsFiltrados.length > 0 && idsFiltrados.every(id => seleccion.has(id))
+  const alternarTodas = () => setSeleccion(todasMarcadas ? new Set() : new Set(idsFiltrados))
+  const alternarUna = (id: number) => setSeleccion(prev => {
+    const n = new Set(prev)
+    if (n.has(id)) n.delete(id); else n.add(id)
+    return n
+  })
+
+  const accionMasiva = async (accion: 'delete' | 'enable' | 'disable') => {
+    const ids = Array.from(seleccion)
+    if (ids.length === 0) return
+    if (accion === 'delete' &&
+        !(await confirmar(traducir("¿Eliminar las ACLs seleccionadas?") + ` (${ids.length})`))) return
+    setProcesando(true)
+    try {
+      const r = await api.bulkAcls(ids, accion)
+      if (r.hechas.length > 0) notificarCambioPendiente()
+      setSeleccion(new Set())
+      loadAcls()
+      if (r.omitidas.length === 0) {
+        showToast(`${r.hechas.length} ${traducir("ACL(s) procesadas correctamente")}`)
+      } else {
+        showToast(`${r.hechas.length} ${traducir("ACL(s) procesadas")}, ${r.omitidas.length} ${traducir("omitidas")}: ` +
+          r.omitidas.slice(0, 3).map(o => `${o.name ?? o.id} (${traducir(o.motivo.split(':')[0])})`).join(', '),
+          r.hechas.length > 0 ? 'success' : 'error')
+      }
+    } catch (e: any) { showToast(`Error: ${e.message}`, 'error') }
+    finally { setProcesando(false) }
+  }
 
   const { pagina, setPagina, totalPaginas } = usePaginacion(filteredAcls.length, ACLS_POR_PAGINA)
-  useEffect(() => { setPagina(0) }, [search, verCategorias])
+  useEffect(() => { setPagina(0) }, [search, verCategorias, filtroUso, filtroEstado])
+  // Al recargar la lista se descartan de la selección las ACLs que ya no existen.
+  useEffect(() => { setSeleccion(prev => new Set(Array.from(prev).filter(id => acls.some(a => a.id === id)))) }, [acls])
   const aclsPagina = filteredAcls.slice(pagina * ACLS_POR_PAGINA, (pagina + 1) * ACLS_POR_PAGINA)
 
   return (
@@ -375,6 +414,41 @@ export default function ACLs() {
         </label>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <label className="flex items-center gap-2 text-sm text-ink-2">
+          {traducir("Uso")}
+          <select value={filtroUso} onChange={e => setFiltroUso(e.target.value as typeof filtroUso)} className="input text-sm py-1">
+            <option value="todas">{traducir("Todas")}</option>
+            <option value="uso">{traducir("En uso")}</option>
+            <option value="sinuso">{traducir("Sin uso")}</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-ink-2">
+          {traducir("Estado")}
+          <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value as typeof filtroEstado)} className="input text-sm py-1">
+            <option value="todas">{traducir("Todas")}</option>
+            <option value="activa">{traducir("Activas")}</option>
+            <option value="inactiva">{traducir("Inactivas")}</option>
+          </select>
+        </label>
+        {(filtroUso !== 'todas' || filtroEstado !== 'todas') && (
+          <button className="text-sm text-brand-700 hover:underline" onClick={() => { setFiltroUso('todas'); setFiltroEstado('todas') }}>
+            {traducir("Quitar filtros")}
+          </button>
+        )}
+        <span className="text-xs text-ink-3 ml-auto">{filteredAcls.length} / {acls.length}</span>
+      </div>
+
+      {seleccion.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4 p-3 rounded-lg bg-brand-50 border border-line-soft">
+          <span className="text-sm font-medium text-ink">{seleccion.size} {traducir("seleccionadas")}</span>
+          <button className="btn btn-ghost" disabled={procesando} onClick={() => accionMasiva('enable')}>{traducir("Activar")}</button>
+          <button className="btn btn-ghost" disabled={procesando} onClick={() => accionMasiva('disable')}>{traducir("Desactivar")}</button>
+          <button className="btn btn-ghost text-danger" disabled={procesando} onClick={() => accionMasiva('delete')}>{traducir("Eliminar")}</button>
+          <button className="text-sm text-ink-3 hover:underline ml-auto" onClick={() => setSeleccion(new Set())}>{traducir("Quitar selección")}</button>
+        </div>
+      )}
+
       {loading ? (
         <LoadingState />
       ) : loadError && acls.length === 0 ? (
@@ -384,6 +458,10 @@ export default function ACLs() {
           <table className="table-panel">
             <thead>
               <tr>
+                <th className="w-10 px-4">
+                  <input type="checkbox" checked={todasMarcadas} onChange={alternarTodas}
+                    aria-label={traducir("Seleccionar todas")} title={traducir("Seleccionar todas las que muestra el filtro")} />
+                </th>
                 <th className="text-left">{traducir("Nombre")}</th>
                 <th className="text-left">{traducir("Tipo")}</th>
                 <th className="text-left">{traducir("Valor")}</th>
@@ -395,6 +473,10 @@ export default function ACLs() {
             <tbody className="divide-y divide-line-soft">
               {aclsPagina.map(acl => (
                 <tr key={acl.id} className="hover:bg-brand-50">
+                  <td className="px-4 py-4">
+                    <input type="checkbox" checked={seleccion.has(acl.id)} onChange={() => alternarUna(acl.id)}
+                      aria-label={`${traducir("Seleccionar")} ${acl.name}`} />
+                  </td>
                   <td className="px-6 py-4 font-medium text-ink">{acl.name}</td>
                   <td className="px-6 py-4">
                     <span className="px-2 py-1 bg-brand-50 text-brand-700 text-xs font-mono rounded">{acl.type}</span>
@@ -441,10 +523,10 @@ export default function ACLs() {
                 </tr>
               ))}
               {aclsPagina.length === 0 && (
-                <tr><td colSpan={6} className="px-6 py-12 text-center text-ink-3">
+                <tr><td colSpan={7} className="px-6 py-12 text-center text-ink-3">
                   {acls.length === 0
                     ? traducir("No hay ACLs personalizadas. Las ACLs predefinidas (localnet, Safe_ports, etc.) ya están incluidas automáticamente.")
-                    : traducir("Ninguna ACL coincide con la búsqueda.")}
+                    : traducir("Ninguna ACL coincide con la búsqueda o los filtros.")}
                 </td></tr>
               )}
             </tbody>

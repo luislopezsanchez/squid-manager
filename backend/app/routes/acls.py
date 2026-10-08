@@ -1,6 +1,9 @@
 """Rutas de gestión de ACLs."""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, defer
 
 from app.database import get_db
@@ -157,6 +160,70 @@ def create_acl(
                            "Se creó una ACL",
                            f"El administrador «{current_admin.username}» creó la ACL «{name}» (tipo {acl_type}).")
     return _to_response(acl)
+
+
+class AclBulkIn(BaseModel):
+    ids: list[int] = Field(..., min_length=1, max_length=1000)
+    accion: Literal["delete", "enable", "disable"]
+
+
+@router.post("/bulk")
+def accion_masiva(
+    data: AclBulkIn,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_writer),
+    background_tasks: BackgroundTasks = None,
+):
+    """Elimina, activa o desactiva varias ACLs de una vez.
+
+    Eliminar respeta la misma regla que una a una: una ACL en uso por alguna regla no se
+    borra (queda en `omitidas` con el motivo) y el resto sí. Devuelve qué se hizo y qué no.
+    """
+    from app.services.squid_names import usos_de_todas
+
+    acls = db.query(Acl).options(defer(Acl.value)).filter(Acl.id.in_(set(data.ids))).all()
+    hechas: list[str] = []
+    omitidas: list[dict] = []
+    encontradas = {a.id for a in acls}
+    for i in set(data.ids) - encontradas:
+        omitidas.append({"id": i, "name": None, "motivo": "ACL no encontrada"})
+
+    usos = usos_de_todas(db) if data.accion == "delete" else {}
+    indexadas: list[str] = []
+    for acl in sorted(acls, key=lambda a: a.name):
+        if data.accion == "delete":
+            if acl.name in usos:
+                omitidas.append({"id": acl.id, "name": acl.name,
+                                 "motivo": "En uso: " + "; ".join(usos[acl.name][:3])})
+                continue
+            if acl.source == "file" and acl.type == "dstdomain":
+                indexadas.append(acl.name)
+            db.add(AuditLog(admin_id=current_admin.id, admin_username=current_admin.username,
+                            action="delete", entity="acl", entity_id=acl.id, old_value=acl.name))
+            db.delete(acl)
+        else:
+            nuevo = data.accion == "enable"
+            if acl.enabled != nuevo:
+                acl.enabled = nuevo
+                db.add(AuditLog(admin_id=current_admin.id, admin_username=current_admin.username,
+                                action="update", entity="acl", entity_id=acl.id,
+                                old_value=f"{acl.name} enabled={not nuevo}", new_value=f"{acl.name} enabled={nuevo}"))
+        hechas.append(acl.name)
+    db.commit()
+    if hechas:
+        mark_dirty()
+    if indexadas:
+        from app.services import domain_index_service
+        for n in indexadas:
+            domain_index_service.remove_category(n)
+
+    if hechas and background_tasks:
+        verbo = {"delete": "eliminó", "enable": "activó", "disable": "desactivó"}[data.accion]
+        queue_notification(background_tasks, db, "acl_change",
+                           "Se modificaron varias ACLs",
+                           f"El administrador «{current_admin.username}» {verbo} {len(hechas)} ACL(s): "
+                           + ", ".join(hechas[:10]) + ("…" if len(hechas) > 10 else ""))
+    return {"hechas": hechas, "omitidas": omitidas}
 
 
 @router.put("/{acl_id}", response_model=AclResponse)

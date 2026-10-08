@@ -182,6 +182,8 @@ export const api = {
   getAclUsage: () => request<Record<string, string[]>>('/acls/usage'),
   createAcl: (data: any) => request<any>('/acls/', { method: 'POST', body: JSON.stringify(data) }),
   updateAcl: (id: number, data: any) => request<any>(`/acls/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  bulkAcls: (ids: number[], accion: 'delete' | 'enable' | 'disable') =>
+    request<{ hechas: string[]; omitidas: { id: number; name: string | null; motivo: string }[] }>('/acls/bulk', { method: 'POST', body: JSON.stringify({ ids, accion }) }),
   deleteAcl: (id: number) => request<void>(`/acls/${id}`, { method: 'DELETE' }),
 
   // Access Rules

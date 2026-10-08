@@ -5,6 +5,18 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [1.0.8] - 2026-10-08
+
+### Añadido
+
+- **ACLs: filtros y acciones en bloque.** La tabla de ACLs se puede filtrar por uso (en uso / sin uso) y por estado
+  (activas / inactivas), además de la búsqueda. Cada fila tiene una casilla y la de la cabecera marca todas las que muestra el
+  filtro; con alguna marcada aparece una barra para **activar, desactivar o eliminar** varias a la vez. El borrado en bloque
+  respeta la regla de siempre: una ACL en uso por alguna regla no se borra y se informa cuál y por qué; el resto sí. Nuevo
+  endpoint `POST /api/acls/bulk`.
+
+---
+
 ## [1.0.7] - 2026-10-08
 
 ### Añadido
